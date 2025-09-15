@@ -183,4 +183,4 @@ cython_debug/
 .pypirc
 .vscode
 
-/data3/tu8435/thesis-remote/pokeagent-speedrun/Miniconda3-latest-Linux-x86_64.sh
+Miniconda3*.sh
