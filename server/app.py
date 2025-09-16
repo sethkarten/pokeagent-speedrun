@@ -11,17 +11,21 @@ import base64
 import io
 import signal
 import sys
+import os
 import asyncio
 import threading
 import json
 from PIL import Image
 import cv2
 
+# Add parent directory to path for local modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 import uvicorn
-import socketio     # for streamer setup
 
 from pokemon_env.emulator import EmeraldEmulator
 from pokemon_env.emerald_utils import (
@@ -44,6 +48,12 @@ step_count = 0
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
 fps = 60
+action_queue = []  # Queue for multi-action sequences
+current_action = None  # Current action being held
+action_frames_remaining = 0  # Frames left to hold current action
+release_frames_remaining = 0  # Frames left to wait after release
+ACTION_HOLD_FRAMES = 6  # Hold each action for 6 frames to match manual mode timing (BUTTON_HOLD_DURATION from agent.py)
+ACTION_RELEASE_DELAY = 12  # Wait 12 frames between presses to match manual mode timing (BUTTON_RELEASE_DELAY from agent.py)
 
 # Video recording state
 video_writer = None
@@ -195,6 +205,7 @@ class ComprehensiveStateResponse(BaseModel):
     map: dict
     step_number: int
     status: str
+    action_queue_length: int = 0
 
 def periodic_milestone_updater():
     """Lightweight background thread that only updates milestones occasionally"""
@@ -472,6 +483,32 @@ def game_loop(manual_mode=False):
         if not should_continue:
             break
             
+        # In server mode, handle action queue with proper button hold timing
+        if not manual_mode:
+            global current_action, action_frames_remaining, release_frames_remaining
+            
+            if current_action and action_frames_remaining > 0:
+                # Continue holding the current action
+                actions_pressed = [current_action]
+                action_frames_remaining -= 1
+                if action_frames_remaining == 0:
+                    # Action finished, start release delay
+                    current_action = None
+                    release_frames_remaining = ACTION_RELEASE_DELAY
+            elif release_frames_remaining > 0:
+                # Release delay (no button pressed)
+                actions_pressed = []
+                release_frames_remaining -= 1
+            elif action_queue:
+                # Start a new action from the queue
+                current_action = action_queue.pop(0)
+                action_frames_remaining = ACTION_HOLD_FRAMES
+                actions_pressed = [current_action]
+                print(f"🎮 Server processing action: {current_action}, Queue remaining: {len(action_queue)} actions")
+            else:
+                # No action to process
+                actions_pressed = []
+            
         # Step environment
         step_environment(actions_pressed)
         
@@ -499,22 +536,18 @@ def init_pygame():
 
 def run_fastapi_server(port):
     """Run FastAPI server in background thread"""
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="error", access_log=False)
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="error", access_log=False)
 
-    # Create a new Socket.IO server
-    sio = socketio.AsyncServer(cors_allowed_origins='*')
-
-    # Attach the Socket.IO server to the FastAPI app
-    sio_app = socketio.ASGIApp(sio, app)
-
-    # Define event handlers for the Socket.IO server
-    @sio.event
-    async def connect(sid, environ):
-        print('Client connected:', sid)
-
-    @sio.event
-    async def disconnect(sid):
-        print('Client disconnected:', sid)
+# Serve stream.html
+@app.get("/stream")
+async def get_stream():
+    """Serve the stream.html interface"""
+    try:
+        with open("server/stream.html", "r") as f:
+            content = f.read()
+        return HTMLResponse(content=content)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Stream interface not found")
 
 # FastAPI endpoints
 @app.get("/status")
@@ -574,47 +607,66 @@ async def get_screenshot():
         logger.error(f"Error getting screenshot: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/frame")
+async def get_latest_frame():
+    """Get latest game frame in same format as single-process mode"""
+    global current_obs
+    
+    with obs_lock:
+        obs_copy = current_obs.copy() if current_obs is not None else None
+    
+    if obs_copy is None:
+        return {"frame": ""}
+    
+    try:
+        # Convert to base64
+        pil_image = Image.fromarray(obs_copy)
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        img_str = base64.b64encode(buffer.getvalue()).decode()
+        
+        return {"frame": img_str}
+    except Exception as e:
+        return {"frame": ""}
+
 @app.post("/action")
 async def take_action(request: ActionRequest):
     """Take an action"""
-    global current_obs, step_count, recent_button_presses
+    global current_obs, step_count, recent_button_presses, action_queue
     
     if env is None:
         raise HTTPException(status_code=400, detail="Emulator not initialized")
     
     try:
-        # Track button presses for recent actions display
+        # Add all actions to the queue (handle both single actions and lists)
         if request.buttons:
+            # Add ALL actions to the queue - let the game loop handle execution
+            print(f"📡 Server received actions: {request.buttons}")
+            print(f"📋 Action queue before extend: {action_queue}")
+            action_queue.extend(request.buttons)
+            print(f"📋 Action queue after extend: {action_queue}")
+            
+            # Track button presses for recent actions display
             current_time = time.time()
             for button in request.buttons:
-                # Avoid duplicate consecutive buttons within 100ms
-                should_add = True
-                if recent_button_presses:
-                    last_entry = recent_button_presses[-1]
-                    if (last_entry["button"] == button and 
-                        current_time - last_entry["timestamp"] < 0.1):  # 100ms threshold
-                        should_add = False
-                
-                if should_add:
-                    recent_button_presses.append({
-                        "button": button,
-                        "timestamp": current_time
-                    })
+                # Add all buttons to recent actions (removed duplicate filtering for debugging)
+                recent_button_presses.append({
+                    "button": button,
+                    "timestamp": current_time
+                })
             
             # Keep only last 50 button presses to avoid memory issues
             if len(recent_button_presses) > 50:
                 recent_button_presses = recent_button_presses[-50:]
         
-        # Execute action - step_environment now handles its own memory locking
-        step_environment(request.buttons)
+        # DON'T execute action here - let the game loop handle it from the queue
+        # This prevents conflicts between the API thread and pygame thread
         
+        # Don't increment step_count here - the game loop does that
         with step_lock:
-            step_count += 1
             current_step = step_count
         
-        # Milestones are now updated in background thread to avoid blocking pygame
-        
-        # Get updated screenshot
+        # Get updated screenshot (from what the game loop is showing)
         with obs_lock:
             obs_copy = current_obs.copy() if current_obs is not None else None
         
@@ -674,80 +726,22 @@ async def get_comprehensive_state():
         with step_lock:
             current_step = step_count
         
+        # Include action queue info for multiprocess coordination
+        queue_length = len(action_queue)  # Action queue access is atomic for len()
+        
         return ComprehensiveStateResponse(
             visual=state["visual"],
             player=state["player"],
             game=state["game"],
             map=state["map"],
             step_number=current_step,
-            status="running"
+            status="running",
+            action_queue_length=queue_length
         )
         
     except Exception as e:
         logger.error(f"Error getting comprehensive state: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    
-def format_map_for_comparison(self, tiles, title, location, position):
-    """Format map tiles for comparison with ground truth format"""
-    if not tiles:
-        return f"=== {title} ===\nNo tiles available\n"
-    
-    output = []
-    output.append(f"=== {title} ===")
-    output.append(f"Format: (MetatileID, Behavior, X, Y)")
-    output.append(f"Map dimensions: {len(tiles)}x{len(tiles[0]) if tiles else 0}")
-    output.append("")
-    output.append("--- TRAVERSABILITY MAP ---")
-    
-    # Header with column numbers
-    header = "      " + "  ".join(f"{i:2}" for i in range(len(tiles[0]) if tiles else 0))
-    output.append(header)
-    output.append("    " + "-" * (len(header) - 4))
-    
-    # Map rows
-    for row_idx, row in enumerate(tiles):
-        traversability_row = []
-        for col_idx, tile in enumerate(row):
-            if len(tile) >= 4:
-                tile_id, behavior, collision, elevation = tile
-                behavior_val = behavior if not hasattr(behavior, 'value') else behavior.value
-                
-                # Convert to traversability symbol
-                if behavior_val == 0:  # NORMAL
-                    symbol = "." if collision == 0 else "#"
-                elif behavior_val == 1:  # SECRET_BASE_WALL
-                    symbol = "#"
-                elif behavior_val == 51:  # IMPASSABLE_SOUTH
-                    symbol = "IM"
-                elif behavior_val == 96:  # NON_ANIMATED_DOOR
-                    symbol = "D"
-                elif behavior_val == 101:  # SOUTH_ARROW_WARP
-                    symbol = "SO"
-                elif behavior_val == 105:  # ANIMATED_DOOR
-                    symbol = "D"
-                elif behavior_val == 134:  # TELEVISION
-                    symbol = "TE"
-                else:
-                    symbol = "."  # Default to walkable for other behaviors
-                
-                # Mark player position
-                if position and len(position) >= 2:
-                    # Calculate if this tile is player position
-                    # Player is at center of 15x15 map (position 7,7)
-                    if row_idx == 7 and col_idx == 7:
-                        symbol = "P"
-                
-                traversability_row.append(symbol)
-            else:
-                traversability_row.append("?")
-        
-        # Format row with row number
-        row_str = f"{row_idx:2}: " + " ".join(f"{symbol:1}" for symbol in traversability_row)
-        output.append(row_str)
-    
-    return "\n".join(output)
-    
+        raise HTTPException(status_code=500, detail=str(e)) 
 
 @app.get("/debug/memory")
 async def debug_memory():
@@ -1157,6 +1151,73 @@ async def stop_server():
     running = False
     return {"status": "stopping"}
 
+@app.post("/checkpoint")
+async def save_checkpoint(request_data: dict = None):
+    """Save checkpoint - called by client when step count reaches checkpoint interval"""
+    try:
+        step_count = request_data.get("step_count", 0) if request_data else 0
+        
+        # Save emulator state
+        checkpoint_state = "checkpoint.state"
+        if env:
+            env.save_state(checkpoint_state)
+            logger.info(f"💾 Server: Saved checkpoint state at step {step_count}")
+            
+            # Save milestones
+            if env.milestone_tracker:
+                milestone_file = env.milestone_tracker.save_milestones_for_state(checkpoint_state)
+                logger.info(f"💾 Server: Saved checkpoint milestones")
+            
+            return {
+                "status": "checkpoint_saved",
+                "step_count": step_count,
+                "files": {
+                    "state": checkpoint_state,
+                    "milestones": f"checkpoint_milestones.json"
+                }
+            }
+        else:
+            return {"status": "error", "message": "No emulator available"}
+            
+    except Exception as e:
+        logger.error(f"Failed to save checkpoint: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/load_checkpoint")
+async def load_checkpoint():
+    """Load checkpoint state - called by client on startup if --load-checkpoint flag is used"""
+    try:
+        checkpoint_state = "checkpoint.state"
+        
+        if not os.path.exists(checkpoint_state):
+            return {"status": "no_checkpoint", "message": "No checkpoint.state file found"}
+        
+        if env:
+            env.load_state(checkpoint_state)
+            logger.info(f"📂 Server: Loaded checkpoint state")
+            
+            # Load milestones if available
+            if env.milestone_tracker:
+                try:
+                    env.milestone_tracker.load_milestones_for_state(checkpoint_state)
+                    logger.info(f"📂 Server: Loaded checkpoint milestones")
+                except:
+                    logger.warning(f"Could not load checkpoint milestones")
+            
+            return {
+                "status": "checkpoint_loaded",
+                "files": {
+                    "state": checkpoint_state,
+                    "milestones": f"checkpoint_milestones.json"
+                }
+            }
+        else:
+            return {"status": "error", "message": "No emulator available"}
+            
+    except Exception as e:
+        logger.error(f"Failed to load checkpoint: {e}")
+        return {"status": "error", "message": str(e)}
+
 def main():
     """Main function"""
     import argparse
@@ -1175,6 +1236,12 @@ def main():
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
     
     args = parser.parse_args()
+    
+    # Check for environment variables from multiprocess mode
+    env_load_state = os.environ.get("LOAD_STATE")
+    if env_load_state and not args.load_state:
+        args.load_state = env_load_state
+        print(f"📂 Using load state from environment: {env_load_state}")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
     # Initialize video recording if requested
@@ -1207,6 +1274,14 @@ def main():
             env.load_state(args.load_state)
             print(f"Loaded state from: {args.load_state}")
             
+            # If this is checkpoint.state, also load milestones
+            if args.load_state.endswith("checkpoint.state") and env.milestone_tracker:
+                try:
+                    env.milestone_tracker.load_milestones_for_state(args.load_state)
+                    print(f"📂 Loaded checkpoint milestones")
+                except Exception as e:
+                    print(f"⚠️ Could not load checkpoint milestones: {e}")
+            
             # Map buffer should already be found by emulator.load_state()
             if env.memory_reader and env.memory_reader._map_buffer_addr:
                 print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
@@ -1223,7 +1298,15 @@ def main():
     server_thread = threading.Thread(target=run_fastapi_server, args=(args.port,), daemon=True)
     server_thread.start()
     
-    print(f"FastAPI server running on http://127.0.0.1:{args.port}")
+    # Get local IP for network access
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from utils.get_local_ip import get_local_ip
+    local_ip = get_local_ip()
+    
+    print(f"🌐 FastAPI server running:")
+    print(f"   Local: http://localhost:{args.port}")
+    print(f"   Network: http://{local_ip}:{args.port}")
+    print(f"📺 Stream interface: http://{local_ip}:{args.port}/stream")
     print("Available endpoints:")
     print("  /status - Server status")
     print("  /screenshot - Current screenshot")
@@ -1240,7 +1323,7 @@ def main():
     print("  /stop - Stop server")
     
     try:
-        # Run pygame loop in main thread
+        # Run pygame loop in main thread (pygame requires this)
         game_loop(manual_mode=args.manual)
     except KeyboardInterrupt:
         print("Interrupted by user")
@@ -1255,6 +1338,76 @@ def main():
             env.stop()
         pygame.quit()
         print("Server stopped")
+
+# Initialize emulator when imported for multiprocess mode
+def init_for_multiprocess():
+    """Initialize emulator when server is imported for multiprocess mode"""
+    global env
+    
+    if env is None:  # Only initialize once
+        # Check for environment variables set by agent.py multiprocess mode
+        rom_path = os.environ.get("ROM_PATH", "Emerald-GBAdvance/rom.gba")
+        load_state = os.environ.get("LOAD_STATE")
+        record_video = os.environ.get("RECORD_VIDEO") == "1"
+        no_ocr = os.environ.get("NO_OCR") == "1"
+        
+        print(f"🔧 Initializing server for multiprocess mode...")
+        print(f"   ROM: {rom_path}")
+        if load_state:
+            print(f"   Load state: {load_state}")
+        
+        # Initialize emulator
+        try:
+            if not os.path.exists(rom_path):
+                raise RuntimeError(f"ROM not found at {rom_path}")
+            
+            env = EmeraldEmulator(rom_path=rom_path)
+            env.initialize()
+            
+            # Initialize video recording if requested
+            init_video_recording(record_video)
+            
+            # Disable OCR if requested
+            if no_ocr and env and env.memory_reader:
+                env.memory_reader._dialog_detection_enabled = False
+                print("🚫 All dialogue detection disabled (--no-ocr flag)")
+            
+            # Load state if specified
+            if load_state:
+                try:
+                    env.load_state(load_state)
+                    print(f"📂 Loaded state from: {load_state}")
+                    
+                    # If this is checkpoint.state, also load milestones
+                    if load_state.endswith("checkpoint.state") and env.milestone_tracker:
+                        try:
+                            env.milestone_tracker.load_milestones_for_state(load_state)
+                            print(f"📂 Loaded checkpoint milestones")
+                        except Exception as e:
+                            print(f"⚠️ Could not load checkpoint milestones: {e}")
+                    
+                    # Map buffer should already be found by emulator.load_state()
+                    if env.memory_reader and env.memory_reader._map_buffer_addr:
+                        print(f"📍 Map buffer initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
+                except Exception as e:
+                    print(f"❌ Failed to load state from {load_state}: {e}")
+                    print("   Continuing with fresh game state...")
+            
+            # Start lightweight milestone updater thread
+            global state_update_running, state_update_thread
+            state_update_running = True
+            state_update_thread = threading.Thread(target=periodic_milestone_updater, daemon=True)
+            state_update_thread.start()
+            
+            print("✅ Server initialized successfully for multiprocess mode")
+            
+        except Exception as e:
+            print(f"❌ Failed to initialize server for multiprocess mode: {e}")
+            raise
+
+# Auto-initialize when imported for multiprocess mode (when ROM_PATH env var is set)
+if os.environ.get("ROM_PATH") and __name__ != "__main__":
+    init_for_multiprocess()
 
 if __name__ == "__main__":
     main() 

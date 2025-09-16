@@ -8,6 +8,7 @@ import os
 import pygame
 import numpy as np
 import time
+import datetime
 import base64
 import io
 import signal
@@ -61,6 +62,19 @@ agent_mode = True   # True = agent (default), False = manual
 agent_auto_enabled = False  # Auto agent actions
 last_game_state = None  # Cache for web interface
 recent_manual_actions = []  # Track recent manual button presses with timestamps
+
+# Checkpoint system
+CHECKPOINT_INTERVAL = 1  # Save checkpoint every N agent actions
+last_checkpoint_step = 0  # Track when we last saved a checkpoint
+agent_step_count = 0  # Track total agent steps
+
+# Error recovery system
+consecutive_errors = 0  # Track consecutive errors for recovery
+MAX_CONSECUTIVE_ERRORS = 5  # Maximum errors before trying recovery
+SERVER_RESTART_THRESHOLD = 10  # Restart server after this many consecutive errors
+
+# LLM logging
+llm_logger = None  # Will be initialized when needed
 
 # Video recording state
 video_writer = None
@@ -311,64 +325,64 @@ class AgentModules:
             self.thinking = False
             return {"action": "A", "reasoning": f"Error: {e}"}  # Default safe action
     
-    def _simple_mode_processing(self, frame, game_state):
-        """Simple mode: direct frame + formatted state -> action"""
-        try:
-            from utils.state_formatter import format_state_for_llm
+#     def _simple_mode_processing(self, frame, game_state):
+#         """Simple mode: direct frame + formatted state -> action"""
+#         try:
+#             from utils.state_formatter import format_state_for_llm
             
-            # Format the current state for LLM
-            formatted_state = format_state_for_llm(game_state)
+#             # Format the current state for LLM
+#             formatted_state = format_state_for_llm(game_state)
             
-            # Create simple prompt with just frame and comprehensive state
-            prompt = f"""You are playing Pokemon Emerald. Based on the current game frame and state information, choose the best button action.
+#             # Create simple prompt with just frame and comprehensive state
+#             prompt = f"""You are playing Pokemon Emerald. Based on the current game frame and state information, choose the best button action.
 
-CURRENT GAME STATE:
-{formatted_state}
+# CURRENT GAME STATE:
+# {formatted_state}
 
-ACTION HISTORY (last 20 actions):
-{', '.join(self.recent_actions[-20:]) if self.recent_actions else 'None'}
+# ACTION HISTORY (last 20 actions):
+# {', '.join(self.recent_actions[-20:]) if self.recent_actions else 'None'}
 
-Available actions: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT
+# Available actions: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT
 
-Respond with just the button name (e.g., 'A' or 'RIGHT'). Be decisive and avoid getting stuck."""
+# Respond with just the button name (e.g., 'A' or 'RIGHT'). Be decisive and avoid getting stuck."""
             
-            # Make VLM call directly
-            if frame:
-                response = self.vlm.get_query(frame, prompt, "simple_mode")
-            else:
-                response = self.vlm.get_text_query(prompt, "simple_mode")
+#             # Make VLM call directly
+#             if frame:
+#                 response = self.vlm.get_query(frame, prompt, "simple_mode")
+#             else:
+#                 response = self.vlm.get_text_query(prompt, "simple_mode")
             
-            # Extract action from response
-            response_upper = response.upper().strip()
-            valid_actions = ['A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT']
+#             # Extract action from response
+#             response_upper = response.upper().strip()
+#             valid_actions = ['A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT']
             
-            # Find the action in the response
-            action = 'A'  # Default
-            for valid_action in valid_actions:
-                if valid_action in response_upper:
-                    action = valid_action
-                    break
+#             # Find the action in the response
+#             action = 'A'  # Default
+#             for valid_action in valid_actions:
+#                 if valid_action in response_upper:
+#                     action = valid_action
+#                     break
             
-            action_result = {
-                "action": action,
-                "reasoning": f"Simple mode: {response[:100]}..."
-            }
+#             action_result = {
+#                 "action": action,
+#                 "reasoning": f"Simple mode: {response}"
+#             }
             
-            # Store action result
-            self.last_action = action_result
-            self.recent_actions.append(action_result["action"])
+#             # Store action result
+#             self.last_action = action_result
+#             self.recent_actions.append(action_result["action"])
             
-            # Keep recent actions reasonable size
-            if len(self.recent_actions) > 20:
-                self.recent_actions = self.recent_actions[-20:]
+#             # Keep recent actions reasonable size
+#             if len(self.recent_actions) > 20:
+#                 self.recent_actions = self.recent_actions[-20:]
             
-            self.thinking = False
-            return action_result
+#             self.thinking = False
+#             return action_result
             
-        except Exception as e:
-            logger.error(f"Error in simple mode processing: {e}")
-            self.thinking = False
-            return {"action": "A", "reasoning": f"Simple mode error: {e}"}
+#         except Exception as e:
+#             logger.error(f"Error in simple mode processing: {e}")
+#             self.thinking = False
+#             return {"action": "A", "reasoning": f"Simple mode error: {e}"}
     
     def get_agent_status(self):
         """Get current agent status for API"""
@@ -463,6 +477,42 @@ async def broadcast_state_update():
     except Exception as e:
         logger.error(f"Error broadcasting state: {e}")
 
+def reset_error_counter():
+    """Reset the consecutive error counter on successful operation"""
+    global consecutive_errors
+    consecutive_errors = 0
+
+def handle_agent_error(error):
+    """Handle agent processing errors with graceful recovery"""
+    global consecutive_errors, running
+    
+    consecutive_errors += 1
+    error_msg = str(error)
+    
+    if "timeout" in error_msg.lower() or "connection" in error_msg.lower():
+        if consecutive_errors <= MAX_CONSECUTIVE_ERRORS:
+            wait_time = min(consecutive_errors * 2, 10)  # Exponential backoff, max 10s
+            print(f"⚠️  Connection error {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}: {error}")
+            if "read timed out" in error_msg.lower():
+                print(f"   Server is not responding. Check if server/app.py is running on port 8000")
+            print(f"   Waiting {wait_time}s before retry...")
+            time.sleep(wait_time)
+        elif consecutive_errors <= SERVER_RESTART_THRESHOLD:
+            print(f"🔄 Too many consecutive errors ({consecutive_errors}), attempting recovery...")
+            time.sleep(5)
+        else:
+            print(f"💥 CRITICAL: Too many consecutive errors ({consecutive_errors})")
+            print("   Saving emergency checkpoint and continuing...")
+            try:
+                save_checkpoint()
+            except:
+                pass
+            time.sleep(10)
+    else:
+        # Non-connection error, just log and continue
+        print(f"Agent processing error: {error}")
+        time.sleep(1)
+
 def signal_handler(signum, _frame):
     """Handle shutdown signals gracefully"""
     global running, video_writer
@@ -475,6 +525,191 @@ def signal_handler(signum, _frame):
         emulator.stop()
     pygame.quit()
     sys.exit(0)
+
+def save_checkpoint(step_count=None):
+    """Save checkpoint with current state, milestones, and LLM history"""
+    global emulator, agent_modules, llm_logger, agent_step_count, last_checkpoint_step
+    
+    # Use provided step count or global one
+    current_step = step_count if step_count is not None else agent_step_count
+    # Update global step count if local one is provided
+    if step_count is not None:
+        agent_step_count = step_count
+    
+    try:
+        checkpoint_base = "checkpoint"
+        
+        # 1. Save emulator state
+        state_file = f"{checkpoint_base}.state"
+        if emulator:
+            emulator.save_state(state_file)
+            print(f"💾 Checkpoint state saved: {state_file}")
+            
+            # 2. Save milestones (this is automatic with state saving)
+            milestone_file = f"{checkpoint_base}_milestones.json"
+            if emulator.milestone_tracker:
+                emulator.milestone_tracker.save_milestones_for_state(state_file)
+                print(f"💾 Checkpoint milestones saved: {milestone_file}")
+        
+        # 3. Save LLM interaction history
+        llm_file = f"{checkpoint_base}_llm.txt"
+        if llm_logger:
+            llm_logger.save_checkpoint(llm_file)
+            print(f"💾 Checkpoint LLM history saved: {llm_file}")
+        
+        # Update checkpoint tracking
+        last_checkpoint_step = current_step
+        print(f"✅ Checkpoint completed at step {current_step}")
+        
+    except Exception as e:
+        print(f"❌ Failed to save checkpoint: {e}")
+        import traceback
+        traceback.print_exc()
+
+def load_checkpoint():
+    """Load checkpoint with state, milestones, and LLM history"""
+    global emulator, agent_modules, llm_logger, agent_step_count, last_checkpoint_step
+    
+    try:
+        checkpoint_base = "checkpoint"
+        
+        # 1. Load emulator state
+        state_file = f"{checkpoint_base}.state"
+        if os.path.exists(state_file) and emulator:
+            emulator.load_state(state_file)
+            print(f"📂 Checkpoint state loaded: {state_file}")
+        
+        # 2. Load LLM interaction history
+        llm_file = f"{checkpoint_base}_llm.txt"
+        if os.path.exists(llm_file) and llm_logger:
+            loaded_step_count = llm_logger.load_checkpoint(llm_file)
+            if loaded_step_count:
+                agent_step_count = loaded_step_count
+                last_checkpoint_step = (agent_step_count // CHECKPOINT_INTERVAL) * CHECKPOINT_INTERVAL
+                print(f"📂 Checkpoint LLM history loaded: {llm_file} (step {agent_step_count})")
+        
+        print(f"✅ Checkpoint loaded at step {agent_step_count}")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Failed to load checkpoint: {e}")
+        return False
+
+def save_agent_state(simple_agent, filename):
+    """Save simple agent state to JSON"""
+    try:
+        import json
+        from collections import deque
+        from datetime import datetime
+        
+        # Convert SimpleAgent state to serializable format
+        state_data = {
+            "step_counter": simple_agent.state.step_counter,
+            "history": [
+                {
+                    "timestamp": entry.timestamp.isoformat(),
+                    "player_coords": entry.player_coords,
+                    "map_id": entry.map_id,
+                    "context": entry.context,
+                    "action_taken": entry.action_taken,
+                    "game_state_summary": entry.game_state_summary
+                }
+                for entry in simple_agent.state.history
+            ],
+            "recent_actions": list(simple_agent.state.recent_actions),
+            "stuck_detection": dict(simple_agent.state.stuck_detection),
+            "objectives": [
+                {
+                    "id": obj.id,
+                    "description": obj.description,
+                    "objective_type": obj.objective_type,
+                    "target_value": obj.target_value,
+                    "completed": obj.completed,
+                    "created_at": obj.created_at.isoformat(),
+                    "completed_at": obj.completed_at.isoformat() if obj.completed_at else None,
+                    "progress_notes": obj.progress_notes,
+                    "storyline": obj.storyline,
+                    "milestone_id": obj.milestone_id
+                }
+                for obj in simple_agent.state.objectives
+            ],
+            "objectives_updated": simple_agent.state.objectives_updated,
+            "history_display_count": simple_agent.history_display_count,
+            "actions_display_count": simple_agent.actions_display_count
+        }
+        
+        with open(filename, 'w') as f:
+            json.dump(state_data, f, indent=2)
+            
+    except Exception as e:
+        print(f"❌ Failed to save SimpleAgent state: {e}")
+        import traceback
+        traceback.print_exc()
+
+def load_agent_state(simple_agent, filename):
+    """Load simple agent state from JSON"""
+    try:
+        import json
+        from collections import deque
+        from datetime import datetime
+        from agent.simple import HistoryEntry, Objective
+        
+        with open(filename, 'r') as f:
+            state_data = json.load(f)
+        
+        # Restore basic counters
+        simple_agent.state.step_counter = state_data.get("step_counter", 0)
+        simple_agent.state.stuck_detection = state_data.get("stuck_detection", {})
+        simple_agent.state.objectives_updated = state_data.get("objectives_updated", False)
+        
+        # Restore display counts
+        simple_agent.history_display_count = state_data.get("history_display_count", 15)
+        simple_agent.actions_display_count = state_data.get("actions_display_count", 20)
+        
+        # Restore recent actions
+        recent_actions = state_data.get("recent_actions", [])
+        simple_agent.state.recent_actions = deque(recent_actions, maxlen=simple_agent.state.recent_actions.maxlen)
+        
+        # Restore history entries
+        history_data = state_data.get("history", [])
+        restored_history = []
+        for entry_data in history_data:
+            entry = HistoryEntry(
+                timestamp=datetime.fromisoformat(entry_data["timestamp"]),
+                player_coords=tuple(entry_data["player_coords"]) if entry_data["player_coords"] else None,
+                map_id=entry_data["map_id"],
+                context=entry_data["context"],
+                action_taken=entry_data["action_taken"],
+                game_state_summary=entry_data["game_state_summary"]
+            )
+            restored_history.append(entry)
+        simple_agent.state.history = deque(restored_history, maxlen=simple_agent.state.history.maxlen)
+        
+        # Restore objectives
+        objectives_data = state_data.get("objectives", [])
+        restored_objectives = []
+        for obj_data in objectives_data:
+            obj = Objective(
+                id=obj_data["id"],
+                description=obj_data["description"],
+                objective_type=obj_data["objective_type"],
+                target_value=obj_data["target_value"],
+                completed=obj_data["completed"],
+                created_at=datetime.fromisoformat(obj_data["created_at"]),
+                completed_at=datetime.fromisoformat(obj_data["completed_at"]) if obj_data["completed_at"] else None,
+                progress_notes=obj_data["progress_notes"],
+                storyline=obj_data["storyline"],
+                milestone_id=obj_data["milestone_id"]
+            )
+            restored_objectives.append(obj)
+        simple_agent.state.objectives = restored_objectives
+        
+        print(f"✅ SimpleAgent state loaded successfully")
+        
+    except Exception as e:
+        print(f"❌ Failed to load SimpleAgent state: {e}")
+        import traceback
+        traceback.print_exc()
 
 def setup_emulator(rom_path="Emerald-GBAdvance/rom.gba", load_state=None):
     """Initialize the emulator"""
@@ -774,7 +1009,8 @@ def agent_processing_worker():
                 
                 # Put result in result queue
                 agent_result_queue.append(agent_action)
-                print(f"✅ Agent processing complete: {agent_action.get('action', 'NO_ACTION')} (reasoning: {agent_action.get('reasoning', 'No reason')[:50]}...)")
+                print(f"✅ Agent processing complete: {agent_action.get('action', 'NO_ACTION')}")
+                print(f"📝 Full reasoning: {agent_action.get('reasoning', 'No reason')}")
                 
             except Exception as e:
                 print(f"❌ Agent processing error: {e}")
@@ -1160,7 +1396,7 @@ def update_display():
                 if agent_status["thinking"]:
                     info_lines.append("🤖 Agent: THINKING...")
                 elif agent_status["last_action"]:
-                    info_lines.append(f"🤖 Last: {agent_status['last_action']} - {agent_status['reasoning'][:50]}...")
+                    info_lines.append(f"🤖 Last: {agent_status['last_action']} - {agent_status['reasoning']}")
             
             y_offset = 10
             for line in info_lines:
@@ -1338,13 +1574,14 @@ def run_fastapi_server(port):
 async def get_status():
     """Get server status"""
     with step_lock:
-        current_step = step_count
+        current_display_step = step_count
     
     agent_status = agent_modules.get_agent_status() if agent_modules else {"thinking": False}
     
     return {
         "status": "running",
-        "step_count": current_step,
+        "step_count": agent_step_count,  # Use agent decision count for main step display
+        "display_step": current_display_step,  # Keep display frames for reference
         "fps": fps,
         "agent_initialized": agent_modules is not None,
         "agent_thinking": agent_status["thinking"]
@@ -1883,7 +2120,15 @@ def run_multiprocess_server(args):
         
         # Configure the server app with the provided arguments
         os.environ["ROM_PATH"] = args.rom
-        if args.load_state:
+        if args.load_checkpoint:
+            # Check if checkpoint files exist
+            checkpoint_state = "checkpoint.state"
+            if os.path.exists(checkpoint_state):
+                os.environ["LOAD_STATE"] = checkpoint_state
+                print(f"🔄 Server will load from checkpoint: {checkpoint_state}")
+            else:
+                print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
+        elif args.load_state:
             os.environ["LOAD_STATE"] = args.load_state
         os.environ["VLM_BACKEND"] = args.backend
         os.environ["VLM_MODEL"] = args.model_name
@@ -1897,7 +2142,9 @@ def run_multiprocess_server(args):
         print(f"📝 Server environment configured:")
         print(f"   ROM: {args.rom}")
         print(f"   Backend: {args.backend} / {args.model_name}")
-        if args.load_state:
+        if args.load_checkpoint:
+            print(f"   Load checkpoint: checkpoint.state")
+        elif args.load_state:
             print(f"   Load state: {args.load_state}")
         if args.simple:
             print(f"   Simple mode enabled")
@@ -1919,6 +2166,8 @@ def run_multiprocess_server(args):
 
 def run_multiprocess_client_headless(server_port=8000, args=None):
     """Run headless client that just processes agent logic and sends commands to server"""
+    global agent_step_count, last_checkpoint_step, llm_logger, consecutive_errors, anticheat_tracker
+    
     server_url = f"http://127.0.0.1:{server_port}"
     
     print(f"🤖 Starting headless agent client, connecting to server at {server_url}")
@@ -1938,6 +2187,9 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
         print("❌ Could not connect to server")
         return False
     
+    # Note: Server checkpoint loading is handled during server startup
+    # Client will only load LLM history below
+    
     # Initialize agent if auto mode is enabled
     vlm = None
     agent_step_count = 0
@@ -1951,6 +2203,34 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
         except Exception as e:
             print(f"❌ Failed to initialize agent: {e}")
             return False
+            
+        # Initialize LLM logger for multiprocess mode
+        from utils.llm_logger import get_llm_logger
+        llm_logger = get_llm_logger()
+        print(f"✅ LLM interaction logging initialized")
+        
+        # Initialize anti-cheat tracker for submission logging
+        from utils.anticheat import AntiCheatTracker
+        anticheat_tracker = AntiCheatTracker()
+        anticheat_tracker.initialize_submission_log(args.model_name if args else "unknown")
+        print(f"✅ Anti-cheat submission logging initialized to submission.log")
+        
+        # Load LLM history if checkpoint was requested
+        if args and getattr(args, 'load_checkpoint', False):
+            llm_checkpoint_file = "checkpoint_llm.txt"
+            if os.path.exists(llm_checkpoint_file):
+                try:
+                    loaded_step_count = llm_logger.load_checkpoint(llm_checkpoint_file)
+                    if loaded_step_count:
+                        agent_step_count = loaded_step_count
+                        last_checkpoint_step = (agent_step_count // CHECKPOINT_INTERVAL) * CHECKPOINT_INTERVAL
+                        print(f"📂 Client: Checkpoint LLM history loaded: {llm_checkpoint_file} (step {agent_step_count})")
+                    else:
+                        print(f"📂 Client: Checkpoint LLM history loaded: {llm_checkpoint_file}")
+                except Exception as e:
+                    print(f"⚠️ Client: Failed to load checkpoint LLM history: {e}")
+            else:
+                print(f"⚠️ Client: No checkpoint LLM history found: {llm_checkpoint_file}")
     
     # Initialize agent modules if not in simple mode
     agent_modules = None
@@ -1974,12 +2254,24 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
         while running:
             # Agent processing (if auto mode enabled)
             current_time = time.time()
-            if vlm and args.agent_auto and (current_time - last_agent_time >= 1.0):  # Agent acts every 1 second
+            if vlm and args.agent_auto:
                 try:
                     # Get comprehensive state from server
-                    state_response = requests.get(f"{server_url}/state", timeout=5)
+                    state_response = requests.get(f"{server_url}/state", timeout=10)
                     if state_response.status_code == 200:
                         state_data = state_response.json()
+                        
+                        # Check if there are still actions in the queue before sending new ones
+                        action_queue_length = state_data.get("action_queue_length", 0)
+                        if action_queue_length > 0:
+                            print(f"⏳ Waiting for action queue to empty (queue length: {action_queue_length})")
+                            time.sleep(0.5)  # Wait longer to let actions complete
+                            continue
+                        
+                        # Only call agent if enough time has passed AND queue is empty
+                        if (current_time - last_agent_time < 2.0):  # Increased to 2 seconds minimum between agent calls
+                            time.sleep(0.1)
+                            continue
                         
                         # Convert server state format to the format expected by agent modules
                         from PIL import Image
@@ -2011,20 +2303,116 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                             action = process_agent_step_multiprocess(vlm, game_state, agent_modules, args)
                         
                         # Send action to server instead of emulator
-                        if action and action != "WAIT":
-                            requests.post(f"{server_url}/action", 
-                                        json={"buttons": [action]}, 
-                                        timeout=5)
-                            print(f"🤖 Agent action: {action} (step {agent_step_count})")
+                        if action and action != "WAIT" and action != ["WAIT"]:
+                            # Always send action as a list to the server
+                            if isinstance(action, list):
+                                # Filter out WAIT actions from the list
+                                valid_actions = [a for a in action if a != "WAIT"]
+                                if valid_actions:
+                                    # Send each action individually for proper step counting
+                                    for individual_action in valid_actions:
+                                        requests.post(f"{server_url}/action", 
+                                                    json={"buttons": [individual_action]}, 
+                                                    timeout=5)
+                                        agent_step_count += 1
+                                        print(f"🤖 Agent action: {individual_action} (step {agent_step_count})")
+                                        
+                                        # Log each individual action to anti-cheat submission.log
+                                        if anticheat_tracker:
+                                            try:
+                                                # Create state hash for integrity
+                                                state_hash = anticheat_tracker.create_state_hash(state_data)
+                                                
+                                                # Log the action to submission.log
+                                                anticheat_tracker.log_submission_data(
+                                                    step=agent_step_count,
+                                                    state_data=state_data,
+                                                    action_taken=individual_action,
+                                                    decision_time=0.1,  # Minimal time for multiprocess
+                                                    state_hash=state_hash
+                                                )
+                                            except Exception as e:
+                                                print(f"⚠️ Anti-cheat logging error: {e}")
+                                        
+                                        # Checkpoint saving after each individual action
+                                        if agent_step_count - last_checkpoint_step >= CHECKPOINT_INTERVAL:
+                                            try:
+                                                # First, save state and milestones via server
+                                                checkpoint_response = requests.post(f"{server_url}/checkpoint", 
+                                                                                  json={"step_count": agent_step_count}, 
+                                                                                  timeout=10)
+                                                if checkpoint_response.status_code == 200:
+                                                    print(f"💾 Server: Checkpoint state saved: checkpoint.state")
+                                                    
+                                                # Then save LLM history locally on client
+                                                if llm_logger:
+                                                    llm_logger.save_checkpoint("checkpoint_llm.txt")
+                                                    print(f"💾 Client: Checkpoint LLM history saved: checkpoint_llm.txt")
+                                                
+                                                # SimpleAgent state is preserved via LLM logger history
+                                                
+                                                print(f"✅ Checkpoint completed at step {agent_step_count}")
+                                                last_checkpoint_step = agent_step_count
+                                            except Exception as e:
+                                                print(f"⚠️ Checkpoint save error: {e}")
+                                else:
+                                    print(f"🤖 Agent waiting - all actions were WAIT (step {agent_step_count})")
+                            else:
+                                # Single action string - convert to list
+                                requests.post(f"{server_url}/action", 
+                                            json={"buttons": [action]}, 
+                                            timeout=5)
+                                agent_step_count += 1
+                                print(f"🤖 Agent action: {action} (step {agent_step_count})")
+                                
+                                # Log to anti-cheat submission.log
+                                if anticheat_tracker:
+                                    try:
+                                        # Create state hash for integrity
+                                        state_hash = anticheat_tracker.create_state_hash(state_data)
+                                        
+                                        # Log the action to submission.log
+                                        anticheat_tracker.log_submission_data(
+                                            step=agent_step_count,
+                                            state_data=state_data,
+                                            action_taken=action,
+                                            decision_time=0.1,  # Minimal time for multiprocess
+                                            state_hash=state_hash
+                                        )
+                                    except Exception as e:
+                                        print(f"⚠️ Anti-cheat logging error: {e}")
+                                
+                                # Checkpoint saving after single action
+                                if agent_step_count - last_checkpoint_step >= CHECKPOINT_INTERVAL:
+                                    try:
+                                        # First, save state and milestones via server
+                                        checkpoint_response = requests.post(f"{server_url}/checkpoint", 
+                                                                          json={"step_count": agent_step_count}, 
+                                                                          timeout=10)
+                                        if checkpoint_response.status_code == 200:
+                                            print(f"💾 Server: Checkpoint state saved: checkpoint.state")
+                                            
+                                        # Then save LLM history locally on client
+                                        if llm_logger:
+                                            llm_logger.save_checkpoint("checkpoint_llm.txt")
+                                            print(f"💾 Client: Checkpoint LLM history saved: checkpoint_llm.txt")
+                                        
+                                        # SimpleAgent state is preserved via LLM logger history
+                                        
+                                        print(f"✅ Checkpoint completed at step {agent_step_count}")
+                                        last_checkpoint_step = agent_step_count
+                                    except Exception as e:
+                                        print(f"⚠️ Checkpoint save error: {e}")
                         else:
                             print(f"🤖 Agent waiting (step {agent_step_count})")
                         
-                        agent_step_count += 1
+                        # Reset error counter on successful action
+                        reset_error_counter()
+                        
                         last_agent_time = current_time
                         
                 except Exception as e:
-                    print(f"Agent processing error: {e}")
-                    time.sleep(1)  # Wait before retrying
+                    handle_agent_error(e)
             
             # Small sleep to avoid busy waiting
             time.sleep(0.1)
@@ -2036,52 +2424,63 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
     return True
 
 def simple_mode_processing_multiprocess(vlm, game_state, args):
-    """Simple mode processing for multiprocess mode"""
+    """Simple mode processing for multiprocess mode using full SimpleAgent with history tracking"""
     try:
-        from utils.state_formatter import format_state_for_llm
+        from agent.simple import SimpleAgent
+        
+        # Get or create a persistent simple agent instance with full history tracking
+        if not hasattr(simple_mode_processing_multiprocess, 'simple_agent'):
+            simple_mode_processing_multiprocess.simple_agent = SimpleAgent(vlm)
+            
+            # Try to load history from LLM checkpoint if it exists
+            checkpoint_llm_file = "checkpoint_llm.txt"
+            if os.path.exists(checkpoint_llm_file):
+                print("🔄 Loading SimpleAgent history from checkpoint_llm.txt...")
+                if simple_mode_processing_multiprocess.simple_agent.load_history_from_llm_checkpoint(checkpoint_llm_file):
+                    stats = simple_mode_processing_multiprocess.simple_agent.get_history_stats()
+                    print("✅ SimpleAgent initialized with restored history:")
+                    print(f"   - Restored {stats['history_entries']} history entries with (X,Y) positions")
+                    print(f"   - Restored {stats['recent_actions']} recent actions")
+                    print(f"   - Restored battle/overworld/dialogue contexts")
+                    print(f"   - Restored LLM analysis and reasoning for each step")
+                    print(f"   - Continuing from step #{stats['step_counter']}")
+                else:
+                    print("⚠️ Failed to load checkpoint history, starting fresh")
+                    print("✅ SimpleAgent initialized with fresh history tracking")
+            else:
+                print("✅ SimpleAgent initialized with fresh history tracking:")
+                print("   - Tracks last 100 states with (X,Y) positions")
+                print("   - Tracks battle/overworld/dialogue contexts") 
+                print("   - Stores LLM analysis and reasoning for each step")
+                print("   - Manages objectives and stuck detection")
         
         frame = game_state["visual"]["screenshot"]
         
-        # Format the current state for LLM  
-        formatted_state = format_state_for_llm(game_state)
+        # Use the SimpleAgent's full processing with history, objectives, and structured reasoning
+        action = simple_mode_processing_multiprocess.simple_agent.process_step(frame, game_state)
         
-        # Get action history if it exists
-        if not hasattr(simple_mode_processing_multiprocess, 'recent_actions'):
-            simple_mode_processing_multiprocess.recent_actions = []
+        # Get the agent's state for debugging/monitoring
+        agent_stats = simple_mode_processing_multiprocess.simple_agent.get_history_stats()
+        if agent_stats["step_counter"] % 10 == 0:  # Log every 10 steps
+            print(f"📊 SimpleAgent Stats: {agent_stats['history_entries']} history entries, "
+                  f"{agent_stats['recent_actions']} recent actions, "
+                  f"{agent_stats['objectives_count']} objectives, "
+                  f"Step #{agent_stats['step_counter']}")
         
-        # Create simple prompt with just frame and comprehensive state
-        prompt = f"""You are playing Pokemon Emerald. Based on the current game frame and state information, choose the best button action.
-
-CURRENT GAME STATE:
-{formatted_state}
-
-ACTION HISTORY (last 20 actions):
-{', '.join(simple_mode_processing_multiprocess.recent_actions[-20:]) if simple_mode_processing_multiprocess.recent_actions else 'None'}
-
-Available actions: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT
-
-Respond with just the button name (e.g., 'A' or 'RIGHT'). Be decisive and avoid getting stuck."""
+        # The SimpleAgent returns either a single action or a list of actions
+        # Return the full action list for the caller to handle properly
+        if isinstance(action, list):
+            return action if action else ["WAIT"]
         
-        # Query VLM for action
-        response = vlm.get_query(frame, prompt, "simple_multiprocess")
-        
-        # Extract action from response
-        response_upper = response.upper().strip()
-        for action in ['UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT']:
-            if action in response_upper:
-                # Update action history
-                simple_mode_processing_multiprocess.recent_actions.append(action)
-                if len(simple_mode_processing_multiprocess.recent_actions) > 50:
-                    simple_mode_processing_multiprocess.recent_actions.pop(0)
-                return action
-        
-        return "WAIT"
+        # Convert single action to list for consistent handling
+        return [action] if action else ["WAIT"]
         
     except Exception as e:
         print(f"Error in simple mode processing: {e}")
         import traceback
         traceback.print_exc()
-        return "WAIT"
+        # Fallback to basic action if SimpleAgent fails
+        return "A"
 
 def process_agent_step_multiprocess(vlm, game_state, agent_modules, args):
     """Process one agent step using the same logic as single process mode"""
@@ -2270,10 +2669,10 @@ def run_multiprocess_client(server_port=8000, args=None):
                         # Run the SAME agent processing as single process mode
                         if args and getattr(args, 'simple', False):
                             # Simple mode processing
-                            action = _simple_mode_processing(vlm, game_state, args)
+                            action = simple_mode_processing_multiprocess(vlm, game_state, args)
                         else:
-                            # Full agent module processing
-                            action = _process_agent_step(vlm, game_state, args)
+                            # Full agent module processing - call the actual functions
+                            action = process_agent_step_multiprocess(vlm, game_state, agent_modules, args)
                         
                         # Send action to server instead of emulator
                         if action and action != "WAIT":
@@ -2352,6 +2751,7 @@ def main():
     parser = argparse.ArgumentParser(description="Direct Agent Pokemon Emerald")
     parser.add_argument("--rom", type=str, default="Emerald-GBAdvance/rom.gba", help="Path to ROM file")
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
+    parser.add_argument("--load-checkpoint", action="store_true", help="Load from checkpoint files (checkpoint.state, checkpoint_llm.txt, checkpoint_milestones.json)")
     parser.add_argument("--backend", type=str, default="gemini", help="VLM backend (openai, gemini, local)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", help="Model name to use")
     parser.add_argument("--port", type=int, default=8000, help="Port for web interface")
@@ -2472,8 +2872,23 @@ def main():
     if not args.no_display:
         init_pygame()
     
+    # Determine what state to load
+    state_to_load = None
+    if args.load_checkpoint:
+        # Check if checkpoint files exist
+        checkpoint_state = "checkpoint.state"
+        if os.path.exists(checkpoint_state):
+            state_to_load = checkpoint_state
+            print(f"🔄 Loading from checkpoint: {checkpoint_state}")
+        else:
+            print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
+            print("   Starting fresh game instead")
+    elif args.load_state:
+        state_to_load = args.load_state
+        print(f"📂 Loading from state: {args.load_state}")
+    
     # Initialize emulator
-    if not setup_emulator(args.rom, args.load_state):
+    if not setup_emulator(args.rom, state_to_load):
         print("Failed to initialize emulator")
         return 1
     
@@ -2484,6 +2899,14 @@ def main():
     if not setup_agent(args.backend, args.model_name):
         print("Failed to initialize agent")
         return 1
+    
+    # Load checkpoint data if requested
+    if args.load_checkpoint:
+        print("🔄 Loading checkpoint data...")
+        if load_checkpoint():
+            print("✅ Checkpoint loaded successfully")
+        else:
+            print("⚠️ Checkpoint loading failed, continuing with fresh state")
     
     # Start agent processing thread
     global agent_processing_thread

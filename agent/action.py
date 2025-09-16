@@ -130,13 +130,20 @@ def action_step(memory_context, current_plan, latest_observation, frame, state_d
     complete_prompt = system_prompt + action_prompt
     
     # Print complete prompt to terminal for debugging
-    print("\n" + "="*80)
+    print("\n" + "="*120)
     print("🤖 COMPLETE AGENT PROMPT SENT TO VLM:")
-    print("="*80)
-    print(complete_prompt)
-    print("="*80)
+    print("="*120)
+    
+    # Print prompt in chunks to avoid terminal truncation
+    import sys
+    sys.stdout.write(complete_prompt)
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+    
+    print("="*120)
     print("🤖 END OF PROMPT")
-    print("="*80 + "\n")
+    print("="*120 + "\n")
+    sys.stdout.flush()
     
     action_response = vlm.get_text_query(complete_prompt, "ACTION").strip().upper()
     valid_buttons = ['A', 'B', 'SELECT', 'START', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R']

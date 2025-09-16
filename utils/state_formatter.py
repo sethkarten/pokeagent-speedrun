@@ -275,10 +275,10 @@ def _format_state_summary(state_data):
     if position and isinstance(position, dict):
         summary_parts.append(f"Pos: ({position.get('x', '?')}, {position.get('y', '?')})")
     
-    # Facing direction
-    facing = player_data.get('facing')
-    if facing:
-        summary_parts.append(f"Facing: {facing}")
+    # Facing direction - removed as it's often unreliable
+    # facing = player_data.get('facing')
+    # if facing:
+    #     summary_parts.append(f"Facing: {facing}")
     
     # Game state
     game_state = game_data.get('game_state')
@@ -513,9 +513,9 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         if position:
             context_parts.append(f"Position: X={position.get('x', 'unknown')}, Y={position.get('y', 'unknown')}")
         
-        # Facing direction
-        if 'facing' in player_data and player_data['facing']:
-            context_parts.append(f"Facing: {player_data['facing']}")
+        # Facing direction - removed as it's often unreliable
+        # if 'facing' in player_data and player_data['facing']:
+        #     context_parts.append(f"Facing: {player_data['facing']}")
         
         # Money (check both player and game sections)
         money = player_data.get('money') or game_data.get('money')
@@ -650,19 +650,8 @@ def _format_map_info(map_info, include_debug_info=False, include_npcs=True):
     # Use raw tiles if available
     if 'tiles' in map_info and map_info['tiles']:
         raw_tiles = map_info['tiles']
-        # Get player facing direction from context
+        # Use default facing direction since memory-based facing is unreliable
         facing = "South"  # default
-        try:
-            # Try to get facing from state data
-            import inspect
-            frame = inspect.currentframe()
-            while frame:
-                if 'state_data' in frame.f_locals:
-                    facing = frame.f_locals['state_data'].get('player', {}).get('facing', 'South')
-                    break
-                frame = frame.f_back
-        except:
-            pass
         
         # Get NPCs from map info
         npcs = map_info.get('object_events', []) if include_npcs else []

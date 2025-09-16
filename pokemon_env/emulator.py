@@ -457,16 +457,21 @@ class EmeraldEmulator:
                 # Reset dialog tracking and invalidate map cache when loading new state
                 if self.memory_reader:
                     self.memory_reader.reset_dialog_tracking()
-                    self.memory_reader.invalidate_map_cache()
+                    # Don't clear buffer address on state load to avoid expensive rescans
+                    self.memory_reader.invalidate_map_cache(clear_buffer_address=False)
                     
                     # Run a frame to ensure memory is properly loaded
                     self.core.run_frame()
                     
-                    # Force finding map buffer addresses after state load
-                    if not self.memory_reader._find_map_buffer_addresses():
-                        logger.warning("Could not find map buffer addresses after state load")
+                    # Only find map buffer addresses if we don't have them cached
+                    # This avoids expensive memory scanning on every state load
+                    if not self.memory_reader._map_buffer_addr:
+                        if not self.memory_reader._find_map_buffer_addresses():
+                            logger.warning("Could not find map buffer addresses after state load")
+                        else:
+                            logger.info(f"Map buffer found at 0x{self.memory_reader._map_buffer_addr:08X}")
                     else:
-                        logger.info(f"Map buffer found at 0x{self.memory_reader._map_buffer_addr:08X}")
+                        logger.debug(f"Using cached map buffer at 0x{self.memory_reader._map_buffer_addr:08X}")
                 
                 # Set the current state file for both emulator and memory reader
                 self._current_state_file = path

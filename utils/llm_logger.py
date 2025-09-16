@@ -248,6 +248,76 @@ class LLMLogger:
         except Exception as e:
             logger.error(f"Failed to get session summary: {e}")
             return {"error": str(e)}
+    
+    def save_checkpoint(self, checkpoint_file: str):
+        """Save current LLM interaction history to checkpoint file
+        
+        Args:
+            checkpoint_file: Path to save the checkpoint
+        """
+        try:
+            # Read all current log entries
+            log_entries = []
+            if os.path.exists(self.log_file):
+                with open(self.log_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        try:
+                            log_entries.append(json.loads(line.strip()))
+                        except json.JSONDecodeError:
+                            continue
+            
+            # Add checkpoint metadata
+            checkpoint_data = {
+                "checkpoint_timestamp": datetime.now().isoformat(),
+                "session_id": self.session_id,
+                "original_log_file": self.log_file,
+                "total_entries": len(log_entries),
+                "log_entries": log_entries
+            }
+            
+            # Save to checkpoint file
+            with open(checkpoint_file, 'w', encoding='utf-8') as f:
+                json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"LLM checkpoint saved: {checkpoint_file} ({len(log_entries)} entries)")
+            
+        except Exception as e:
+            logger.error(f"Failed to save LLM checkpoint: {e}")
+    
+    def load_checkpoint(self, checkpoint_file: str) -> Optional[int]:
+        """Load LLM interaction history from checkpoint file
+        
+        Args:
+            checkpoint_file: Path to load the checkpoint from
+            
+        Returns:
+            Last agent step count from the checkpoint, or None if not found
+        """
+        try:
+            with open(checkpoint_file, 'r', encoding='utf-8') as f:
+                checkpoint_data = json.load(f)
+            
+            log_entries = checkpoint_data.get("log_entries", [])
+            
+            # Restore log entries to current log file
+            with open(self.log_file, 'w', encoding='utf-8') as f:
+                for entry in log_entries:
+                    f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+            
+            # Find the last agent step from log entries
+            last_step = None
+            for entry in reversed(log_entries):
+                if entry.get("type") == "step_start" and "step_number" in entry:
+                    last_step = entry["step_number"]
+                    break
+            
+            logger.info(f"LLM checkpoint loaded: {checkpoint_file} ({len(log_entries)} entries)")
+            
+            return last_step
+            
+        except Exception as e:
+            logger.error(f"Failed to load LLM checkpoint: {e}")
+            return None
 
 # Global logger instance
 _llm_logger = None

@@ -2,7 +2,6 @@
 <html>
 <head>
     <title>PokeAgent Challenge - Speedrun</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
         
@@ -501,44 +500,109 @@
     </div>
     
     <script>
-        // Initialize Socket.IO connection
-        const socket = io('http://127.0.0.1:8000');
+        let isConnected = false;
+        let frameUpdateInterval;
+        let mediaRecorder = null;
+        let recordedChunks = [];
         
-        // WebSocket event handlers
-        socket.on('frame_update', function(data) {
-            document.getElementById('frame').src = `data:image/png;base64,${data.frame}`;
+        // Recording functions
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { 
+                        mediaSource: 'tab',
+                        width: 1920,
+                        height: 1080,
+                        frameRate: 30
+                    }
+                });
+                
+                mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: 'video/webm;codecs=vp9'
+                });
+                
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+                
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `pokeagent_stream_${new Date().toISOString()}.webm`;
+                    a.click();
+                    recordedChunks = [];
+                };
+                
+                mediaRecorder.start();
+                console.log('Recording started');
+            } catch (error) {
+                console.error('Error starting recording:', error);
+            }
+        }
+        
+        function stopRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+                console.log('Recording stopped');
+            }
+        }
+        
+        // Keyboard shortcuts for recording
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === 'R') {
+                if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                    startRecording();
+                } else {
+                    stopRecording();
+                }
+            }
         });
         
-        socket.on('text_update', function(data) {
-            // Text updates can be logged to console if needed
-            console.log('Text update:', data.text);
-        });
+        // Detect server address dynamically
+        const serverUrl = `http://${window.location.hostname}:${window.location.port || '8000'}`;
+        console.log(`Using server URL: ${serverUrl}`);
         
-        socket.on('plan_update', function(data) {
-            // Plan updates can be logged to console if needed
-            console.log('Plan update:', data.plan);
-        });
+        // Poll for frame updates using FastAPI
+        async function pollFrameUpdate() {
+            try {
+                const response = await fetch(`${serverUrl}/api/frame`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.frame) {
+                        document.getElementById('frame').src = `data:image/png;base64,${data.frame}`;
+                    }
+                    
+                    if (!isConnected) {
+                        isConnected = true;
+                        console.log('FastAPI connected');
+                        document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#33ff33';
+                    }
+                } else {
+                    throw new Error('Failed to fetch frame');
+                }
+            } catch (error) {
+                if (isConnected) {
+                    isConnected = false;
+                    console.log('FastAPI disconnected');
+                    document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
+                }
+            }
+        }
         
-        socket.on('memory_update', function(data) {
-            // Memory updates can be logged to console if needed
-            console.log('Memory update: Memory refreshed');
-        });
+        // Start polling every 50ms (20 FPS)
+        frameUpdateInterval = setInterval(pollFrameUpdate, 50);
         
-        // Connection status indicators
-        socket.on('connect', function() {
-            console.log('WebSocket connected');
-            document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#33ff33';
-        });
-        
-        socket.on('disconnect', function() {
-            console.log('WebSocket disconnected');
-            document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
-        });
+        // Initial connection attempt
+        pollFrameUpdate();
 
         // Function to fetch and update agent thinking
         async function updateAgentThinking() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/agent');
+                const response = await fetch(`${serverUrl}/agent`);
                 const data = await response.json();
                 
                 const agentThinkingDiv = document.getElementById('agent-thinking');
@@ -579,7 +643,7 @@
         
         async function updateRecentActions() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/recent_actions');
+                const response = await fetch(`${serverUrl}/recent_actions`);
                 const data = await response.json();
                 
                 const actionQueue = document.getElementById('action-queue');
@@ -637,7 +701,7 @@
         // Function to fetch and update milestones
         async function updateMilestones() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/milestones');
+                const response = await fetch(`${serverUrl}/milestones`);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -746,7 +810,7 @@
         // Function to fetch and update party status
         async function updatePartyStatus() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/state');
+                const response = await fetch(`${serverUrl}/state`);
                 const data = await response.json();
                 
                 const partyContainer = document.getElementById('party-status');
@@ -844,21 +908,8 @@
             }
         }
 
-        // Function to fetch and update the game screenshot
-        async function updateScreenshot() {
-            try {
-                const response = await fetch('http://127.0.0.1:8000/screenshot');
-                const data = await response.json();
-                document.getElementById('frame').src = `data:image/png;base64,${data.screenshot_base64}`;
-            } catch (error) {
-                console.error('Error fetching screenshot:', error);
-            }
-        }
-
-        // Set fast updates for frames
-        setInterval(() => {
-            updateScreenshot();
-        }, 100); // Update every 100ms
+        // Frame updates are already handled by pollFrameUpdate()
+        // No need for updateScreenshot()
 
         // Set up periodic updates
         setInterval(() => {
@@ -873,7 +924,6 @@
         }, 5000); // Update every 5 seconds (reduced from 2 seconds)
 
         // Call the update functions initially
-        updateScreenshot();
         updateAgentThinking();
         updateRecentActions();
         updateMilestones();

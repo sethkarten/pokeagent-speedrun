@@ -2416,10 +2416,10 @@ class PokemonEmeraldReader:
             if player_name:
                 state["player"]["name"] = player_name
             
-            # Player facing direction
-            facing = self.read_player_facing()
-            if facing:
-                state["player"]["facing"] = facing
+            # Player facing direction - removed as it's often unreliable
+            # facing = self.read_player_facing()
+            # if facing:
+            #     state["player"]["facing"] = facing
             
             # Game information
             state["game"].update({
