@@ -480,6 +480,12 @@
         <div class="header-logo">PokeAgent Challenge //</div>
         <div class="header-title">PROTOCOL_EMERALD // AGENT = PLAYER</div>
         <div style="flex: 1;"></div>
+        <div id="metrics-display" style="color: #33ff33; margin-right: 20px; font-size: 14px;">
+            <span id="cost-metric">Cost: $0.00</span> | 
+            <span id="tokens-metric">0 tokens</span> | 
+            <span id="actions-metric">Actions: 0</span> | 
+            <span id="time-metric">Time: 00:00:00</span>
+        </div>
         <div style="width: 10px; height: 10px; background-color: #33ff33; border-radius: 50%; box-shadow: 0 0 10px #33ff33;"></div>
     </div>
     
@@ -633,6 +639,82 @@
                 }
             }
         }
+        
+        // Function to format time from seconds to HH:MM:SS
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+        
+        // Track session start time for continuous timer
+        let sessionStartTime = null;
+        let savedRunTime = 0;
+        
+        // Function to update metrics display
+        async function updateMetrics() {
+            try {
+                const response = await fetch(`${serverUrl}/metrics`);
+                if (response.ok) {
+                    const metrics = await response.json();
+                    
+                    // Update cost display
+                    const cost = metrics.total_cost || 0;
+                    document.getElementById('cost-metric').textContent = `Cost: $${cost.toFixed(4)}`;
+                    
+                    // Update tokens display
+                    const tokens = metrics.total_tokens || 0;
+                    document.getElementById('tokens-metric').textContent = `${tokens.toLocaleString()} tokens`;
+                    
+                    // Update actions display
+                    const actions = metrics.total_actions || 0;
+                    document.getElementById('actions-metric').textContent = `Actions: ${actions.toLocaleString()}`;
+                    
+                    // Handle start time - detect fresh start if metrics are all zero
+                    const isNewSession = metrics.total_llm_calls === 0 && metrics.total_actions === 0 && metrics.total_cost === 0;
+                    
+                    if (isNewSession) {
+                        // Fresh start - reset timer and force immediate update
+                        sessionStartTime = null;
+                        savedRunTime = 0;
+                        console.log('Detected fresh session - resetting timer');
+                        
+                        // Force an immediate metrics update in case server cache is stale
+                        setTimeout(() => {
+                            updateMetrics();
+                        }, 500);
+                    } else if (metrics.start_time && !sessionStartTime) {
+                        // Restore from checkpoint or first metrics update
+                        sessionStartTime = metrics.start_time * 1000; // Convert to milliseconds
+                        savedRunTime = metrics.total_run_time || 0;
+                        console.log('Initialized timer from metrics:', {
+                            startTime: metrics.start_time,
+                            savedRunTime: savedRunTime
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching metrics:', error);
+            }
+        }
+        
+        // Function to update time continuously
+        function updateTime() {
+            if (sessionStartTime) {
+                const currentTime = Date.now();
+                const elapsedSeconds = Math.floor((currentTime - sessionStartTime) / 1000) + savedRunTime;
+                document.getElementById('time-metric').textContent = `Time: ${formatTime(elapsedSeconds)}`;
+            } else {
+                // No session started yet - show 00:00:00
+                document.getElementById('time-metric').textContent = `Time: 00:00:00`;
+            }
+        }
+        
+        // Poll for metrics updates
+        setInterval(updateMetrics, 1000);  // Update metrics every 1 second for faster response
+        setInterval(updateTime, 100);  // Update timer every 100ms for smooth display
+        updateMetrics();  // Initial metrics load
         
         // Start polling every 50ms (20 FPS)
         frameUpdateInterval = setInterval(pollFrameUpdate, 50);

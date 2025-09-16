@@ -52,8 +52,8 @@ action_queue = []  # Queue for multi-action sequences
 current_action = None  # Current action being held
 action_frames_remaining = 0  # Frames left to hold current action
 release_frames_remaining = 0  # Frames left to wait after release
-ACTION_HOLD_FRAMES = 6  # Hold each action for 6 frames to match manual mode timing (BUTTON_HOLD_DURATION from agent.py)
-ACTION_RELEASE_DELAY = 12  # Wait 12 frames between presses to match manual mode timing (BUTTON_RELEASE_DELAY from agent.py)
+ACTION_HOLD_FRAMES = 12  # Hold each action for 6 frames to match manual mode timing (BUTTON_HOLD_DURATION from agent.py)
+ACTION_RELEASE_DELAY = 24  # Wait 12 frames between presses to match manual mode timing (BUTTON_RELEASE_DELAY from agent.py)
 
 # Video recording state
 video_writer = None
@@ -551,6 +551,11 @@ async def get_stream():
         raise HTTPException(status_code=404, detail="Stream interface not found")
 
 # FastAPI endpoints
+@app.get("/health")
+async def get_health():
+    """Health check endpoint for server monitoring"""
+    return {"status": "healthy", "timestamp": time.time()}
+
 @app.get("/status")
 async def get_status():
     """Get server status"""
@@ -1070,21 +1075,122 @@ async def get_agent_thinking():
             "timestamp": time.time()
         }
 
-@app.post("/agent_step")
-async def update_agent_step(request: Request = None):
-    """Update the agent step count (called by agent.py)"""
-    global agent_step_count
+@app.get("/metrics")
+async def get_metrics():
+    """Get cumulative metrics for the run"""
+    global latest_metrics
     
     try:
-        # Check if this is a direct set operation
+        # Return the latest metrics received from client (with thread safety)
+        with step_lock:
+            metrics = latest_metrics.copy()
+            metrics["agent_step_count"] = agent_step_count
+        
+        # If metrics haven't been initialized by client yet, try to load from checkpoint
+        # BUT only if checkpoint loading is enabled (not for fresh starts with --load-state)
+        if metrics.get("total_llm_calls", 0) == 0 and checkpoint_loading_enabled:
+            checkpoint_file = "checkpoint_llm.txt"
+            if os.path.exists(checkpoint_file):
+                try:
+                    with open(checkpoint_file, 'r', encoding='utf-8') as f:
+                        checkpoint_data = json.load(f)
+                        if "cumulative_metrics" in checkpoint_data:
+                            checkpoint_metrics = checkpoint_data["cumulative_metrics"]
+                            metrics.update(checkpoint_metrics)
+                            
+                            # Recalculate total_run_time based on original start_time
+                            if "start_time" in checkpoint_metrics:
+                                metrics["total_run_time"] = time.time() - checkpoint_metrics["start_time"]
+                            
+                            # Update agent step count from checkpoint
+                            if "agent_step_count" in checkpoint_data:
+                                metrics["agent_step_count"] = checkpoint_data["agent_step_count"]
+                except:
+                    pass
+        
+        return metrics
+        
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}")
+        return {
+            "total_tokens": 0,
+            "prompt_tokens": 0, 
+            "completion_tokens": 0,
+            "total_cost": 0.0,
+            "total_actions": 0,
+            "total_run_time": 0,
+            "total_llm_calls": 0,
+            "agent_step_count": agent_step_count
+        }
+
+# Store latest metrics from client
+latest_metrics = {
+    "total_tokens": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_cost": 0.0,
+    "total_actions": 0,
+    "total_run_time": 0,
+    "total_llm_calls": 0,
+    "start_time": time.time()  # Will be overwritten if checkpoint is loaded
+}
+
+# Flag to track whether checkpoint loading should be enabled
+checkpoint_loading_enabled = True  # Will be set based on startup args
+
+@app.post("/reset_metrics")
+async def reset_metrics():
+    """Reset all metrics to zero for fresh start"""
+    global latest_metrics, agent_step_count, checkpoint_loading_enabled
+    
+    with step_lock:
+        latest_metrics.update({
+            "total_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_cost": 0.0,
+            "total_actions": 0,
+            "total_run_time": 0,
+            "total_llm_calls": 0,
+            "start_time": time.time()
+        })
+        agent_step_count = 0
+        # Disable checkpoint loading to prevent loading from checkpoint_llm.txt
+        checkpoint_loading_enabled = False
+    
+    print("🔄 Server metrics reset for fresh start - checkpoint loading disabled")
+    return {"status": "reset", "timestamp": time.time()}
+
+@app.post("/agent_step")
+async def update_agent_step(request: Request = None):
+    """Update the agent step count and metrics (called by agent.py)"""
+    global agent_step_count, latest_metrics
+    
+    try:
+        # Check if this is a direct set operation or has metrics
         if request:
-            request_data = await request.json()
-            if "set_step" in request_data:
-                with step_lock:
-                    agent_step_count = request_data["set_step"]
-                return {"status": "set", "agent_step": agent_step_count}
-    except:
-        pass
+            try:
+                request_data = await request.json()
+                
+                # Update metrics if provided (with thread safety)
+                if "metrics" in request_data and isinstance(request_data["metrics"], dict):
+                    with step_lock:  # Use existing lock for thread safety
+                        # Safely update each metric individually to avoid race conditions
+                        for key, value in request_data["metrics"].items():
+                            if key in latest_metrics:
+                                latest_metrics[key] = value
+                    
+                # Handle set_step for initialization
+                if "set_step" in request_data:
+                    with step_lock:
+                        agent_step_count = request_data["set_step"]
+                    return {"status": "set", "agent_step": agent_step_count}
+            except Exception as e:
+                logger.error(f"Error processing agent_step request: {e}")
+                # Continue with default increment behavior
+    except Exception as e:
+        logger.error(f"Error in agent_step endpoint: {e}")
+        # Continue with default increment behavior
     
     # Default increment behavior
     with step_lock:
@@ -1389,6 +1495,26 @@ def main():
     if env_load_state and not args.load_state:
         args.load_state = env_load_state
         print(f"📂 Using load state from environment: {env_load_state}")
+        if env_load_state == "checkpoint.state":
+            if os.path.exists("checkpoint.state"):
+                print(f"✅ Server startup: checkpoint.state file exists")
+            else:
+                print(f"❌ Server startup: checkpoint.state file MISSING!")
+    
+    # Set checkpoint loading flag based on whether this is a true checkpoint load
+    global checkpoint_loading_enabled
+    env_load_checkpoint_mode = os.environ.get("LOAD_CHECKPOINT_MODE")
+    
+    if env_load_checkpoint_mode == "true":
+        checkpoint_loading_enabled = True
+        print("🔄 Checkpoint loading enabled - will restore LLM metrics from checkpoint_llm.txt")
+    elif args.load_state and args.load_state.endswith("checkpoint.state") and not env_load_checkpoint_mode:
+        # Someone manually used --load-state checkpoint.state (not --load-checkpoint)
+        checkpoint_loading_enabled = False
+        print("✨ Manual checkpoint.state load as fresh start - will NOT load LLM metrics")
+    else:
+        checkpoint_loading_enabled = False
+        print("✨ Fresh start mode - will NOT load LLM metrics from checkpoint_llm.txt")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
     # Initialize video recording if requested
@@ -1522,20 +1648,28 @@ def init_for_multiprocess():
             # Load state if specified
             if load_state:
                 try:
+                    print(f"🔄 Attempting to load state from: {load_state}")
                     env.load_state(load_state)
-                    print(f"📂 Loaded state from: {load_state}")
+                    print(f"📂 Successfully loaded state from: {load_state}")
                     
                     # If this is checkpoint.state, also load milestones
                     if load_state.endswith("checkpoint.state") and env.milestone_tracker:
                         try:
-                            env.milestone_tracker.load_milestones_for_state(load_state)
-                            print(f"📂 Loaded checkpoint milestones")
+                            checkpoint_milestones = "checkpoint_milestones.json"
+                            if os.path.exists(checkpoint_milestones):
+                                env.milestone_tracker.load_milestones_for_state(load_state)
+                                print(f"📋 Successfully loaded checkpoint milestones from {checkpoint_milestones}")
+                            else:
+                                print(f"⚠️ Checkpoint milestones file not found: {checkpoint_milestones}")
                         except Exception as e:
                             print(f"⚠️ Could not load checkpoint milestones: {e}")
                     
                     # Map buffer should already be found by emulator.load_state()
                     if env.memory_reader and env.memory_reader._map_buffer_addr:
                         print(f"📍 Map buffer initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
+                    
+                    print(f"✅ State loading complete for {load_state}")
+                    
                 except Exception as e:
                     print(f"❌ Failed to load state from {load_state}: {e}")
                     print("   Continuing with fresh game state...")

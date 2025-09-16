@@ -72,6 +72,8 @@ agent_step_count = 0  # Track total agent steps
 consecutive_errors = 0  # Track consecutive errors for recovery
 MAX_CONSECUTIVE_ERRORS = 5  # Maximum errors before trying recovery
 SERVER_RESTART_THRESHOLD = 10  # Restart server after this many consecutive errors
+server_process = None  # Track server subprocess for restart capability
+server_env_vars = {}  # Store original server environment variables for restart
 
 # LLM logging
 llm_logger = None  # Will be initialized when needed
@@ -482,6 +484,57 @@ def reset_error_counter():
     global consecutive_errors
     consecutive_errors = 0
 
+def start_server():
+    """Start the server subprocess with original environment variables"""
+    global server_process, server_env_vars
+    try:
+        # Kill any existing server process
+        if server_process and server_process.poll() is None:
+            print("🔄 Terminating existing server process...")
+            server_process.terminate()
+            server_process.wait(timeout=5)
+    except:
+        pass
+    
+    try:
+        # Prepare environment for server restart
+        server_env = os.environ.copy()
+        server_env.update(server_env_vars)
+        
+        print(f"🚀 Starting server process with preserved environment...")
+        if server_env_vars:
+            env_summary = {k: v for k, v in server_env_vars.items() if k.startswith(('ROM_PATH', 'LOAD_STATE', 'LOAD_CHECKPOINT_MODE', 'VLM_', 'NO_OCR', 'RECORD_VIDEO', 'SIMPLE_MODE'))}
+            print(f"📝 Environment: {env_summary}")
+            
+            # Check if checkpoint files still exist when restarting
+            if 'LOAD_STATE' in server_env_vars and server_env_vars['LOAD_STATE'] == 'checkpoint.state':
+                if os.path.exists('checkpoint.state'):
+                    print(f"✅ Checkpoint state file exists for restart")
+                else:
+                    print(f"❌ ERROR: Checkpoint state file missing during restart!")
+        
+        server_process = subprocess.Popen(
+            ["python", "server/app.py"], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE,
+            env=server_env
+        )
+        
+        # Wait a moment for server to start
+        time.sleep(3)
+        
+        # Check if server is responding
+        response = requests.get("http://localhost:8000/health", timeout=5)
+        if response.status_code == 200:
+            print("✅ Server started successfully")
+            return True
+        else:
+            print(f"❌ Server health check failed: {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"❌ Failed to start server: {e}")
+        return False
+
 def handle_agent_error(error):
     """Handle agent processing errors with graceful recovery"""
     global consecutive_errors, running
@@ -498,8 +551,13 @@ def handle_agent_error(error):
             print(f"   Waiting {wait_time}s before retry...")
             time.sleep(wait_time)
         elif consecutive_errors <= SERVER_RESTART_THRESHOLD:
-            print(f"🔄 Too many consecutive errors ({consecutive_errors}), attempting recovery...")
-            time.sleep(5)
+            print(f"🔄 Too many consecutive errors ({consecutive_errors}), attempting server recovery...")
+            if start_server():
+                print("✅ Server recovery successful, resetting error count")
+                consecutive_errors = 0  # Reset error count on successful recovery
+            else:
+                print("❌ Server recovery failed, waiting before next attempt...")
+                time.sleep(5)
         else:
             print(f"💥 CRITICAL: Too many consecutive errors ({consecutive_errors})")
             print("   Saving emergency checkpoint and continuing...")
@@ -515,12 +573,19 @@ def handle_agent_error(error):
 
 def signal_handler(signum, _frame):
     """Handle shutdown signals gracefully"""
-    global running, video_writer
+    global running, video_writer, server_process
     print(f"\nReceived signal {signum}, shutting down gracefully...")
     running = False
     if video_writer is not None:
         video_writer.release()
         print(f"Video saved to: {video_filename}")
+    if server_process and server_process.poll() is None:
+        print("🔄 Terminating server process...")
+        server_process.terminate()
+        try:
+            server_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            server_process.kill()
     if emulator:
         emulator.stop()
     pygame.quit()
@@ -2113,6 +2178,7 @@ async def get_web_interface_server_path():
 
 def run_multiprocess_server(args):
     """Run the server component in multiprocess mode"""
+    global server_env_vars
     try:
         # Import server dependencies
         from server.app import app
@@ -2120,24 +2186,54 @@ def run_multiprocess_server(args):
         
         # Configure the server app with the provided arguments
         os.environ["ROM_PATH"] = args.rom
+        server_env_vars["ROM_PATH"] = args.rom
+        
         if args.load_checkpoint:
             # Check if checkpoint files exist
             checkpoint_state = "checkpoint.state"
+            checkpoint_milestones = "checkpoint_milestones.json"
             if os.path.exists(checkpoint_state):
                 os.environ["LOAD_STATE"] = checkpoint_state
+                server_env_vars["LOAD_STATE"] = checkpoint_state
+                # Add flag to indicate this is checkpoint loading, not fresh start
+                os.environ["LOAD_CHECKPOINT_MODE"] = "true"
+                server_env_vars["LOAD_CHECKPOINT_MODE"] = "true"
                 print(f"🔄 Server will load from checkpoint: {checkpoint_state}")
+                if os.path.exists(checkpoint_milestones):
+                    print(f"📋 Checkpoint milestones found: {checkpoint_milestones}")
+                else:
+                    print(f"⚠️ Checkpoint milestones not found: {checkpoint_milestones}")
             else:
                 print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
         elif args.load_state:
             os.environ["LOAD_STATE"] = args.load_state
+            server_env_vars["LOAD_STATE"] = args.load_state
+            
+            # Clear checkpoint files for fresh start in multiprocess mode
+            checkpoint_files = ["checkpoint.state", "checkpoint_llm.txt", "checkpoint_milestones.json"]
+            for checkpoint_file in checkpoint_files:
+                if os.path.exists(checkpoint_file):
+                    try:
+                        os.remove(checkpoint_file)
+                        print(f"🗑️  Cleared old checkpoint file: {checkpoint_file}")
+                    except Exception as e:
+                        print(f"⚠️ Could not remove {checkpoint_file}: {e}")
+            print("✨ Fresh start - all checkpoint data cleared")
+            
         os.environ["VLM_BACKEND"] = args.backend
+        server_env_vars["VLM_BACKEND"] = args.backend
         os.environ["VLM_MODEL"] = args.model_name
+        server_env_vars["VLM_MODEL"] = args.model_name
+        
         if args.no_ocr:
             os.environ["NO_OCR"] = "1"
+            server_env_vars["NO_OCR"] = "1"
         if args.record:
             os.environ["RECORD_VIDEO"] = "1"
+            server_env_vars["RECORD_VIDEO"] = "1"
         if args.simple:
             os.environ["SIMPLE_MODE"] = "1"
+            server_env_vars["SIMPLE_MODE"] = "1"
         
         print(f"📝 Server environment configured:")
         print(f"   ROM: {args.rom}")
@@ -2164,6 +2260,26 @@ def run_multiprocess_server(args):
         print(f"❌ Server process error: {e}")
         return False
 
+def reset_server_metrics_if_fresh_start(server_url):
+    """Reset server metrics if this is a fresh start (no checkpoint files)"""
+    checkpoint_files = ["checkpoint.state", "checkpoint_llm.txt", "checkpoint_milestones.json"]
+    has_any_checkpoint = any(os.path.exists(f) for f in checkpoint_files)
+    
+    # Also check if LOAD_CHECKPOINT_MODE environment is set (indicates checkpoint loading intent)
+    load_checkpoint_mode = os.environ.get("LOAD_CHECKPOINT_MODE")
+    
+    if not has_any_checkpoint and load_checkpoint_mode != "true":
+        try:
+            response = requests.post(f"{server_url}/reset_metrics", timeout=5)
+            if response.status_code == 200:
+                print("🔄 Server metrics reset for fresh start")
+            else:
+                print(f"⚠️ Failed to reset server metrics: {response.status_code}")
+        except Exception as e:
+            print(f"⚠️ Could not reset server metrics: {e}")
+    elif load_checkpoint_mode == "true":
+        print("🔄 Checkpoint mode detected - NOT resetting server metrics")
+
 def run_multiprocess_client_headless(server_port=8000, args=None):
     """Run headless client that just processes agent logic and sends commands to server"""
     global agent_step_count, last_checkpoint_step, llm_logger, consecutive_errors, anticheat_tracker
@@ -2186,6 +2302,9 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
     else:
         print("❌ Could not connect to server")
         return False
+    
+    # Reset server metrics if this is a fresh start (no checkpoint files)
+    reset_server_metrics_if_fresh_start(server_url)
     
     # Note: Server checkpoint loading is handled during server startup
     # Client will only load LLM history below
@@ -2274,8 +2393,8 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                         # Check if there are still actions in the queue before sending new ones
                         action_queue_length = state_data.get("action_queue_length", 0)
                         if action_queue_length > 0:
-                            # Calculate expected wait time (0.3s per action at 60 FPS)
-                            expected_wait = action_queue_length * 0.3
+                            # Calculate expected wait time (0.5s per action to ensure full effect)
+                            expected_wait = action_queue_length * 0.5
                             print(f"⏳ Waiting for action queue to empty (queue length: {action_queue_length}, ~{expected_wait:.1f}s)")
                             
                             # Keep polling until queue is empty with proper wait time
@@ -2305,12 +2424,12 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                             else:
                                 print(f"✅ Action queue empty after {elapsed:.1f}s, ready for next frame")
                             
-                            # Add small delay after queue empties to ensure frame is stable
-                            time.sleep(0.3)
+                            # Add longer delay after queue empties to ensure game state has fully updated
+                            time.sleep(1.0)
                             continue
                         
                         # Only call agent if enough time has passed AND queue is empty
-                        if (current_time - last_agent_time < 2.0):  # Increased to 2 seconds minimum between agent calls
+                        if (current_time - last_agent_time < 3.0):  # Increased to 3 seconds minimum between agent calls
                             time.sleep(0.1)
                             continue
                         
@@ -2359,11 +2478,27 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                         agent_step_count += 1
                                         print(f"🤖 Agent action: {individual_action} (step {agent_step_count})")
                                         
-                                        # Update server's agent step count for web interface display
+                                        # Update server's agent step count and metrics for web interface display
                                         try:
-                                            requests.post(f"{server_url}/agent_step", timeout=2)
+                                            # Get current metrics from LLM logger and add action count
+                                            metrics_data = {}
+                                            if llm_logger:
+                                                try:
+                                                    # Manually increment action count for this button press
+                                                    llm_logger.cumulative_metrics["total_actions"] += 1
+                                                    metrics_data = llm_logger.get_cumulative_metrics()
+                                                except Exception as metrics_error:
+                                                    print(f"⚠️ Error getting metrics from LLM logger: {metrics_error}")
+                                                    metrics_data = {}
+                                            
+                                            response = requests.post(f"{server_url}/agent_step", json={"metrics": metrics_data}, timeout=5)
+                                            if response.status_code != 200:
+                                                print(f"⚠️ Server returned status {response.status_code}: {response.text}")
+                                        except requests.exceptions.RequestException as e:
+                                            # Network/connection errors - let error handler manage this
+                                            handle_agent_error(e)
                                         except Exception as e:
-                                            print(f"⚠️ Failed to update server step count: {e}")
+                                            print(f"⚠️ Unexpected error updating server metrics: {e}")
                                         
                                         # Log each individual action to anti-cheat submission.log
                                         if anticheat_tracker:
@@ -2413,11 +2548,28 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                 agent_step_count += 1
                                 print(f"🤖 Agent action: {action} (step {agent_step_count})")
                                 
-                                # Update server's agent step count for web interface display
+                                # Update server's agent step count and metrics for web interface display
                                 try:
-                                    requests.post(f"{server_url}/agent_step", timeout=2)
+                                    # Get current metrics from LLM logger and add action count
+                                    metrics_data = {}
+                                    if llm_logger:
+                                        try:
+                                            # Manually increment action count for this button press (if not WAIT)
+                                            if action != "WAIT":
+                                                llm_logger.cumulative_metrics["total_actions"] += 1
+                                            metrics_data = llm_logger.get_cumulative_metrics()
+                                        except Exception as metrics_error:
+                                            print(f"⚠️ Error getting metrics from LLM logger: {metrics_error}")
+                                            metrics_data = {}
+                                    
+                                    response = requests.post(f"{server_url}/agent_step", json={"metrics": metrics_data}, timeout=5)
+                                    if response.status_code != 200:
+                                        print(f"⚠️ Server returned status {response.status_code}: {response.text}")
+                                except requests.exceptions.RequestException as e:
+                                    # Network/connection errors - let error handler manage this
+                                    handle_agent_error(e)
                                 except Exception as e:
-                                    print(f"⚠️ Failed to update server step count: {e}")
+                                    print(f"⚠️ Unexpected error updating server metrics: {e}")
                                 
                                 # Log to anti-cheat submission.log
                                 if anticheat_tracker:
@@ -2642,6 +2794,9 @@ def run_multiprocess_client(server_port=8000, args=None):
         else:
             print("❌ Could not connect to server")
             return False
+        
+        # Reset server metrics if this is a fresh start (no checkpoint files)
+        reset_server_metrics_if_fresh_start(server_url)
         
         # Initialize agent if auto mode is enabled
         vlm = None
@@ -2951,6 +3106,25 @@ def main():
     elif args.load_state:
         state_to_load = args.load_state
         print(f"📂 Loading from state: {args.load_state}")
+        
+        # Clear checkpoint files for fresh start
+        checkpoint_files = ["checkpoint.state", "checkpoint_llm.txt", "checkpoint_milestones.json"]
+        for checkpoint_file in checkpoint_files:
+            if os.path.exists(checkpoint_file):
+                try:
+                    os.remove(checkpoint_file)
+                    print(f"🗑️  Cleared old checkpoint file: {checkpoint_file}")
+                except Exception as e:
+                    print(f"⚠️ Could not remove {checkpoint_file}: {e}")
+        print("✨ Fresh start - all checkpoint data cleared")
+        
+        # Reset server metrics if running in multiprocess mode
+        if not multiprocess_mode:
+            # Direct mode - reset will happen when LLM logger is initialized
+            pass
+        else:
+            # For multiprocess mode, we'll need to signal the server to reset
+            pass
     
     # Initialize emulator
     if not setup_emulator(args.rom, state_to_load):

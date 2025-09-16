@@ -111,13 +111,22 @@ class OpenAIBackend(VLMBackend):
             result = response.choices[0].message.content
             duration = time.time() - start_time
             
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage'):
+                token_usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens
+                }
+            
             # Log the interaction
             log_llm_interaction(
                 interaction_type=f"openai_{module_name}",
                 prompt=text,
                 response=result,
                 duration=duration,
-                metadata={"model": self.model_name, "backend": "openai", "has_image": True},
+                metadata={"model": self.model_name, "backend": "openai", "has_image": True, "token_usage": token_usage},
                 model_info={"model": self.model_name, "backend": "openai"}
             )
             
@@ -147,13 +156,22 @@ class OpenAIBackend(VLMBackend):
             result = response.choices[0].message.content
             duration = time.time() - start_time
             
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage'):
+                token_usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens
+                }
+            
             # Log the interaction
             log_llm_interaction(
                 interaction_type=f"openai_{module_name}",
                 prompt=text,
                 response=result,
                 duration=duration,
-                metadata={"model": self.model_name, "backend": "openai", "has_image": False},
+                metadata={"model": self.model_name, "backend": "openai", "has_image": False, "token_usage": token_usage},
                 model_info={"model": self.model_name, "backend": "openai"}
             )
             
@@ -517,6 +535,7 @@ class GeminiBackend(VLMBackend):
     
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
         """Process an image and text prompt using Gemini API"""
+        start_time = time.time()
         try:
             image = self._prepare_image(img)
             
@@ -540,6 +559,27 @@ class GeminiBackend(VLMBackend):
                     return self.get_text_query(text, module_name)
             
             result = response.text
+            duration = time.time() - start_time
+            
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage_metadata'):
+                usage = response.usage_metadata
+                token_usage = {
+                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
+                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
+                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                }
+            
+            # Log the interaction
+            log_llm_interaction(
+                interaction_type=f"gemini_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "gemini", "has_image": True, "token_usage": token_usage},
+                model_info={"model": self.model_name, "backend": "gemini"}
+            )
             
             # Log the response
             result_preview = result[:1000] + "..." if len(result) > 1000 else result
@@ -560,6 +600,7 @@ class GeminiBackend(VLMBackend):
     
     def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
         """Process a text-only prompt using Gemini API"""
+        start_time = time.time()
         try:
             # Log the prompt
             prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
@@ -577,6 +618,27 @@ class GeminiBackend(VLMBackend):
                     return "I cannot analyze this content due to safety restrictions. I'll proceed with a basic action: press 'A' to continue."
             
             result = response.text
+            duration = time.time() - start_time
+            
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage_metadata'):
+                usage = response.usage_metadata
+                token_usage = {
+                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
+                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
+                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                }
+            
+            # Log the interaction
+            log_llm_interaction(
+                interaction_type=f"gemini_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "gemini", "has_image": False, "token_usage": token_usage},
+                model_info={"model": self.model_name, "backend": "gemini"}
+            )
             
             # Log the response
             result_preview = result[:1000] + "..." if len(result) > 1000 else result
