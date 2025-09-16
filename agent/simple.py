@@ -135,8 +135,64 @@ class SimpleAgent:
         """Initialize the main storyline objectives for Pokémon Emerald progression"""
         storyline_objectives = [
             {
+                "id": "story_game_start",
+                "description": "Complete title sequence and begin the game",
+                "objective_type": "system",
+                "target_value": "Game Running",
+                "milestone_id": "GAME_RUNNING"
+            },
+            {
+                "id": "story_truck_pokedollars", 
+                "description": "Complete intro sequence until pokedollars appear (truck scene)",
+                "objective_type": "progress",
+                "target_value": "1000 Pokedollars",
+                "milestone_id": "EARNED_1000_POKEDOLLARS"
+            },
+            {
+                "id": "story_littleroot_town",
+                "description": "Arrive in Littleroot Town and explore the area",
+                "objective_type": "location", 
+                "target_value": "Littleroot Town",
+                "milestone_id": "LITTLEROOT_TOWN"
+            },
+            {
+                "id": "story_route_101",
+                "description": "Travel north to Route 101 and encounter Prof. Birch",
+                "objective_type": "location",
+                "target_value": "Route 101", 
+                "milestone_id": "ROUTE_101"
+            },
+            {
+                "id": "story_starter_chosen",
+                "description": "Choose starter Pokémon and receive first party member",
+                "objective_type": "pokemon",
+                "target_value": "Starter Pokémon",
+                "milestone_id": "STARTER_CHOSEN"
+            },
+            {
+                "id": "story_oldale_town",
+                "description": "Continue journey to Oldale Town",
+                "objective_type": "location",
+                "target_value": "Oldale Town",
+                "milestone_id": "OLDALE_TOWN"
+            },
+            {
+                "id": "story_route_103",
+                "description": "Travel to Route 103 to meet rival",
+                "objective_type": "location",
+                "target_value": "Route 103",
+                "milestone_id": "ROUTE_103"
+            },
+            {
+                "id": "story_route_102",
+                "description": "Return through Route 102 toward Petalburg City",
+                "objective_type": "location",
+                "target_value": "Route 102", 
+                "milestone_id": "ROUTE_102"
+            },
+            {
                 "id": "story_petalburg_city",
-                "description": "Navigate from Route 102 to Petalburg City and visit Dad's gym",
+                "description": "Navigate to Petalburg City and visit Dad's gym",
                 "objective_type": "location",
                 "target_value": "Petalburg City",
                 "milestone_id": "PETALBURG_CITY"
@@ -146,14 +202,14 @@ class SimpleAgent:
                 "description": "Travel north through Route 104 toward Petalburg Woods",
                 "objective_type": "location",
                 "target_value": "Route 104",
-                "milestone_id": None  # No specific milestone for route 104
+                "milestone_id": "ROUTE_104"
             },
             {
                 "id": "story_petalburg_woods",
                 "description": "Navigate through Petalburg Woods to help Devon researcher",
                 "objective_type": "location",
                 "target_value": "Petalburg Woods",
-                "milestone_id": None  # Woods are part of route progression
+                "milestone_id": "PETALBURG_WOODS"
             },
             {
                 "id": "story_rustboro_city",

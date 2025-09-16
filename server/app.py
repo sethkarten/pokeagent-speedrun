@@ -21,7 +21,7 @@ import cv2
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -203,6 +203,7 @@ class ComprehensiveStateResponse(BaseModel):
     player: dict
     game: dict
     map: dict
+    milestones: dict = {}
     step_number: int
     status: str
     action_queue_length: int = 0
@@ -709,7 +710,9 @@ async def get_comprehensive_state():
             # Force overworld if not in dialog (respect 5-second timeout)
             state["game"]["game_state"] = "overworld"
         
-        # Milestones are updated in the action endpoint, no need to duplicate here
+        # Include milestones for storyline objective auto-completion
+        if env.milestone_tracker:
+            state["milestones"] = env.milestone_tracker.milestones
         
         # The battle information already contains all necessary data
         # No additional analysis needed - keep it clean
@@ -734,6 +737,7 @@ async def get_comprehensive_state():
             player=state["player"],
             game=state["game"],
             map=state["map"],
+            milestones=state.get("milestones", {}),
             step_number=current_step,
             status="running",
             action_queue_length=queue_length
@@ -856,6 +860,138 @@ async def debug_memory_dump(start: int = 0x02000000, length: int = 0x1000):
 
 
 
+@app.get("/test_stream")
+async def test_stream():
+    """Simple test stream to verify SSE works"""
+    from fastapi.responses import StreamingResponse
+    import asyncio
+    
+    async def simple_stream():
+        for i in range(5):
+            yield f"data: {{'test': {i}, 'timestamp': {time.time()}}}\n\n"
+            await asyncio.sleep(1)
+        yield f"data: {{'done': true}}\n\n"
+    
+    return StreamingResponse(simple_stream(), media_type="text/event-stream")
+
+@app.get("/agent_stream")
+async def stream_agent_thinking():
+    """Stream agent thinking in real-time using Server-Sent Events"""
+    from fastapi.responses import StreamingResponse
+    import asyncio
+    import glob
+    import os
+    
+    async def event_stream():
+        """Generate server-sent events for agent thinking"""
+        logger.info("SSE: Starting event stream")
+        last_timestamp = ""  # Track last seen timestamp instead of count
+        sent_timestamps = set()  # Track all sent timestamps to avoid duplicates
+        heartbeat_counter = 0
+        
+        try:
+            # Send initial connection message
+            yield f"data: {json.dumps({'status': 'connected', 'timestamp': time.time()})}\n\n"
+            
+            # On startup, mark all existing interactions as "sent" to avoid flooding with old messages
+            # We only want to stream NEW interactions from this point forward
+            try:
+                log_files = sorted(glob.glob("llm_logs/llm_log_*.jsonl"))
+                for log_file in log_files:
+                    if os.path.exists(log_file):
+                        with open(log_file, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                try:
+                                    entry = json.loads(line.strip())
+                                    if entry.get("type") == "interaction":
+                                        timestamp = entry.get("timestamp", "")
+                                        if timestamp:
+                                            sent_timestamps.add(timestamp)
+                                except:
+                                    continue
+                logger.info(f"SSE: Marked {len(sent_timestamps)} existing interactions as already sent")
+            except Exception as init_e:
+                logger.warning(f"SSE: Error initializing sent timestamps: {init_e}")
+            
+            while True:
+                try:
+                    heartbeat_counter += 1
+                    
+                    # Use simple file reading instead of complex get_agent_thinking()
+                    current_step = 0
+                    
+                    with step_lock:
+                        current_step = agent_step_count
+                    
+                    new_interactions = []
+                    try:
+                        # Read LLM log files directly (same as working /agent endpoint)
+                        log_files = sorted(glob.glob("llm_logs/llm_log_*.jsonl"))
+                        
+                        # Check all recent log files for new entries
+                        for log_file in log_files[-2:]:  # Check last 2 files to catch session changes
+                            if os.path.exists(log_file):
+                                with open(log_file, 'r', encoding='utf-8') as f:
+                                    lines = f.readlines()
+                                    # Check all lines, not just last 5
+                                    for line in lines:
+                                        try:
+                                            entry = json.loads(line.strip())
+                                            if entry.get("type") == "interaction":
+                                                timestamp = entry.get("timestamp", "")
+                                                # Only add if we haven't sent this timestamp before
+                                                if timestamp and timestamp not in sent_timestamps:
+                                                    new_interactions.append({
+                                                        "type": entry.get("interaction_type", "unknown"),
+                                                        "response": entry.get("response", ""),
+                                                        "duration": entry.get("duration", 0),
+                                                        "timestamp": timestamp
+                                                    })
+                                        except:
+                                            continue
+                    except Exception as file_e:
+                        logger.warning(f"SSE: File reading error: {file_e}")
+                    
+                    # Sort by timestamp to ensure chronological order
+                    new_interactions.sort(key=lambda x: x.get("timestamp", ""))
+                    
+                    # Check if there are new interactions
+                    if new_interactions:
+                        logger.info(f"SSE: Found {len(new_interactions)} new interactions to send")
+                        # Send new interactions
+                        for interaction in new_interactions:
+                            
+                            event_data = {
+                                "step": current_step,
+                                "type": interaction.get("type", "unknown"),
+                                "response": interaction.get("response", ""),
+                                "duration": interaction.get("duration", 0),
+                                "timestamp": interaction.get("timestamp", ""),
+                                "is_new": True
+                            }
+                            
+                            yield f"data: {json.dumps(event_data)}\n\n"
+                            # Mark this timestamp as sent
+                            sent_timestamps.add(interaction.get("timestamp", ""))
+                    
+                    # Send periodic heartbeat to keep connection alive (every 10 cycles = 5 seconds)
+                    elif heartbeat_counter % 10 == 0:
+                        yield f"data: {json.dumps({'heartbeat': True, 'timestamp': time.time(), 'step': current_step})}\n\n"
+                    
+                    # Wait before checking again
+                    await asyncio.sleep(0.5)
+                    
+                except Exception as e:
+                    logger.error(f"SSE: Error in stream loop: {e}")
+                    yield f"data: {json.dumps({'error': str(e), 'timestamp': time.time()})}\n\n"
+                    await asyncio.sleep(2)
+                    
+        except Exception as outer_e:
+            logger.error(f"SSE: Fatal error in event stream: {outer_e}")
+            yield f"data: {json.dumps({'fatal_error': str(outer_e), 'timestamp': time.time()})}\n\n"
+    
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
+
 @app.get("/agent")
 async def get_agent_thinking():
     """Get current agent thinking status and recent LLM interactions"""
@@ -898,18 +1034,17 @@ async def get_agent_thinking():
                 except Exception as e:
                     logger.error(f"Error reading LLM log {log_file}: {e}")
         
-        # Sort by timestamp and keep only the last 3 interactions
+        # Sort by timestamp and keep only the most recent interaction (current step)
         recent_interactions.sort(key=lambda x: x.get("timestamp", ""))
-        recent_interactions = recent_interactions[-3:]
-        logger.info(f"Found {len(recent_interactions)} recent interactions")
+        recent_interactions = recent_interactions[-1:] if recent_interactions else []
+        logger.info(f"Found {len(recent_interactions)} recent interactions (showing current step only)")
         
         # Format the agent thinking display
         if recent_interactions:
-            current_thought = f"Recent LLM interactions:\n"
-            for i, interaction in enumerate(reversed(recent_interactions)):
-                current_thought += f"\n{i+1}. {interaction['type'].upper()} ({interaction['duration']:.2f}s)\n"
-                current_thought += f"   Q: {interaction['prompt']}\n"
-                current_thought += f"   A: {interaction['response']}\n"
+            interaction = recent_interactions[-1]  # Get the most recent interaction
+            current_thought = f"Current step LLM output:\n"
+            current_thought += f"{interaction['type'].upper()} ({interaction['duration']:.2f}s)\n"
+            current_thought += f"Response: {interaction['response']}"
         else:
             current_thought = "No recent LLM interactions. Agent is ready to process game state."
         
@@ -936,10 +1071,22 @@ async def get_agent_thinking():
         }
 
 @app.post("/agent_step")
-async def update_agent_step():
+async def update_agent_step(request: Request = None):
     """Update the agent step count (called by agent.py)"""
     global agent_step_count
     
+    try:
+        # Check if this is a direct set operation
+        if request:
+            request_data = await request.json()
+            if "set_step" in request_data:
+                with step_lock:
+                    agent_step_count = request_data["set_step"]
+                return {"status": "set", "agent_step": agent_step_count}
+    except:
+        pass
+    
+    # Default increment behavior
     with step_lock:
         agent_step_count += 1
     

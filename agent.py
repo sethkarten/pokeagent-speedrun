@@ -554,7 +554,7 @@ def save_checkpoint(step_count=None):
         # 3. Save LLM interaction history
         llm_file = f"{checkpoint_base}_llm.txt"
         if llm_logger:
-            llm_logger.save_checkpoint(llm_file)
+            llm_logger.save_checkpoint(llm_file, current_step)
             print(f"💾 Checkpoint LLM history saved: {llm_file}")
         
         # Update checkpoint tracking
@@ -2215,8 +2215,10 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
         anticheat_tracker.initialize_submission_log(args.model_name if args else "unknown")
         print(f"✅ Anti-cheat submission logging initialized to submission.log")
         
-        # Load LLM history if checkpoint was requested
-        if args and getattr(args, 'load_checkpoint', False):
+        # Load LLM history if checkpoint was requested or if loading checkpoint.state
+        checkpoint_requested = args and getattr(args, 'load_checkpoint', False)
+        loading_checkpoint_state = args and getattr(args, 'load_state', '') == 'checkpoint.state'
+        if checkpoint_requested or loading_checkpoint_state:
             llm_checkpoint_file = "checkpoint_llm.txt"
             if os.path.exists(llm_checkpoint_file):
                 try:
@@ -2225,6 +2227,14 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                         agent_step_count = loaded_step_count
                         last_checkpoint_step = (agent_step_count // CHECKPOINT_INTERVAL) * CHECKPOINT_INTERVAL
                         print(f"📂 Client: Checkpoint LLM history loaded: {llm_checkpoint_file} (step {agent_step_count})")
+                        
+                        # Sync server's step count to match
+                        try:
+                            requests.post(f"http://127.0.0.1:{server_port}/agent_step", 
+                                        json={"set_step": agent_step_count}, timeout=2)
+                            print(f"📂 Client: Synced server step count to {agent_step_count}")
+                        except Exception as e:
+                            print(f"⚠️ Client: Failed to sync server step count: {e}")
                     else:
                         print(f"📂 Client: Checkpoint LLM history loaded: {llm_checkpoint_file}")
                 except Exception as e:
@@ -2264,8 +2274,39 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                         # Check if there are still actions in the queue before sending new ones
                         action_queue_length = state_data.get("action_queue_length", 0)
                         if action_queue_length > 0:
-                            print(f"⏳ Waiting for action queue to empty (queue length: {action_queue_length})")
-                            time.sleep(0.5)  # Wait longer to let actions complete
+                            # Calculate expected wait time (0.3s per action at 60 FPS)
+                            expected_wait = action_queue_length * 0.3
+                            print(f"⏳ Waiting for action queue to empty (queue length: {action_queue_length}, ~{expected_wait:.1f}s)")
+                            
+                            # Keep polling until queue is empty with proper wait time
+                            max_wait_time = max(10.0, expected_wait + 2.0)  # At least expected time + 2s buffer
+                            wait_start = time.time()
+                            poll_count = 0
+                            while action_queue_length > 0 and (time.time() - wait_start) < max_wait_time:
+                                time.sleep(0.2)  # Check every 200ms
+                                poll_count += 1
+                                
+                                # Re-check queue status
+                                try:
+                                    check_response = requests.get(f"{server_url}/state", timeout=5)
+                                    if check_response.status_code == 200:
+                                        check_data = check_response.json()
+                                        new_queue_length = check_data.get("action_queue_length", 0)
+                                        if new_queue_length != action_queue_length:
+                                            action_queue_length = new_queue_length
+                                            if action_queue_length > 0:
+                                                print(f"   Queue update: {action_queue_length} actions remaining...")
+                                except:
+                                    break  # On error, continue anyway
+                            
+                            elapsed = time.time() - wait_start
+                            if action_queue_length > 0:
+                                print(f"⚠️ Action queue still not empty after {elapsed:.1f}s, continuing anyway")
+                            else:
+                                print(f"✅ Action queue empty after {elapsed:.1f}s, ready for next frame")
+                            
+                            # Add small delay after queue empties to ensure frame is stable
+                            time.sleep(0.3)
                             continue
                         
                         # Only call agent if enough time has passed AND queue is empty
@@ -2290,7 +2331,8 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                             "visual": state_data.get("visual", {}),
                             "player": state_data.get("player", {}),
                             "game": state_data.get("game", {}),
-                            "map": state_data.get("map", {})
+                            "map": state_data.get("map", {}),
+                            "milestones": state_data.get("milestones", {})
                         }
                         game_state["visual"]["screenshot"] = screenshot
                         
@@ -2316,6 +2358,12 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                                     timeout=5)
                                         agent_step_count += 1
                                         print(f"🤖 Agent action: {individual_action} (step {agent_step_count})")
+                                        
+                                        # Update server's agent step count for web interface display
+                                        try:
+                                            requests.post(f"{server_url}/agent_step", timeout=2)
+                                        except Exception as e:
+                                            print(f"⚠️ Failed to update server step count: {e}")
                                         
                                         # Log each individual action to anti-cheat submission.log
                                         if anticheat_tracker:
@@ -2346,7 +2394,7 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                                     
                                                 # Then save LLM history locally on client
                                                 if llm_logger:
-                                                    llm_logger.save_checkpoint("checkpoint_llm.txt")
+                                                    llm_logger.save_checkpoint("checkpoint_llm.txt", agent_step_count)
                                                     print(f"💾 Client: Checkpoint LLM history saved: checkpoint_llm.txt")
                                                 
                                                 # SimpleAgent state is preserved via LLM logger history
@@ -2364,6 +2412,12 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                             timeout=5)
                                 agent_step_count += 1
                                 print(f"🤖 Agent action: {action} (step {agent_step_count})")
+                                
+                                # Update server's agent step count for web interface display
+                                try:
+                                    requests.post(f"{server_url}/agent_step", timeout=2)
+                                except Exception as e:
+                                    print(f"⚠️ Failed to update server step count: {e}")
                                 
                                 # Log to anti-cheat submission.log
                                 if anticheat_tracker:
@@ -2394,7 +2448,7 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                             
                                         # Then save LLM history locally on client
                                         if llm_logger:
-                                            llm_logger.save_checkpoint("checkpoint_llm.txt")
+                                            llm_logger.save_checkpoint("checkpoint_llm.txt", agent_step_count)
                                             print(f"💾 Client: Checkpoint LLM history saved: checkpoint_llm.txt")
                                         
                                         # SimpleAgent state is preserved via LLM logger history
@@ -2662,7 +2716,8 @@ def run_multiprocess_client(server_port=8000, args=None):
                             "visual": state_data.get("visual", {}),
                             "player": state_data.get("player", {}),
                             "game": state_data.get("game", {}),
-                            "map": state_data.get("map", {})
+                            "map": state_data.get("map", {}),
+                            "milestones": state_data.get("milestones", {})
                         }
                         game_state["visual"]["screenshot"] = screenshot
                         
@@ -2778,12 +2833,22 @@ def main():
             # Pass through server-relevant arguments
             if args.record:
                 server_cmd.append("--record")
-            if args.load_state:
+            if args.load_checkpoint:
+                # Auto-load checkpoint.state when --load-checkpoint is used
+                checkpoint_state = "checkpoint.state"
+                if os.path.exists(checkpoint_state):
+                    server_cmd.extend(["--load-state", checkpoint_state])
+                    print(f"🔄 Server will load checkpoint: {checkpoint_state}")
+                else:
+                    print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
+            elif args.load_state:
                 server_cmd.extend(["--load-state", args.load_state])
             if args.manual_mode:
                 server_cmd.append("--manual")
             if args.no_ocr:
                 server_cmd.append("--no-ocr")
+            if args.no_display:
+                server_cmd.append("--no-display")
             
             # Start server as subprocess
             import subprocess

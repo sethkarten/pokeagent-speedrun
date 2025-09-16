@@ -249,11 +249,12 @@ class LLMLogger:
             logger.error(f"Failed to get session summary: {e}")
             return {"error": str(e)}
     
-    def save_checkpoint(self, checkpoint_file: str):
+    def save_checkpoint(self, checkpoint_file: str, agent_step_count: int = None):
         """Save current LLM interaction history to checkpoint file
         
         Args:
             checkpoint_file: Path to save the checkpoint
+            agent_step_count: Current agent step count for persistence
         """
         try:
             # Read all current log entries
@@ -272,6 +273,7 @@ class LLMLogger:
                 "session_id": self.session_id,
                 "original_log_file": self.log_file,
                 "total_entries": len(log_entries),
+                "agent_step_count": agent_step_count,  # Save current step count
                 "log_entries": log_entries
             }
             
@@ -304,14 +306,17 @@ class LLMLogger:
                 for entry in log_entries:
                     f.write(json.dumps(entry, ensure_ascii=False) + '\n')
             
-            # Find the last agent step from log entries
-            last_step = None
-            for entry in reversed(log_entries):
-                if entry.get("type") == "step_start" and "step_number" in entry:
-                    last_step = entry["step_number"]
-                    break
+            # Try to get step count from checkpoint metadata first
+            last_step = checkpoint_data.get("agent_step_count")
             
-            logger.info(f"LLM checkpoint loaded: {checkpoint_file} ({len(log_entries)} entries)")
+            # If not in metadata, find the last agent step from log entries
+            if last_step is None:
+                for entry in reversed(log_entries):
+                    if entry.get("type") == "step_start" and "step_number" in entry:
+                        last_step = entry["step_number"]
+                        break
+            
+            logger.info(f"LLM checkpoint loaded: {checkpoint_file} ({len(log_entries)} entries, step {last_step})")
             
             return last_step
             

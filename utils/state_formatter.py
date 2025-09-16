@@ -527,7 +527,7 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.extend(party_context)
 
         # Map/Location information with traversability (NOT shown in battle)
-        map_context = _format_map_info(state_data.get('map', {}), include_debug_info, include_npcs)
+        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs)
         context_parts.extend(map_context)
 
         # Game state information (including dialogue if not in battle)
@@ -635,7 +635,7 @@ def _format_party_info(player_data, game_data):
     
     return context_parts
 
-def _format_map_info(map_info, include_debug_info=False, include_npcs=True):
+def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True):
     """Format map and traversability information using unified formatter."""
     context_parts = []
     
@@ -643,6 +643,17 @@ def _format_map_info(map_info, include_debug_info=False, include_npcs=True):
         return context_parts
     
     context_parts.append("\n=== LOCATION & MAP INFO ===")
+    
+    # Add current location from player data
+    if player_data and 'location' in player_data and player_data['location']:
+        location = player_data['location']
+        if isinstance(location, dict):
+            # If location is a dict, try to get map_name or use str representation
+            location_name = location.get('map_name', str(location))
+        else:
+            # If location is a string, use it directly
+            location_name = str(location)
+        context_parts.append(f"Current Location: {location_name}")
     
     if 'current_map' in map_info:
         context_parts.append(f"Current Map: {map_info['current_map']}")

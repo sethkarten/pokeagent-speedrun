@@ -265,6 +265,47 @@
             float: none;
         }
 
+        /* Streaming-specific styles */
+        .llm-entry.streaming {
+            border-left: 3px solid #ffa500;
+            background-color: rgba(255, 165, 0, 0.1);
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+
+        .llm-entry.complete {
+            border-left: 3px solid #00ff00;
+            background-color: rgba(0, 255, 0, 0.05);
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+
+        .llm-message {
+            color: #ddd;
+            margin: 5px 0;
+        }
+
+        .llm-meta {
+            color: #888;
+            font-size: 12px;
+            font-style: italic;
+            margin-top: 5px;
+        }
+
+        .status-message {
+            color: #ffa500;
+            font-style: italic;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .error-message {
+            color: #ff6b6b;
+            font-style: italic;
+            text-align: center;
+            padding: 10px;
+        }
+
         .llm-message {
             color: #33ff33;
             word-wrap: break-word;
@@ -599,8 +640,111 @@
         // Initial connection attempt
         pollFrameUpdate();
 
-        // Function to fetch and update agent thinking
+        // Streaming agent thinking using Server-Sent Events
+        let streamingSource = null;
+        let currentMessage = null;
+        let isMessageComplete = true;
+        
+        function initializeAgentStreaming() {
+            const agentThinkingDiv = document.getElementById('agent-thinking');
+            
+            // Close existing connection if any
+            if (streamingSource) {
+                streamingSource.close();
+            }
+            
+            // Create new EventSource connection
+            streamingSource = new EventSource(`${serverUrl}/agent_stream`);
+            
+            streamingSource.onopen = function(event) {
+                console.log('Agent streaming connected');
+                agentThinkingDiv.innerHTML = '<div class="status-message">Agent streaming connected...</div>';
+            };
+            
+            streamingSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.error) {
+                        console.error('Streaming error:', data.error);
+                        return;
+                    }
+                    
+                    // Ignore heartbeat messages
+                    if (data.heartbeat) {
+                        return;
+                    }
+                    
+                    // Only process new messages
+                    if (!data.is_new) {
+                        return;
+                    }
+                    
+                    console.log('New agent message received:', data.step);
+                    
+                    // Create new message element
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'llm-entry streaming';
+                    messageDiv.innerHTML = `
+                        <div class="llm-step">Step ${data.step}:</div>
+                        <div class="llm-message" id="streaming-message-${data.step}-${Date.now()}"></div>
+                        <div class="llm-meta">${data.type} (${data.duration?.toFixed(2)}s)</div>
+                    `;
+                    
+                    // Add to container
+                    agentThinkingDiv.appendChild(messageDiv);
+                    
+                    // Stream the response text word by word
+                    const messageElement = messageDiv.querySelector('.llm-message');
+                    const responseText = data.response || '';
+                    
+                    // Split text into words while preserving whitespace and punctuation
+                    const words = responseText.split(/(\s+)/).filter(w => w.length > 0);
+                    let wordIndex = 0;
+                    
+                    function typeWord() {
+                        if (wordIndex < words.length) {
+                            messageElement.textContent += words[wordIndex];
+                            wordIndex++;
+                            // Auto-scroll as text appears
+                            agentThinkingDiv.scrollTop = agentThinkingDiv.scrollHeight;
+                            
+                            // Vary delay based on word type (faster for spaces, slower for content)
+                            const delay = words[wordIndex - 1].trim() === '' ? 5 : 25; // 5ms for spaces, 25ms for words
+                            setTimeout(typeWord, delay);
+                        } else {
+                            // Message complete
+                            messageDiv.classList.remove('streaming');
+                            messageDiv.classList.add('complete');
+                            console.log('Message complete for step:', data.step);
+                        }
+                    }
+                    
+                    typeWord();
+                    
+                } catch (error) {
+                    console.error('Error parsing streaming data:', error);
+                }
+            };
+            
+            streamingSource.onerror = function(event) {
+                console.error('Agent streaming error:', event);
+                agentThinkingDiv.innerHTML = '<div class="error-message">Agent streaming disconnected. Retrying...</div>';
+                
+                // Retry connection after delay
+                setTimeout(() => {
+                    initializeAgentStreaming();
+                }, 5000);
+            };
+        }
+        
+        // Fallback function for non-streaming updates
         async function updateAgentThinking() {
+            // Only use fallback if streaming is not available
+            if (streamingSource && streamingSource.readyState === EventSource.OPEN) {
+                return;
+            }
+            
             try {
                 const response = await fetch(`${serverUrl}/agent`);
                 const data = await response.json();
@@ -613,14 +757,14 @@
                     data.recent_interactions.forEach((interaction, index) => {
                         // Calculate step number based on current step and interaction index
                         const baseStep = data.current_step || 0;
-                        const stepNumber = baseStep; // - (data.recent_interactions.length - 1 - index);
+                        const stepNumber = baseStep;
                         
                         // Trim whitespace from the response
                         const trimmedResponse = interaction.response.trim();
                         
-                        html += `<div class="llm-entry">
-                            <span class="llm-step">Step ${stepNumber}:</span>
-                            <span class="llm-message">${trimmedResponse}</span>
+                        html += `<div class="llm-entry complete">
+                            <div class="llm-step">Step ${stepNumber}:</div>
+                            <div class="llm-message">${trimmedResponse}</div>
                         </div>`;
                     });
                     agentThinkingDiv.innerHTML = html;
@@ -911,9 +1055,11 @@
         // Frame updates are already handled by pollFrameUpdate()
         // No need for updateScreenshot()
 
-        // Set up periodic updates
+        // Initialize streaming for agent thinking
+        initializeAgentStreaming();
+
+        // Set up periodic updates for other components
         setInterval(() => {
-            updateAgentThinking();
             updateRecentActions();
             updatePartyStatus();
         }, 1000); // Update every 1000ms (reduced from 500ms)
@@ -923,8 +1069,7 @@
             updateMilestones();
         }, 5000); // Update every 5 seconds (reduced from 2 seconds)
 
-        // Call the update functions initially
-        updateAgentThinking();
+        // Call the update functions initially (except agent thinking which streams)
         updateRecentActions();
         updateMilestones();
         updatePartyStatus();
