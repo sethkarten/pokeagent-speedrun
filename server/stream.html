@@ -152,7 +152,6 @@
         .milestone-progress-fill {
             height: 100%;
             background-color: #33ff33;
-            transition: width 0.3s ease;
         }
         
         .milestone-count {
@@ -334,24 +333,11 @@
             font-family: 'VT323', monospace;
             font-size: 12px;
             border-radius: 0;
-            transition: all 0.3s ease;
         }
 
         .action-button.newest {
             border-color: #ff6177;
             box-shadow: 0 0 10px #ff6177;
-            animation: buttonGlow 0.5s ease-out;
-        }
-
-        @keyframes buttonGlow {
-            0% { 
-                box-shadow: 0 0 15px #33ff33;
-                transform: scale(1.1);
-            }
-            100% { 
-                box-shadow: 0 0 5px #33ff33;
-                transform: scale(1);
-            }
         }
         
         .game-state {
@@ -411,7 +397,6 @@
         .hp-fill {
             height: 100%;
             background-color: #33ff33;
-            transition: width 0.3s ease;
         }
 
         .hp-fill.low {
@@ -454,22 +439,7 @@
         }
 
         .crt-flicker {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(18, 16, 16, 0.1);
-            opacity: 0;
-            pointer-events: none;
-            z-index: 11;
-            animation: flicker 0.3s infinite;
-        }
-
-        @keyframes flicker {
-            0% { opacity: 0.1; }
-            50% { opacity: 0; }
-            100% { opacity: 0.1; }
+            display: none; /* Disabled for performance */
         }
     </style>
 </head>
@@ -549,79 +519,40 @@
     <script>
         let isConnected = false;
         let frameUpdateInterval;
-        let mediaRecorder = null;
-        let recordedChunks = [];
-        
-        // Recording functions
-        async function startRecording() {
-            try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: { 
-                        mediaSource: 'tab',
-                        width: 1920,
-                        height: 1080,
-                        frameRate: 30
-                    }
-                });
-                
-                mediaRecorder = new MediaRecorder(stream, {
-                    mimeType: 'video/webm;codecs=vp9'
-                });
-                
-                mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
-                    }
-                };
-                
-                mediaRecorder.onstop = () => {
-                    const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `pokeagent_stream_${new Date().toISOString()}.webm`;
-                    a.click();
-                    recordedChunks = [];
-                };
-                
-                mediaRecorder.start();
-                console.log('Recording started');
-            } catch (error) {
-                console.error('Error starting recording:', error);
-            }
-        }
-        
-        function stopRecording() {
-            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-                mediaRecorder.stop();
-                console.log('Recording stopped');
-            }
-        }
-        
-        // Keyboard shortcuts for recording
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.shiftKey && e.key === 'R') {
-                if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                    startRecording();
-                } else {
-                    stopRecording();
-                }
-            }
-        });
         
         // Detect server address dynamically
         const serverUrl = `http://${window.location.hostname}:${window.location.port || '8000'}`;
+        const frameServerUrl = `http://${window.location.hostname}:8001`; // Separate frame server
         console.log(`Using server URL: ${serverUrl}`);
+        console.log(`Using frame server URL: ${frameServerUrl}`);
         
-        // Poll for frame updates using FastAPI
+        // Poll for frame updates using FastAPI with robust error handling
+        let consecutiveErrors = 0;
+        let pollInterval = 25; // Start with 25ms (40 FPS) - better match for 120 FPS emulator
+        const maxInterval = 200; // Max 200ms for faster recovery
+        const maxConsecutiveErrors = 5;
+        
         async function pollFrameUpdate() {
             try {
-                const response = await fetch(`${serverUrl}/api/frame`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+                
+                const response = await fetch(`${frameServerUrl}/frame`, {
+                    signal: controller.signal,
+                    method: 'GET',
+                    cache: 'no-cache'
+                });
+                clearTimeout(timeoutId);
+                
                 if (response.ok) {
                     const data = await response.json();
                     if (data.frame) {
                         document.getElementById('frame').src = `data:image/png;base64,${data.frame}`;
                     }
+                    
+                    // Reset error tracking on success
+                    consecutiveErrors = 0;
+                    pollInterval = 25; // Reset to fast polling (40 FPS)
                     
                     if (!isConnected) {
                         isConnected = true;
@@ -629,13 +560,27 @@
                         document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#33ff33';
                     }
                 } else {
-                    throw new Error('Failed to fetch frame');
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
             } catch (error) {
-                if (isConnected) {
+                consecutiveErrors++;
+                
+                // Exponential backoff for polling interval
+                if (consecutiveErrors > 2) {
+                    pollInterval = Math.min(pollInterval * 1.5, maxInterval);
+                    clearInterval(frameUpdateInterval);
+                    frameUpdateInterval = setInterval(pollFrameUpdate, pollInterval);
+                }
+                
+                if (isConnected || consecutiveErrors === 1) {
                     isConnected = false;
-                    console.log('FastAPI disconnected');
+                    console.log(`FastAPI disconnected (${consecutiveErrors} errors): ${error.message}`);
                     document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
+                }
+                
+                // Log only every 5th consecutive error to avoid spam
+                if (consecutiveErrors % 5 === 0) {
+                    console.warn(`${consecutiveErrors} consecutive connection errors, polling every ${pollInterval}ms`);
                 }
             }
         }
@@ -711,13 +656,13 @@
             }
         }
         
-        // Poll for metrics updates
-        setInterval(updateMetrics, 1000);  // Update metrics every 1 second for faster response
-        setInterval(updateTime, 100);  // Update timer every 100ms for smooth display
+        // Poll for metrics updates - reduced frequency for better performance  
+        setInterval(updateMetrics, 2000);  // Update metrics every 2 seconds (reduced from 1s)
+        setInterval(updateTime, 500);  // Update timer every 500ms (reduced from 100ms) 
         updateMetrics();  // Initial metrics load
         
-        // Start polling every 50ms (20 FPS)
-        frameUpdateInterval = setInterval(pollFrameUpdate, 50);
+        // Start polling every 25ms (40 FPS) to better match 120 FPS emulator
+        frameUpdateInterval = setInterval(pollFrameUpdate, 25);
         
         // Initial connection attempt
         pollFrameUpdate();
@@ -791,8 +736,8 @@
                             // Auto-scroll as text appears
                             agentThinkingDiv.scrollTop = agentThinkingDiv.scrollHeight;
                             
-                            // Vary delay based on word type (faster for spaces, slower for content)
-                            const delay = words[wordIndex - 1].trim() === '' ? 5 : 25; // 5ms for spaces, 25ms for words
+                            // Faster typing for better performance (reduced delay)
+                            const delay = words[wordIndex - 1].trim() === '' ? 2 : 10; // 2ms for spaces, 10ms for words (faster)
                             setTimeout(typeWord, delay);
                         } else {
                             // Message complete
@@ -1140,16 +1085,16 @@
         // Initialize streaming for agent thinking
         initializeAgentStreaming();
 
-        // Set up periodic updates for other components
+        // Set up periodic updates for other components - optimized frequencies
         setInterval(() => {
             updateRecentActions();
             updatePartyStatus();
-        }, 1000); // Update every 1000ms (reduced from 500ms)
+        }, 2000); // Update every 2 seconds (reduced from 1s)
 
-        // Less frequent updates for milestones
+        // Less frequent updates for milestones  
         setInterval(() => {
             updateMilestones();
-        }, 5000); // Update every 5 seconds (reduced from 2 seconds)
+        }, 10000); // Update every 10 seconds (reduced from 5s)
 
         // Call the update functions initially (except agent thinking which streams)
         updateRecentActions();

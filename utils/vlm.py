@@ -711,25 +711,13 @@ class VLM:
     
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
         """Process an image and text prompt"""
-        start_time = time.time()
-        
         try:
+            # Backend handles its own logging, so we don't duplicate it here
             result = self.backend.get_query(img, text, module_name)
-            duration = time.time() - start_time
-            
-            # Log the interaction
-            log_llm_interaction(
-                interaction_type=f"{self.backend.__class__.__name__.lower()}_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={"model": self.model_name, "backend": self.backend.__class__.__name__, "has_image": True},
-                model_info={"model": self.model_name, "backend": self.backend.__class__.__name__}
-            )
-            
             return result
         except Exception as e:
-            duration = time.time() - start_time
+            # Only log errors that aren't already logged by the backend
+            duration = 0  # Backend tracks actual duration
             log_llm_error(
                 interaction_type=f"{self.backend.__class__.__name__.lower()}_{module_name}",
                 prompt=text,
@@ -740,25 +728,13 @@ class VLM:
     
     def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
         """Process a text-only prompt"""
-        start_time = time.time()
-        
         try:
+            # Backend handles its own logging, so we don't duplicate it here
             result = self.backend.get_text_query(text, module_name)
-            duration = time.time() - start_time
-            
-            # Log the interaction
-            log_llm_interaction(
-                interaction_type=f"{self.backend.__class__.__name__.lower()}_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={"model": self.model_name, "backend": self.backend.__class__.__name__, "has_image": False},
-                model_info={"model": self.model_name, "backend": self.backend.__class__.__name__}
-            )
-            
             return result
         except Exception as e:
-            duration = time.time() - start_time
+            # Only log errors that aren't already logged by the backend
+            duration = 0  # Backend tracks actual duration
             log_llm_error(
                 interaction_type=f"{self.backend.__class__.__name__.lower()}_{module_name}",
                 prompt=text,

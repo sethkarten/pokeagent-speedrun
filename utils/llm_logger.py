@@ -368,6 +368,13 @@ class LLMLogger:
                 "log_entries": log_entries
             }
             
+            # Add map stitcher data if available via callback
+            if hasattr(self, '_map_stitcher_callback') and self._map_stitcher_callback:
+                try:
+                    self._map_stitcher_callback(checkpoint_data)
+                except Exception as e:
+                    logger.debug(f"Failed to save map stitcher to checkpoint: {e}")
+            
             # Save to checkpoint file
             with open(checkpoint_file, 'w', encoding='utf-8') as f:
                 json.dump(checkpoint_data, f, indent=2, ensure_ascii=False)
@@ -421,6 +428,13 @@ class LLMLogger:
             
             logger.info(f"LLM checkpoint loaded: {checkpoint_file} ({len(log_entries)} entries, step {last_step})")
             
+            # Load map stitcher data if available via callback
+            if hasattr(self, '_map_stitcher_load_callback') and self._map_stitcher_load_callback:
+                try:
+                    self._map_stitcher_load_callback(checkpoint_data)
+                except Exception as e:
+                    logger.debug(f"Failed to load map stitcher from checkpoint: {e}")
+            
             return last_step
             
         except Exception as e:
@@ -440,6 +454,21 @@ def get_llm_logger() -> LLMLogger:
     if _llm_logger is None:
         _llm_logger = LLMLogger()
     return _llm_logger
+
+def setup_map_stitcher_checkpoint_integration(memory_reader):
+    """Set up map stitcher integration with checkpoint system"""
+    logger = get_llm_logger()
+    
+    def save_callback(checkpoint_data):
+        if hasattr(memory_reader, '_map_stitcher') and memory_reader._map_stitcher:
+            memory_reader._map_stitcher.save_to_checkpoint(checkpoint_data)
+    
+    def load_callback(checkpoint_data):
+        if hasattr(memory_reader, '_map_stitcher') and memory_reader._map_stitcher:
+            memory_reader._map_stitcher.load_from_checkpoint(checkpoint_data)
+    
+    logger._map_stitcher_callback = save_callback
+    logger._map_stitcher_load_callback = load_callback
 
 def log_llm_interaction(interaction_type: str, prompt: str, response: str, 
                        metadata: Optional[Dict[str, Any]] = None,

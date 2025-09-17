@@ -226,6 +226,9 @@ class PokemonEmeraldReader:
         # Dialog content tracking for FPS adjustment
         self._last_dialog_content = None
         self._dialog_fps_start_time = None
+        
+        # Map stitching system (import on-demand to avoid circular import)
+        self._map_stitcher = None
         self._dialog_fps_duration = 5.0  # Run at 120 FPS for 5 seconds when dialog detected
         
         # Recent dialogue cache system to prevent residual text issues
@@ -2020,7 +2023,7 @@ class PokemonEmeraldReader:
             logger.debug(f"Buffer currency validation failed for 0x{buffer_addr:08X}: {e}")
             return False
 
-    def read_map_around_player(self, radius: int = 7) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
+    def read_map_around_player(self, radius: int = 10) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
         """Read map area around player with improved error handling for area transitions"""
         # Check for area transitions (re-enabled with minimal logic)
         location = self.read_location()
@@ -2158,7 +2161,7 @@ class PokemonEmeraldReader:
         
         return []
     
-    def _read_map_data_internal(self, radius: int = 7) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
+    def _read_map_data_internal(self, radius: int = 10) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
         """Internal method to read map data without validation/retry logic"""
         
         try:
@@ -2607,8 +2610,262 @@ class PokemonEmeraldReader:
                 state["map"]["player_coords"] = {'x': player_coords[0], 'y': player_coords[1]}
         else:
             state["map"]["object_events"] = []
+        
+        # Update map stitcher with current area data
+        print("🗺️ DEBUG: About to call _update_map_stitcher")
+        self._update_map_stitcher(tiles, state)
+        print("🗺️ DEBUG: _update_map_stitcher call completed")
+        
+        # Add stitched map information to state
+        stitched_info = self.get_stitched_map_info()
+        state["map"]["stitched_map_info"] = stitched_info
             
         return state
+    
+    def _update_map_stitcher(self, tiles, state):
+        """Update the map stitcher with current map data"""
+        print("🗺️ DEBUG: _update_map_stitcher called!")
+        try:
+            # Initialize map stitcher on first use
+            if self._map_stitcher is None:
+                from utils.map_stitcher import MapStitcher
+                self._map_stitcher = MapStitcher()
+            
+            # Get current map identifiers
+            map_bank = self._read_u8(self.addresses.MAP_BANK)
+            map_number = self._read_u8(self.addresses.MAP_NUMBER)
+            
+            # Get location name from player location
+            location_name = state.get("player", {}).get("location", "Unknown")
+            
+            # Get player coordinates
+            player_coords = self.read_coordinates()
+            if not player_coords:
+                return
+            
+            # Convert absolute player coordinates to local map coordinates
+            # The map data from read_map_around_player() is centered on the player
+            # With radius=10, the map is 21x21, so player is at center (10, 10)
+            map_height = len(tiles) if tiles else 21
+            map_width = len(tiles[0]) if tiles and tiles[0] else 21
+            local_player_coords = (map_width // 2, map_height // 2)
+            
+            # Get overworld coordinates for this map
+            overworld_coords = self._get_overworld_coordinates(map_bank, map_number, location_name)
+            
+            # Debug logging
+            logger.info(f"🗺️ Map stitcher update: Bank {map_bank}, Map {map_number}, Location: {location_name}")
+            logger.info(f"🎯 Overworld coordinates: {overworld_coords}")
+                
+            # Update the stitcher
+            timestamp = time.time()
+            self._map_stitcher.update_map_area(
+                map_bank=map_bank,
+                map_number=map_number,
+                location_name=location_name,
+                map_data=tiles,
+                player_pos=local_player_coords,
+                timestamp=timestamp,
+                overworld_coords=overworld_coords
+            )
+            
+            # Periodically save stitcher data
+            if hasattr(self, '_last_stitcher_save'):
+                if timestamp - self._last_stitcher_save > 10.0:  # Save every 10 seconds
+                    self._map_stitcher.save_to_file()
+                    self._last_stitcher_save = timestamp
+            else:
+                self._last_stitcher_save = timestamp
+                
+        except Exception as e:
+            print(f"🗺️ DEBUG: Failed to update map stitcher: {e}")
+            logger.debug(f"Failed to update map stitcher: {e}")
+            import traceback
+            print(f"🗺️ DEBUG: Traceback: {traceback.format_exc()}")
+    
+    def _get_overworld_coordinates(self, map_bank: int, map_number: int, location_name: str) -> Optional[Tuple[int, int]]:
+        """Get overworld coordinates for a given map bank/number combination"""
+        # Map Pokemon Emerald's map bank/number to overworld coordinates
+        # This is based on the actual Pokemon Emerald map layout
+        
+        map_coords = {
+            # Bank 0 - Overworld maps
+            (0, 0): (8, 18),   # PETALBURG_CITY
+            (0, 1): (13, 30),  # SLATEPORT_CITY  
+            (0, 2): (17, 15),  # MAUVILLE_CITY
+            (0, 3): (8, 9),    # RUSTBORO_CITY
+            (0, 4): (30, 6),   # FORTREE_CITY
+            (0, 5): (35, 8),   # LILYCOVE_CITY
+            (0, 6): (42, 12),  # MOSSDEEP_CITY
+            (0, 7): (37, 20),  # SOOTOPOLIS_CITY
+            (0, 8): (44, 15),  # EVER_GRANDE_CITY
+            (0, 9): (16, 23),  # LITTLEROOT_TOWN
+            (0, 10): (16, 19), # OLDALE_TOWN
+            (0, 11): (3, 27),  # DEWFORD_TOWN
+            (0, 12): (17, 9),  # LAVARIDGE_TOWN
+            (0, 13): (15, 8),  # FALLARBOR_TOWN
+            (0, 14): (11, 14), # VERDANTURF_TOWN
+            (0, 15): (30, 28), # PACIFIDLOG_TOWN
+            
+            # Routes
+            (0, 16): (16, 21), # ROUTE_101
+            (0, 17): (14, 18), # ROUTE_102
+            (0, 18): (18, 21), # ROUTE_103
+            (0, 19): (10, 12), # ROUTE_104
+            (0, 20): (5, 25),  # ROUTE_105
+            (0, 21): (6, 27),  # ROUTE_106
+            (0, 22): (7, 30),  # ROUTE_107
+            (0, 23): (10, 32), # ROUTE_108
+            (0, 24): (12, 32), # ROUTE_109
+            (0, 25): (16, 16), # ROUTE_110
+            (0, 26): (17, 12), # ROUTE_111
+            (0, 27): (17, 10), # ROUTE_112
+            (0, 28): (15, 10), # ROUTE_113
+            (0, 29): (13, 8),  # ROUTE_114
+            (0, 30): (6, 15),  # ROUTE_115
+            (0, 31): (11, 9),  # ROUTE_116
+            (0, 32): (13, 14), # ROUTE_117
+            (0, 33): (20, 15), # ROUTE_118
+            (0, 34): (25, 12), # ROUTE_119
+            (0, 35): (27, 10), # ROUTE_120
+            (0, 36): (30, 12), # ROUTE_121
+            (0, 37): (32, 15), # ROUTE_122
+            (0, 38): (33, 14), # ROUTE_123
+            (0, 39): (35, 18), # ROUTE_124
+            (0, 40): (28, 25), # ROUTE_125
+            (0, 41): (25, 28), # ROUTE_126
+            (0, 42): (30, 32), # ROUTE_127
+            (0, 43): (35, 32), # ROUTE_128
+            (0, 44): (38, 30), # ROUTE_129
+            (0, 45): (40, 25), # ROUTE_130
+            (0, 46): (42, 20), # ROUTE_131
+            (0, 47): (40, 15), # ROUTE_132
+            (0, 48): (38, 12), # ROUTE_133
+            (0, 49): (35, 12), # ROUTE_134
+        }
+        
+        # Check for exact match
+        coords = map_coords.get((map_bank, map_number))
+        if coords:
+            return coords
+        
+        # For indoor locations (banks 1+), inherit coordinates from parent outdoor area
+        if map_bank > 0:
+            # Try to infer from location name
+            name_upper = location_name.upper()
+            
+            # Match building names to their town coordinates
+            if "LITTLEROOT" in name_upper:
+                return (16, 23)
+            elif "OLDALE" in name_upper:
+                return (16, 19)
+            elif "PETALBURG" in name_upper:
+                return (8, 18)
+            elif "RUSTBORO" in name_upper:
+                return (8, 9)
+            elif "DEWFORD" in name_upper:
+                return (3, 27)
+            elif "SLATEPORT" in name_upper:
+                return (13, 30)
+            elif "MAUVILLE" in name_upper:
+                return (17, 15)
+            elif "VERDANTURF" in name_upper:
+                return (11, 14)
+            elif "FALLARBOR" in name_upper:
+                return (15, 8)
+            elif "LAVARIDGE" in name_upper:
+                return (17, 9)
+            elif "FORTREE" in name_upper:
+                return (30, 6)
+            elif "LILYCOVE" in name_upper:
+                return (35, 8)
+            elif "MOSSDEEP" in name_upper:
+                return (42, 12)
+            elif "SOOTOPOLIS" in name_upper:
+                return (37, 20)
+            elif "EVER_GRANDE" in name_upper:
+                return (44, 15)
+            elif "PACIFIDLOG" in name_upper:
+                return (30, 28)
+        
+        # If no coordinates found, return None (unknown location)
+        return None
+    
+    def get_stitched_map_info(self) -> Dict[str, Any]:
+        """Get stitched map information for agent use"""
+        if self._map_stitcher is None:
+            return {"available": False, "reason": "Map stitcher not initialized"}
+        
+        try:
+            stats = self._map_stitcher.get_stats()
+            
+            # Get current area info
+            current_map_bank = self._read_u8(self.addresses.MAP_BANK)
+            current_map_number = self._read_u8(self.addresses.MAP_NUMBER)
+            current_map_id = (current_map_bank << 8) | current_map_number
+            
+            current_area = self._map_stitcher.map_areas.get(current_map_id)
+            current_connections = self._map_stitcher.get_connected_areas(current_map_id)
+            
+            # Get nearby areas (areas reachable in 1-2 connections)
+            nearby_areas = []
+            visited_ids = set()
+            
+            def add_connected_areas(area_id, depth=0, max_depth=2):
+                if depth > max_depth or area_id in visited_ids:
+                    return
+                visited_ids.add(area_id)
+                
+                area = self._map_stitcher.map_areas.get(area_id)
+                if area:
+                    connections = self._map_stitcher.get_connected_areas(area_id)
+                    nearby_areas.append({
+                        "name": area.location_name,
+                        "id": f"{area_id:04X}",
+                        "depth": depth,
+                        "overworld_coords": area.overworld_coords,
+                        "connections": [{"name": name, "direction": direction} 
+                                      for _, name, direction in connections]
+                    })
+                    
+                    # Recursively add connected areas
+                    for conn_id, _, _ in connections:
+                        add_connected_areas(conn_id, depth + 1, max_depth)
+            
+            add_connected_areas(current_map_id)
+            
+            # Include terrain data for world map display
+            terrain_areas = []
+            for area_id, area in self._map_stitcher.map_areas.items():
+                if area.overworld_coords and area.map_data:
+                    terrain_areas.append({
+                        "id": f"{area_id:04X}",
+                        "name": area.location_name or "Unknown",
+                        "overworld_coords": area.overworld_coords,
+                        "map_data": area.map_data,
+                        "player_pos": area.player_last_position
+                    })
+            
+            return {
+                "available": True,
+                "stats": stats,
+                "current_area": {
+                    "name": current_area.location_name if current_area else "Unknown",
+                    "id": f"{current_map_id:04X}",
+                    "overworld_coords": current_area.overworld_coords if current_area else None,
+                    "connections": [{"name": name, "direction": direction} 
+                                   for _, name, direction in current_connections]
+                },
+                "nearby_areas": nearby_areas[:10],  # Limit to 10 areas
+                "terrain_areas": terrain_areas,  # Include terrain data for world map
+                "total_discovered": len(self._map_stitcher.map_areas)
+            }
+            
+        except Exception as e:
+            import traceback
+            logger.debug(f"Failed to get stitched map info: {e}")
+            logger.debug(f"Full traceback: {traceback.format_exc()}")
+            return {"available": False, "reason": f"Error: {e}"}
 
     def _is_encounter_tile(self, behavior) -> bool:
         """Check if tile can trigger encounters"""

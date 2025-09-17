@@ -47,13 +47,17 @@ running = True
 step_count = 0
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
-fps = 60
+fps = 80
+
+# Performance monitoring
+last_fps_log = time.time()
+frame_count_since_log = 0
 action_queue = []  # Queue for multi-action sequences
 current_action = None  # Current action being held
 action_frames_remaining = 0  # Frames left to hold current action
 release_frames_remaining = 0  # Frames left to wait after release
-ACTION_HOLD_FRAMES = 12  # Hold each action for 6 frames to match manual mode timing (BUTTON_HOLD_DURATION from agent.py)
-ACTION_RELEASE_DELAY = 24  # Wait 12 frames between presses to match manual mode timing (BUTTON_RELEASE_DELAY from agent.py)
+ACTION_HOLD_FRAMES = 6   # Reduced from 12 - Hold each action for fewer frames 
+ACTION_RELEASE_DELAY = 6   # Reduced from 24 - Shorter delay between actions for faster processing
 
 # Video recording state
 video_writer = None
@@ -61,6 +65,10 @@ video_recording = False
 video_filename = ""
 video_frame_counter = 0
 video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
+
+# Frame cache for separate frame server
+FRAME_CACHE_FILE = "/tmp/pokemon_frame_cache.json"
+frame_cache_counter = 0
 
 # Pygame display
 screen_width = 480  # 240 * 2 (upscaled)
@@ -120,6 +128,45 @@ def init_video_recording(record_enabled=False):
     except Exception as e:
         print(f"❌ Video recording initialization error: {e}")
         video_writer = None
+
+def update_frame_cache(screenshot):
+    """Update the frame cache file for the separate frame server"""
+    global frame_cache_counter, FRAME_CACHE_FILE
+    
+    if screenshot is None:
+        return
+        
+    try:
+        # Convert screenshot to base64
+        if hasattr(screenshot, 'save'):  # PIL image
+            buffer = io.BytesIO()
+            screenshot.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+        elif isinstance(screenshot, np.ndarray):  # Numpy array
+            pil_image = Image.fromarray(screenshot)
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+        else:
+            return
+            
+        frame_cache_counter += 1
+        
+        # Write to cache file atomically
+        cache_data = {
+            "frame_data": img_str,
+            "frame_counter": frame_cache_counter,
+            "timestamp": time.time()
+        }
+        
+        # Write to temporary file first, then move (atomic operation)
+        temp_file = FRAME_CACHE_FILE + ".tmp"
+        with open(temp_file, 'w') as f:
+            json.dump(cache_data, f)
+        os.rename(temp_file, FRAME_CACHE_FILE)
+        
+    except Exception as e:
+        pass  # Silently handle cache write errors
 
 def record_frame(screenshot):
     """Record frame to video if recording is enabled with frame skipping"""
@@ -294,6 +341,11 @@ def handle_input(manual_mode=False):
         # Server mode - no keyboard input
         return True, []
     
+    # Check if pygame is initialized (not headless mode)
+    if screen is None:
+        # Headless mode - no input handling, just return continue
+        return True, []
+    
     # Manual mode - handle keyboard input
     # This handles continuous key presses
     keys = pygame.key.get_pressed()
@@ -346,66 +398,50 @@ def handle_input(manual_mode=False):
     return True, actions_pressed
 
 def step_environment(actions_pressed):
-    """Take a step in the environment with comprehensive locking for race condition prevention"""
+    """Take a step in the environment with optimized locking for better performance"""
     global current_obs
     
-    # Use memory_lock to prevent race conditions with state reading during area transitions
+    # Only use memory_lock for the essential emulator step
     with memory_lock:
-        with step_lock:
-            env.run_frame_with_buttons(actions_pressed)
-            
-            # IMPROVED AREA TRANSITION DETECTION: Use proper _check_area_transition method
-            if hasattr(env, 'memory_reader') and env.memory_reader:
-                try:
-                    # Use the built-in area transition detection
-                    transition_detected = env.memory_reader._check_area_transition()
-                    
-                    if transition_detected:
-                        logger.info("Area transition detected by _check_area_transition()")
-                        
-                        # Force complete cache invalidation
-                        env.memory_reader.invalidate_map_cache()
-                        
-                        # Clear behavior cache specifically - this is the key fix
-                        if hasattr(env.memory_reader, '_cached_behaviors'):
-                            env.memory_reader._cached_behaviors = None
-                        if hasattr(env.memory_reader, '_cached_behaviors_map_key'):
-                            env.memory_reader._cached_behaviors_map_key = None
-                        
-                        # Clear memory region cache for EWRAM (where map buffer lives)
-                        if hasattr(env.memory_reader, '_mem_cache'):
-                            env.memory_reader._mem_cache.clear()
-                        
-                        # Let the system naturally refresh rather than forcing immediate re-detection
-                        logger.info("Caches cleared for area transition")
-                    
-                    # Also do a basic location name check as backup
-                    current_location = env.memory_reader.read_location()
-                    if hasattr(env, '_last_location_check'):
-                        if current_location != env._last_location_check:
-                            logger.info(f"Location name changed: {env._last_location_check} -> {current_location}")
-                            # Additional cache clearing for location name changes
-                            env.memory_reader.invalidate_map_cache()
-                    
-                    env._last_location_check = current_location
-                except Exception as e:
-                    logger.debug(f"Location check failed: {e}")
-
-            screenshot = env.get_screenshot()
-            if screenshot:
-                # Record frame for video if enabled
-                record_frame(screenshot)
-                with obs_lock:
-                    current_obs = np.array(screenshot)
+        env.run_frame_with_buttons(actions_pressed)
+        
+        # Do lightweight area transition detection inside the lock
+        if hasattr(env, 'memory_reader') and env.memory_reader:
+            try:
+                transition_detected = env.memory_reader._check_area_transition()
+                if transition_detected:
+                    logger.info("Area transition detected")
+                    env.memory_reader.invalidate_map_cache()
+                    if hasattr(env.memory_reader, '_cached_behaviors'):
+                        env.memory_reader._cached_behaviors = None
+                    if hasattr(env.memory_reader, '_cached_behaviors_map_key'):
+                        env.memory_reader._cached_behaviors_map_key = None
+            except Exception as e:
+                logger.warning(f"Area transition check failed: {e}")
+    
+    # Update screenshot outside the memory lock to reduce contention
+    try:
+        screenshot = env.get_screenshot()
+        if screenshot:
+            record_frame(screenshot)
+            update_frame_cache(screenshot)  # Update frame cache for separate frame server
+            with obs_lock:
+                current_obs = np.array(screenshot)
+    except Exception as e:
+        logger.warning(f"Error updating screenshot: {e}")
 
 def update_display(manual_mode=False):
     """Update the display with current game state"""
     global current_obs, screen, step_count
     
+    # Only update display if pygame is initialized
+    if screen is None:
+        return
+        
     with obs_lock:
         obs_copy = current_obs.copy() if current_obs is not None else None
     
-    if obs_copy is not None and screen:
+    if obs_copy is not None:
         obs_surface = pygame.surfarray.make_surface(obs_copy.swapaxes(0, 1))
         scaled_surface = pygame.transform.scale(obs_surface, (screen_width, screen_height))
         screen.blit(scaled_surface, (0, 0))
@@ -505,7 +541,9 @@ def game_loop(manual_mode=False):
                 current_action = action_queue.pop(0)
                 action_frames_remaining = ACTION_HOLD_FRAMES
                 actions_pressed = [current_action]
-                print(f"🎮 Server processing action: {current_action}, Queue remaining: {len(action_queue)} actions")
+                queue_len = len(action_queue)
+                estimated_time = queue_len * (ACTION_HOLD_FRAMES + ACTION_RELEASE_DELAY) / current_fps
+                print(f"🎮 Server processing action: {current_action}, Queue remaining: {queue_len} actions (~{estimated_time:.1f}s)")
             else:
                 # No action to process
                 actions_pressed = []
@@ -515,15 +553,31 @@ def game_loop(manual_mode=False):
         
         # Milestones are now updated in background thread to avoid blocking pygame
         
-        # Update display
-        update_display(manual_mode)
+        # Update display only if not headless
+        if screen is not None:  # Only update display if pygame was initialized
+            update_display(manual_mode)
         
         with step_lock:
             step_count += 1
         
+        # Performance monitoring - log actual FPS every 5 seconds
+        global last_fps_log, frame_count_since_log
+        frame_count_since_log += 1
+        current_time = time.time()
+        if current_time - last_fps_log >= 5.0:  # Log every 5 seconds
+            actual_fps = frame_count_since_log / (current_time - last_fps_log)
+            queue_len = len(action_queue)
+            print(f"📊 Server FPS: {actual_fps:.1f} (target: {fps}), Queue: {queue_len} actions")
+            last_fps_log = current_time
+            frame_count_since_log = 0
+        
         # Use dynamic FPS - 2x speed during dialog
         current_fps = env.get_current_fps(fps) if env else fps
-        clock.tick(current_fps)
+        if clock is not None:
+            clock.tick(current_fps)
+        else:
+            # Headless mode - sleep instead of using clock
+            time.sleep(1.0 / current_fps)
 
 def init_pygame():
     """Initialize pygame"""
@@ -537,7 +591,15 @@ def init_pygame():
 
 def run_fastapi_server(port):
     """Run FastAPI server in background thread"""
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="error", access_log=False)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port, 
+        log_level="error", 
+        access_log=False,
+        timeout_keep_alive=60,  # Keep connections alive longer
+        timeout_graceful_shutdown=30  # More time for graceful shutdown
+    )
 
 # Serve stream.html
 @app.get("/stream")
@@ -668,28 +730,16 @@ async def take_action(request: ActionRequest):
         # DON'T execute action here - let the game loop handle it from the queue
         # This prevents conflicts between the API thread and pygame thread
         
-        # Don't increment step_count here - the game loop does that
-        with step_lock:
-            current_step = step_count
+        # Return immediate success - avoid all locks to prevent deadlocks
+        actions_added = len(request.buttons) if request.buttons else 0
         
-        # Get updated screenshot (from what the game loop is showing)
-        with obs_lock:
-            obs_copy = current_obs.copy() if current_obs is not None else None
-        
-        if obs_copy is not None:
-            pil_image = Image.fromarray(obs_copy)
-            buffer = io.BytesIO()
-            pil_image.save(buffer, format='PNG')
-            img_str = base64.b64encode(buffer.getvalue()).decode()
-            
-            return GameStateResponse(
-                screenshot_base64=img_str,
-                step_number=current_step,
-                resolution=[obs_copy.shape[1], obs_copy.shape[0]],
-                status="running"
-            )
-        else:
-            raise HTTPException(status_code=500, detail="No screenshot available")
+        # Return lightweight response without any lock acquisition
+        return {
+            "status": "success", 
+            "actions_queued": actions_added,
+            "queue_length": len(action_queue),  # action_queue access is atomic for lists
+            "message": f"Added {actions_added} actions to queue"
+        }
             
     except Exception as e:
         logger.error(f"Error taking action: {e}")
@@ -1487,6 +1537,7 @@ def main():
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
+    parser.add_argument("--no-display", action="store_true", help="Run without pygame display (headless mode)")
     
     args = parser.parse_args()
     
@@ -1525,10 +1576,19 @@ def main():
         print("Server mode - no keyboard input, no overlay")
     if args.no_ocr:
         print("OCR dialogue detection disabled")
+    if args.no_display:
+        print("Display disabled - running in headless mode")
     print("Press Ctrl+C to stop")
     
-    # Initialize pygame
-    init_pygame()
+    # Initialize pygame only if display is enabled
+    if not args.no_display:
+        init_pygame()
+    else:
+        # Set display globals to None for headless mode
+        global screen, font, clock
+        screen = None
+        font = None
+        clock = None
     
     # Initialize emulator
     if not setup_environment():
@@ -1609,7 +1669,8 @@ def main():
         state_update_running = False
         if env:
             env.stop()
-        pygame.quit()
+        if screen is not None:  # Only quit pygame if it was initialized
+            pygame.quit()
         print("Server stopped")
 
 # Initialize emulator when imported for multiprocess mode

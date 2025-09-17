@@ -70,10 +70,12 @@ agent_step_count = 0  # Track total agent steps
 
 # Error recovery system
 consecutive_errors = 0  # Track consecutive errors for recovery
-MAX_CONSECUTIVE_ERRORS = 5  # Maximum errors before trying recovery
-SERVER_RESTART_THRESHOLD = 10  # Restart server after this many consecutive errors
+MAX_CONSECUTIVE_ERRORS = 2  # Maximum errors before trying recovery (reduced from 5)
+SERVER_RESTART_THRESHOLD = 4  # Restart server after this many consecutive errors (reduced from 10)
 server_process = None  # Track server subprocess for restart capability
+frame_server_process = None  # Track frame server subprocess
 server_env_vars = {}  # Store original server environment variables for restart
+server_cmd_args = []  # Store original server command for restart
 
 # LLM logging
 llm_logger = None  # Will be initialized when needed
@@ -167,9 +169,10 @@ class AgentStateResponse(BaseModel):
 
 class AgentModules:
     """Container for agent modules using function-based approach"""
-    def __init__(self, backend="openai", model_name="gpt-4o"):
+    def __init__(self, backend="openai", model_name="gpt-4o", simple_mode=False):
         self.backend = backend
         self.model_name = model_name
+        self.simple_mode = simple_mode
         self.vlm = None  # Will be initialized lazily
         self._vlm_initializing = False
         self._vlm_init_error = None
@@ -235,7 +238,7 @@ class AgentModules:
                 self.step_counter += 1
                 
                 # Simple mode: skip all modules except action selection
-                if simple_mode:
+                if self.simple_mode:
                     return self._simple_mode_processing(frame, game_state)
                 
                 # Full mode: use all four agent modules
@@ -484,15 +487,70 @@ def reset_error_counter():
     global consecutive_errors
     consecutive_errors = 0
 
+def start_frame_server():
+    """Start the lightweight frame server for stream.html"""
+    global frame_server_process
+    
+    try:
+        # Kill any existing frame server process
+        if frame_server_process and frame_server_process.poll() is None:
+            print("🔄 Terminating existing frame server...")
+            frame_server_process.terminate()
+            try:
+                frame_server_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                frame_server_process.kill()
+    except:
+        pass
+    
+    try:
+        print("🖼️ Starting frame server on port 8001...")
+        frame_server_process = subprocess.Popen(
+            ["python", "-m", "server.frame_server", "--port", "8001"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        time.sleep(1)  # Brief wait for startup
+        
+        # Quick health check
+        try:
+            response = requests.get("http://localhost:8001/health", timeout=2)
+            if response.status_code == 200:
+                print("✅ Frame server started successfully")
+                return True
+        except:
+            pass
+            
+        print("⚠️ Frame server may not be responding")
+        return True  # Continue anyway, it's not critical
+        
+    except Exception as e:
+        print(f"❌ Failed to start frame server: {e}")
+        return False
+
 def start_server():
-    """Start the server subprocess with original environment variables"""
-    global server_process, server_env_vars
+    """Start the server subprocess with original environment variables and command"""
+    global server_process, server_env_vars, server_cmd_args
     try:
         # Kill any existing server process
         if server_process and server_process.poll() is None:
             print("🔄 Terminating existing server process...")
             server_process.terminate()
-            server_process.wait(timeout=5)
+            try:
+                server_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                print("🔪 Force killing unresponsive server process...")
+                server_process.kill()
+                server_process.wait(timeout=2)
+    except:
+        pass
+    
+    # Also kill any other server processes that might be running on port 8000
+    try:
+        import subprocess
+        print("🧹 Cleaning up any other server processes on port 8000...")
+        subprocess.run(["pkill", "-f", "server.app.*--port.*8000"], timeout=5)
+        time.sleep(1)  # Give processes time to die
     except:
         pass
     
@@ -513,23 +571,65 @@ def start_server():
                 else:
                     print(f"❌ ERROR: Checkpoint state file missing during restart!")
         
+        # Use stored server command if available, otherwise fallback to basic command
+        if server_cmd_args:
+            cmd_to_use = server_cmd_args.copy()
+            
+            # Check if we should switch to checkpoint.state for restart
+            checkpoint_state = "checkpoint.state"
+            if os.path.exists(checkpoint_state):
+                # Find and replace any existing --load-state argument with checkpoint.state
+                updated_cmd = False
+                for i, arg in enumerate(cmd_to_use):
+                    if arg == "--load-state" and i + 1 < len(cmd_to_use):
+                        cmd_to_use[i + 1] = checkpoint_state
+                        updated_cmd = True
+                        print(f"🔄 Updated server command to use checkpoint: {checkpoint_state}")
+                        break
+                
+                # If no --load-state was found, add it
+                if not updated_cmd:
+                    cmd_to_use.extend(["--load-state", checkpoint_state])
+                    print(f"🔄 Added checkpoint to server command: {checkpoint_state}")
+            
+            print(f"📋 Using server command: {' '.join(cmd_to_use)}")
+        else:
+            cmd_to_use = ["python", "-m", "server.app"]
+            print(f"⚠️ No stored command, using fallback: {' '.join(cmd_to_use)}")
+        
         server_process = subprocess.Popen(
-            ["python", "server/app.py"], 
+            cmd_to_use, 
             stdout=subprocess.PIPE, 
             stderr=subprocess.PIPE,
             env=server_env
         )
         
-        # Wait a moment for server to start
-        time.sleep(3)
+        # Wait a moment for server to start (reduced for faster recovery)
+        time.sleep(2)
         
-        # Check if server is responding
-        response = requests.get("http://localhost:8000/health", timeout=5)
-        if response.status_code == 200:
-            print("✅ Server started successfully")
-            return True
+        # Check if server is responding with shorter timeout for faster recovery
+        max_health_checks = 3
+        for attempt in range(max_health_checks):
+            try:
+                response = requests.get("http://localhost:8000/health", timeout=3)
+                if response.status_code == 200:
+                    print("✅ Server started successfully")
+                    return True
+                else:
+                    print(f"❌ Server health check failed: {response.status_code}")
+            except Exception as e:
+                if attempt < max_health_checks - 1:
+                    print(f"⏳ Health check {attempt + 1}/{max_health_checks} failed, retrying...")
+                    time.sleep(1)
+                else:
+                    print(f"❌ Server health check timeout after {max_health_checks} attempts: {e}")
+            
+        # Final check - see if process is still alive
+        if server_process and server_process.poll() is None:
+            print("⚠️ Server process is running but not responding to health checks")
+            return False
         else:
-            print(f"❌ Server health check failed: {response.status_code}")
+            print("❌ Server process died during startup")
             return False
     except Exception as e:
         print(f"❌ Failed to start server: {e}")
@@ -544,7 +644,7 @@ def handle_agent_error(error):
     
     if "timeout" in error_msg.lower() or "connection" in error_msg.lower():
         if consecutive_errors <= MAX_CONSECUTIVE_ERRORS:
-            wait_time = min(consecutive_errors * 2, 10)  # Exponential backoff, max 10s
+            wait_time = min(consecutive_errors * 1, 3)  # Faster backoff, max 3s
             print(f"⚠️  Connection error {consecutive_errors}/{MAX_CONSECUTIVE_ERRORS}: {error}")
             if "read timed out" in error_msg.lower():
                 print(f"   Server is not responding. Check if server/app.py is running on port 8000")
@@ -557,7 +657,7 @@ def handle_agent_error(error):
                 consecutive_errors = 0  # Reset error count on successful recovery
             else:
                 print("❌ Server recovery failed, waiting before next attempt...")
-                time.sleep(5)
+                time.sleep(2)
         else:
             print(f"💥 CRITICAL: Too many consecutive errors ({consecutive_errors})")
             print("   Saving emergency checkpoint and continuing...")
@@ -797,6 +897,12 @@ def setup_emulator(rom_path="Emerald-GBAdvance/rom.gba", load_state=None):
             emulator.memory_reader._dialog_detection_enabled = False
             print("🚫 All dialogue detection disabled (--no-ocr flag)")
         
+        # Set up map stitcher checkpoint integration
+        if emulator.memory_reader:
+            from utils.llm_logger import setup_map_stitcher_checkpoint_integration
+            setup_map_stitcher_checkpoint_integration(emulator.memory_reader)
+            print("🗺️  Map stitcher checkpoint integration enabled")
+        
         if load_state and os.path.exists(load_state):
             emulator.load_state(load_state)
             print(f"✅ Loaded state from: {load_state}")
@@ -933,10 +1039,10 @@ def display_comprehensive_state():
 
 def setup_agent(backend="openai", model_name="gpt-4o"):
     """Initialize agent modules"""
-    global agent_modules, anticheat_tracker, llm_logger
+    global agent_modules, anticheat_tracker, llm_logger, simple_mode
     
     try:
-        agent_modules = AgentModules(backend=backend, model_name=model_name)
+        agent_modules = AgentModules(backend=backend, model_name=model_name, simple_mode=simple_mode)
         print(f"Agent initialized with {backend} backend using {model_name}")
         
         # Initialize anti-cheat tracker for submission logging
@@ -1014,6 +1120,16 @@ def handle_input(manual_mode=True):
                     if os.path.exists(load_file):
                         emulator.load_state(load_file)
                         print(f"State loaded from: {load_file}")
+            elif event.key == pygame.K_w:
+                if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                    # Shift+W for full world map overview
+                    display_world_map_overview()
+                else:
+                    # Regular 'W' for current area connections
+                    display_current_area_connections()
+            elif event.key == pygame.K_n:
+                # 'N' for navigation hints
+                display_navigation_menu()
     
     return True, actions_pressed
 
@@ -1493,6 +1609,84 @@ def save_screenshot():
             img = Image.fromarray(obs_copy)
             img.save(filename)
         print(f"Screenshot saved: {filename}")
+
+def display_current_area_connections():
+    """Display connections for the current area"""
+    global emulator
+    
+    if not emulator:
+        print("❌ Emulator not initialized")
+        return
+    
+    try:
+        from utils.map_visualizer import create_map_visualizer
+        
+        # Get current map info
+        map_bank = emulator.memory_reader._read_u8(emulator.memory_reader.addresses.MAP_BANK)
+        map_number = emulator.memory_reader._read_u8(emulator.memory_reader.addresses.MAP_NUMBER)
+        current_map_id = (map_bank << 8) | map_number
+        
+        visualizer = create_map_visualizer(emulator.memory_reader)
+        connections_map = visualizer.generate_area_connections_map(current_map_id)
+        print(connections_map)
+        
+    except Exception as e:
+        print(f"❌ Error displaying area connections: {e}")
+
+def display_world_map_overview():
+    """Display complete world map overview"""
+    global emulator
+    
+    if not emulator:
+        print("❌ Emulator not initialized")
+        return
+    
+    try:
+        from utils.map_visualizer import create_map_visualizer
+        
+        visualizer = create_map_visualizer(emulator.memory_reader)
+        world_overview = visualizer.generate_complete_world_overview()
+        print(world_overview)
+        
+    except Exception as e:
+        print(f"❌ Error displaying world map: {e}")
+
+def display_navigation_menu():
+    """Display navigation options"""
+    global emulator
+    
+    if not emulator:
+        print("❌ Emulator not initialized")
+        return
+    
+    try:
+        from utils.map_visualizer import create_map_visualizer
+        
+        # Get current map info
+        map_bank = emulator.memory_reader._read_u8(emulator.memory_reader.addresses.MAP_BANK)
+        map_number = emulator.memory_reader._read_u8(emulator.memory_reader.addresses.MAP_NUMBER)
+        current_map_id = (map_bank << 8) | map_number
+        
+        visualizer = create_map_visualizer(emulator.memory_reader)
+        
+        print("🗺️  NAVIGATION MENU")
+        print("Enter destination name (or press Enter for route overview):")
+        
+        # Show available areas for reference
+        areas = list(emulator.memory_reader._map_stitcher.map_areas.values())
+        if areas:
+            print(f"\nDiscovered areas ({len(areas)}):")
+            for area in sorted(areas, key=lambda x: x.location_name)[:10]:
+                print(f"  • {area.location_name}")
+            if len(areas) > 10:
+                print(f"  ... and {len(areas) - 10} more")
+        
+        # For now, just show route network instead of interactive input
+        route_network = visualizer.generate_route_network_map()
+        print(f"\n{route_network}")
+        
+    except Exception as e:
+        print(f"❌ Error displaying navigation menu: {e}")
 
 def display_map():
     """Display current map in terminal - showing both raw and agent views"""
@@ -2385,8 +2579,8 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
             current_time = time.time()
             if vlm and args.agent_auto:
                 try:
-                    # Get comprehensive state from server
-                    state_response = requests.get(f"{server_url}/state", timeout=10)
+                    # Get comprehensive state from server with robust timeout
+                    state_response = requests.get(f"{server_url}/state", timeout=30)  # Longer timeout for VLM processing
                     if state_response.status_code == 200:
                         state_data = state_response.json()
                         
@@ -2455,13 +2649,28 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                         }
                         game_state["visual"]["screenshot"] = screenshot
                         
-                        # Run agent processing
-                        if args and getattr(args, 'simple', False):
-                            # Simple mode processing
-                            action = simple_mode_processing_multiprocess(vlm, game_state, args)
-                        else:
-                            # Full agent module processing - call the actual functions
-                            action = process_agent_step_multiprocess(vlm, game_state, agent_modules, args)
+                        # Run agent processing with timeout protection
+                        action = None
+                        try:
+                            # Add timeout protection around VLM calls
+                            print(f"🧠 Starting VLM processing...")
+                            vlm_start_time = time.time()
+                            
+                            if args and getattr(args, 'simple', False):
+                                # Simple mode processing
+                                action = simple_mode_processing_multiprocess(vlm, game_state, args)
+                            else:
+                                # Full agent module processing - call the actual functions
+                                action = process_agent_step_multiprocess(vlm, game_state, agent_modules, args)
+                                
+                            vlm_duration = time.time() - vlm_start_time
+                            print(f"✅ VLM processing completed in {vlm_duration:.1f}s")
+                            
+                        except Exception as e:
+                            vlm_duration = time.time() - vlm_start_time
+                            print(f"❌ VLM processing failed after {vlm_duration:.1f}s: {e}")
+                            # Continue with WAIT action to avoid getting stuck
+                            action = "WAIT"
                         
                         # Send action to server instead of emulator
                         if action and action != "WAIT" and action != ["WAIT"]:
@@ -2474,7 +2683,7 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                     for individual_action in valid_actions:
                                         requests.post(f"{server_url}/action", 
                                                     json={"buttons": [individual_action]}, 
-                                                    timeout=5)
+                                                    timeout=15)  # Longer timeout for post-VLM actions
                                         agent_step_count += 1
                                         print(f"🤖 Agent action: {individual_action} (step {agent_step_count})")
                                         
@@ -2544,7 +2753,7 @@ def run_multiprocess_client_headless(server_port=8000, args=None):
                                 # Single action string - convert to list
                                 requests.post(f"{server_url}/action", 
                                             json={"buttons": [action]}, 
-                                            timeout=5)
+                                            timeout=15)  # Longer timeout for post-VLM actions
                                 agent_step_count += 1
                                 print(f"🤖 Agent action: {action} (step {agent_step_count})")
                                 
@@ -2763,15 +2972,25 @@ def process_agent_step_multiprocess(vlm, game_state, agent_modules, args):
 def run_multiprocess_client(server_port=8000, args=None):
     """Run the client component that talks to server in multiprocess mode"""
     try:
-        import pygame
+        # Check if display is disabled
+        no_display = args and args.no_display
         
-        # Initialize pygame for display
-        pygame.init()
-        screen_width, screen_height = 480, 320
-        screen = pygame.display.set_mode((screen_width, screen_height))
-        pygame.display.set_caption("Pokemon Agent - Multiprocess Client")
-        font = pygame.font.Font(None, 24)
-        clock = pygame.time.Clock()
+        if not no_display:
+            import pygame
+            
+            # Initialize pygame for display
+            pygame.init()
+            screen_width, screen_height = 480, 320
+            screen = pygame.display.set_mode((screen_width, screen_height))
+            pygame.display.set_caption("Pokemon Agent - Multiprocess Client")
+            font = pygame.font.Font(None, 24)
+            clock = pygame.time.Clock()
+        else:
+            # No display mode - no pygame initialization
+            screen = None
+            font = None
+            clock = None
+            print("🚫 Display disabled - running in headless mode")
         
         server_url = f"http://127.0.0.1:{server_port}"
         running = True
@@ -2814,36 +3033,47 @@ def run_multiprocess_client(server_port=8000, args=None):
         
         # Main client loop
         while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
+            # Handle events only if display is enabled
+            if not no_display:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
                         running = False
-                    elif event.key == pygame.K_SPACE:
-                        # Send manual agent action request
-                        try:
-                            requests.post(f"{server_url}/action", 
-                                        json={"buttons": [], "manual": False}, 
-                                        timeout=30)
-                        except Exception as e:
-                            print(f"Agent action error: {e}")
-                    else:
-                        # Handle button presses
-                        button_map = {
-                            pygame.K_z: 'A', pygame.K_x: 'B', 
-                            pygame.K_RETURN: 'START', pygame.K_RSHIFT: 'SELECT',
-                            pygame.K_UP: 'UP', pygame.K_DOWN: 'DOWN',
-                            pygame.K_LEFT: 'LEFT', pygame.K_RIGHT: 'RIGHT'
-                        }
-                        if event.key in button_map:
-                            button = button_map[event.key]
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            running = False
+                        elif event.key == pygame.K_SPACE:
+                            # Send manual agent action request
                             try:
                                 requests.post(f"{server_url}/action", 
-                                            json={"buttons": [button], "manual": True}, 
-                                            timeout=5)
+                                            json={"buttons": [], "manual": False}, 
+                                            timeout=30)
                             except Exception as e:
-                                print(f"Manual action error: {e}")
+                                print(f"Agent action error: {e}")
+                        else:
+                            # Handle button presses
+                            button_map = {
+                                pygame.K_z: 'A', pygame.K_x: 'B', 
+                                pygame.K_RETURN: 'START', pygame.K_RSHIFT: 'SELECT',
+                                pygame.K_UP: 'UP', pygame.K_DOWN: 'DOWN',
+                                pygame.K_LEFT: 'LEFT', pygame.K_RIGHT: 'RIGHT'
+                            }
+                            if event.key in button_map:
+                                button = button_map[event.key]
+                                try:
+                                    requests.post(f"{server_url}/action", 
+                                                json={"buttons": [button], "manual": True}, 
+                                                timeout=5)
+                                except Exception as e:
+                                    print(f"Manual action error: {e}")
+            else:
+                # Headless mode - simple exit handling
+                import signal
+                try:
+                    # Check for interrupt signals in headless mode
+                    time.sleep(0.1)
+                except KeyboardInterrupt:
+                    print("Received interrupt in headless mode")
+                    running = False
             
             # Agent processing (if auto mode enabled)
             current_time = time.time()
@@ -2897,59 +3127,78 @@ def run_multiprocess_client(server_port=8000, args=None):
                         last_agent_time = current_time
                         
                 except Exception as e:
-                    print(f"Agent processing error: {e}")
-                    time.sleep(1)  # Wait before retrying
+                    error_msg = str(e)
+                    print(f"❌ Agent processing error: {error_msg}")
+                    
+                    # Handle different types of errors appropriately
+                    if "timeout" in error_msg.lower() or "connection" in error_msg.lower():
+                        print("🔄 Connection issue detected, will retry after delay")
+                        time.sleep(5)  # Longer wait for connection issues
+                    elif "json" in error_msg.lower() or "decode" in error_msg.lower():
+                        print("🔄 JSON parsing error, likely server response issue")
+                        time.sleep(2)
+                    else:
+                        print(f"🔄 General error, waiting before retry")
+                        time.sleep(3)
+                        
+                    # Continue the loop to retry
             
-            # Get current frame from server (only every few frames to maintain performance)
-            frame_counter += 1
-            if frame_counter % 4 == 0:  # Only fetch every 4th frame for 30 FPS display
-                try:
-                    response = requests.get(f"{server_url}/screenshot", timeout=0.1)
-                    if response.status_code == 200:
-                        frame_data = response.json().get("screenshot", "")
-                        if frame_data:
-                            # Decode and display frame
-                            import base64
-                            import io
-                            img_data = base64.b64decode(frame_data)
-                            img = Image.open(io.BytesIO(img_data))
-                            frame_array = np.array(img)
-                            frame_surface = pygame.surfarray.make_surface(frame_array.swapaxes(0, 1))
-                            scaled_surface = pygame.transform.scale(frame_surface, (screen_width, screen_height))
-                            screen.blit(scaled_surface, (0, 0))
-                            last_good_frame = scaled_surface
-                except Exception as e:
-                    # Use last good frame or fill with black
+            # Display updates only if display is enabled
+            if not no_display:
+                # Get current frame from server (only every few frames to maintain performance)
+                frame_counter += 1
+                if frame_counter % 4 == 0:  # Only fetch every 4th frame for 30 FPS display
+                    try:
+                        response = requests.get(f"{server_url}/screenshot", timeout=2.0)
+                        if response.status_code == 200:
+                            frame_data = response.json().get("screenshot", "")
+                            if frame_data:
+                                # Decode and display frame
+                                import base64
+                                import io
+                                img_data = base64.b64decode(frame_data)
+                                img = Image.open(io.BytesIO(img_data))
+                                frame_array = np.array(img)
+                                frame_surface = pygame.surfarray.make_surface(frame_array.swapaxes(0, 1))
+                                scaled_surface = pygame.transform.scale(frame_surface, (screen_width, screen_height))
+                                screen.blit(scaled_surface, (0, 0))
+                                last_good_frame = scaled_surface
+                    except Exception as e:
+                        # Use last good frame or fill with black
+                        if last_good_frame is not None:
+                            screen.blit(last_good_frame, (0, 0))
+                        else:
+                            screen.fill((0, 0, 0))
+                else:
+                    # Reuse last frame for performance
                     if last_good_frame is not None:
                         screen.blit(last_good_frame, (0, 0))
                     else:
                         screen.fill((0, 0, 0))
+                
+                # Add status overlay
+                if font:
+                    status_lines = [
+                        "Multiprocess Mode - Client",
+                        f"Server: {server_url}",
+                        "Controls: WASD=Move, Z=A, X=B, Space=Agent, Esc=Quit"
+                    ]
+                    y_offset = screen_height - 80
+                    for line in status_lines:
+                        text_surface = font.render(line, True, (255, 255, 255))
+                        bg_rect = pygame.Rect(5, y_offset-2, text_surface.get_width()+4, text_surface.get_height()+4)
+                        pygame.draw.rect(screen, (0, 0, 0, 180), bg_rect)
+                        screen.blit(text_surface, (5, y_offset))
+                        y_offset += 25
+                
+                pygame.display.flip()
+                clock.tick(120)  # 120 FPS for client to match server
             else:
-                # Reuse last frame for performance
-                if last_good_frame is not None:
-                    screen.blit(last_good_frame, (0, 0))
-                else:
-                    screen.fill((0, 0, 0))
-            
-            # Add status overlay
-            if font:
-                status_lines = [
-                    "Multiprocess Mode - Client",
-                    f"Server: {server_url}",
-                    "Controls: WASD=Move, Z=A, X=B, Space=Agent, Esc=Quit"
-                ]
-                y_offset = screen_height - 80
-                for line in status_lines:
-                    text_surface = font.render(line, True, (255, 255, 255))
-                    bg_rect = pygame.Rect(5, y_offset-2, text_surface.get_width()+4, text_surface.get_height()+4)
-                    pygame.draw.rect(screen, (0, 0, 0, 180), bg_rect)
-                    screen.blit(text_surface, (5, y_offset))
-                    y_offset += 25
-            
-            pygame.display.flip()
-            clock.tick(120)  # 120 FPS for client to match server
+                # Headless mode - just sleep to avoid busy waiting
+                time.sleep(0.01)  # 100 FPS equivalent
         
-        pygame.quit()
+        if not no_display:
+            pygame.quit()
         return True
         
     except Exception as e:
@@ -3005,6 +3254,10 @@ def main():
             if args.no_display:
                 server_cmd.append("--no-display")
             
+            # Store server command for restart capability
+            global server_cmd_args
+            server_cmd_args = server_cmd.copy()
+            
             # Start server as subprocess
             import subprocess
             try:
@@ -3019,6 +3272,9 @@ def main():
                 print(f"✅ Server started with PID {server_process.pid}")
                 print("⏳ Waiting 3 seconds for server to initialize...")
                 time.sleep(3)
+                
+                # Also start the frame server for stream.html
+                start_frame_server()
                 
             except Exception as e:
                 print(f"❌ Failed to start server: {e}")
