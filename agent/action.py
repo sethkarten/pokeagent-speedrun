@@ -122,6 +122,8 @@ def action_step(memory_context, current_plan, latest_observation, frame, state_d
     - UP/DOWN/LEFT/RIGHT: Move character, navigate menus, select options
     - L/R: Cycle through pages in some menus, switch Pokemon in battle (rare usage)
     
+    ⚠️ CRITICAL WARNING: NEVER save the game using the in-game save menu! Saving will crash the entire run and end your progress. If you encounter a save prompt in the game, press B to cancel it immediately!
+    
     Return ONLY the button name(s) as a comma-separated list, nothing else.
     Maximum 10 actions in sequence. Avoid repeating same button more than 6 times.
     """

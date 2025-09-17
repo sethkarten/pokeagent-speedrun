@@ -11,8 +11,14 @@ import logging
 import numpy as np
 from PIL import Image
 from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol
+import base64
+import io
 
 logger = logging.getLogger(__name__)
+
+# Global persistent world map storage
+PERSISTENT_WORLD_GRID = {}
+PERSISTENT_MAP_FILE = "/tmp/pokemon_world_map.json"
 
 def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
     """
@@ -32,8 +38,6 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
     try:
         # Convert base64 to image if needed
         if screenshot_base64 and not frame_array:
-            import base64
-            import io
             image_data = base64.b64decode(screenshot_base64)
             image = Image.open(io.BytesIO(image_data))
             frame_array = np.array(image)
@@ -657,35 +661,51 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     if 'current_map' in map_info:
         context_parts.append(f"Current Map: {map_info['current_map']}")
     
-    # Check if stitched map info is available to show world map
-    stitched_data = map_info.get('stitched_map_info')
-    if stitched_data and stitched_data.get('available'):
-        # Show world map instead of local 21x21 map
+    # For now, use the local map approach but prepare for stitching integration
+    # We need to modify this to use actual current local map data and stitch it
+    
+    # Try to build stitched map from current local map data
+    if 'tiles' in map_info and map_info['tiles']:
+        # Get current local map (this is the 11x11 around player)
+        current_local_tiles = map_info['tiles']
+        
+        # Extract player coordinates properly - try map first, then player data as fallback
+        player_coords_dict = map_info.get('player_coords', {})
+        if isinstance(player_coords_dict, dict) and player_coords_dict.get('x') is not None:
+            player_coords = (player_coords_dict.get('x', 0), player_coords_dict.get('y', 0))
+        elif player_coords_dict and not isinstance(player_coords_dict, dict):
+            # Fallback if it's already a tuple
+            player_coords = player_coords_dict
+        else:
+            # Use player position from player data as fallback
+            if player_data and 'position' in player_data:
+                pos = player_data['position']
+                player_coords = (pos.get('x', 0), pos.get('y', 0))
+                print(f"🗺️ DEBUG: Using player.position coordinates: {player_coords}")
+            else:
+                player_coords = (0, 0)
+                print(f"🗺️ DEBUG: No coordinates found, defaulting to (0, 0)")
+        
+        # Build stitched data structure from current local map
+        stitched_data = {
+            'current_local_map': current_local_tiles,
+            'player_world_pos': player_coords,  # These should be absolute coordinates
+            'terrain_areas': map_info.get('stitched_map_info', {}).get('terrain_areas', []) if map_info.get('stitched_map_info') else [],
+            'current_area': map_info.get('stitched_map_info', {}).get('current_area', {}) if map_info.get('stitched_map_info') else {}
+        }
+        
+        # Try the new stitching approach
         world_map_display = _format_world_map_display(stitched_data)
         if world_map_display:
             context_parts.extend(world_map_display)
+        else:
+            # Fall back to local map
+            context_parts.append("\n--- LOCAL MAP (Stitching failed) ---")
+            _add_local_map_fallback(context_parts, map_info, include_npcs)
     else:
-        # Fallback to local map if world map not available
-        if 'tiles' in map_info and map_info['tiles']:
-            raw_tiles = map_info['tiles']
-            # Use default facing direction since memory-based facing is unreliable
-            facing = "South"  # default
-            
-            # Get NPCs from map info
-            npcs = map_info.get('object_events', []) if include_npcs else []
-            
-            # Get player coordinates for NPC positioning
-            player_coords = map_info.get('player_coords')
-            
-            # Use unified LLM formatter for consistency
-            map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords)
-            context_parts.append(f"\n--- LOCAL MAP ({len(raw_tiles)}x{len(raw_tiles[0])}) ---")
-            context_parts.append(map_display)
-            
-            # Add dynamic legend based on symbols in the map
-            grid = format_map_grid(raw_tiles, facing, npcs, player_coords)
-            legend = generate_dynamic_legend(grid)
-            context_parts.append(f"\n{legend}")
+        # No local map data - show whatever we have
+        context_parts.append("\n--- LOCAL MAP (No local data) ---")
+        _add_local_map_fallback(context_parts, map_info, include_npcs)
     
     # Add NPC information if present (regardless of map type)
     if include_npcs and 'object_events' in map_info:
@@ -723,151 +743,236 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     
     return context_parts
 
+def _add_local_map_fallback(context_parts, map_info, include_npcs):
+    """Helper function to add local map display as fallback"""
+    if 'tiles' in map_info and map_info['tiles']:
+        raw_tiles = map_info['tiles']
+        # Use default facing direction since memory-based facing is unreliable
+        facing = "South"  # default
+        
+        # Get NPCs from map info
+        npcs = map_info.get('object_events', []) if include_npcs else []
+        
+        # Get player coordinates for NPC positioning
+        player_coords = map_info.get('player_coords')
+        
+        # Use unified LLM formatter for consistency
+        map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords)
+        context_parts.append(map_display)
+        
+        # Add dynamic legend based on symbols in the map
+        grid = format_map_grid(raw_tiles, facing, npcs, player_coords)
+        legend = generate_dynamic_legend(grid)
+        context_parts.append(f"\n{legend}")
+
 def _format_world_map_display(stitched_data):
-    """Format world map display for agent context"""
+    """Format world map display using the same clean format as local map"""
     try:
-        # Get terrain areas with actual map data
-        terrain_areas = stitched_data.get('terrain_areas', [])
-        current_area = stitched_data.get('current_area', {})
-        current_area_id = current_area.get('id')
-        
-        if not terrain_areas:
-            return []
-        
-        # Build a world map grid with actual terrain
-        map_width = 100
-        map_height = 60
-        grid = [['.' for _ in range(map_width)] for _ in range(map_height)]
-        area_info = []
-        
-        # Use the existing proven tile-to-symbol logic from map_formatter
-        def tile_to_symbol(tile_data):
-            return format_tile_to_symbol(tile_data)
-        
-        # Stitch terrain areas together
-        for area in terrain_areas:
-            coords = area.get('overworld_coords')
-            map_data = area.get('map_data')
-            name = area.get('name', 'Unknown')
-            
-            if coords and map_data:
-                base_x, base_y = coords
-                
-                # Each area is 21x21, place at the base coordinates
-                for local_y, row in enumerate(map_data):
-                    for local_x, tile_data in enumerate(row):
-                        world_x = base_x + local_x
-                        world_y = base_y + local_y
-                        
-                        if 0 <= world_x < map_width and 0 <= world_y < map_height:
-                            symbol = tile_to_symbol(tile_data)
-                            grid[world_y][world_x] = symbol
-                
-                area_info.append(f"  {base_x},{base_y}: {name}")
-        
-        # Mark current player position - find the current area and use its player position
-        current_area_id = current_area.get('id')
-        if current_area_id:
-            for area in terrain_areas:
-                if area.get('id') == current_area_id:
-                    coords = area.get('overworld_coords')
-                    player_pos = area.get('player_pos')
-                    map_data = area.get('map_data')
-                    
-                    if coords and player_pos and map_data:
-                        base_x, base_y = coords
-                        map_height_local = len(map_data)
-                        map_width_local = len(map_data[0]) if map_data else 0
-                        
-                        # Player position should now be in local coordinates
-                        player_x, player_y = player_pos
-                        local_x = max(0, min(player_x, map_width_local - 1))
-                        local_y = max(0, min(player_y, map_height_local - 1))
-                        
-                        # Calculate world position
-                        player_world_x = base_x + local_x
-                        player_world_y = base_y + local_y
-                        
-                        # Use the grid dimensions (100x60) not the map dimensions (21x21)
-                        if 0 <= player_world_x < 100 and 0 <= player_world_y < 60:
-                            grid[player_world_y][player_world_x] = "P"
-                        break
-        
-        lines = []
-        lines.append("\n--- WORLD MAP ---")
-        
-        # Find the actual bounds of placed content on the grid
-        min_x = map_width
-        max_x = -1
-        min_y = map_height  
-        max_y = -1
-        
-        # Scan the grid to find actual content bounds
-        for y in range(map_height):
-            for x in range(map_width):
-                if grid[y][x] != '.':
-                    min_x = min(min_x, x)
-                    max_x = max(max_x, x)
-                    min_y = min(min_y, y)
-                    max_y = max(max_y, y)
-        
-        # If no content found, fall back to area coordinates
-        if min_x >= map_width:
-            for area in terrain_areas:
-                coords = area.get('overworld_coords')
-                map_data = area.get('map_data')
-                if coords and map_data:
-                    x, y = coords
-                    area_width = len(map_data[0]) if map_data else 21
-                    area_height = len(map_data) if map_data else 21
-                    min_x = min(min_x, x) if min_x < map_width else x
-                    max_x = max(max_x, x + area_width - 1)
-                    min_y = min(min_y, y) if min_y < map_height else y
-                    max_y = max(max_y, y + area_height - 1)
-        
-        # Add padding and ensure reasonable display size
-        if min_x < map_width:  # Only if we have valid coordinates
-            padding = 2
-            min_x = max(0, min_x - padding)
-            max_x = min(map_width - 1, max_x + padding)
-            min_y = max(0, min_y - padding)
-            max_y = min(map_height - 1, max_y + padding)
-            
-            # Add coordinate header first
-            header = "    "
-            for x in range(min_x, max_x + 1):
-                header += f"{x%10}"
-            lines.append(header)
-            
-            # Show the map section
-            for y in range(min_y, max_y + 1):
-                row_str = ""
-                for x in range(min_x, max_x + 1):
-                    row_str += grid[y][x]
-                lines.append(f"{y:2d}: {row_str}")
-            
-            # Add dynamic legend using proven legend system
-            lines.append("")
-            lines.append(generate_dynamic_legend(grid))
-            
-            # Add discovered areas (only those with coordinates)
-            if area_info:
-                lines.append("")
-                lines.append("Discovered Areas:")
-                for info in sorted(area_info)[:8]:  # Show first 8
-                    lines.append(info)
-                if len(area_info) > 8:
-                    lines.append(f"  ... and {len(area_info) - 8} more")
-        else:
-            # No coordinates available, show simple message
-            lines.append("World map coordinates not yet discovered.")
-            lines.append("Explore to map the overworld!")
-        
-        return lines
+        # This is the new stitching approach: build persistent world map from local observations
+        return _build_stitched_world_map(stitched_data)
         
     except Exception as e:
-        # If world map generation fails, return empty
+        logger.warning(f"World map generation failed: {e}")
         return []
+
+def _load_persistent_world_map():
+    """Load persistent world map from file"""
+    global PERSISTENT_WORLD_GRID
+    try:
+        import os
+        if os.path.exists(PERSISTENT_MAP_FILE):
+            with open(PERSISTENT_MAP_FILE, 'r') as f:
+                data = json.load(f)
+                # Convert string keys back to tuples
+                PERSISTENT_WORLD_GRID = {eval(k): v for k, v in data.items()}
+                print(f"🗺️ DEBUG: Loaded {len(PERSISTENT_WORLD_GRID)} tiles from persistent storage")
+        else:
+            PERSISTENT_WORLD_GRID = {}
+            print("🗺️ DEBUG: No persistent map file found, starting fresh")
+    except Exception as e:
+        print(f"🗺️ DEBUG: Failed to load persistent map: {e}")
+        PERSISTENT_WORLD_GRID = {}
+
+def _save_persistent_world_map():
+    """Save persistent world map to file"""
+    try:
+        # Convert tuple keys to strings for JSON serialization
+        data = {str(k): v for k, v in PERSISTENT_WORLD_GRID.items()}
+        with open(PERSISTENT_MAP_FILE, 'w') as f:
+            json.dump(data, f)
+        print(f"🗺️ DEBUG: Saved {len(PERSISTENT_WORLD_GRID)} tiles to persistent storage")
+    except Exception as e:
+        print(f"🗺️ DEBUG: Failed to save persistent map: {e}")
+
+def clear_persistent_world_map():
+    """Clear the persistent world map for testing"""
+    global PERSISTENT_WORLD_GRID
+    PERSISTENT_WORLD_GRID.clear()
+    try:
+        import os
+        if os.path.exists(PERSISTENT_MAP_FILE):
+            os.remove(PERSISTENT_MAP_FILE)
+        print("🗺️ DEBUG: Cleared persistent world map and file")
+    except Exception as e:
+        print(f"🗺️ DEBUG: Failed to clear persistent map file: {e}")
+
+def _build_stitched_world_map(stitched_data):
+    """Build a persistent world map by stitching local 11x11 observations"""
+    
+    # Get the current local map data (should be 11x11 around player)
+    current_map = stitched_data.get('current_local_map')  # This should be the 11x11 map
+    current_area = stitched_data.get('current_area', {})
+    player_world_pos = stitched_data.get('player_world_pos')  # Absolute world coordinates
+    
+    # Get persistent world grid - load from file if empty
+    global PERSISTENT_WORLD_GRID
+    if not PERSISTENT_WORLD_GRID:
+        _load_persistent_world_map()
+    
+    persistent_world_grid = PERSISTENT_WORLD_GRID
+    
+    # Debug: show current persistent grid size
+    print(f"🗺️ DEBUG: Persistent grid currently has {len(persistent_world_grid)} tiles")
+    
+    # DO NOT load from terrain_areas - we want to build incrementally from current observations only
+    # This was causing the map to show huge areas from the start
+    print(f"🗺️ DEBUG: Skipping terrain_areas to build map incrementally")
+    
+    # If we have current local map data and player position, stitch it in
+    if current_map and player_world_pos:
+        player_world_x, player_world_y = player_world_pos
+        
+        # Current map is typically 11x11 or 15x15 centered on player
+        map_size = len(current_map)
+        center = map_size // 2  # For 11x11: center at 5, for 15x15: center at 7
+        
+        print(f"🗺️ DEBUG: Current observation is {map_size}x{len(current_map[0]) if current_map else 0}, center at {center}")
+        
+        tiles_added = 0
+        for local_y, row in enumerate(current_map):
+            for local_x, tile_data in enumerate(row):
+                # Calculate world coordinates for this tile
+                offset_x = local_x - center
+                offset_y = local_y - center
+                world_x = player_world_x + offset_x
+                world_y = player_world_y + offset_y
+                
+                # Convert tile to symbol
+                symbol = format_tile_to_symbol(tile_data)
+                
+                # STITCHING RULE: Only overwrite if we have real data
+                # Don't overwrite existing data with "unknown" or empty data
+                if symbol and symbol != '?' and symbol != ' ':
+                    if (world_x, world_y) not in persistent_world_grid:
+                        tiles_added += 1
+                    persistent_world_grid[(world_x, world_y)] = symbol
+                # If the new observation is unknown (?), keep existing data if it exists
+                # This preserves previously observed terrain
+        
+        print(f"🗺️ DEBUG: Added {tiles_added} new tiles, total now {len(persistent_world_grid)}")
+        
+        # Save to file after adding new tiles
+        if tiles_added > 0:
+            _save_persistent_world_map()
+    
+    if not persistent_world_grid:
+        return []
+    
+    # Find current player position from current area data
+    player_display_pos = None
+    if player_world_pos:
+        player_display_pos = player_world_pos
+    else:
+        # Fallback: try to get from current area
+        for area in terrain_areas:
+            if area.get('id') == current_area.get('id'):
+                coords = area.get('overworld_coords')
+                player_pos = area.get('player_pos')
+                if coords and player_pos:
+                    base_x, base_y = coords
+                    player_local_x, player_local_y = player_pos
+                    player_display_pos = (base_x + player_local_x, base_y + player_local_y)
+                    break
+    
+    # Find the exact bounds of the discovered world content (no padding)
+    all_positions = list(persistent_world_grid.keys())
+    if player_display_pos:
+        all_positions.append(player_display_pos)
+    
+    if not all_positions:
+        return []
+    
+    min_x = min(pos[0] for pos in all_positions)
+    max_x = max(pos[0] for pos in all_positions)
+    min_y = min(pos[1] for pos in all_positions)
+    max_y = max(pos[1] for pos in all_positions)
+    
+    # NO PADDING - show exactly what has been discovered
+    print(f"🗺️ DEBUG: Map bounds: x={min_x} to {max_x}, y={min_y} to {max_y}")
+    
+    # Build the display
+    lines = []
+    lines.append("\n--- WORLD MAP (Stitched) ---")
+    
+    # Create the map display - ONLY show discovered tiles (no ? for unexplored)
+    discovered_count = 0
+    for y in range(min_y, max_y + 1):
+        row = ""
+        for x in range(min_x, max_x + 1):
+            if player_display_pos and (x, y) == player_display_pos:
+                row += "P"
+                discovered_count += 1
+            elif (x, y) in persistent_world_grid:
+                row += persistent_world_grid[(x, y)]
+                discovered_count += 1
+            else:
+                # This should never happen since we're only showing discovered bounds
+                row += "?"
+        
+        # Add spacing for readability
+        spaced_row = " ".join(row)
+        lines.append(spaced_row)
+    
+    # Add legend
+    legend_lines = ["Legend:"]
+    if player_display_pos:
+        legend_lines.append("  Movement: P=Player")
+    
+    # Check what terrain symbols we have
+    terrain_symbols = set(persistent_world_grid.values())
+    terrain_items = []
+    
+    for symbol in [".", "#", "~", "W", "D", "S"]:
+        if symbol in terrain_symbols:
+            if symbol == ".":
+                terrain_items.append(".=Walkable path")
+            elif symbol == "#":
+                terrain_items.append("#=Wall/Blocked")
+            elif symbol == "~":
+                terrain_items.append("~=Tall grass")
+            elif symbol == "W":
+                terrain_items.append("W=Water")
+            elif symbol == "D":
+                terrain_items.append("D=Door")
+            elif symbol == "S":
+                terrain_items.append("S=Stairs/Warp")
+    
+    if terrain_items:
+        legend_lines.append(f"  Terrain: {', '.join(terrain_items)}")
+    
+    lines.append("")
+    lines.append("\n".join(legend_lines))
+    
+    # Add exploration statistics based on persistent grid
+    total_persistent_tiles = len(persistent_world_grid)
+    display_width = max_x - min_x + 1
+    display_height = max_y - min_y + 1
+    
+    lines.append("")
+    lines.append(f"Discovered Map: {display_width}x{display_height} (exactly what has been explored)")
+    
+    return lines
+
 
 def _format_stitched_map_info(map_info):
     """Format stitched map information for the agent"""

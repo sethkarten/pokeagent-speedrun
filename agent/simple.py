@@ -492,6 +492,23 @@ class SimpleAgent:
         Returns:
             Action string or list of actions
         """
+        # CRITICAL: Validate frame before any VLM processing
+        if frame is None:
+            logger.error("🚫 CRITICAL: SimpleAgent.process_step called with None frame - cannot proceed")
+            return "WAIT"
+        
+        # Validate frame is a proper image
+        if not (hasattr(frame, 'save') or hasattr(frame, 'shape')):
+            logger.error(f"🚫 CRITICAL: SimpleAgent.process_step called with invalid frame type {type(frame)} - cannot proceed")
+            return "WAIT"
+        
+        # Additional PIL Image validation
+        if hasattr(frame, 'size'):
+            width, height = frame.size
+            if width <= 0 or height <= 0:
+                logger.error(f"🚫 CRITICAL: SimpleAgent.process_step called with invalid frame size {width}x{height} - cannot proceed")
+                return "WAIT"
+        
         try:
             from utils.state_formatter import format_state_for_llm
             
@@ -523,7 +540,8 @@ class SimpleAgent:
             objectives_summary = self._format_objectives_for_llm(active_objectives, completed_objectives_list)
             
             # Create enhanced prompt with objectives, history context and chain of thought request
-            prompt = f"""You are playing Pokemon Emerald. Based on the current game frame and state information, think through your next move and choose the best button action.
+            prompt = f"""You are playing Pokemon Emerald. Progress quickly to the milestones by balancing exploration and exploitation of things you know. 
+            Based on the current game frame and state information, think through your next move and choose the best button action.
 
 CURRENT OBJECTIVES:
 {objectives_summary}
@@ -564,6 +582,7 @@ ACTION:
 You can chain multiple moves together (max 10 actions) for repetitive actions like walking.
 Be decisive and avoid getting stuck. If you notice you're repeating the same actions in the same location, try something different!
 
+
 Context: {context} | Coords: {coords} | Map: {map_id}"""
             
             # Print complete prompt to terminal for debugging
@@ -581,11 +600,12 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
             print("="*120 + "\n")
             sys.stdout.flush()
             
-            # Make VLM call
-            if frame:
+            # Make VLM call - double-check frame validation before VLM
+            if frame and (hasattr(frame, 'save') or hasattr(frame, 'shape')):
                 response = self.vlm.get_query(frame, prompt, "simple_mode")
             else:
-                response = self.vlm.get_text_query(prompt, "simple_mode")
+                logger.error("🚫 CRITICAL: About to call VLM but frame validation failed - this should never happen!")
+                return "WAIT"
             
             # Extract action(s) from structured response
             actions, reasoning = self._parse_structured_response(response)
@@ -1038,4 +1058,10 @@ def simple_mode_processing_multiprocess(vlm, game_state, args=None):
     _ = args  # Acknowledge unused parameter
     agent = get_simple_agent(vlm)
     frame = game_state["visual"]["screenshot"]
+    
+    # CRITICAL: Validate frame before processing
+    if frame is None:
+        logger.error("🚫 CRITICAL: simple_step called with None frame")
+        return "WAIT"
+    
     return agent.process_step(frame, game_state)

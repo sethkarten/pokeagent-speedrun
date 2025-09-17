@@ -13,6 +13,7 @@ import threading
 from pathlib import Path
 from PIL import Image
 import numpy as np
+import argparse
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -134,7 +135,6 @@ async def get_status():
     }
 
 if __name__ == "__main__":
-    import argparse
     
     parser = argparse.ArgumentParser(description="Pokemon Frame Server")
     parser.add_argument("--port", type=int, default=8001, help="Port to run on")

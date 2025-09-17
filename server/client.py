@@ -23,6 +23,38 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent import Agent
+from utils.state_formatter import format_state_for_llm
+
+
+def update_display_with_status(screen, font, mode, step_count, additional_info="", frame_surface=None):
+    """
+    Update the display with frame (if provided) and status text overlay.
+    
+    Args:
+        screen: Pygame screen surface
+        font: Pygame font for rendering text
+        mode: Current mode (MANUAL/AGENT/AUTO)
+        step_count: Current step count
+        additional_info: Additional status information to display
+        frame_surface: Optional frame surface to display, if None fills with black
+    """
+    if frame_surface:
+        # Display the frame
+        scaled_surface = pygame.transform.scale(frame_surface, (480, 320))
+        screen.blit(scaled_surface, (0, 0))
+    else:
+        # Fill with black if no frame
+        screen.fill((0, 0, 0))
+    
+    # Create status text
+    status_text = f"{mode} | Steps: {step_count}"
+    if additional_info:
+        status_text += f" | {additional_info}"
+    
+    # Render and display status text
+    text_surface = font.render(status_text, True, (255, 255, 255))
+    screen.blit(text_surface, (10, 290))
+    pygame.display.flip()
 
 
 def run_multiprocess_client(server_port=8000, args=None):
@@ -45,13 +77,13 @@ def run_multiprocess_client(server_port=8000, args=None):
     print(f"🎮 Client connected to server at {server_url}")
     
     # Display setup
-    headless = args and args.no_display
+    headless = args and args.headless
     screen = None
     clock = None
     font = None
     
     # Control state - three modes: MANUAL, AGENT, AUTO
-    if args and args.manual_mode:
+    if args and args.manual:
         mode = "MANUAL"
     elif args and args.agent_auto:
         mode = "AUTO"
@@ -65,11 +97,11 @@ def run_multiprocess_client(server_port=8000, args=None):
     if not headless and PYGAME_AVAILABLE:
         pygame.init()
         screen = pygame.display.set_mode((480, 320))
-        pygame.display.set_caption("Pokemon Agent - Multiprocess")
+        pygame.display.set_caption("Pokemon Emerald")
         font = pygame.font.Font(None, 24)
         clock = pygame.time.Clock()
         print("✅ Display initialized")
-        print("Controls: Tab=Cycle Mode (MANUAL/AGENT/AUTO), Space=Agent Step, Arrows/WASD=Move, Z=A, X=B")
+        print("Controls: Tab=Cycle Mode (MANUAL/AGENT/AUTO), Space=Agent Step, M=Show State, Arrows/WASD=Move, Z=A, X=B")
     elif not headless and not PYGAME_AVAILABLE:
         print("⚠️ Pygame not available, running in headless mode")
         headless = True
@@ -151,37 +183,59 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 action = "L"
                             elif event.key == pygame.K_RSHIFT:
                                 action = "R"
+                            elif event.key == pygame.K_m:
+                                # Display comprehensive state (what LLM sees)
+                                print("🔍 Getting comprehensive state...")
+                                try:
+                                    response = requests.get(f"{server_url}/state", timeout=5)
+                                    if response.status_code == 200:
+                                        state_data = response.json()
+                                        print("=" * 80)
+                                        print("📊 COMPREHENSIVE STATE (LLM View)")
+                                        print("=" * 80)
+                                        
+                                        # Format and display state in a readable way (exactly what LLM sees)
+                                        formatted_state = format_state_for_llm(state_data)
+                                        print(formatted_state)
+                                        
+                                        print("=" * 80)
+                                    else:
+                                        print(f"❌ Failed to get state: {response.status_code}")
+                                except Exception as e:
+                                    print(f"❌ Error getting state: {e}")
                             
                             if action:
-                                # Send manual action to server
-                                requests.post(
-                                    f"{server_url}/manual_action",
-                                    json={"action": action},
-                                    timeout=2
-                                )
-                                print(f"🎮 Manual: {action}")
+                                # Send manual action to server using the same endpoint as agent actions
+                                try:
+                                    response = requests.post(
+                                        f"{server_url}/action",
+                                        json={"buttons": [action]},
+                                        timeout=2
+                                    )
+                                    if response.status_code == 200:
+                                        print(f"🎮 Manual: {action} (sent successfully)")
+                                    else:
+                                        print(f"🎮 Manual: {action} (server error: {response.status_code})")
+                                except requests.exceptions.RequestException as e:
+                                    print(f"🎮 Manual: {action} (connection error: {e})")
                 
                 # Update display
                 try:
                     response = requests.get(f"{server_url}/screenshot", timeout=0.5)
                     if response.status_code == 200:
-                        frame_data = response.json().get("screenshot", "")
+                        frame_data = response.json().get("screenshot_base64", "")
                         if frame_data:
                             img_data = base64.b64decode(frame_data)
                             img = Image.open(io.BytesIO(img_data))
                             frame_array = np.array(img)
                             frame_surface = pygame.surfarray.make_surface(frame_array.swapaxes(0, 1))
-                            scaled_surface = pygame.transform.scale(frame_surface, (480, 320))
-                            screen.blit(scaled_surface, (0, 0))
-                            
-                            # Draw status overlay
-                            status_text = f"{mode} | Steps: {step_count}"
-                            text_surface = font.render(status_text, True, (255, 255, 255))
-                            screen.blit(text_surface, (10, 290))
-                            
-                            pygame.display.flip()
-                except:
-                    pass  # Silent fail for display updates
+                            update_display_with_status(screen, font, mode, step_count, frame_surface=frame_surface)
+                        else:
+                            update_display_with_status(screen, font, mode, step_count, "No frame data")
+                    else:
+                        update_display_with_status(screen, font, mode, step_count, f"Server error: {response.status_code}")
+                except Exception as e:
+                    update_display_with_status(screen, font, mode, step_count, f"Error: {str(e)[:30]}")
                 
                 clock.tick(30)  # 30 FPS for display
             

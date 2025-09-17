@@ -2182,8 +2182,8 @@ class PokemonEmeraldReader:
             map_x = player_x + 7
             map_y = player_y + 7
             
-            # Ensure consistent 15x15 output by adjusting boundaries
-            target_width = 2 * radius + 1  # Should be 15 for radius=7
+            # Ensure consistent 11x11 output by adjusting boundaries
+            target_width = 2 * radius + 1  # Should be 11 for radius=5
             target_height = 2 * radius + 1
             
             # Calculate ideal boundaries
@@ -2521,7 +2521,7 @@ class PokemonEmeraldReader:
         return state
     
     def read_map(self, state): 
-        tiles = self.read_map_around_player(radius=7)
+        tiles = self.read_map_around_player(radius=5)  # 11x11 grid to match agent's pixel view
         if tiles:
             # DEBUG: Print tile data before processing for HTTP API
             total_tiles = sum(len(row) for row in tiles)
@@ -2645,9 +2645,9 @@ class PokemonEmeraldReader:
             
             # Convert absolute player coordinates to local map coordinates
             # The map data from read_map_around_player() is centered on the player
-            # With radius=10, the map is 21x21, so player is at center (10, 10)
-            map_height = len(tiles) if tiles else 21
-            map_width = len(tiles[0]) if tiles and tiles[0] else 21
+            # With radius=5, the map is 11x11, so player is at center (5, 5)
+            map_height = len(tiles) if tiles else 11
+            map_width = len(tiles[0]) if tiles and tiles[0] else 11
             local_player_coords = (map_width // 2, map_height // 2)
             
             # Get overworld coordinates for this map
@@ -4420,7 +4420,7 @@ class PokemonEmeraldReader:
         """
         try:
             # Read map tiles around player to check for doors
-            map_tiles = self.read_map_around_player(radius=7)
+            map_tiles = self.read_map_around_player(radius=5)  # 11x11 grid to match agent's pixel view
             if not map_tiles:
                 # If we can't read map, return all NPCs (better to have false positives than miss real ones)
                 return object_events

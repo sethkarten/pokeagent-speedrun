@@ -11,6 +11,10 @@ import argparse
 import subprocess
 import signal
 
+# Add parent directory to path for imports
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from server.client import run_multiprocess_client
+
 
 def start_server(args):
     """Start the server process with appropriate arguments"""
@@ -31,22 +35,19 @@ def start_server(args):
     elif args.load_state:
         server_cmd.extend(["--load-state", args.load_state])
     
-    if args.manual_mode:
-        server_cmd.append("--manual")
+    # Don't pass --manual to server - server should always run in server mode
+    # The --manual flag only affects client behavior
     
     if args.no_ocr:
         server_cmd.append("--no-ocr")
     
-    if args.no_display:
-        server_cmd.append("--no-display")
+    # Server always runs headless - display handled by client
     
     # Start server as subprocess
     try:
         print(f"📋 Server command: {' '.join(server_cmd)}")
         server_process = subprocess.Popen(
             server_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
             universal_newlines=True,
             bufsize=1
         )
@@ -102,11 +103,11 @@ def main():
                        help="Simple mode: direct frame->action without 4-module architecture")
     
     # Operation modes
-    parser.add_argument("--no-display", action="store_true", 
+    parser.add_argument("--headless", action="store_true", 
                        help="Run without pygame display (headless)")
     parser.add_argument("--agent-auto", action="store_true", 
                        help="Agent acts automatically")
-    parser.add_argument("--manual-mode", action="store_true", 
+    parser.add_argument("--manual", action="store_true", 
                        help="Start in manual mode instead of agent mode")
     
     # Features
@@ -121,16 +122,12 @@ def main():
     print("🎮 Pokemon Emerald AI Agent")
     print("=" * 60)
     
-    # Import the client module
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from server.client import run_multiprocess_client
-    
     server_process = None
     frame_server_process = None
     
     try:
         # Auto-start server if requested
-        if args.agent_auto or args.manual_mode:
+        if args.agent_auto or args.manual:
             print("\n📡 Starting server process...")
             server_process = start_server(args)
             

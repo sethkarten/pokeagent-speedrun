@@ -287,6 +287,7 @@ class LocalHuggingFaceBackend(VLMBackend):
         
         self.model_name = model_name
         self.device = device
+        self.torch = torch
         
         logger.info(f"Loading local VLM model: {model_name}")
         
@@ -324,14 +325,13 @@ class LocalHuggingFaceBackend(VLMBackend):
     def _generate_response(self, inputs: Dict[str, Any], text: str, module_name: str) -> str:
         """Generate response using the local model"""
         try:
-            import torch
             
             # Log the prompt
             prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
             logger.info(f"[{module_name}] LOCAL HF VLM QUERY:")
             logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
             
-            with torch.no_grad():
+            with self.torch.no_grad():
                 # Ensure all inputs are on the correct device
                 if hasattr(self.model, 'device'):
                     device = self.model.device

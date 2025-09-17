@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """
-Fixed Simple Pokemon Emerald server - handles FastAPI and pygame properly
+Fixed Simple Pokemon Emerald server - headless FastAPI server
 """
 
 import os
-import pygame
 import numpy as np
 import time
 import base64
@@ -56,8 +55,10 @@ action_queue = []  # Queue for multi-action sequences
 current_action = None  # Current action being held
 action_frames_remaining = 0  # Frames left to hold current action
 release_frames_remaining = 0  # Frames left to wait after release
-ACTION_HOLD_FRAMES = 6   # Reduced from 12 - Hold each action for fewer frames 
-ACTION_RELEASE_DELAY = 6   # Reduced from 24 - Shorter delay between actions for faster processing
+
+### IMPORTANT: DO NOT REDUCE THESE OR BUTTONS MAY NOT WORK! ###
+ACTION_HOLD_FRAMES = 12   # Hold each action for 12 frames 
+ACTION_RELEASE_DELAY = 24   # Delay between actions for processing
 
 # Video recording state
 video_writer = None
@@ -70,12 +71,7 @@ video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
 FRAME_CACHE_FILE = "/tmp/pokemon_frame_cache.json"
 frame_cache_counter = 0
 
-# Pygame display
-screen_width = 480  # 240 * 2 (upscaled)
-screen_height = 320  # 160 * 2 (upscaled)
-screen = None
-font = None
-clock = None
+# Server runs headless - display handled by client
 
 # Threading locks for thread safety
 obs_lock = threading.Lock()
@@ -86,17 +82,7 @@ memory_lock = threading.Lock()  # New lock for memory operations to prevent race
 state_update_thread = None
 state_update_running = False
 
-# Button mapping
-button_map = {
-    pygame.K_z: 'A',
-    pygame.K_x: 'B', 
-    pygame.K_RETURN: 'START',
-    pygame.K_RSHIFT: 'SELECT',
-    pygame.K_UP: 'UP',
-    pygame.K_DOWN: 'DOWN',
-    pygame.K_LEFT: 'LEFT',
-    pygame.K_RIGHT: 'RIGHT',
-}
+# Button mapping removed - handled by client
 
 # Video recording functions
 def init_video_recording(record_enabled=False):
@@ -221,9 +207,9 @@ def cleanup_video_recording():
 
 # FastAPI app
 app = FastAPI(
-    title="Pokemon Emerald Simple Server",
-    description="Simple server with pygame display and FastAPI endpoints",
-    version="1.0.0",
+    title="PokeAgent Challenge",
+    description="Streamer display FastAPI endpoints",
+    version="3.0.0",
 )
 
 # Add CORS middleware
@@ -302,7 +288,6 @@ def signal_handler(signum, frame):
     cleanup_video_recording()
     if env:
         env.stop()
-    pygame.quit()
     sys.exit(0)
 
 def setup_environment():
@@ -333,73 +318,17 @@ def setup_environment():
         return False
 
 def handle_input(manual_mode=False):
-    """Handle keyboard input and convert to game actions"""
-    global recent_button_presses
-    actions_pressed = []
-    
-    if not manual_mode:
-        # Server mode - no keyboard input
-        return True, []
-    
-    # Check if pygame is initialized (not headless mode)
-    if screen is None:
-        # Headless mode - no input handling, just return continue
-        return True, []
-    
-    # Manual mode - handle keyboard input
-    # This handles continuous key presses
-    keys = pygame.key.get_pressed()
-    for key, button in button_map.items():
-        if keys[key]:
-            actions_pressed.append(button)
-
-    # This handles single key events
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return False, []
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                return False, []
-            elif event.key == pygame.K_s:
-                save_screenshot()
-            elif event.key == pygame.K_r:
-                reset_game()
-            elif event.key == pygame.K_1:
-                # Use currently loaded state file if one exists, otherwise use default
-                save_file = env._current_state_file if env._current_state_file else "server/simple_test.state"
-                env.save_state(save_file)
-            elif event.key == pygame.K_2:
-                # Use currently loaded state file if one exists, otherwise use default
-                load_file = env._current_state_file if env._current_state_file else "server/simple_test.state"
-                env.load_state(load_file)
-    
-    # Track manual button presses for the action queue display
-    if actions_pressed:
-        current_time = time.time()
-        for button in actions_pressed:
-            # Avoid duplicate consecutive buttons within 100ms
-            should_add = True
-            if recent_button_presses:
-                last_entry = recent_button_presses[-1]
-                if (last_entry["button"] == button and 
-                    current_time - last_entry["timestamp"] < 0.1):  # 100ms threshold
-                    should_add = False
-            
-            if should_add:
-                recent_button_presses.append({
-                    "button": button,
-                    "timestamp": current_time
-                })
-        
-        # Keep only last 50 button presses to avoid memory issues
-        if len(recent_button_presses) > 50:
-            recent_button_presses = recent_button_presses[-50:]
-    
-    return True, actions_pressed
+    """Handle input - server runs headless, no input handling needed"""
+    # Server always runs headless - input handled by client via HTTP API
+    return True, []
 
 def step_environment(actions_pressed):
     """Take a step in the environment with optimized locking for better performance"""
     global current_obs
+    
+    # Debug: print what actions are being sent to emulator
+    if actions_pressed:
+        print(f"🎯 DEBUG: Stepping emulator with actions: {actions_pressed}")
     
     # Only use memory_lock for the essential emulator step
     with memory_lock:
@@ -431,52 +360,14 @@ def step_environment(actions_pressed):
         logger.warning(f"Error updating screenshot: {e}")
 
 def update_display(manual_mode=False):
-    """Update the display with current game state"""
-    global current_obs, screen, step_count
-    
-    # Only update display if pygame is initialized
-    if screen is None:
-        return
-        
-    with obs_lock:
-        obs_copy = current_obs.copy() if current_obs is not None else None
-    
-    if obs_copy is not None:
-        obs_surface = pygame.surfarray.make_surface(obs_copy.swapaxes(0, 1))
-        scaled_surface = pygame.transform.scale(obs_surface, (screen_width, screen_height))
-        screen.blit(scaled_surface, (0, 0))
-    
-    # if manual_mode:
-    #     draw_info_overlay()
-    pygame.display.flip()
+    """Update display - server runs headless, no display update needed"""
+    # Server runs headless - display handled by client
+    pass
 
 def draw_info_overlay():
-    """Draw information overlay on the screen"""
-    global screen, step_count, font
-    
-    if not screen or not font:
-        return
-        
-    overlay_height = 80
-    overlay = pygame.Surface((screen_width, overlay_height))
-    overlay.set_alpha(200)
-    overlay.fill((0, 0, 0))
-    
-    # Position overlay at the bottom of the screen
-    overlay_y = screen_height - overlay_height
-    screen.blit(overlay, (0, overlay_y))
-    
-    info_lines = [
-        f"Step: {step_count}",
-        f"Controls: Z=A, X=B, Enter=Start, RShift=Select, Arrows=Move",
-        f"Special: S=Screenshot, R=Reset, 1=Save State, 2=Load State, Esc=Quit"
-    ]
-    
-    y_offset = overlay_y + 8
-    for line in info_lines:
-        text_surface = font.render(line, True, (255, 255, 255))
-        screen.blit(text_surface, (10, y_offset))
-        y_offset += 22
+    """Draw info overlay - server runs headless, no overlay needed"""
+    # Server runs headless - overlay handled by client
+    pass
 
 def save_screenshot():
     """Save current screenshot"""
@@ -504,15 +395,10 @@ def reset_game():
     print("Game and milestone reset complete")
 
 def game_loop(manual_mode=False):
-    """Main game loop - runs in main thread"""
-    global running, step_count, clock
+    """Main game loop - runs in main thread, always headless"""
+    global running, step_count
     
-    if manual_mode:
-        print("Starting game loop in manual mode...")
-        print("Controls: Z=A, X=B, Enter=Start, RShift=Select, Arrows=Move")
-        print("Special: S=Screenshot, R=Reset, 1=Save State, 2=Load State, Esc=Quit")
-    else:
-        print("Starting game loop in server mode...")
+    print("Starting headless game loop...")
     
     while running:
         # Handle input
@@ -521,6 +407,7 @@ def game_loop(manual_mode=False):
             break
             
         # In server mode, handle action queue with proper button hold timing
+        action_completed = False
         if not manual_mode:
             global current_action, action_frames_remaining, release_frames_remaining
             
@@ -532,6 +419,8 @@ def game_loop(manual_mode=False):
                     # Action finished, start release delay
                     current_action = None
                     release_frames_remaining = ACTION_RELEASE_DELAY
+                    action_completed = True  # Mark action as completed
+                    print(f"✅ Action completed: step_count will increment")
             elif release_frames_remaining > 0:
                 # Release delay (no button pressed)
                 actions_pressed = []
@@ -542,7 +431,9 @@ def game_loop(manual_mode=False):
                 action_frames_remaining = ACTION_HOLD_FRAMES
                 actions_pressed = [current_action]
                 queue_len = len(action_queue)
-                estimated_time = queue_len * (ACTION_HOLD_FRAMES + ACTION_RELEASE_DELAY) / current_fps
+                # Get current FPS for estimation
+                current_fps_for_calc = env.get_current_fps(fps) if env else fps
+                estimated_time = queue_len * (ACTION_HOLD_FRAMES + ACTION_RELEASE_DELAY) / current_fps_for_calc
                 print(f"🎮 Server processing action: {current_action}, Queue remaining: {queue_len} actions (~{estimated_time:.1f}s)")
             else:
                 # No action to process
@@ -551,14 +442,16 @@ def game_loop(manual_mode=False):
         # Step environment
         step_environment(actions_pressed)
         
-        # Milestones are now updated in background thread to avoid blocking pygame
+        # Milestones are now updated in background thread
         
-        # Update display only if not headless
-        if screen is not None:  # Only update display if pygame was initialized
-            update_display(manual_mode)
+        # Server runs headless - no display update needed
+        update_display(manual_mode)
         
-        with step_lock:
-            step_count += 1
+        # Only increment step count when an action is completed
+        if action_completed:
+            with step_lock:
+                step_count += 1
+                print(f"📈 Step count incremented to: {step_count}")
         
         # Performance monitoring - log actual FPS every 5 seconds
         global last_fps_log, frame_count_since_log
@@ -573,21 +466,8 @@ def game_loop(manual_mode=False):
         
         # Use dynamic FPS - 2x speed during dialog
         current_fps = env.get_current_fps(fps) if env else fps
-        if clock is not None:
-            clock.tick(current_fps)
-        else:
-            # Headless mode - sleep instead of using clock
-            time.sleep(1.0 / current_fps)
-
-def init_pygame():
-    """Initialize pygame"""
-    global screen, font, clock
-    
-    pygame.init()
-    screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("Pokemon Emerald Simple Server")
-    font = pygame.font.Font(None, 24)
-    clock = pygame.time.Clock()
+        # Server runs headless - always use sleep for timing
+        time.sleep(1.0 / current_fps)
 
 def run_fastapi_server(port):
     """Run FastAPI server in background thread"""
@@ -678,10 +558,23 @@ async def get_screenshot():
 @app.get("/api/frame")
 async def get_latest_frame():
     """Get latest game frame in same format as single-process mode"""
-    global current_obs
+    global current_obs, env
     
     with obs_lock:
         obs_copy = current_obs.copy() if current_obs is not None else None
+    
+    # If current_obs is None (e.g., after server restart), try to get a fresh screenshot
+    if obs_copy is None and env:
+        try:
+            screenshot = env.get_screenshot()
+            if screenshot:
+                obs_copy = np.array(screenshot)
+                # Update current_obs for future requests
+                with obs_lock:
+                    current_obs = obs_copy.copy()
+                logger.debug("Frame endpoint: Retrieved fresh screenshot after restart")
+        except Exception as e:
+            logger.warning(f"Frame endpoint: Failed to get fresh screenshot: {e}")
     
     if obs_copy is None:
         return {"frame": ""}
@@ -695,6 +588,7 @@ async def get_latest_frame():
         
         return {"frame": img_str}
     except Exception as e:
+        logger.warning(f"Frame endpoint: Error encoding frame: {e}")
         return {"frame": ""}
 
 @app.post("/action")
@@ -702,7 +596,11 @@ async def take_action(request: ActionRequest):
     """Take an action"""
     global current_obs, step_count, recent_button_presses, action_queue
     
+    print(f"🔍 DEBUG: Action endpoint called with request: {request}")
+    print(f"🔍 DEBUG: Request buttons: {request.buttons}")
+    
     if env is None:
+        print(f"❌ DEBUG: Emulator not initialized")
         raise HTTPException(status_code=400, detail="Emulator not initialized")
     
     try:
@@ -726,12 +624,16 @@ async def take_action(request: ActionRequest):
             # Keep only last 50 button presses to avoid memory issues
             if len(recent_button_presses) > 50:
                 recent_button_presses = recent_button_presses[-50:]
+        else:
+            print(f"⚠️ DEBUG: No buttons in request")
         
         # DON'T execute action here - let the game loop handle it from the queue
         # This prevents conflicts between the API thread and pygame thread
         
         # Return immediate success - avoid all locks to prevent deadlocks
         actions_added = len(request.buttons) if request.buttons else 0
+        
+        print(f"✅ DEBUG: Returning success, actions_added: {actions_added}, queue_length: {len(action_queue)}")
         
         # Return lightweight response without any lock acquisition
         return {
@@ -742,8 +644,28 @@ async def take_action(request: ActionRequest):
         }
             
     except Exception as e:
+        print(f"❌ DEBUG: Exception in action endpoint: {e}")
         logger.error(f"Error taking action: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/queue_status")
+async def get_queue_status():
+    """Get action queue status"""
+    global action_queue, current_action, action_frames_remaining, release_frames_remaining
+    
+    queue_empty = (len(action_queue) == 0 and 
+                   current_action is None and 
+                   action_frames_remaining == 0 and 
+                   release_frames_remaining == 0)
+    
+    return {
+        "queue_empty": queue_empty,
+        "queue_length": len(action_queue),
+        "current_action": current_action,
+        "action_frames_remaining": action_frames_remaining,
+        "release_frames_remaining": release_frames_remaining
+    }
 
 @app.get("/state")
 async def get_comprehensive_state():
@@ -1537,7 +1459,7 @@ def main():
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
-    parser.add_argument("--no-display", action="store_true", help="Run without pygame display (headless mode)")
+    # Server always runs headless - display handled by client
     
     args = parser.parse_args()
     
@@ -1570,25 +1492,10 @@ def main():
     print("Starting Fixed Simple Pokemon Emerald Server")
     # Initialize video recording if requested
     init_video_recording(args.record)
-    if args.manual:
-        print("Manual mode enabled - keyboard input and overlay active")
-    else:
-        print("Server mode - no keyboard input, no overlay")
+    print("Server mode - headless operation, display handled by client")
     if args.no_ocr:
         print("OCR dialogue detection disabled")
-    if args.no_display:
-        print("Display disabled - running in headless mode")
     print("Press Ctrl+C to stop")
-    
-    # Initialize pygame only if display is enabled
-    if not args.no_display:
-        init_pygame()
-    else:
-        # Set display globals to None for headless mode
-        global screen, font, clock
-        screen = None
-        font = None
-        clock = None
     
     # Initialize emulator
     if not setup_environment():
@@ -1656,8 +1563,8 @@ def main():
     print("  /stop - Stop server")
     
     try:
-        # Run pygame loop in main thread (pygame requires this)
-        game_loop(manual_mode=args.manual)
+        # Run headless game loop in main thread
+        game_loop(manual_mode=False)  # Server always runs in server mode
     except KeyboardInterrupt:
         print("Interrupted by user")
     except Exception as e:
@@ -1669,8 +1576,6 @@ def main():
         state_update_running = False
         if env:
             env.stop()
-        if screen is not None:  # Only quit pygame if it was initialized
-            pygame.quit()
         print("Server stopped")
 
 # Initialize emulator when imported for multiprocess mode
