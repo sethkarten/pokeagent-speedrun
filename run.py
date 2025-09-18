@@ -29,7 +29,10 @@ def start_server(args):
         checkpoint_state = "checkpoint.state"
         if os.path.exists(checkpoint_state):
             server_cmd.extend(["--load-state", checkpoint_state])
+            # Set environment variable to enable LLM checkpoint loading
+            os.environ["LOAD_CHECKPOINT_MODE"] = "true"
             print(f"🔄 Server will load checkpoint: {checkpoint_state}")
+            print(f"🔄 LLM metrics will be restored from checkpoint_llm.txt")
         else:
             print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
     elif args.load_state:

@@ -31,11 +31,12 @@ Configuration defaults (can be customized):
 """
 
 import logging
-import os, sys
-from typing import List, Dict, Any, Optional, Tuple
+import os
+import sys
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +255,9 @@ class SimpleAgent:
         """Determine current game context (overworld, battle, menu, dialogue)"""
         try:
             # Check if in battle
-            if game_state.get("game", {}).get("in_battle", False):
+            is_in_battle = game_state.get("game", {}).get("is_in_battle", False)
+            if is_in_battle:
+                logger.debug(f"Detected battle context")
                 return "battle"
             
             # Check if dialogue is active
@@ -414,10 +417,27 @@ class SimpleAgent:
         
         return completed_ids
     
-    def detect_stuck_pattern(self, coords: Optional[Tuple[int, int]], context: str) -> bool:
+    def detect_stuck_pattern(self, coords: Optional[Tuple[int, int]], context: str, game_state: Dict[str, Any] = None) -> bool:
         """Detect if the agent appears to be stuck in a location/context"""
         if not coords:
             return False
+        
+        # Don't trigger stuck detection during contexts where staying in place is expected
+        if context in ["battle", "dialogue", "menu"]:
+            logger.debug(f"Skipping stuck detection - context: {context}")
+            return False
+        
+        # Check for title sequence if game state is available
+        if game_state:
+            # Check if in title sequence (no player name or invalid coordinates)
+            player_name = game_state.get("player", {}).get("name", "").strip()
+            if not player_name or player_name == "????????":
+                return False
+                
+            # Check if game state indicates title/intro
+            game_state_value = game_state.get("game", {}).get("game_state", "").lower()
+            if "title" in game_state_value or "intro" in game_state_value:
+                return False
             
         key = f"{coords[0]}_{coords[1]}_{context}"
         self.state.stuck_detection[key] = self.state.stuck_detection.get(key, 0) + 1
@@ -443,9 +463,9 @@ class SimpleAgent:
         
         return "\n".join(summary_lines)
     
-    def get_stuck_warning(self, coords: Optional[Tuple[int, int]], context: str) -> str:
+    def get_stuck_warning(self, coords: Optional[Tuple[int, int]], context: str, game_state: Dict[str, Any] = None) -> str:
         """Generate warning text if stuck pattern detected"""
-        if self.detect_stuck_pattern(coords, context):
+        if self.detect_stuck_pattern(coords, context, game_state):
             return "\n⚠️ WARNING: You appear to be stuck at this location/context. Try a different approach!"
         return ""
     
@@ -480,6 +500,24 @@ class SimpleAgent:
         except Exception as e:
             logger.warning(f"Error creating game state summary: {e}")
             return "Error reading state"
+    
+    def step(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compatibility method for client that expects agent.step(game_state)
+        
+        Args:
+            game_state: Complete game state dictionary (should include 'frame')
+            
+        Returns:
+            Dictionary with 'action' and optional 'reasoning'
+        """
+        frame = game_state.get('frame')
+        if frame is None:
+            logger.error("🚫 No frame in game_state for SimpleAgent.step")
+            return {"action": "WAIT", "reasoning": "No frame available"}
+        
+        action = self.process_step(frame, game_state)
+        return {"action": action, "reasoning": "Simple agent decision"}
     
     def process_step(self, frame, game_state: Dict[str, Any]) -> str:
         """
@@ -531,7 +569,7 @@ class SimpleAgent:
             
             # Get relevant history and stuck detection
             history_summary = self.get_relevant_history_summary(context, coords)
-            stuck_warning = self.get_stuck_warning(coords, context)
+            stuck_warning = self.get_stuck_warning(coords, context, game_state)
             recent_actions_str = ', '.join(list(self.state.recent_actions)[-self.actions_display_count:]) if self.state.recent_actions else 'None'
             
             # Format objectives for LLM
@@ -602,7 +640,13 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
             
             # Make VLM call - double-check frame validation before VLM
             if frame and (hasattr(frame, 'save') or hasattr(frame, 'shape')):
-                response = self.vlm.get_query(frame, prompt, "simple_mode")
+                print("🔍 Making VLM call...")
+                try:
+                    response = self.vlm.get_query(frame, prompt, "simple_mode")
+                    print(f"🔍 VLM response received: {response[:100]}..." if len(response) > 100 else f"🔍 VLM response: {response}")
+                except Exception as e:
+                    print(f"❌ VLM call failed: {e}")
+                    return "WAIT"
             else:
                 logger.error("🚫 CRITICAL: About to call VLM but frame validation failed - this should never happen!")
                 return "WAIT"
@@ -637,11 +681,40 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
                     if self.state.stuck_detection[key] > 0:
                         self.state.stuck_detection[key] = max(0, self.state.stuck_detection[key] - 1)
             
+            # Update server with agent step and metrics (for agent thinking display)
+            self._update_server_metrics()
+            
             return actions
             
         except Exception as e:
             logger.error(f"Error in simple agent processing: {e}")
             return ["A"]  # Default safe action as list
+    
+    def _update_server_metrics(self):
+        """Update server with current agent step count and LLM metrics"""
+        try:
+            import requests
+            from utils.llm_logger import get_llm_logger
+            
+            # Get current LLM metrics
+            llm_logger = get_llm_logger()
+            metrics = llm_logger.get_cumulative_metrics()
+            
+            # Send metrics to server
+            try:
+                response = requests.post(
+                    "http://localhost:8000/agent_step",
+                    json={"metrics": metrics},
+                    timeout=1
+                )
+                if response.status_code != 200:
+                    logger.warning(f"Failed to update server metrics: {response.status_code}")
+            except requests.exceptions.RequestException:
+                # Silent fail - server might not be running or in different mode
+                pass
+                
+        except Exception as e:
+            logger.warning(f"Error updating server metrics: {e}")
     
     def _parse_actions(self, response: str) -> List[str]:
         """Parse action response from LLM into list of valid actions"""
@@ -919,6 +992,7 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
     def load_history_from_llm_checkpoint(self, checkpoint_file: str):
         """Load SimpleAgent history from LLM checkpoint file"""
         try:
+            from utils.llm_logger import get_llm_logger
             import json
             import re
             from datetime import datetime
@@ -926,6 +1000,15 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
             if not os.path.exists(checkpoint_file):
                 logger.info(f"No checkpoint file found: {checkpoint_file}")
                 return False
+            
+            # Use LLM logger to restore cumulative metrics first
+            llm_logger = get_llm_logger()
+            if llm_logger:
+                restored_step_count = llm_logger.load_checkpoint(checkpoint_file)
+                if restored_step_count is not None:
+                    logger.info(f"✅ LLM logger restored checkpoint with {restored_step_count} steps")
+                    # Update SimpleAgent step counter to match LLM logger
+                    self.state.step_counter = restored_step_count
             
             with open(checkpoint_file, 'r') as f:
                 checkpoint_data = json.load(f)
@@ -1026,6 +1109,33 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
             traceback.print_exc()
             return False
     
+    def save_history_to_llm_checkpoint(self, checkpoint_file: str = "checkpoint_llm.txt"):
+        """Save SimpleAgent history using LLM logger checkpoint system"""
+        try:
+            from utils.llm_logger import get_llm_logger
+            
+            # Get the global LLM logger instance
+            llm_logger = get_llm_logger()
+            if llm_logger is None:
+                logger.warning("No LLM logger available for checkpoint saving")
+                return False
+            
+            # Save checkpoint using LLM logger which includes cumulative metrics
+            # The LLM logger will handle saving log_entries AND cumulative_metrics
+            llm_logger.save_checkpoint(checkpoint_file, agent_step_count=self.state.step_counter)
+            
+            logger.info(f"💾 Saved LLM checkpoint to {checkpoint_file}")
+            logger.info(f"   Step counter: {self.state.step_counter}")
+            logger.info(f"   History: {len(self.state.history)} entries")
+            logger.info(f"   Recent actions: {len(self.state.recent_actions)} actions")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to save LLM checkpoint: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def get_history_stats(self) -> Dict[str, int]:
         """Get current history tracking statistics"""
         return {
@@ -1047,9 +1157,29 @@ def get_simple_agent(vlm) -> SimpleAgent:
     global _global_simple_agent
     if _global_simple_agent is None:
         _global_simple_agent = SimpleAgent(vlm)
+        
+        # Check if we should load from checkpoint
+        import os
+        if os.environ.get("LOAD_CHECKPOINT_MODE") == "true":
+            checkpoint_file = "checkpoint_llm.txt"
+            if os.path.exists(checkpoint_file):
+                logger.info(f"🔄 Loading SimpleAgent history from {checkpoint_file}")
+                _global_simple_agent.load_history_from_llm_checkpoint(checkpoint_file)
+            else:
+                logger.info(f"⚠️ No checkpoint file found: {checkpoint_file}")
+                
     elif _global_simple_agent.vlm != vlm:
         # VLM changed, create new instance
         _global_simple_agent = SimpleAgent(vlm)
+        
+        # Load checkpoint for new instance too if mode is set
+        import os
+        if os.environ.get("LOAD_CHECKPOINT_MODE") == "true":
+            checkpoint_file = "checkpoint_llm.txt"
+            if os.path.exists(checkpoint_file):
+                logger.info(f"🔄 Loading SimpleAgent history from {checkpoint_file}")
+                _global_simple_agent.load_history_from_llm_checkpoint(checkpoint_file)
+                
     return _global_simple_agent
 
 def simple_mode_processing_multiprocess(vlm, game_state, args=None):

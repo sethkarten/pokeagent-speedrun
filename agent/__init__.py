@@ -35,7 +35,8 @@ class Agent:
         # Initialize agent mode
         self.simple_mode = simple_mode
         if simple_mode:
-            self.simple_agent = SimpleAgent(self.vlm)
+            # Use global SimpleAgent instance to enable checkpoint persistence
+            self.simple_agent = get_simple_agent(self.vlm)
             print(f"   Mode: Simple (direct frame->action)")
         else:
             # Four-module agent context

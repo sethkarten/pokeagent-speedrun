@@ -257,7 +257,7 @@ def get_symbol_legend():
         "PC": "PC/Computer",
         "T": "Television",
         "B": "Bookshelf", 
-        "?": "Sign/Information",
+        "?": "Unexplored area",
         "F": "Flowers/Plants",
         "C": "Counter/Desk",
         "=": "Bed",
@@ -298,10 +298,10 @@ def generate_dynamic_legend(grid):
     
     # Group symbols by category for better organization
     player_symbols = ["P"]
-    terrain_symbols = [".", "#", "W", "~"] 
+    terrain_symbols = [".", "#", "W", "~", "?"] 
     structure_symbols = ["D", "S"]
     jump_symbols = ["J", "↗", "↖", "↘", "↙"]
-    furniture_symbols = ["PC", "T", "B", "?", "F", "C", "=", "t"]
+    furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t"]
     npc_symbols = ["N", "@"]
     
     categories = [

@@ -3,40 +3,35 @@
 Fixed Simple Pokemon Emerald server - headless FastAPI server
 """
 
-import os
-import numpy as np
-import time
+# Standard library imports
 import base64
+import datetime
 import io
+import json
+import logging
+import os
 import signal
 import sys
-import os
-import asyncio
 import threading
-import json
-from PIL import Image
+import time
+
+# Third-party imports
 import cv2
+import numpy as np
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from PIL import Image
+from pydantic import BaseModel
 
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
-import uvicorn
-
+# Local application imports
 from pokemon_env.emulator import EmeraldEmulator
-from pokemon_env.emerald_utils import (
-    SYSTEM_FLAGS_START, FLAG_VISITED_LITTLEROOT_TOWN, FLAG_VISITED_OLDALE_TOWN,
-    FLAG_VISITED_PETALBURG_CITY, FLAG_VISITED_RUSTBORO_CITY, FLAG_VISITED_DEWFORD_TOWN,
-    FLAG_VISITED_SLATEPORT_CITY, FLAG_VISITED_MAUVILLE_CITY, FLAG_BADGE01_GET,
-    FLAG_BADGE02_GET, FLAG_BADGE03_GET, FLAG_SYS_POKEMON_GET, FLAG_SYS_POKEDEX_GET,
-    FLAG_DEFEATED_RUSTBORO_GYM, FLAG_DEFEATED_DEWFORD_GYM, FLAG_DEFEATED_MAUVILLE_GYM
-)
 
 # Set up logging - reduced verbosity for multiprocess mode
-import logging
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
@@ -94,7 +89,6 @@ def init_video_recording(record_enabled=False):
     
     try:
         # Create video filename with timestamp
-        import datetime
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         video_filename = f"pokegent_recording_{timestamp}.mp4"
         
@@ -620,6 +614,26 @@ async def take_action(request: ActionRequest):
                     "button": button,
                     "timestamp": current_time
                 })
+            
+            # Update total actions count in metrics
+            with step_lock:
+                latest_metrics["total_actions"] = latest_metrics.get("total_actions", 0) + len(request.buttons)
+                
+                # Also update the LLM logger's action count for checkpoint persistence
+                try:
+                    from utils.llm_logger import get_llm_logger
+                    llm_logger = get_llm_logger()
+                    if llm_logger:
+                        llm_logger.cumulative_metrics["total_actions"] = latest_metrics["total_actions"]
+                        
+                        # Sync LLM logger's cumulative metrics back to latest_metrics
+                        # This ensures token usage and costs from LLM interactions are displayed
+                        cumulative_metrics_to_sync = ["total_tokens", "prompt_tokens", "completion_tokens", "total_cost", "total_llm_calls", "total_run_time"]
+                        for metric_key in cumulative_metrics_to_sync:
+                            if metric_key in llm_logger.cumulative_metrics:
+                                latest_metrics[metric_key] = llm_logger.cumulative_metrics[metric_key]
+                except Exception as e:
+                    logger.debug(f"Failed to sync metrics with LLM logger: {e}")
             
             # Keep only last 50 button presses to avoid memory issues
             if len(recent_button_presses) > 50:
@@ -1150,7 +1164,11 @@ async def update_agent_step(request: Request = None):
                         # Safely update each metric individually to avoid race conditions
                         for key, value in request_data["metrics"].items():
                             if key in latest_metrics:
-                                latest_metrics[key] = value
+                                # Always protect total_actions as it's managed by server
+                                if key == "total_actions":
+                                    continue
+                                else:
+                                    latest_metrics[key] = value
                     
                 # Handle set_step for initialization
                 if "set_step" in request_data:
@@ -1408,6 +1426,69 @@ async def save_checkpoint(request_data: dict = None):
         logger.error(f"Failed to save checkpoint: {e}")
         return {"status": "error", "message": str(e)}
 
+@app.post("/sync_llm_metrics")
+async def sync_llm_metrics(request: Request):
+    """Sync LLM cumulative metrics from client to server"""
+    try:
+        request_data = await request.json()
+        cumulative_metrics = request_data.get("cumulative_metrics", {})
+        
+        if not cumulative_metrics:
+            return {"status": "error", "message": "No metrics provided"}, 400
+        
+        # Update server's LLM logger with client's cumulative metrics
+        from utils.llm_logger import get_llm_logger
+        llm_logger = get_llm_logger()
+        if llm_logger is not None:
+            # Update cumulative metrics (but preserve server-managed metrics like start_time and total_actions)
+            server_start_time = llm_logger.cumulative_metrics.get("start_time")
+            server_total_actions = llm_logger.cumulative_metrics.get("total_actions")
+            
+            llm_logger.cumulative_metrics.update(cumulative_metrics)
+            
+            # Restore server-managed metrics
+            if server_start_time:
+                llm_logger.cumulative_metrics["start_time"] = server_start_time
+            if server_total_actions is not None:
+                llm_logger.cumulative_metrics["total_actions"] = server_total_actions
+            
+            # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
+            global latest_metrics
+            with step_lock:
+                for key, value in cumulative_metrics.items():
+                    if key in latest_metrics and key not in ["total_actions", "start_time"]:
+                        latest_metrics[key] = value
+            
+            logger.info(f"🔄 Synced LLM metrics: {cumulative_metrics.get('total_llm_calls', 0)} calls, {cumulative_metrics.get('total_tokens', 0)} tokens, ${cumulative_metrics.get('total_cost', 0):.6f}")
+            return {"status": "metrics_synced"}
+        else:
+            logger.error("No LLM logger available for sync")
+            return {"status": "error", "message": "No LLM logger available"}, 500
+    except Exception as e:
+        logger.error(f"Error syncing LLM metrics: {e}")
+        return {"status": "error", "message": str(e)}, 500
+
+@app.post("/save_agent_history")
+async def save_agent_history():
+    """Save agent history to checkpoint_llm.txt (called by client after each step)"""
+    try:
+        # Use server-side LLM logger to save checkpoint
+        from utils.llm_logger import get_llm_logger
+        
+        llm_logger = get_llm_logger()
+        if llm_logger is not None:
+            # Save checkpoint using current agent step count
+            global agent_step_count
+            llm_logger.save_checkpoint("checkpoint_llm.txt", agent_step_count=agent_step_count)
+            logger.info(f"💾 Saved LLM checkpoint at step {agent_step_count}")
+            return {"status": "agent_history_saved", "step_count": agent_step_count}
+        else:
+            return {"status": "no_logger", "message": "No LLM logger available"}
+            
+    except Exception as e:
+        logger.error(f"Failed to save agent history: {e}")
+        return {"status": "error", "message": str(e)}
+
 @app.post("/load_checkpoint")
 async def load_checkpoint():
     """Load checkpoint state - called by client on startup if --load-checkpoint flag is used"""
@@ -1481,13 +1562,32 @@ def main():
     if env_load_checkpoint_mode == "true":
         checkpoint_loading_enabled = True
         print("🔄 Checkpoint loading enabled - will restore LLM metrics from checkpoint_llm.txt")
-    elif args.load_state and args.load_state.endswith("checkpoint.state") and not env_load_checkpoint_mode:
-        # Someone manually used --load-state checkpoint.state (not --load-checkpoint)
-        checkpoint_loading_enabled = False
-        print("✨ Manual checkpoint.state load as fresh start - will NOT load LLM metrics")
-    else:
+        
+        # Initialize LLM logger and load checkpoint immediately during server startup
+        from utils.llm_logger import get_llm_logger
+        llm_logger = get_llm_logger()
+        if llm_logger and os.path.exists("checkpoint_llm.txt"):
+            restored_step_count = llm_logger.load_checkpoint("checkpoint_llm.txt")
+            if restored_step_count is not None:
+                global agent_step_count
+                agent_step_count = restored_step_count
+                print(f"✅ Server startup: restored LLM checkpoint with step count {restored_step_count}")
+                
+                # Sync latest_metrics with loaded cumulative metrics
+                global latest_metrics
+                latest_metrics.update(llm_logger.cumulative_metrics)
+                print(f"✅ Server startup: synced metrics - actions: {latest_metrics.get('total_actions', 0)}, cost: {latest_metrics.get('total_cost', 0)}")
+            else:
+                print("❌ Server startup: failed to load LLM checkpoint")
+        else:
+            print("ℹ️ Server startup: no checkpoint_llm.txt file found")
+    elif env_load_checkpoint_mode == "false":
         checkpoint_loading_enabled = False
         print("✨ Fresh start mode - will NOT load LLM metrics from checkpoint_llm.txt")
+    else:
+        # Default behavior: allow checkpoint loading unless explicitly disabled
+        checkpoint_loading_enabled = True
+        print("🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
     # Initialize video recording if requested
