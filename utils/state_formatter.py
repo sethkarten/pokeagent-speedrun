@@ -16,9 +16,14 @@ import io
 
 logger = logging.getLogger(__name__)
 
-# Global persistent world map storage
-PERSISTENT_WORLD_GRID = {}
-PERSISTENT_MAP_FILE = "/tmp/pokemon_world_map.json"
+# Global persistent location maps storage - separate map for each location
+PERSISTENT_LOCATION_GRIDS = {}  # {location_name: {(x,y): symbol}}
+PERSISTENT_MAP_FILE = "/tmp/pokemon_location_maps.json"
+CURRENT_LOCATION = None
+LAST_LOCATION = None
+LAST_TRANSITION = None  # Stores transition coordinates
+LAST_PLAYER_POSITION = {}  # {location_name: (x, y)} - tracks last position in each location
+LOCATION_CONNECTIONS = {}  # {location_name: [(other_location, my_coords, their_coords)]} - bidirectional connections
 
 def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
     """
@@ -686,12 +691,27 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
                 player_coords = (0, 0)
                 print(f"🗺️ DEBUG: No coordinates found, defaulting to (0, 0)")
         
+        # Get location name from player data or stitched map info
+        location_name = None
+        if player_data and 'location' in player_data and player_data['location']:
+            location = player_data['location']
+            if isinstance(location, dict):
+                location_name = location.get('map_name', str(location))
+            else:
+                location_name = str(location)
+        
+        # Build current area info with location name
+        current_area = map_info.get('stitched_map_info', {}).get('current_area', {}) if map_info.get('stitched_map_info') else {}
+        if location_name and not current_area.get('name'):
+            current_area['name'] = location_name
+        
         # Build stitched data structure from current local map
         stitched_data = {
             'current_local_map': current_local_tiles,
-            'player_world_pos': player_coords,  # These should be absolute coordinates
+            'player_local_pos': player_coords,  # Player's position in local map coordinates
             'terrain_areas': map_info.get('stitched_map_info', {}).get('terrain_areas', []) if map_info.get('stitched_map_info') else [],
-            'current_area': map_info.get('stitched_map_info', {}).get('current_area', {}) if map_info.get('stitched_map_info') else {}
+            'current_area': current_area,
+            'location_name_fallback': location_name  # Direct fallback for location name
         }
         
         # Try the new stitching approach
@@ -707,34 +727,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         context_parts.append("\n--- LOCAL MAP (No local data) ---")
         _add_local_map_fallback(context_parts, map_info, include_npcs)
     
-    # Add NPC information if present (regardless of map type)
-    if include_npcs and 'object_events' in map_info:
-        npcs = map_info.get('object_events', [])
-        if npcs:
-            context_parts.append(f"\n--- NPCs/TRAINERS ({len(npcs)} found) ---")
-            context_parts.append("NOTE: These are static NPC spawn positions. NPCs may have moved from these locations during walking animations.")
-            
-            # Analyze terrain under NPCs
-            raw_tiles = map_info.get('tiles')
-            player_coords = map_info.get('player_coords')
-            
-            for npc in npcs:
-                npc_x = npc.get('current_x', 0)
-                npc_y = npc.get('current_y', 0)
-                npc_info = f"NPC {npc['id']}: "
-                
-                if npc.get('trainer_type', 0) > 0:
-                    npc_info += f"Trainer at ({npc_x}, {npc_y})"
-                else:
-                    npc_info += f"NPC at ({npc_x}, {npc_y})"
-                
-                # Analyze terrain under NPC position if raw tiles available
-                if raw_tiles:
-                    terrain_note = _analyze_npc_terrain(npc, raw_tiles, player_coords)
-                    if terrain_note:
-                        npc_info += f" - {terrain_note}"
-                
-                context_parts.append(npc_info)
+    # NPC information removed - unreliable detection with incorrect positions
     
     # Add stitched map information if available
     stitched_info = _format_stitched_map_info(map_info)
@@ -750,25 +743,22 @@ def _add_local_map_fallback(context_parts, map_info, include_npcs):
         # Use default facing direction since memory-based facing is unreliable
         facing = "South"  # default
         
-        # Get NPCs from map info
-        npcs = map_info.get('object_events', []) if include_npcs else []
-        
-        # Get player coordinates for NPC positioning
+        # Get player coordinates
         player_coords = map_info.get('player_coords')
         
-        # Use unified LLM formatter for consistency
-        map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords)
+        # Use unified LLM formatter for consistency (no NPCs)
+        map_display = format_map_for_llm(raw_tiles, facing, [], player_coords)
         context_parts.append(map_display)
         
         # Add dynamic legend based on symbols in the map
-        grid = format_map_grid(raw_tiles, facing, npcs, player_coords)
+        grid = format_map_grid(raw_tiles, facing, [], player_coords)
         legend = generate_dynamic_legend(grid)
         context_parts.append(f"\n{legend}")
 
 def _format_world_map_display(stitched_data):
-    """Format world map display using the same clean format as local map"""
+    """Format location-specific map display"""
     try:
-        # This is the new stitching approach: build persistent world map from local observations
+        # Build separate map for each location
         return _build_stitched_world_map(stitched_data)
         
     except Exception as e:
@@ -776,126 +766,284 @@ def _format_world_map_display(stitched_data):
         return []
 
 def _load_persistent_world_map():
-    """Load persistent world map from file"""
-    global PERSISTENT_WORLD_GRID
+    """Load persistent location maps from file"""
+    global PERSISTENT_LOCATION_GRIDS
     try:
         import os
         if os.path.exists(PERSISTENT_MAP_FILE):
             with open(PERSISTENT_MAP_FILE, 'r') as f:
                 data = json.load(f)
-                # Convert string keys back to tuples
-                PERSISTENT_WORLD_GRID = {eval(k): v for k, v in data.items()}
-                print(f"🗺️ DEBUG: Loaded {len(PERSISTENT_WORLD_GRID)} tiles from persistent storage")
+                # Convert string keys back to tuples for coordinates
+                PERSISTENT_LOCATION_GRIDS = {}
+                for location, tiles in data.items():
+                    PERSISTENT_LOCATION_GRIDS[location] = {eval(k): v for k, v in tiles.items()}
+                print(f"🗺️ DEBUG: Loaded {len(PERSISTENT_LOCATION_GRIDS)} location maps from persistent storage")
         else:
-            PERSISTENT_WORLD_GRID = {}
+            PERSISTENT_LOCATION_GRIDS = {}
             print("🗺️ DEBUG: No persistent map file found, starting fresh")
     except Exception as e:
         print(f"🗺️ DEBUG: Failed to load persistent map: {e}")
-        PERSISTENT_WORLD_GRID = {}
+        PERSISTENT_LOCATION_GRIDS = {}
 
 def _save_persistent_world_map():
-    """Save persistent world map to file"""
+    """Save persistent location maps to file"""
     try:
         # Convert tuple keys to strings for JSON serialization
-        data = {str(k): v for k, v in PERSISTENT_WORLD_GRID.items()}
+        data = {}
+        for location, tiles in PERSISTENT_LOCATION_GRIDS.items():
+            data[location] = {str(k): v for k, v in tiles.items()}
         with open(PERSISTENT_MAP_FILE, 'w') as f:
             json.dump(data, f)
-        print(f"🗺️ DEBUG: Saved {len(PERSISTENT_WORLD_GRID)} tiles to persistent storage")
+        print(f"🗺️ DEBUG: Saved {len(PERSISTENT_LOCATION_GRIDS)} location maps to persistent storage")
     except Exception as e:
         print(f"🗺️ DEBUG: Failed to save persistent map: {e}")
 
+def save_persistent_world_map(file_path=None):
+    """Save persistent location maps and connections to specified file (public function for checkpoint system)"""
+    if file_path is None:
+        file_path = PERSISTENT_MAP_FILE
+    
+    try:
+        # Convert tuple keys to strings for JSON serialization
+        map_data = {}
+        for location, tiles in PERSISTENT_LOCATION_GRIDS.items():
+            map_data[location] = {str(k): v for k, v in tiles.items()}
+        
+        # Save all persistent data including connections
+        data = {
+            'location_grids': map_data,
+            'location_connections': LOCATION_CONNECTIONS,
+            'current_location': CURRENT_LOCATION,
+            'last_location': LAST_LOCATION,
+            'last_player_position': LAST_PLAYER_POSITION
+        }
+        
+        with open(file_path, 'w') as f:
+            json.dump(data, f)
+        print(f"🗺️ DEBUG: Saved {len(PERSISTENT_LOCATION_GRIDS)} location maps and connections to {file_path}")
+    except Exception as e:
+        print(f"🗺️ DEBUG: Failed to save persistent map to {file_path}: {e}")
+
+def load_persistent_world_map(file_path=None):
+    """Load persistent location maps and connections from specified file (public function for checkpoint system)"""
+    global PERSISTENT_LOCATION_GRIDS, LOCATION_CONNECTIONS, CURRENT_LOCATION, LAST_LOCATION, LAST_PLAYER_POSITION
+    if file_path is None:
+        file_path = PERSISTENT_MAP_FILE
+    
+    try:
+        import os
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+            
+            # Handle both old format (just grids) and new format (with connections)
+            if 'location_grids' in data:
+                # New format with connections
+                map_data = data['location_grids']
+                LOCATION_CONNECTIONS = data.get('location_connections', {})
+                CURRENT_LOCATION = data.get('current_location')
+                LAST_LOCATION = data.get('last_location')
+                LAST_PLAYER_POSITION = data.get('last_player_position', {})
+            else:
+                # Old format - just grids
+                map_data = data
+                LOCATION_CONNECTIONS = {}
+                CURRENT_LOCATION = None
+                LAST_LOCATION = None
+                LAST_PLAYER_POSITION = {}
+            
+            # Convert string keys back to tuples for coordinates
+            PERSISTENT_LOCATION_GRIDS = {}
+            for location, tiles in map_data.items():
+                PERSISTENT_LOCATION_GRIDS[location] = {eval(k): v for k, v in tiles.items()}
+            
+            print(f"🗺️ DEBUG: Loaded {len(PERSISTENT_LOCATION_GRIDS)} location maps and {len(LOCATION_CONNECTIONS)} connections from {file_path}")
+        else:
+            PERSISTENT_LOCATION_GRIDS = {}
+            LOCATION_CONNECTIONS = {}
+            CURRENT_LOCATION = None
+            LAST_LOCATION = None
+            LAST_PLAYER_POSITION = {}
+            print(f"🗺️ DEBUG: No map file found at {file_path}, starting fresh")
+    except Exception as e:
+        print(f"🗺️ DEBUG: Failed to load persistent map from {file_path}: {e}")
+        PERSISTENT_LOCATION_GRIDS = {}
+        LOCATION_CONNECTIONS = {}
+        CURRENT_LOCATION = None
+        LAST_LOCATION = None
+        LAST_PLAYER_POSITION = {}
+
 def clear_persistent_world_map():
-    """Clear the persistent world map for testing"""
-    global PERSISTENT_WORLD_GRID
-    PERSISTENT_WORLD_GRID.clear()
+    """Clear the persistent location maps for testing"""
+    global PERSISTENT_LOCATION_GRIDS, CURRENT_LOCATION, LAST_LOCATION, LAST_TRANSITION, LAST_PLAYER_POSITION
+    PERSISTENT_LOCATION_GRIDS.clear()
+    LAST_PLAYER_POSITION.clear()
+    CURRENT_LOCATION = None
+    LAST_LOCATION = None
+    LAST_TRANSITION = None
     try:
         import os
         if os.path.exists(PERSISTENT_MAP_FILE):
             os.remove(PERSISTENT_MAP_FILE)
-        print("🗺️ DEBUG: Cleared persistent world map and file")
+        print("🗺️ DEBUG: Cleared persistent location maps and file")
     except Exception as e:
         print(f"🗺️ DEBUG: Failed to clear persistent map file: {e}")
 
 def _build_stitched_world_map(stitched_data):
-    """Build a persistent world map by stitching local 11x11 observations"""
+    """Build separate persistent maps for each location"""
     
     # Get the current local map data (should be 11x11 around player)
     current_map = stitched_data.get('current_local_map')  # This should be the 11x11 map
     current_area = stitched_data.get('current_area', {})
-    player_world_pos = stitched_data.get('player_world_pos')  # Absolute world coordinates
+    location_name = current_area.get('name')
     
-    # Get persistent world grid - load from file if empty
-    global PERSISTENT_WORLD_GRID
-    if not PERSISTENT_WORLD_GRID:
+    # Use fallback location name if current_area has 'Unknown' or empty name
+    if not location_name or location_name == 'Unknown':
+        fallback_name = stitched_data.get('location_name_fallback')
+        if fallback_name and fallback_name != 'Unknown':
+            location_name = fallback_name
+            print(f"🗺️ DEBUG: Using fallback location name: {location_name}")
+        else:
+            location_name = 'Unknown'
+    
+    # Debug if we're still getting Unknown location
+    if location_name == 'Unknown':
+        print(f"⚠️ WARNING: Location name is 'Unknown', current_area data: {current_area}")
+        print(f"⚠️ WARNING: Fallback location name: {stitched_data.get('location_name_fallback')}")
+    
+    # Track location changes and transition coordinates
+    global CURRENT_LOCATION, LAST_LOCATION, PERSISTENT_LOCATION_GRIDS, LAST_TRANSITION, LAST_PLAYER_POSITION, LOCATION_CONNECTIONS
+    LAST_TRANSITION = None  # Will store transition info
+    
+    # Load persistent maps if empty
+    if not PERSISTENT_LOCATION_GRIDS:
         _load_persistent_world_map()
     
-    persistent_world_grid = PERSISTENT_WORLD_GRID
+    # Get player position for transition tracking
+    player_local_pos = stitched_data.get('player_local_pos', (0, 0))
     
-    # Debug: show current persistent grid size
-    print(f"🗺️ DEBUG: Persistent grid currently has {len(persistent_world_grid)} tiles")
+    # Update current location's player position
+    if location_name:
+        LAST_PLAYER_POSITION[location_name] = player_local_pos
     
-    # DO NOT load from terrain_areas - we want to build incrementally from current observations only
-    # This was causing the map to show huge areas from the start
-    print(f"🗺️ DEBUG: Skipping terrain_areas to build map incrementally")
-    
-    # If we have current local map data and player position, stitch it in
-    if current_map and player_world_pos:
-        player_world_x, player_world_y = player_world_pos
+    # Check if we've changed locations
+    if CURRENT_LOCATION != location_name:
+        # Store transition information
+        if CURRENT_LOCATION is not None and CURRENT_LOCATION != location_name:
+            # Get the exit coordinates from the previous location
+            from_coords = LAST_PLAYER_POSITION.get(CURRENT_LOCATION, (0, 0))
+            
+            LAST_TRANSITION = {
+                'from_location': CURRENT_LOCATION,
+                'from_coords': from_coords,
+                'to_location': location_name,
+                'to_coords': player_local_pos
+            }
+            
+            # Record bidirectional connection
+            if CURRENT_LOCATION not in LOCATION_CONNECTIONS:
+                LOCATION_CONNECTIONS[CURRENT_LOCATION] = []
+            if location_name not in LOCATION_CONNECTIONS:
+                LOCATION_CONNECTIONS[location_name] = []
+            
+            # Add connection from current to new location
+            connection_exists = False
+            for other_loc, my_coords, their_coords in LOCATION_CONNECTIONS[CURRENT_LOCATION]:
+                if other_loc == location_name:
+                    connection_exists = True
+                    break
+            
+            if not connection_exists:
+                LOCATION_CONNECTIONS[CURRENT_LOCATION].append((location_name, from_coords, player_local_pos))
+                LOCATION_CONNECTIONS[location_name].append((CURRENT_LOCATION, player_local_pos, from_coords))
+                print(f"🗺️ DEBUG: Recorded connection: {CURRENT_LOCATION} ({from_coords}) ↔ {location_name} ({player_local_pos})")
+            
+            print(f"🗺️ DEBUG: Location transition: {CURRENT_LOCATION} ({from_coords}) → {location_name} ({player_local_pos})")
         
-        # Current map is typically 11x11 or 15x15 centered on player
+        LAST_LOCATION = CURRENT_LOCATION
+        CURRENT_LOCATION = location_name
+    
+    # Initialize this location's grid if it doesn't exist
+    if location_name not in PERSISTENT_LOCATION_GRIDS:
+        PERSISTENT_LOCATION_GRIDS[location_name] = {}
+        print(f"🗺️ DEBUG: Created new map for location: {location_name}")
+    
+    current_location_grid = PERSISTENT_LOCATION_GRIDS[location_name]
+    
+    # Debug: show current location's grid size
+    print(f"🗺️ DEBUG: Location '{location_name}' currently has {len(current_location_grid)} tiles")
+    
+    # Get player position - use local coordinates for this location
+    player_local_pos = stitched_data.get('player_local_pos')
+    if not player_local_pos:
+        # Fallback to extracting from current area
+        player_local_pos = current_area.get('player_pos', (5, 5))  # Default to center
+    
+    # If we have current local map data, add it to this location's grid
+    if current_map:
+        player_x, player_y = player_local_pos
+        
+        # Current map from memory reader is typically 11x11 centered on player
         map_size = len(current_map)
-        center = map_size // 2  # For 11x11: center at 5, for 15x15: center at 7
+        center = map_size // 2  # For 11x11: center at 5
         
-        print(f"🗺️ DEBUG: Current observation is {map_size}x{len(current_map[0]) if current_map else 0}, center at {center}")
+        # For 11x11 input, process 10x10 (skip outer border)
+        # For 11x11 with center at 5: process indices 0-9 (center-5 to center+4)
+        
+        print(f"🗺️ DEBUG: Full observation is {map_size}x{map_size}, processing 10x10 (skipping outer border), player at local ({player_x}, {player_y})")
         
         tiles_added = 0
-        for local_y, row in enumerate(current_map):
-            for local_x, tile_data in enumerate(row):
-                # Calculate world coordinates for this tile
-                offset_x = local_x - center
-                offset_y = local_y - center
-                world_x = player_world_x + offset_x
-                world_y = player_world_y + offset_y
-                
-                # Convert tile to symbol
-                symbol = format_tile_to_symbol(tile_data)
-                
-                # STITCHING RULE: Only overwrite if we have real data
-                # Don't overwrite existing data with "unknown" or empty data
-                if symbol and symbol != '?' and symbol != ' ':
-                    if (world_x, world_y) not in persistent_world_grid:
-                        tiles_added += 1
-                    persistent_world_grid[(world_x, world_y)] = symbol
-                # If the new observation is unknown (?), keep existing data if it exists
-                # This preserves previously observed terrain
+        # Process 10x10 area: skip the outer border of the 11x11
+        if map_size == 11:
+            start_y = 0  # Skip top border
+            end_y = 10   # Skip bottom border  
+            start_x = 0  # Skip left border
+            end_x = 10   # Skip right border
+        else:
+            # For other sizes, use radius approach
+            radius = 4  # For 10x10 from center
+            start_y = max(0, center - radius)
+            end_y = min(map_size, center + radius + 1)
+            start_x = max(0, center - radius)  
+            end_x = min(map_size, center + radius + 1)
         
-        print(f"🗺️ DEBUG: Added {tiles_added} new tiles, total now {len(persistent_world_grid)}")
+        for local_y in range(start_y, end_y):
+            row = current_map[local_y]
+            for local_x in range(start_x, end_x):
+                if local_x < len(row):
+                    tile_data = row[local_x]
+                    
+                    # Calculate position in this location's coordinate system
+                    offset_x = local_x - center
+                    offset_y = local_y - center
+                    location_x = player_x + offset_x
+                    location_y = player_y + offset_y
+                    
+                    # Convert tile to symbol
+                    symbol = format_tile_to_symbol(tile_data)
+                    
+                    # Only add tiles with real data
+                    if symbol and symbol != '?' and symbol != ' ':
+                        if (location_x, location_y) not in current_location_grid:
+                            tiles_added += 1
+                        current_location_grid[(location_x, location_y)] = symbol
+        
+        print(f"🗺️ DEBUG: Added {tiles_added} new tiles to {location_name}, total now {len(current_location_grid)}")
         
         # Save to file after adding new tiles
         if tiles_added > 0:
             _save_persistent_world_map()
     
-    if not persistent_world_grid:
+    if not current_location_grid:
         return []
     
-    # Find current player position from current area data
-    player_display_pos = None
-    if player_world_pos:
-        player_display_pos = player_world_pos
-    else:
-        # Fallback: try to get from current area
-        for area in terrain_areas:
-            if area.get('id') == current_area.get('id'):
-                coords = area.get('overworld_coords')
-                player_pos = area.get('player_pos')
-                if coords and player_pos:
-                    base_x, base_y = coords
-                    player_local_x, player_local_y = player_pos
-                    player_display_pos = (base_x + player_local_x, base_y + player_local_y)
-                    break
+    # Use player local position for display
+    player_display_pos = player_local_pos
+    if not player_display_pos:
+        return []
     
-    # Find the exact bounds of the discovered world content (no padding)
-    all_positions = list(persistent_world_grid.keys())
+    # Find the bounds of the full explored area in this location
+    all_positions = list(current_location_grid.keys())
     if player_display_pos:
         all_positions.append(player_display_pos)
     
@@ -907,43 +1055,84 @@ def _build_stitched_world_map(stitched_data):
     min_y = min(pos[1] for pos in all_positions)
     max_y = max(pos[1] for pos in all_positions)
     
-    # NO PADDING - show exactly what has been discovered
-    print(f"🗺️ DEBUG: Map bounds: x={min_x} to {max_x}, y={min_y} to {max_y}")
+    print(f"🗺️ DEBUG: {location_name} - showing full explored area: x={min_x} to {max_x}, y={min_y} to {max_y}")
     
-    # Build the display
+    # Get connection info from current_area for portal markers
+    connections = current_area.get('connections', [])
+    portal_positions = {}  # Track where portals lead
+    
+    # Build the display for this location
     lines = []
-    lines.append("\n--- WORLD MAP (Stitched) ---")
     
-    # Create the map display - ONLY show discovered tiles (no ? for unexplored)
-    discovered_count = 0
+    # Add location transition indicator if we just changed locations
+    if LAST_LOCATION and LAST_LOCATION != location_name:
+        lines.append(f"\n⚡ LOCATION TRANSITION: {LAST_LOCATION} → {location_name}")
+        # Add transition coordinates if available
+        if LAST_TRANSITION and LAST_TRANSITION['to_location'] == location_name:
+            from_coords = LAST_TRANSITION['from_coords']
+            to_coords = LAST_TRANSITION['to_coords']
+            from_location = LAST_TRANSITION['from_location']
+            lines.append(f"📍 Exited {from_location} at ({from_coords[0]}, {from_coords[1]})")
+            lines.append(f"📍 Entered {location_name} at ({to_coords[0]}, {to_coords[1]})")
+        # Clear the LAST_LOCATION after showing transition
+        LAST_LOCATION = None
+        lines.append("")
+    
+    lines.append(f"\n--- MAP: {location_name.upper()} ---")
+    
+    # Create the map display showing full explored area
     for y in range(min_y, max_y + 1):
         row = ""
         for x in range(min_x, max_x + 1):
-            if player_display_pos and (x, y) == player_display_pos:
+            # Check if this is an edge position for potential portals
+            is_edge = (x == min_x or x == max_x or y == min_y or y == max_y)
+            
+            if (x, y) == player_display_pos:
                 row += "P"
-                discovered_count += 1
-            elif (x, y) in persistent_world_grid:
-                row += persistent_world_grid[(x, y)]
-                discovered_count += 1
+            elif (x, y) in current_location_grid:
+                tile = current_location_grid[(x, y)]
+                # Check if this is an edge tile that could be a portal
+                if is_edge and tile == '.':
+                    # Mark portals based on position and connections
+                    for conn in connections:
+                        direction = conn.get('direction', '').lower()
+                        if direction == 'east' and x == max_x:
+                            row += "→"
+                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
+                            break
+                        elif direction == 'west' and x == min_x:
+                            row += "←"
+                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
+                            break
+                        elif direction == 'north' and y == min_y:
+                            row += "↑"
+                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
+                            break
+                        elif direction == 'south' and y == max_y:
+                            row += "↓"
+                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
+                            break
+                    else:
+                        row += tile
+                else:
+                    row += tile
             else:
-                # This should never happen since we're only showing discovered bounds
-                row += "?"
+                row += "?"  # Unexplored area in this location
         
         # Add spacing for readability
         spaced_row = " ".join(row)
         lines.append(spaced_row)
     
     # Add legend
-    legend_lines = ["Legend:"]
-    if player_display_pos:
-        legend_lines.append("  Movement: P=Player")
+    legend_lines = ["", "Legend:"]
+    legend_lines.append("  Movement: P=Player")
     
-    # Check what terrain symbols we have
-    terrain_symbols = set(persistent_world_grid.values())
+    # Check what terrain symbols we have visible in the full explored area
+    visible_symbols = set(current_location_grid.values())
+    
     terrain_items = []
-    
     for symbol in [".", "#", "~", "W", "D", "S"]:
-        if symbol in terrain_symbols:
+        if symbol in visible_symbols:
             if symbol == ".":
                 terrain_items.append(".=Walkable path")
             elif symbol == "#":
@@ -960,16 +1149,41 @@ def _build_stitched_world_map(stitched_data):
     if terrain_items:
         legend_lines.append(f"  Terrain: {', '.join(terrain_items)}")
     
-    lines.append("")
-    lines.append("\n".join(legend_lines))
+    # Add portal/exit markers to legend if any are visible
+    portal_items = []
+    if portal_positions:
+        unique_portals = {}
+        for pos, dest in portal_positions.items():
+            x, y = pos
+            # Determine direction symbol
+            if x == min_x:
+                unique_portals["←"] = dest
+            elif x == max_x:
+                unique_portals["→"] = dest
+            elif y == min_y:
+                unique_portals["↑"] = dest
+            elif y == max_y:
+                unique_portals["↓"] = dest
+        
+        for symbol, dest in unique_portals.items():
+            portal_items.append(f"{symbol}=To {dest}")
     
-    # Add exploration statistics based on persistent grid
-    total_persistent_tiles = len(persistent_world_grid)
-    display_width = max_x - min_x + 1
-    display_height = max_y - min_y + 1
+    if portal_items:
+        legend_lines.append(f"  Portals: {', '.join(portal_items)}")
     
+    lines.extend(legend_lines)
+    
+    # Add exploration statistics for this location
+    total_tiles = len(current_location_grid)
     lines.append("")
-    lines.append(f"Discovered Map: {display_width}x{display_height} (exactly what has been explored)")
+    lines.append(f"Total explored in {location_name}: {total_tiles} tiles")
+    
+    # Add discovered connection points from our transition tracking
+    if location_name in LOCATION_CONNECTIONS:
+        lines.append("")
+        lines.append("Known Portal Coordinates:")
+        for other_loc, my_coords, their_coords in LOCATION_CONNECTIONS[location_name]:
+            lines.append(f"  At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
     
     return lines
 
@@ -984,60 +1198,7 @@ def _format_stitched_map_info(map_info):
         return context_parts
     
     # Check if world map display with terrain was already shown
-    # If terrain areas exist, the main _format_map_info already showed the world map
-    terrain_areas = stitched_data.get('terrain_areas', [])
-    if terrain_areas and any(area.get('map_data') for area in terrain_areas):
-        # World map with terrain already displayed, don't add basic knowledge
-        return context_parts
-    
-    context_parts.append("\n--- WORLD MAP KNOWLEDGE ---")
-    
-    stats = stitched_data.get('stats', {})
-    current_area = stitched_data.get('current_area', {})
-    
-    # Basic stats
-    total_areas = stats.get('total_areas', 0)
-    if total_areas > 0:
-        context_parts.append(f"Discovered Areas: {total_areas} ({stats.get('indoor_areas', 0)} indoor, {stats.get('outdoor_areas', 0)} outdoor)")
-    
-    # Current area with coordinates
-    current_coords = current_area.get('overworld_coords')
-    if current_coords:
-        coord_str = f" at ({current_coords[0]}, {current_coords[1]})"
-    else:
-        coord_str = " at (?, ?)"
-    context_parts.append(f"Current Area: {current_area.get('name', 'Unknown')}{coord_str}")
-    
-    # Current area connections
-    connections = current_area.get('connections', [])
-    if connections:
-        context_parts.append(f"Available Connections:")
-        for conn in connections:
-            direction_symbols = {
-                "north": "⬆️", "south": "⬇️", "east": "➡️", "west": "⬅️",
-                "up": "🔼", "down": "🔽"
-            }
-            symbol = direction_symbols.get(conn['direction'], "🔄")
-            context_parts.append(f"  {symbol} {conn['direction']}: {conn['name']}")
-    
-    # Nearby areas (for navigation context)
-    nearby_areas = stitched_data.get('nearby_areas', [])
-    reachable_areas = [area for area in nearby_areas if area.get('depth', 0) <= 1]
-    if reachable_areas and len(reachable_areas) > 1:  # More than just current area
-        context_parts.append(f"Nearby Reachable Areas:")
-        for area in reachable_areas[:5]:  # Show top 5
-            if area.get('depth', 0) == 0:
-                continue  # Skip current area
-            area_connections = area.get('connections', [])
-            conn_count = len(area_connections)
-            coords = area.get('overworld_coords')
-            coord_str = f" at ({coords[0]}, {coords[1]})" if coords else " at (?, ?)"
-            context_parts.append(f"  • {area['name']}{coord_str} ({conn_count} connections)")
-    
-    # Show total discovered for context
-    if total_areas >= 5:
-        context_parts.append(f"Navigation: You have mapped {total_areas} areas. Use discovered connections to plan efficient routes.")
-    
+    # Old world map knowledge system removed - replaced by location-based maps with portal coordinates
     return context_parts
 
 def _format_game_state(game_data):

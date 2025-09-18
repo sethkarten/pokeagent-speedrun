@@ -460,6 +460,14 @@ class EmeraldEmulator:
                     # Don't clear buffer address on state load to avoid expensive rescans
                     self.memory_reader.invalidate_map_cache(clear_buffer_address=False)
                     
+                    # Reset persistent location maps when loading a state
+                    try:
+                        from utils.state_formatter import clear_persistent_world_map
+                        clear_persistent_world_map()
+                        logger.info("Cleared persistent location maps for state load")
+                    except Exception as e:
+                        logger.warning(f"Failed to clear persistent location maps: {e}")
+                    
                     # Run a frame to ensure memory is properly loaded
                     self.core.run_frame()
                     

@@ -39,6 +39,14 @@ def save_checkpoint(emulator, llm_logger=None, agent_step_count=0):
             json.dump(milestone_data, f, indent=2)
         print(f"   ✅ Saved milestones to checkpoint_milestones.json")
         
+        # Save location maps
+        try:
+            from utils.state_formatter import save_persistent_world_map
+            save_persistent_world_map("checkpoint_maps.json")
+            print(f"   ✅ Saved location maps to checkpoint_maps.json")
+        except Exception as e:
+            print(f"   ⚠️ Failed to save location maps: {e}")
+        
         # Save LLM history if logger available
         if llm_logger:
             # Get conversation history from logger
@@ -104,6 +112,17 @@ def load_checkpoint(emulator, llm_logger=None):
                 emulator.memory_reader.milestones = milestone_data.get("milestones", {})
             checkpoint_data['step_count'] = milestone_data.get("step_count", 0)
             print(f"   ✅ Loaded milestones from checkpoint_milestones.json")
+        
+        # Load location maps
+        try:
+            from utils.state_formatter import load_persistent_world_map
+            if os.path.exists("checkpoint_maps.json"):
+                load_persistent_world_map("checkpoint_maps.json")
+                print(f"   ✅ Loaded location maps from checkpoint_maps.json")
+            else:
+                print(f"   ⚠️ No checkpoint_maps.json found")
+        except Exception as e:
+            print(f"   ⚠️ Failed to load location maps: {e}")
         
         # Load LLM history if logger available
         if llm_logger and os.path.exists("checkpoint_llm.txt"):

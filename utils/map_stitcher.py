@@ -108,23 +108,11 @@ class MapStitcher:
             area.warp_tiles = warp_tiles
             area.visited_count += 1
             area.last_seen = timestamp
-            # Update overworld coordinates if provided
-            if overworld_coords is not None:
-                area.overworld_coords = overworld_coords
-                print(f"🗺️ DEBUG: Set overworld_coords = {overworld_coords} for existing area {map_id}")
-                print(f"🗺️ DEBUG: Forcing immediate save...")
-                self.save_to_file()
-            else:
-                print(f"🗺️ DEBUG: No overworld_coords provided for existing area {map_id}")
+            # Keep overworld_coords as None to indicate separate maps
+            area.overworld_coords = None
             logger.debug(f"Updated map area {location_name} (ID: {map_id:04X})")
         else:
-            # Create new area - try to infer overworld coordinates if not provided
-            if overworld_coords is None:
-                overworld_coords = self._infer_overworld_coordinates(location_name, player_pos)
-                print(f"🗺️ DEBUG: No overworld_coords provided for new area {map_id}, inferred: {overworld_coords}")
-            else:
-                print(f"🗺️ DEBUG: Using provided overworld_coords = {overworld_coords} for new area {map_id}")
-            
+            # Create new area without global coordinates
             boundaries = self._calculate_boundaries(map_data)
             area = MapArea(
                 map_id=map_id,
@@ -136,11 +124,10 @@ class MapStitcher:
                 visited_count=1,
                 first_seen=timestamp,
                 last_seen=timestamp,
-                overworld_coords=overworld_coords
+                overworld_coords=None  # Each location is separate
             )
             self.map_areas[map_id] = area
-            coord_info = f" at {overworld_coords}" if overworld_coords else ""
-            logger.info(f"Added new map area: {location_name} (ID: {map_id:04X}){coord_info}")
+            logger.info(f"Added new map area: {location_name} (ID: {map_id:04X}) as separate location")
             
         # Check for area transitions and potential warp connections
         if self.last_map_id is not None and self.last_map_id != map_id:

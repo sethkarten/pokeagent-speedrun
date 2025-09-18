@@ -45,6 +45,9 @@ The system is built with a modular architecture that separates perception, plann
 - **Strategic planning**: Develops high-level plans based on game observations
 - **Memory management**: Maintains context about the game state and progress
 - **Intelligent action selection**: Chooses appropriate GBA button inputs based on the current situation
+- **Advanced Map System**: Location-based persistent maps with portal coordinate tracking
+- **Spatial Navigation**: Bidirectional portal connections show exact transition coordinates between locations
+- **Checkpoint Persistence**: Maps and connections persist across game sessions with checkpoint system
 - **Web interface**: Visualize the agent's thought process and game state in real-time
 - **Modular architecture**: Easily extendable with new capabilities
 - **Customizable prompts**: Easy-to-edit prompt system for different agent behaviors
@@ -52,31 +55,54 @@ The system is built with a modular architecture that separates perception, plann
 ## Directory Structure
 
 ```
-emerald/
+pokeagent-speedrun/
 ├── README.md
 ├── requirements.txt
-├── agent.py                 # Main AI agent implementation
-├── server/
+├── agent.py                 # Main AI agent implementation (direct emulator integration)
+├── server/                  # Server components (multiprocess mode)
 │   ├── __init__.py
-│   ├── stream.html          # Web interface for streaming
-│   ├── templates.py         # HTML templates for web interface
-│   └── simple_test.state    # Game state file
-├── agent/                   # (EDIT THESE FILES TO CUSTOMIZE BEHAVIOR)
+│   ├── app.py               # FastAPI server for multiprocess mode
+│   ├── frame_server.py      # Frame streaming server
+│   └── stream.html          # Web interface for streaming
+├── agent/                   # Four-module agent architecture (EDIT THESE FILES TO CUSTOMIZE BEHAVIOR)
 │   ├── __init__.py
 │   ├── system_prompt.py     # Main system prompt 
 │   ├── perception.py        # Perception module + prompts
 │   ├── planning.py          # Planning module + prompts
 │   ├── memory.py            # Memory module + prompts
-│   └── action.py            # Action module + prompts
+│   ├── action.py            # Action module + prompts
+│   └── simple.py            # Simple mode implementation (bypasses four-module architecture)
 ├── utils/
 │   ├── __init__.py
-│   ├── vlm.py               # VLM backend implementations with robust error handling
+│   ├── vlm.py               # VLM backend implementations (OpenAI, Gemini, local models)
 │   ├── helpers.py           # Helper functions
 │   ├── state_formatter.py   # Game state formatting utilities
 │   ├── anticheat.py         # Anti-cheat tracking and verification
-│   └── llm_logger.py        # Comprehensive LLM interaction logging
-├── pokemon_env/             # Pokémon environment wrapper
-└── Emerald-GBAdvance/       # Place your Pokémon Emerald ROM here
+│   ├── llm_logger.py        # Comprehensive LLM interaction logging
+│   ├── ocr_dialogue.py      # OCR-based dialogue detection
+│   ├── map_formatter.py     # Map visualization and formatting
+│   ├── map_stitcher.py      # Map stitching utilities
+│   ├── map_visualizer.py    # Map visualization tools
+│   ├── headless_recorder.py # Video recording capabilities
+│   └── get_local_ip.py      # Network utilities
+├── pokemon_env/             # Pokémon environment wrapper (mGBA integration)
+│   ├── __init__.py
+│   ├── emulator.py          # Core emulator integration
+│   ├── memory_reader.py     # Game state memory reading (DO NOT MODIFY)
+│   ├── emerald_utils.py     # Pokémon Emerald specific utilities
+│   ├── enums.py             # Game enumerations
+│   ├── types.py             # Type definitions
+│   └── utils.py             # Environment utilities
+├── tests/                   # Test suite and validation
+│   ├── run_tests.py         # Main test runner
+│   ├── states/              # Test save states with ground truth data
+│   ├── ground_truth/        # Reference data for validation
+│   └── test_*.py            # Individual test files
+├── Emerald-GBAdvance/       # Game ROM and save states
+│   ├── rom.gba              # Pokémon Emerald ROM (not included)
+│   └── *.state              # Various starting save states
+├── llm_logs/                # LLM interaction logs (auto-generated)
+└── *.mp4                    # Video recordings (auto-generated with --record)
 ```
 
 ## Requirements
@@ -127,37 +153,24 @@ Before installing Python dependencies, ensure you have a compatible libffi versi
 conda install -n pokeagent libffi=3.3 -y
 ```
 
-### 5. Install Tesseract OCR (Required for dialogue detection)
-
-```bash
-# Ubuntu/Debian
-sudo apt-get install tesseract-ocr
-
-# macOS
-brew install tesseract
-
-# Conda (if preferred)
-conda install -c conda-forge tesseract
-```
-
-### 6. Install Python Dependencies
+### 5. Install Python Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 7. Set up Game ROM
+### 6. Set up Game ROM
 
 **Important**: You must obtain a Pokémon Emerald ROM file legally (e.g., dump from your own cartridge).
 
-1. Place your `PokemonEmerald.gba` ROM file in the `Emerald-GBAdvance/` directory:
+1. Place your ROM file in the `Emerald-GBAdvance/` directory and rename it to `rom.gba`:
    ```
-   emerald/
+   pokeagent-speedrun/
    └── Emerald-GBAdvance/
-       └── PokemonEmerald.gba  # Your ROM file here
+       └── rom.gba  # Your Pokémon Emerald ROM file here
    ```
 
-2. The ROM file can be named anything with a `.gba` extension, but make sure it's a valid Pokémon Emerald ROM by checking the SHA-1 hash with `f3ae088181bf583e55daf962a92bb46f4f1d07b7`.
+2. Ensure it's a valid Pokémon Emerald ROM. The SHA-1 hash should be `f3ae088181bf583e55daf962a92bb46f4f1d07b7` for the US English version.
 
 ## VLM Backend Setup
 
@@ -265,7 +278,7 @@ python agent.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
 
 ```bash
 # Load from a saved state
-python agent.py --load-state server/start.state --backend gemini --model-name gemini-2.5-flash
+python agent.py --load-state Emerald-GBAdvance/start.state --backend gemini --model-name gemini-2.5-flash
 
 # Load from test states
 python agent.py --load-state tests/states/torchic.state --backend gemini --model-name gemini-2.5-flash
@@ -317,8 +330,7 @@ When running with display (default):
 
 ### Web Interface
 
-The agent automatically starts a web server at `http://localhost:8000` (or custom port).
-Open `server/stream.html` in your browser to view the game stream and agent status
+The agent automatically starts a web server at `http://localhost:8000` (or custom port) that serves the game stream and agent status in real-time.
 
 #### Other Options
 
