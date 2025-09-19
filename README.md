@@ -47,6 +47,9 @@ The system is built with a modular architecture that separates perception, plann
 - **Intelligent action selection**: Chooses appropriate GBA button inputs based on the current situation
 - **Advanced Map System**: Location-based persistent maps with portal coordinate tracking
 - **Spatial Navigation**: Bidirectional portal connections show exact transition coordinates between locations
+- **NPC Detection**: Real-time NPC detection and display on maps to help avoid blocked movement
+- **Movement Memory**: Tracks failed movements and NPC interactions for better navigation
+- **LLM-Controlled Pathfinding**: Intelligent pathfinding decisions made directly by the language model
 - **Checkpoint Persistence**: Maps and connections persist across game sessions with checkpoint system
 - **Web interface**: Visualize the agent's thought process and game state in real-time
 - **Modular architecture**: Easily extendable with new capabilities
@@ -435,6 +438,34 @@ python agent.py --multiprocess --record --simple --no-ocr --agent-auto --backend
 # Terminal 2: python agent.py --multiprocess --backend gemini
 ```
 
+### 🧭 Navigation & Pathfinding System
+
+The agent includes an intelligent navigation system that helps with spatial reasoning:
+
+**Movement Preview System:**
+- Shows immediate results of directional actions (UP, DOWN, LEFT, RIGHT)
+- Displays target coordinates and tile information for each direction
+- Handles special terrain like ledges (only walkable in arrow direction)
+
+**NPC Detection & Avoidance:**
+- Real-time NPC detection from game memory displays NPCs as `N` markers on maps
+- Visual frame analysis allows LLM to identify NPCs not shown on maps
+- Movement memory system tracks locations where movement failed (usually NPCs/obstacles)
+
+**LLM-Controlled Pathfinding:**
+- All pathfinding decisions made directly by the language model for maximum flexibility
+- Movement preview provides the LLM with complete information about movement consequences  
+- No automatic pathfinding algorithms - the LLM plans routes step-by-step based on current state
+
+**Map Features:**
+- `P` = Player position
+- `N` = NPC/Trainer location  
+- `?` = Unexplored areas at map edges (only shown for walkable boundaries)
+- `#` = Walls/obstacles, `~` = Tall grass, `.` = Walkable paths
+- Directional arrows (`↑↓←→`) = Ledges (one-way movement)
+
+This system provides the LLM with complete spatial awareness while maintaining flexibility in navigation decisions.
+
 ### 🚀 Recommended Production Setup
 
 For the most stable and efficient agent runs:
@@ -457,6 +488,7 @@ This combination provides:
 - ✅ Fast processing (simple mode)
 - ✅ No dialogue hanging (no-ocr)
 - ✅ Continuous operation (agent-auto)
+- ✅ Intelligent navigation (movement preview + NPC detection)
 
 ## Command Line Options
 

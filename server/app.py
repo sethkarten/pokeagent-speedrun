@@ -6,6 +6,7 @@ Fixed Simple Pokemon Emerald server - headless FastAPI server
 # Standard library imports
 import base64
 import datetime
+import glob
 import io
 import json
 import logging
@@ -21,7 +22,7 @@ import numpy as np
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from PIL import Image
 from pydantic import BaseModel
 
@@ -870,8 +871,6 @@ async def stream_agent_thinking():
     """Stream agent thinking in real-time using Server-Sent Events"""
     from fastapi.responses import StreamingResponse
     import asyncio
-    import glob
-    import os
     
     async def event_stream():
         """Generate server-sent events for agent thinking"""
@@ -988,8 +987,6 @@ async def get_agent_thinking():
     """Get current agent thinking status and recent LLM interactions"""
     try:
         # Get the most recent LLM log file
-        import glob
-        import os
         from utils.llm_logger import get_llm_logger
         
         # Get recent LLM interactions
@@ -1394,6 +1391,38 @@ async def stop_server():
     running = False
     return {"status": "stopping"}
 
+@app.post("/save_state")
+async def save_state_endpoint(request: dict):
+    """Save the current emulator state to a file"""
+    try:
+        filepath = request.get("filepath", "manual_save.state")
+        if env:
+            env.save_state(filepath)
+            logger.info(f"💾 State saved to: {filepath}")
+            return {"status": "success", "message": f"State saved to {filepath}"}
+        else:
+            return JSONResponse(status_code=500, content={"error": "Emulator not initialized"})
+    except Exception as e:
+        logger.error(f"Error saving state: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/load_state")
+async def load_state_endpoint(request: dict):
+    """Load an emulator state from a file"""
+    try:
+        filepath = request.get("filepath", "manual_save.state")
+        if env:
+            if not os.path.exists(filepath):
+                return JSONResponse(status_code=404, content={"error": f"State file not found: {filepath}"})
+            env.load_state(filepath)
+            logger.info(f"📂 State loaded from: {filepath}")
+            return {"status": "success", "message": f"State loaded from {filepath}"}
+        else:
+            return JSONResponse(status_code=500, content={"error": "Emulator not initialized"})
+    except Exception as e:
+        logger.error(f"Error loading state: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.post("/checkpoint")
 async def save_checkpoint(request_data: dict = None):
     """Save checkpoint - called by client when step count reaches checkpoint interval"""
@@ -1416,7 +1445,8 @@ async def save_checkpoint(request_data: dict = None):
                 "step_count": step_count,
                 "files": {
                     "state": checkpoint_state,
-                    "milestones": f"checkpoint_milestones.json"
+                    "milestones": f"checkpoint_milestones.json",
+                    "map": f"checkpoint_grids.json"
                 }
             }
         else:
@@ -1514,7 +1544,8 @@ async def load_checkpoint():
                 "status": "checkpoint_loaded",
                 "files": {
                     "state": checkpoint_state,
-                    "milestones": f"checkpoint_milestones.json"
+                    "milestones": f"checkpoint_milestones.json",
+                    "map": f"checkpoint_grids.json"
                 }
             }
         else:
@@ -1614,13 +1645,18 @@ def main():
             env.load_state(args.load_state)
             print(f"Loaded state from: {args.load_state}")
             
-            # If this is checkpoint.state, also load milestones
-            if args.load_state.endswith("checkpoint.state") and env.milestone_tracker:
-                try:
-                    env.milestone_tracker.load_milestones_for_state(args.load_state)
-                    print(f"📂 Loaded checkpoint milestones")
-                except Exception as e:
-                    print(f"⚠️ Could not load checkpoint milestones: {e}")
+            # Milestones and map data are automatically loaded by env.load_state()
+            # Check what was loaded
+            state_dir = os.path.dirname(args.load_state)
+            base_name = os.path.splitext(os.path.basename(args.load_state))[0]
+            
+            milestone_file = os.path.join(state_dir, f"{base_name}_milestones.json")
+            if os.path.exists(milestone_file):
+                print(f"📂 Loaded milestones from: {milestone_file}")
+            
+            grids_file = os.path.join(state_dir, f"{base_name}_grids.json")
+            if os.path.exists(grids_file):
+                print(f"🗺️  Loaded map grids from: {grids_file}")
             
             # Map buffer should already be found by emulator.load_state()
             if env.memory_reader and env.memory_reader._map_buffer_addr:
@@ -1718,17 +1754,18 @@ def init_for_multiprocess():
                     env.load_state(load_state)
                     print(f"📂 Successfully loaded state from: {load_state}")
                     
-                    # If this is checkpoint.state, also load milestones
-                    if load_state.endswith("checkpoint.state") and env.milestone_tracker:
-                        try:
-                            checkpoint_milestones = "checkpoint_milestones.json"
-                            if os.path.exists(checkpoint_milestones):
-                                env.milestone_tracker.load_milestones_for_state(load_state)
-                                print(f"📋 Successfully loaded checkpoint milestones from {checkpoint_milestones}")
-                            else:
-                                print(f"⚠️ Checkpoint milestones file not found: {checkpoint_milestones}")
-                        except Exception as e:
-                            print(f"⚠️ Could not load checkpoint milestones: {e}")
+                    # Milestones and map data are automatically loaded by env.load_state()
+                    # Check what was loaded
+                    state_dir = os.path.dirname(load_state)
+                    base_name = os.path.splitext(os.path.basename(load_state))[0]
+                    
+                    milestone_file = os.path.join(state_dir, f"{base_name}_milestones.json")
+                    if os.path.exists(milestone_file):
+                        print(f"📋 Loaded milestones from: {milestone_file}")
+                    
+                    grids_file = os.path.join(state_dir, f"{base_name}_grids.json")
+                    if os.path.exists(grids_file):
+                        print(f"🗺️  Loaded map grids from: {grids_file}")
                     
                     # Map buffer should already be found by emulator.load_state()
                     if env.memory_reader and env.memory_reader._map_buffer_addr:

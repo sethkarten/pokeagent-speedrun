@@ -376,6 +376,7 @@ class MapStitcher:
             with open(self.save_file, 'r') as f:
                 data = json.load(f)
             
+            # Add loaded data to existing map areas (accumulate knowledge)
             # Restore map areas (with map_data for world map display)
             for map_id_str, area_data in data.get("map_areas", {}).items():
                 map_id = int(map_id_str)

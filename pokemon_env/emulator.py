@@ -432,6 +432,9 @@ class EmeraldEmulator:
                 # Save corresponding milestones for this state
                 milestone_filename = self.milestone_tracker.save_milestones_for_state(path)
                 logger.info(f"Milestones saved to {milestone_filename}")
+                
+                # Save the persistent location grids (contains all map data)
+                self._save_persistent_grids_for_state(path)
             
             return data
         except Exception as e:
@@ -460,13 +463,7 @@ class EmeraldEmulator:
                     # Don't clear buffer address on state load to avoid expensive rescans
                     self.memory_reader.invalidate_map_cache(clear_buffer_address=False)
                     
-                    # Reset persistent location maps when loading a state
-                    try:
-                        from utils.state_formatter import clear_persistent_world_map
-                        clear_persistent_world_map()
-                        logger.info("Cleared persistent location maps for state load")
-                    except Exception as e:
-                        logger.warning(f"Failed to clear persistent location maps: {e}")
+                    # Persistent location maps will be loaded from the state file later
                     
                     # Run a frame to ensure memory is properly loaded
                     self.core.run_frame()
@@ -490,9 +487,50 @@ class EmeraldEmulator:
                 if path:
                     self.milestone_tracker.load_milestones_for_state(path)
                     logger.info(f"Milestones loaded for state {path}")
+                    
+                    # Load the persistent location grids (contains all map data)
+                    self._load_persistent_grids_for_state(path)
         except Exception as e:
             logger.error(f"Failed to load state: {e}")
 
+    def _save_persistent_grids_for_state(self, state_filename: str):
+        """Save persistent location grids for a specific state file"""
+        try:
+            # Get the directory and base name of the state file
+            import os
+            state_dir = os.path.dirname(state_filename)
+            base_name = os.path.splitext(os.path.basename(state_filename))[0]
+            grids_filename = os.path.join(state_dir, f"{base_name}_grids.json")
+            
+            # Save the persistent grids
+            from utils.state_formatter import save_persistent_world_map
+            save_persistent_world_map(grids_filename)
+            logger.info(f"Persistent grids saved to {grids_filename}")
+            
+        except Exception as e:
+            logger.error(f"Error saving persistent grids for state: {e}")
+    
+    def _load_persistent_grids_for_state(self, state_filename: str):
+        """Load persistent location grids for a specific state file"""
+        try:
+            # Get the directory and base name of the state file
+            import os
+            state_dir = os.path.dirname(state_filename)
+            base_name = os.path.splitext(os.path.basename(state_filename))[0]
+            grids_filename = os.path.join(state_dir, f"{base_name}_grids.json")
+            
+            if not os.path.exists(grids_filename):
+                logger.info(f"No persistent grids file found for state: {grids_filename}")
+                return
+            
+            # Load the persistent grids
+            from utils.state_formatter import load_persistent_world_map
+            load_persistent_world_map(grids_filename)
+            logger.info(f"Persistent grids loaded from {grids_filename}")
+            
+        except Exception as e:
+            logger.error(f"Error loading persistent grids for state: {e}")
+    
     def start_frame_capture(self, fps: int = 30):
         """Start asynchronous frame capture"""
         self.running = True

@@ -203,6 +203,32 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 action = "L"
                             elif event.key == pygame.K_RSHIFT:
                                 action = "R"
+                            elif event.key == pygame.K_1:
+                                # Save state
+                                print("💾 Saving state...")
+                                try:
+                                    response = requests.post(f"{server_url}/save_state", 
+                                                           json={"filepath": "manual_save.state"}, 
+                                                           timeout=5)
+                                    if response.status_code == 200:
+                                        print("✅ State saved to manual_save.state")
+                                    else:
+                                        print(f"❌ Failed to save state: {response.status_code}")
+                                except Exception as e:
+                                    print(f"❌ Error saving state: {e}")
+                            elif event.key == pygame.K_2:
+                                # Load state
+                                print("📂 Loading state...")
+                                try:
+                                    response = requests.post(f"{server_url}/load_state", 
+                                                           json={"filepath": "manual_save.state"}, 
+                                                           timeout=5)
+                                    if response.status_code == 200:
+                                        print("✅ State loaded from manual_save.state")
+                                    else:
+                                        print(f"❌ Failed to load state: {response.status_code}")
+                                except Exception as e:
+                                    print(f"❌ Error loading state: {e}")
                             elif event.key == pygame.K_m:
                                 # Display comprehensive state (what LLM sees)
                                 print("🔍 Getting comprehensive state...")
