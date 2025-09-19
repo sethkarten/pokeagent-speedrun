@@ -953,8 +953,8 @@ class PokemonEmeraldReader:
         special_ratio = special_tiles / total_tiles if total_tiles > 0 else 0
         
         # Validation rules based on location type
-        is_indoor = "HOUSE" in location_name.upper() or "ROOM" in location_name.upper()
-        is_outdoor = "TOWN" in location_name.upper() or "ROUTE" in location_name.upper()
+        is_indoor = location_name and ("HOUSE" in location_name.upper() or "ROOM" in location_name.upper())
+        is_outdoor = location_name and ("TOWN" in location_name.upper() or "ROUTE" in location_name.upper())
         
         # Rule 1: Too many unknown tiles (> 20%)
         if unknown_ratio > 0.2:
@@ -2084,7 +2084,7 @@ class PokemonEmeraldReader:
                 location_name = ""
             
             # Only apply validation for outdoor areas, skip for indoor/house areas
-            is_outdoor = any(keyword in location_name.upper() for keyword in ['TOWN', 'ROUTE', 'CITY', 'ROAD', 'PATH'])
+            is_outdoor = location_name and any(keyword in location_name.upper() for keyword in ['TOWN', 'ROUTE', 'CITY', 'ROAD', 'PATH'])
             
             if is_outdoor:
                 total_tiles = sum(len(row) for row in map_data)
@@ -2518,6 +2518,10 @@ class PokemonEmeraldReader:
         except Exception as e:
             logger.warning(f"Failed to read comprehensive state: {e}")
         
+        # Add screenshot to visual state if provided
+        if screenshot is not None:
+            state["visual"]["screenshot"] = screenshot
+        
         return state
     
     def read_map(self, state): 
@@ -2612,9 +2616,7 @@ class PokemonEmeraldReader:
             state["map"]["object_events"] = []
         
         # Update map stitcher with current area data
-        print("🗺️ DEBUG: About to call _update_map_stitcher")
         self._update_map_stitcher(tiles, state)
-        print("🗺️ DEBUG: _update_map_stitcher call completed")
         
         # Add stitched map information to state
         stitched_info = self.get_stitched_map_info()
@@ -2624,7 +2626,6 @@ class PokemonEmeraldReader:
     
     def _update_map_stitcher(self, tiles, state):
         """Update the map stitcher with current map data"""
-        print("🗺️ DEBUG: _update_map_stitcher called!")
         try:
             # Initialize map stitcher on first use
             if self._map_stitcher is None:
@@ -2637,6 +2638,8 @@ class PokemonEmeraldReader:
             
             # Get location name from player location
             location_name = state.get("player", {}).get("location", "Unknown")
+            if location_name is None:
+                location_name = "Unknown"
             
             # Get player coordinates
             player_coords = self.read_coordinates()
@@ -2683,10 +2686,15 @@ class PokemonEmeraldReader:
             import traceback
             print(f"🗺️ DEBUG: Traceback: {traceback.format_exc()}")
     
-    def _get_overworld_coordinates(self, map_bank: int, map_number: int, location_name: str) -> Optional[Tuple[int, int]]:
+    def _get_overworld_coordinates(self, map_bank: int, map_number: int, location_name: Optional[str]) -> Optional[Tuple[int, int]]:
         """Get overworld coordinates for a given map bank/number combination"""
         # Map Pokemon Emerald's map bank/number to overworld coordinates
         # This is based on the actual Pokemon Emerald map layout
+        # Is this correct? since each map has local coords?
+        
+        # Safety check for None location_name
+        if location_name is None:
+            location_name = "Unknown"
         
         map_coords = {
             # Bank 0 - Overworld maps
@@ -2750,7 +2758,7 @@ class PokemonEmeraldReader:
             return coords
         
         # For indoor locations (banks 1+), inherit coordinates from parent outdoor area
-        if map_bank > 0:
+        if map_bank > 0 and location_name:
             # Try to infer from location name
             name_upper = location_name.upper()
             

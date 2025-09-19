@@ -711,7 +711,8 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
             'player_local_pos': player_coords,  # Player's position in local map coordinates
             'terrain_areas': map_info.get('stitched_map_info', {}).get('terrain_areas', []) if map_info.get('stitched_map_info') else [],
             'current_area': current_area,
-            'location_name_fallback': location_name  # Direct fallback for location name
+            'location_name_fallback': location_name,  # Direct fallback for location name
+            'object_events': map_info.get('object_events', [])  # Pass NPCs to the stitched map
         }
         
         # Try the new stitching approach
@@ -746,12 +747,17 @@ def _add_local_map_fallback(context_parts, map_info, include_npcs):
         # Get player coordinates
         player_coords = map_info.get('player_coords')
         
-        # Use unified LLM formatter for consistency (no NPCs)
-        map_display = format_map_for_llm(raw_tiles, facing, [], player_coords)
+        # Get NPCs if available and include_npcs is True
+        npcs = []
+        if include_npcs and 'object_events' in map_info:
+            npcs = map_info.get('object_events', [])
+        
+        # Use unified LLM formatter for consistency with NPCs if available
+        map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords)
         context_parts.append(map_display)
         
         # Add dynamic legend based on symbols in the map
-        grid = format_map_grid(raw_tiles, facing, [], player_coords)
+        grid = format_map_grid(raw_tiles, facing, npcs, player_coords)
         legend = generate_dynamic_legend(grid)
         context_parts.append(f"\n{legend}")
 
@@ -889,6 +895,43 @@ def clear_persistent_world_map():
     except Exception as e:
         print(f"🗺️ DEBUG: Failed to clear persistent map file: {e}")
 
+def _is_explorable_edge(x, y, location_grid):
+    """
+    Check if an unexplored coordinate is worth exploring (adjacent to walkable tiles).
+    
+    Args:
+        x, y: Coordinates to check
+        location_grid: Dict of (x,y) -> tile_symbol for known tiles
+        
+    Returns:
+        bool: True if this unexplored area has walkable adjacent tiles
+    """
+    # Check all 4 adjacent directions
+    adjacent_coords = [
+        (x-1, y),  # Left
+        (x+1, y),  # Right
+        (x, y-1),  # Up
+        (x, y+1)   # Down
+    ]
+    
+    for adj_x, adj_y in adjacent_coords:
+        if (adj_x, adj_y) in location_grid:
+            tile_symbol = location_grid[(adj_x, adj_y)]
+            # If adjacent to a walkable tile, this edge is worth exploring
+            if tile_symbol in ['.', '~', 'D', 'S', 'P']:  # Walkable tiles
+                return True
+            # Special case: also explorable if adjacent to directional tiles that point toward this position
+            if tile_symbol in ['↑', '↓', '←', '→', '↗', '↖', '↘', '↙']:
+                # Check if the directional tile points toward this unexplored area
+                if ((tile_symbol == '→' and adj_x < x) or   # Right arrow pointing to this tile
+                    (tile_symbol == '←' and adj_x > x) or   # Left arrow pointing to this tile  
+                    (tile_symbol == '↓' and adj_y < y) or   # Down arrow pointing to this tile
+                    (tile_symbol == '↑' and adj_y > y)):    # Up arrow pointing to this tile
+                    return True
+    
+    return False
+
+
 def _build_stitched_world_map(stitched_data):
     """Build separate persistent maps for each location"""
     
@@ -896,6 +939,9 @@ def _build_stitched_world_map(stitched_data):
     current_map = stitched_data.get('current_local_map')  # This should be the 11x11 map
     current_area = stitched_data.get('current_area', {})
     location_name = current_area.get('name')
+    
+    # Get NPCs if available
+    npcs = stitched_data.get('object_events', [])
     
     # Use fallback location name if current_area has 'Unknown' or empty name
     if not location_name or location_name == 'Unknown':
@@ -967,6 +1013,39 @@ def _build_stitched_world_map(stitched_data):
     if location_name not in PERSISTENT_LOCATION_GRIDS:
         PERSISTENT_LOCATION_GRIDS[location_name] = {}
         print(f"🗺️ DEBUG: Created new map for location: {location_name}")
+        
+        # Check if MapStitcher has data for this location
+        if stitched_data and stitched_data.get('available') and 'current_area' in stitched_data:
+            # Try to populate from MapStitcher's existing data
+            current_map_id = stitched_data.get('current_map_id')
+            if current_map_id:
+                # Look for this map in the stitched data
+                for area_info in stitched_data.get('terrain_areas', []):
+                    if area_info.get('location_name', '').upper() == location_name:
+                        # Found matching area with map data
+                        map_data = area_info.get('map_data', [])
+                        if map_data:
+                            print(f"🗺️ DEBUG: Found {len(map_data)} tiles for {location_name} in MapStitcher")
+                            # Add all tiles from MapStitcher to this location's grid
+                            for tile_row in map_data:
+                                if isinstance(tile_row, list):
+                                    for tile_info in tile_row:
+                                        if len(tile_info) >= 4:
+                                            x, y, tile_id, behavior = tile_info[:4]
+                                            # Convert behavior to symbol
+                                            from pokemon_env.enums import MetatileBehavior
+                                            symbol = '.'  # Default walkable
+                                            if behavior == MetatileBehavior.BLOCKED.value:
+                                                symbol = '#'
+                                            elif behavior == MetatileBehavior.WATER.value:
+                                                symbol = '~'
+                                            elif behavior == MetatileBehavior.GRASS.value:
+                                                symbol = '^'
+                                            elif behavior == MetatileBehavior.DOOR.value or behavior == MetatileBehavior.WARP.value:
+                                                symbol = 'D'
+                                            PERSISTENT_LOCATION_GRIDS[location_name][(x, y)] = symbol
+                            print(f"🗺️ DEBUG: Populated {len(PERSISTENT_LOCATION_GRIDS[location_name])} tiles from MapStitcher")
+                        break
     
     current_location_grid = PERSISTENT_LOCATION_GRIDS[location_name]
     
@@ -1087,37 +1166,68 @@ def _build_stitched_world_map(stitched_data):
             # Check if this is an edge position for potential portals
             is_edge = (x == min_x or x == max_x or y == min_y or y == max_y)
             
+            # Check for NPCs at this position
+            npc_at_pos = None
+            for npc in npcs:
+                npc_x = npc.get('current_x', npc.get('x'))
+                npc_y = npc.get('current_y', npc.get('y'))
+                if npc_x == x and npc_y == y:
+                    npc_at_pos = npc
+                    break
+            
             if (x, y) == player_display_pos:
                 row += "P"
+            elif npc_at_pos:
+                # Show NPC marker
+                row += "N"
             elif (x, y) in current_location_grid:
                 tile = current_location_grid[(x, y)]
                 # Check if this is an edge tile that could be a portal
-                if is_edge and tile == '.':
+                if is_edge and tile == '.' and connections:
                     # Mark portals based on position and connections
+                    portal_added = False
                     for conn in connections:
                         direction = conn.get('direction', '').lower()
-                        if direction == 'east' and x == max_x:
-                            row += "→"
-                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
-                            break
-                        elif direction == 'west' and x == min_x:
-                            row += "←"
-                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
-                            break
-                        elif direction == 'north' and y == min_y:
-                            row += "↑"
-                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
-                            break
-                        elif direction == 'south' and y == max_y:
-                            row += "↓"
-                            portal_positions[(x, y)] = conn.get('name', 'Unknown')
-                            break
-                    else:
+                        conn_name = conn.get('name', '')
+                        # Only add portal if connection has valid name and direction
+                        if direction and conn_name and conn_name not in ['Unknown', 'None', '']:
+                            if direction == 'east' and x == max_x:
+                                row += "→"
+                                portal_positions[(x, y)] = conn_name
+                                portal_added = True
+                                break
+                            elif direction == 'west' and x == min_x:
+                                row += "←"
+                                portal_positions[(x, y)] = conn_name
+                                portal_added = True
+                                break
+                            elif direction == 'north' and y == min_y:
+                                row += "↑"
+                                portal_positions[(x, y)] = conn_name
+                                portal_added = True
+                                break
+                            elif direction == 'south' and y == max_y:
+                                row += "↓"
+                                portal_positions[(x, y)] = conn_name
+                                portal_added = True
+                                break
+                    
+                    if not portal_added:
                         row += tile
                 else:
                     row += tile
             else:
-                row += "?"  # Unexplored area in this location
+                # Check if this is at the edge of the explored area
+                is_map_edge = (x == min_x or x == max_x or y == min_y or y == max_y)
+                
+                if is_map_edge:
+                    # At the edge of explored area - show ? for all unexplored edge tiles
+                    row += "?"
+                elif _is_explorable_edge(x, y, current_location_grid):
+                    # Inside the map but adjacent to walkable tiles
+                    row += "?"  # Explorable unexplored area
+                else:
+                    row += " "   # Non-explorable or blocked adjacent areas
         
         # Add spacing for readability
         spaced_row = " ".join(row)
@@ -1126,12 +1236,14 @@ def _build_stitched_world_map(stitched_data):
     # Add legend
     legend_lines = ["", "Legend:"]
     legend_lines.append("  Movement: P=Player")
+    if npcs:
+        legend_lines.append("            N=NPC/Trainer")
     
     # Check what terrain symbols we have visible in the full explored area
     visible_symbols = set(current_location_grid.values())
     
     terrain_items = []
-    for symbol in [".", "#", "~", "W", "D", "S"]:
+    for symbol in [".", "#", "~", "W", "D", "S", "?", "^", "!"]:
         if symbol in visible_symbols:
             if symbol == ".":
                 terrain_items.append(".=Walkable path")
@@ -1145,6 +1257,12 @@ def _build_stitched_world_map(stitched_data):
                 terrain_items.append("D=Door")
             elif symbol == "S":
                 terrain_items.append("S=Stairs/Warp")
+            elif symbol == "?":
+                terrain_items.append("?=Unknown")
+            elif symbol == "^":
+                terrain_items.append("^=Grass")
+            elif symbol == "!":
+                terrain_items.append("!=Ledge")
     
     if terrain_items:
         legend_lines.append(f"  Terrain: {', '.join(terrain_items)}")
@@ -1166,7 +1284,9 @@ def _build_stitched_world_map(stitched_data):
                 unique_portals["↓"] = dest
         
         for symbol, dest in unique_portals.items():
-            portal_items.append(f"{symbol}=To {dest}")
+            # Only show portals with valid destinations (not None, Unknown, or empty)
+            if dest and dest not in ['None', 'Unknown', '']:
+                portal_items.append(f"{symbol}=To {dest}")
     
     if portal_items:
         legend_lines.append(f"  Portals: {', '.join(portal_items)}")
@@ -1297,6 +1417,372 @@ def get_movement_options(state_data):
             movement_options[direction] = "Out of bounds"
     
     return movement_options
+
+
+def get_movement_preview(state_data):
+    """
+    Get detailed preview of what happens with each directional movement.
+    Shows new coordinates and tile information for each direction.
+    
+    Args:
+        state_data: Complete game state data
+        
+    Returns:
+        dict: Direction -> preview info mapping
+    """
+    # Get current player position
+    player_data = state_data.get('player', {})
+    player_position = _get_player_position(player_data)
+    
+    if not player_position or 'x' not in player_position or 'y' not in player_position:
+        return {}
+    
+    current_x = int(player_position['x'])
+    current_y = int(player_position['y'])
+    
+    # Get map and tile data
+    map_info = state_data.get('map', {})
+    raw_tiles = map_info.get('tiles', [])
+    
+    if not raw_tiles:
+        return {}
+    
+    directions = {
+        'UP': (0, -1),
+        'DOWN': (0, 1), 
+        'LEFT': (-1, 0),
+        'RIGHT': (1, 0)
+    }
+    
+    movement_preview = {}
+    
+    # Player is at center of the 15x15 grid
+    center_x = len(raw_tiles[0]) // 2 if raw_tiles and raw_tiles[0] else 7
+    center_y = len(raw_tiles) // 2 if raw_tiles else 7
+    
+    for direction, (dx, dy) in directions.items():
+        # Calculate new world coordinates
+        new_world_x = current_x + dx
+        new_world_y = current_y + dy
+        
+        # Calculate grid position in the tile array
+        grid_x = center_x + dx
+        grid_y = center_y + dy
+        
+        preview_info = {
+            'new_coords': (new_world_x, new_world_y),
+            'blocked': True,
+            'tile_symbol': '#',
+            'tile_description': 'BLOCKED - Out of bounds'
+        }
+        
+        # Check if the target position is within the grid bounds
+        if (0 <= grid_y < len(raw_tiles) and 
+            0 <= grid_x < len(raw_tiles[grid_y]) and
+            raw_tiles[grid_y]):
+            
+            try:
+                # Get the tile at the target position
+                target_tile = raw_tiles[grid_y][grid_x]
+                
+                # Get tile symbol and check if walkable
+                tile_symbol = format_tile_to_symbol(target_tile)
+                
+                # Determine if movement is blocked
+                is_blocked = tile_symbol in ['#', 'W']  # Walls and water block movement
+                
+                # Special handling for jump ledges - they're only walkable in their direction
+                if tile_symbol in ['↓', '↑', '←', '→', '↗', '↖', '↘', '↙']:
+                    # Map directions to tile symbols
+                    ledge_direction_map = {
+                        'UP': '↑',
+                        'DOWN': '↓', 
+                        'LEFT': '←',
+                        'RIGHT': '→'
+                    }
+                    
+                    # Only allow movement if we're going in the direction the ledge points
+                    if direction in ledge_direction_map:
+                        allowed_symbol = ledge_direction_map[direction]
+                        if tile_symbol != allowed_symbol:
+                            is_blocked = True  # Block movement in wrong direction
+                    else:
+                        is_blocked = True  # Block diagonal movements for basic directional ledges
+                
+                # Get tile description
+                if len(target_tile) >= 2:
+                    tile_id, behavior = target_tile[:2]
+                    
+                    # Convert behavior to readable description
+                    if hasattr(behavior, 'name'):
+                        behavior_name = behavior.name
+                    elif isinstance(behavior, int):
+                        try:
+                            from pokemon_env.enums import MetatileBehavior
+                            behavior_enum = MetatileBehavior(behavior)
+                            behavior_name = behavior_enum.name
+                        except (ValueError, ImportError):
+                            behavior_name = f"BEHAVIOR_{behavior}"
+                    else:
+                        behavior_name = str(behavior)
+                    
+                    # Create human-readable description
+                    if tile_symbol == '.':
+                        tile_description = f"Walkable path (ID: {tile_id})"
+                    elif tile_symbol == '#':
+                        tile_description = f"BLOCKED - Wall/Obstacle (ID: {tile_id}, {behavior_name})"
+                    elif tile_symbol == 'W':
+                        tile_description = f"BLOCKED - Water (need Surf) (ID: {tile_id})"
+                    elif tile_symbol == '~':
+                        tile_description = f"Walkable - Tall grass (wild encounters) (ID: {tile_id})"
+                    elif tile_symbol == 'D':
+                        tile_description = f"Walkable - Door/Entrance (ID: {tile_id})"
+                    elif tile_symbol == 'S':
+                        tile_description = f"Walkable - Stairs/Warp (ID: {tile_id})"
+                    elif tile_symbol in ['↓', '↑', '←', '→', '↗', '↖', '↘', '↙']:
+                        # Ledge description based on whether movement is allowed
+                        if is_blocked:
+                            tile_description = f"BLOCKED - Jump ledge {tile_symbol} (wrong direction) (ID: {tile_id})"
+                        else:
+                            tile_description = f"Walkable - Jump ledge {tile_symbol} (correct direction) (ID: {tile_id})"
+                    else:
+                        tile_description = f"Walkable - {behavior_name} (ID: {tile_id})"
+                else:
+                    tile_description = "Unknown tile"
+                
+                preview_info.update({
+                    'blocked': is_blocked,
+                    'tile_symbol': tile_symbol,
+                    'tile_description': tile_description
+                })
+                
+            except (IndexError, TypeError) as e:
+                logger.warning(f"Error analyzing tile at {grid_x}, {grid_y}: {e}")
+                # Keep default blocked values
+                pass
+        
+        movement_preview[direction] = preview_info
+    
+    return movement_preview
+
+
+def format_movement_preview_for_llm(state_data):
+    """
+    Format movement preview in a concise format suitable for LLM prompts.
+    
+    Args:
+        state_data: Complete game state data
+        
+    Returns:
+        str: Formatted movement preview text
+    """
+    preview = get_movement_preview(state_data)
+    
+    if not preview:
+        return "Movement preview: Not available"
+    
+    lines = ["MOVEMENT PREVIEW:"]
+    
+    for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+        if direction in preview:
+            info = preview[direction]
+            new_x, new_y = info['new_coords']
+            symbol = info['tile_symbol']
+            status = "BLOCKED" if info['blocked'] else "WALKABLE"
+            
+            lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
+            # Add brief description for tiles
+            desc = info['tile_description']
+            if info['blocked']:
+                # Special messages for blocked tiles
+                if 'Jump ledge' in desc and 'wrong direction' in desc:
+                    lines[-1] += " - Can only jump in arrow direction"
+                elif 'Water' in desc:
+                    lines[-1] += " - Need Surf to cross"
+                elif 'Wall' in desc or 'Obstacle' in desc:
+                    lines[-1] += " - Impassable"
+            else:
+                # Add brief description for walkable tiles
+                if 'Tall grass' in desc:
+                    lines[-1] += " - Tall grass (wild encounters)"
+                elif 'Door' in desc:
+                    lines[-1] += " - Door/Entrance"
+                elif 'Stairs' in desc or 'Warp' in desc:
+                    lines[-1] += " - Stairs/Warp"
+                elif 'Jump ledge' in desc and 'correct direction' in desc:
+                    lines[-1] += " - Jump ledge (can jump this way)"
+    
+    return "\n".join(lines)
+
+
+# Pathfinding functions removed - LLM handles pathfinding decisions directly
+
+
+def detect_npcs_from_frame(game_state):
+    """
+    Detect NPCs in the visual frame that might not be shown on the map.
+    
+    Args:
+        game_state: Complete game state data with 'frame' key
+        
+    Returns:
+        list: List of detected NPC positions relative to player
+    """
+    try:
+        frame = game_state.get('frame')
+        if frame is None:
+            return []
+        
+        # Convert PIL Image to numpy array if needed
+        import numpy as np
+        if hasattr(frame, 'save'):  # PIL Image
+            frame_array = np.array(frame)
+        elif hasattr(frame, 'shape'):  # Already numpy array
+            frame_array = frame
+        else:
+            return []
+        
+        # GBA resolution is 240x160
+        height, width = frame_array.shape[:2]
+        
+        # Player is typically at center of screen
+        player_center_x = width // 2
+        player_center_y = height // 2
+        
+        # Look for NPC-like sprites in the frame
+        # NPCs in Pokemon are typically small moving sprites
+        # This is a simple heuristic - could be improved with more sophisticated detection
+        
+        detected_npcs = []
+        
+        # Define regions to check around the player (exclude player position)
+        # Each region is 16x16 pixels (typical sprite size)
+        check_regions = [
+            # Adjacent tiles (up, down, left, right)
+            (player_center_x - 16, player_center_y - 16, 'UP'),
+            (player_center_x - 16, player_center_y + 16, 'DOWN'),
+            (player_center_x - 32, player_center_y, 'LEFT'),
+            (player_center_x + 16, player_center_y, 'RIGHT'),
+            # Diagonal positions
+            (player_center_x - 16, player_center_y - 16, 'UP_LEFT'),
+            (player_center_x + 16, player_center_y - 16, 'UP_RIGHT'),
+            (player_center_x - 16, player_center_y + 16, 'DOWN_LEFT'),
+            (player_center_x + 16, player_center_y + 16, 'DOWN_RIGHT'),
+        ]
+        
+        for region_x, region_y, direction in check_regions:
+            # Check bounds
+            if (region_x < 0 or region_y < 0 or 
+                region_x + 16 > width or region_y + 16 > height):
+                continue
+            
+            # Extract region
+            region = frame_array[region_y:region_y+16, region_x:region_x+16]
+            
+            # Simple NPC detection heuristic
+            # NPCs typically have:
+            # 1. Distinct colors different from background
+            # 2. Vertical symmetry (humanoid shape)
+            # 3. Movement patterns
+            
+            if len(region.shape) == 3:  # Color image
+                # Calculate color variance in the region
+                color_variance = np.var(region.reshape(-1, region.shape[-1]), axis=0).sum()
+                
+                # Check for human-like colors (skin tones, clothing)
+                # This is very basic - real NPC detection would be more sophisticated
+                if color_variance > 500:  # Lower threshold for sprite-like color patterns
+                    # Calculate relative position from player
+                    if direction == 'UP':
+                        relative_pos = (0, -1)
+                    elif direction == 'DOWN':
+                        relative_pos = (0, 1)
+                    elif direction == 'LEFT':
+                        relative_pos = (-1, 0)
+                    elif direction == 'RIGHT':
+                        relative_pos = (1, 0)
+                    elif direction == 'UP_LEFT':
+                        relative_pos = (-1, -1)
+                    elif direction == 'UP_RIGHT':
+                        relative_pos = (1, -1)
+                    elif direction == 'DOWN_LEFT':
+                        relative_pos = (-1, 1)
+                    elif direction == 'DOWN_RIGHT':
+                        relative_pos = (1, 1)
+                    else:
+                        continue
+                    
+                    detected_npcs.append({
+                        'relative_position': relative_pos,
+                        'direction': direction,
+                        'confidence': min(color_variance / 5000, 1.0)  # Normalize confidence
+                    })
+        
+        return detected_npcs
+        
+    except Exception as e:
+        logger.warning(f"Error detecting NPCs from frame: {e}")
+        return []
+
+
+def get_npc_avoidance_guidance(game_state):
+    """
+    Generate guidance for avoiding NPCs detected in the visual frame.
+    
+    Args:
+        game_state: Complete game state data
+        
+    Returns:
+        str: Formatted NPC avoidance guidance
+    """
+    detected_npcs = detect_npcs_from_frame(game_state)
+    
+    if not detected_npcs:
+        return ""
+    
+    guidance = ["🚶 NPC AVOIDANCE:"]
+    
+    # Get movement preview to cross-reference
+    preview = get_movement_preview(game_state)
+    
+    blocked_directions = []
+    for npc in detected_npcs:
+        rel_x, rel_y = npc['relative_position']
+        confidence = npc.get('confidence', 0.5)
+        
+        # Determine which movement direction would hit this NPC
+        if rel_x == 0 and rel_y == -1:  # NPC is above
+            blocked_directions.append(('UP', confidence))
+        elif rel_x == 0 and rel_y == 1:   # NPC is below
+            blocked_directions.append(('DOWN', confidence))
+        elif rel_x == -1 and rel_y == 0:  # NPC is left
+            blocked_directions.append(('LEFT', confidence))
+        elif rel_x == 1 and rel_y == 0:   # NPC is right
+            blocked_directions.append(('RIGHT', confidence))
+    
+    if blocked_directions:
+        guidance.append("❌ AVOID THESE MOVES (NPCs detected):")
+        for direction, confidence in blocked_directions:
+            conf_text = "high" if confidence > 0.7 else "medium" if confidence > 0.4 else "low"
+            guidance.append(f"  {direction:5}: NPC detected ({conf_text} confidence)")
+        
+        # Suggest safe alternatives
+        safe_directions = []
+        for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+            if direction in preview and not preview[direction]['blocked']:
+                # Check if this direction has NPC conflicts
+                has_npc = any(d == direction for d, _ in blocked_directions)
+                if not has_npc:
+                    safe_directions.append(direction)
+        
+        if safe_directions:
+            guidance.append("✅ SAFE ALTERNATIVES:")
+            for direction in safe_directions:
+                guidance.append(f"  {direction:5}: Clear of NPCs")
+        else:
+            guidance.append("⚠️  NO SAFE MOVES - Wait or try interacting (A/B)")
+    
+    return "\n".join(guidance)
 
 def get_party_health_summary(state_data):
     """

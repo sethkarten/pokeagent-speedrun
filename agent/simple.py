@@ -38,6 +38,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 
+from utils.state_formatter import format_state_for_llm, format_movement_preview_for_llm
+
 logger = logging.getLogger(__name__)
 
 # Configurable parameters for history tracking
@@ -98,6 +100,8 @@ class SimpleAgentState:
     step_counter: int = 0
     objectives: List[Objective] = field(default_factory=list)
     objectives_updated: bool = False
+    failed_movements: Dict[str, List[str]] = field(default_factory=dict)  # coord_key -> [failed_directions]
+    npc_interactions: Dict[str, str] = field(default_factory=dict)  # coord_key -> interaction_notes
     
     def __post_init__(self):
         """Initialize deques with current default values"""
@@ -466,7 +470,8 @@ class SimpleAgent:
     def get_stuck_warning(self, coords: Optional[Tuple[int, int]], context: str, game_state: Dict[str, Any] = None) -> str:
         """Generate warning text if stuck pattern detected"""
         if self.detect_stuck_pattern(coords, context, game_state):
-            return "\n⚠️ WARNING: You appear to be stuck at this location/context. Try a different approach!"
+            return "\n⚠️ WARNING: You appear to be stuck at this location/context. Try a different approach!\n" \
+                   "💡 TIP: If you try an action like RIGHT but coordinates don't change from (X,Y) to (X+1,Y), there's likely an obstacle. Check the map around player P for walls (#) or other barriers blocking your path."
         return ""
     
     def create_game_state_summary(self, game_state: Dict[str, Any]) -> str:
@@ -548,8 +553,6 @@ class SimpleAgent:
                 return "WAIT"
         
         try:
-            from utils.state_formatter import format_state_for_llm
-            
             # Increment step counter
             self.state.step_counter += 1
             
@@ -560,6 +563,14 @@ class SimpleAgent:
             
             # Format the current state for LLM
             formatted_state = format_state_for_llm(game_state)
+            
+            # Get movement preview only
+            movement_preview = format_movement_preview_for_llm(game_state)
+            
+            # Get movement memory for the current area
+            movement_memory = ""
+            if coords:
+                movement_memory = self.get_area_movement_memory(coords)
             
             # Check for objective completion first
             self.check_objective_completion(game_state)
@@ -581,17 +592,21 @@ class SimpleAgent:
             prompt = f"""You are playing Pokemon Emerald. Progress quickly to the milestones by balancing exploration and exploitation of things you know. 
             Based on the current game frame and state information, think through your next move and choose the best button action.
 
+RECENT ACTION HISTORY (last {self.actions_display_count} actions):
+{recent_actions_str}
+
+LOCATION/CONTEXT HISTORY (last {self.history_display_count} steps):
+{history_summary}
+
 CURRENT OBJECTIVES:
 {objectives_summary}
 
 CURRENT GAME STATE:
 {formatted_state}
 
-RECENT ACTION HISTORY (last {self.actions_display_count} actions):
-{recent_actions_str}
+{movement_preview}
 
-LOCATION/CONTEXT HISTORY (last {self.history_display_count} steps):
-{history_summary}
+{movement_memory}
 
 {stuck_warning}
 
@@ -600,7 +615,8 @@ Available actions: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT
 IMPORTANT: Please think step by step before choosing your action. Structure your response like this:
 
 ANALYSIS:
-[Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing?]
+[Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing? 
+IMPORTANT: Look carefully at the game image for NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue.]
 
 OBJECTIVES:
 [Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
@@ -609,19 +625,50 @@ OBJECTIVES:
 - NOTE: Do NOT try to complete storyline objectives (story_*) - they auto-complete when milestones are reached]
 
 PLAN:
-[Think about your immediate goal - what do you want to accomplish in the next few actions? Consider your current objectives and recent history.]
+[Think about your immediate goal - what do you want to accomplish in the next few actions? Consider your current objectives and recent history. 
+Check MOVEMENT MEMORY for areas you've had trouble with before and plan your route accordingly.]
 
 REASONING:
-[Explain why you're choosing this specific action or sequence of actions. Consider how it helps with your objectives.]
+[Explain why you're choosing this specific action. Reference the MOVEMENT PREVIEW and MOVEMENT MEMORY sections. Check the visual frame for NPCs before moving. If you see NPCs in the image, avoid walking into them. Consider any failed movements or known obstacles from your memory.]
 
 ACTION:
-[Your final action choice - either a single action like 'A' or 'RIGHT', or multiple actions like 'UP, UP, RIGHT, A']
+[Your final action choice - PREFER SINGLE ACTIONS like 'RIGHT' or 'A'. Only use multiple actions like 'UP, UP, RIGHT' if you've verified each step is WALKABLE in the movement preview and map.]
 
-You can chain multiple moves together (max 10 actions) for repetitive actions like walking.
-Be decisive and avoid getting stuck. If you notice you're repeating the same actions in the same location, try something different!
+🚨 PATHFINDING RULES:
+1. **SINGLE STEP FIRST**: Always prefer single actions (UP, DOWN, LEFT, RIGHT, A, B) unless you're 100% certain about multi-step paths
+2. **CHECK EVERY STEP**: Before chaining movements, verify EACH step in your sequence using the MOVEMENT PREVIEW and map
+3. **BLOCKED = STOP**: If ANY step shows BLOCKED in the movement preview, the entire sequence will fail
+4. **NO BLIND CHAINS**: Never chain movements through areas you can't see or verify as walkable
+5. **PERFORM PATHFINDING**: Find a path to a target location (X',Y') from the player position (X,Y) on the map. DO NOT TRAVERSE THROUGH OBSTACLES (#) -- it will not work.
+
+💡 SMART MOVEMENT STRATEGY:
+- Use MOVEMENT PREVIEW to see exactly what happens with each direction
+- If your target requires multiple steps, plan ONE step at a time
+- Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
+- When stuck, try a different direction rather than repeating the same blocked move
+
+EXAMPLE - DON'T DO THIS:
+❌ "I want to go right 5 tiles" → "RIGHT, RIGHT, RIGHT, RIGHT, RIGHT" (may hit wall on step 2!)
+
+EXAMPLE - DO THIS INSTEAD:
+✅ Check movement preview → "RIGHT shows (X+1,Y) WALKABLE" → "RIGHT" (single safe step)
+✅ Next turn, check again → "RIGHT shows (X+2,Y) WALKABLE" → "RIGHT" (another safe step)
+
+💡 SMART NAVIGATION:
+- Check the VISUAL FRAME for NPCs (people/trainers) before moving - they're not always on the map!
+- Review MOVEMENT MEMORY for locations where you've failed to move before
+- Only explore areas marked with ? (these are confirmed explorable edges)
+- Avoid areas surrounded by # (walls) - they're fully blocked
+- Use doors (D), stairs (S), or walk around obstacles when pathfinding suggests it
+
+💡 NPC & OBSTACLE HANDLING:
+- If you see NPCs in the image, avoid walking into them or interact with A/B if needed
+- If a movement fails (coordinates don't change), that location likely has an NPC or obstacle
+- Use your MOVEMENT MEMORY to remember problem areas and plan around them
+- NPCs can trigger battles or dialogue, which may be useful for objectives
 
 
-Context: {context} | Coords: {coords} | Map: {map_id}"""
+Context: {context} | Coords: {coords} """
             
             # Print complete prompt to terminal for debugging
             print("\n" + "="*120)
@@ -654,6 +701,20 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
             # Extract action(s) from structured response
             actions, reasoning = self._parse_structured_response(response)
             
+            # Check for failed movement by comparing previous coordinates
+            if len(self.state.history) > 0:
+                prev_coords = self.state.history[-1].player_coords
+                if prev_coords and coords:
+                    # If coordinates didn't change and we attempted a movement, record it as failed
+                    if (prev_coords == coords and 
+                        isinstance(actions, list) and len(actions) > 0 and 
+                        actions[0] in ['UP', 'DOWN', 'LEFT', 'RIGHT']):
+                        self.record_failed_movement(coords, actions[0], "movement_blocked")
+                    elif (prev_coords == coords and 
+                          isinstance(actions, str) and 
+                          actions in ['UP', 'DOWN', 'LEFT', 'RIGHT']):
+                        self.record_failed_movement(coords, actions, "movement_blocked")
+
             # Record this step in history with reasoning
             game_state_summary = self.create_game_state_summary(game_state)
             action_with_reasoning = f"{actions} | Reasoning: {reasoning}" if reasoning else str(actions)
@@ -1136,6 +1197,65 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
             traceback.print_exc()
             return False
 
+    def record_failed_movement(self, coords: Tuple[int, int], direction: str, reason: str = "blocked"):
+        """Record a failed movement attempt for future reference"""
+        coord_key = f"{coords[0]},{coords[1]}"
+        if coord_key not in self.state.failed_movements:
+            self.state.failed_movements[coord_key] = []
+        
+        failed_entry = f"{direction}:{reason}"
+        if failed_entry not in self.state.failed_movements[coord_key]:
+            self.state.failed_movements[coord_key].append(failed_entry)
+            logger.info(f"Recorded failed movement: {coord_key} -> {direction} ({reason})")
+    
+    def record_npc_interaction(self, coords: Tuple[int, int], interaction_type: str, notes: str = ""):
+        """Record an NPC interaction for future reference"""
+        coord_key = f"{coords[0]},{coords[1]}"
+        interaction_info = f"{interaction_type}: {notes}" if notes else interaction_type
+        self.state.npc_interactions[coord_key] = interaction_info
+        logger.info(f"Recorded NPC interaction: {coord_key} -> {interaction_info}")
+    
+    def get_movement_memory(self, coords: Tuple[int, int]) -> str:
+        """Get memory about failed movements and interactions at specific coordinates"""
+        coord_key = f"{coords[0]},{coords[1]}"
+        memory_parts = []
+        
+        # Check for failed movements
+        if coord_key in self.state.failed_movements:
+            failed_list = self.state.failed_movements[coord_key]
+            memory_parts.append(f"Failed moves: {', '.join(failed_list)}")
+        
+        # Check for NPC interactions
+        if coord_key in self.state.npc_interactions:
+            interaction = self.state.npc_interactions[coord_key]
+            memory_parts.append(f"NPC: {interaction}")
+        
+        return " | ".join(memory_parts) if memory_parts else ""
+    
+    def get_area_movement_memory(self, center_coords: Tuple[int, int], radius: int = 5) -> str:
+        """Get movement memory for the area around the player"""
+        cx, cy = center_coords
+        memory_lines = []
+        
+        # Check nearby coordinates for failed movements or NPC interactions
+        nearby_memories = []
+        for dx in range(-radius, radius + 1):
+            for dy in range(-radius, radius + 1):
+                if dx == 0 and dy == 0:
+                    continue  # Skip current position
+                
+                check_coords = (cx + dx, cy + dy)
+                memory = self.get_movement_memory(check_coords)
+                if memory:
+                    nearby_memories.append(f"({check_coords[0]},{check_coords[1]}): {memory}")
+        
+        if nearby_memories:
+            memory_lines.append("🧠 MOVEMENT MEMORY (nearby area):")
+            for memory in nearby_memories[:5]:  # Limit to 5 most relevant
+                memory_lines.append(f"  {memory}")
+        
+        return "\n".join(memory_lines)
+
     def get_history_stats(self) -> Dict[str, int]:
         """Get current history tracking statistics"""
         return {
@@ -1146,7 +1266,9 @@ Context: {context} | Coords: {coords} | Map: {map_id}"""
             "history_display_count": self.history_display_count,
             "actions_display_count": self.actions_display_count,
             "objectives_count": len(self.state.objectives),
-            "step_counter": self.state.step_counter
+            "step_counter": self.state.step_counter,
+            "failed_movements": len(self.state.failed_movements),
+            "npc_interactions": len(self.state.npc_interactions)
         }
 
 # Global simple agent instance for backward compatibility with existing multiprocess code
