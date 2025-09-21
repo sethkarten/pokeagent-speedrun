@@ -13,6 +13,7 @@ from typing import Dict, List, Tuple, Optional, Set, Any
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from pokemon_env.enums import MapLocation, MetatileBehavior
+from utils import state_formatter
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +119,6 @@ class MapStitcher:
             logger.debug(f"Skipping map 0 (startup state)")
             return
         
-        # Detect warp tiles in the map data
-        warp_tiles = self._detect_warp_tiles(map_data)
-        
         if map_id in self.map_areas:
             # Update existing area
             area = self.map_areas[map_id]
@@ -138,11 +136,7 @@ class MapStitcher:
                     area.location_name = location_name
             area.map_data = map_data
             area.player_last_position = player_pos
-            area.warp_tiles = warp_tiles
-            area.visited_count += 1
-            area.last_seen = timestamp
-            # Keep overworld_coords as None to indicate separate maps
-            area.overworld_coords = None
+            # Remove deprecated fields - keep it simple
             logger.debug(f"Updated map area {area.location_name} (ID: {map_id:04X})")
         else:
             # Create new area without global coordinates
@@ -150,7 +144,6 @@ class MapStitcher:
             # Try to resolve location name from map ID if empty
             if not location_name or not location_name.strip():
                 # Import and use the location mapping
-                from pokemon_env.enums import MapLocation
                 try:
                     map_enum = MapLocation(map_id)
                     final_location_name = map_enum.name.replace('_', ' ').title()
@@ -167,20 +160,29 @@ class MapStitcher:
                 location_name=final_location_name,
                 map_data=map_data,
                 player_last_position=player_pos,
-                warp_tiles=warp_tiles,
-                boundaries=boundaries,
+                warp_tiles=[],  # Deprecated - not needed
+                boundaries={"north": 0, "south": 10, "west": 0, "east": 10},  # Simple default
                 visited_count=1,
                 first_seen=timestamp,
                 last_seen=timestamp,
-                overworld_coords=None  # Each location is separate
+                overworld_coords=None  # Not needed
             )
             self.map_areas[map_id] = area
             logger.info(f"Added new map area: {final_location_name} (ID: {map_id:04X}) as separate location")
             
         # Check for area transitions and potential warp connections
+        print(f"🔍 Transition check: last_map_id={self.last_map_id}, current_map_id={map_id}, last_pos={self.last_position}, current_pos={player_pos}")
         if self.last_map_id is not None and self.last_map_id != map_id:
+            logger.info(f"🔄 Map transition detected! {self.last_map_id} -> {map_id}")
+            
+            # Use the last position stored in the previous map area for the from_pos
+            # This is the actual exit point from the previous map
+            from_area = self.map_areas.get(self.last_map_id)
+            from_pos = from_area.player_last_position if from_area else self.last_position
+            
+            logger.info(f"🔄 Warp coordinates: from_pos={from_pos} (exit from map {self.last_map_id}), to_pos={player_pos} (entry to map {map_id})")
             self._detect_warp_connection(self.last_map_id, map_id, 
-                                       self.last_position, player_pos, timestamp)
+                                       from_pos, player_pos, timestamp)
             
             # Try to resolve any unknown location names after adding connections  
             # Note: resolve_unknown_location_names() can be called with memory_reader from calling code
@@ -188,8 +190,10 @@ class MapStitcher:
                 logger.info("Resolved unknown location names after area transition")
                 # Save will be handled by the calling code
         
-        self.last_map_id = map_id
-        self.last_position = player_pos
+        # Update tracking variables for next iteration
+        if self.last_position != player_pos:
+            self.last_map_id = map_id
+            self.last_position = player_pos
     
     def _detect_warp_tiles(self, map_data: List[List[Tuple]]) -> List[Tuple[int, int, str]]:
         """Detect tiles that can be warps (doors, stairs, exits)"""
@@ -264,6 +268,7 @@ class MapStitcher:
             warp_type = near_warp
         
         # Create the connection
+        print(f"🔄 Creating warp connection: {from_pos} -> {to_pos} (maps {from_map_id} -> {to_map_id})")
         connection = WarpConnection(
             from_map_id=from_map_id,
             to_map_id=to_map_id,
@@ -276,7 +281,7 @@ class MapStitcher:
         # Check if this connection already exists
         if not self._connection_exists(connection):
             self.warp_connections.append(connection)
-            logger.info(f"Added warp connection: {from_area.location_name} -> {to_area.location_name} "
+            print(f"Added warp connection: {from_area.location_name} -> {to_area.location_name} "
                        f"({warp_type}, {direction})")
             
             # Auto-add reverse connection for two-way warps
@@ -374,36 +379,6 @@ class MapStitcher:
             except Exception as e:
                 logger.debug(f"Could not resolve current location: {e}")
         
-        # For now, we keep a basic approach for some common areas if no memory reader
-        # In the future, we could implement a system to revisit areas and get their names
-        if memory_reader is None and resolved_count == 0:
-            # Basic fallback for common map IDs - only the most essential ones
-            # NOTE: Be careful with map ID mappings - check pokemon_env/enums.py for correct values
-            basic_mappings = {
-                0x0009: "LITTLEROOT TOWN",                 # Map 9 - actual outdoor town map
-                0x0011: "ROUTE 102",                       # Map 17 - ROUTE_102 = 0x11
-                0x0012: "ROUTE 103",                       # Map 18 - ROUTE_103 = 0x12
-                0x0101: "LITTLEROOT TOWN BRENDANS HOUSE 2F", # Map 257 - LITTLEROOT_TOWN_BRENDANS_HOUSE_2F = 0x101
-                0x0102: "LITTLEROOT TOWN MAYS HOUSE 1F",   # Map 258 - LITTLEROOT_TOWN_MAYS_HOUSE_1F = 0x102
-                0x0103: "LITTLEROOT TOWN MAYS HOUSE 2F",   # Map 259 - LITTLEROOT_TOWN_MAYS_HOUSE_2F = 0x103  
-            }
-            
-            for map_id, area in self.map_areas.items():
-                if map_id in basic_mappings:
-                    correct_name = basic_mappings[map_id]
-                    if area.location_name == "Unknown":
-                        # Resolve unknown names
-                        old_name = area.location_name
-                        area.location_name = correct_name
-                        logger.info(f"Resolved location name for map {map_id:04X}: '{old_name}' -> '{area.location_name}'")
-                        resolved_count += 1
-                    elif area.location_name != correct_name:
-                        # Fix incorrect existing names (e.g., house interiors mislabeled as routes)
-                        old_name = area.location_name
-                        area.location_name = correct_name
-                        logger.info(f"Corrected location name for map {map_id:04X}: '{old_name}' -> '{area.location_name}'")
-                        resolved_count += 1
-        
         if resolved_count > 0:
             logger.info(f"Resolved {resolved_count} unknown location names")
             return True
@@ -454,57 +429,135 @@ class MapStitcher:
         
         return layout
     
+    def get_location_connections(self):
+        """Convert warp_connections to location_connections format for display"""
+        location_connections = {}
+        
+        # Process each warp connection
+        for conn in self.warp_connections:
+            from_area = self.map_areas.get(conn.from_map_id)
+            to_area = self.map_areas.get(conn.to_map_id)
+            
+            if from_area and to_area:
+                from_location = from_area.location_name
+                to_location = to_area.location_name
+                
+                # Add forward connection
+                if from_location not in location_connections:
+                    location_connections[from_location] = []
+                
+                # Check if connection already exists
+                exists = False
+                for existing in location_connections[from_location]:
+                    if existing[0] == to_location:
+                        exists = True
+                        break
+                
+                if not exists:
+                    # Use the actual last positions from map areas, not the warp spawn point
+                    # This gives more useful information about where transitions happen
+                    from_pos = list(conn.from_position) if conn.from_position else [1, 1]
+                    to_pos = list(to_area.player_last_position) if to_area.player_last_position else list(conn.to_position)
+                    
+                    location_connections[from_location].append([
+                        to_location,
+                        from_pos,
+                        to_pos
+                    ])
+        
+        return location_connections
+    
+    def get_location_grid(self, location_name: str, simplified: bool = True) -> Dict[Tuple[int, int], str]:
+        """Get a simplified grid representation of a location for display.
+        
+        Args:
+            location_name: Name of the location to get grid for
+            simplified: If True, return simplified symbols (., #, D, etc.), otherwise raw tile data
+            
+        Returns:
+            Dictionary mapping (x, y) coordinates to tile symbols
+        """
+        # Find the map area with this location name
+        map_area = None
+        for area in self.map_areas.values():
+            if area.location_name == location_name:
+                map_area = area
+                break
+        
+        if not map_area or not map_area.map_data:
+            return {}
+        
+        grid = {}
+        for y, row in enumerate(map_area.map_data):
+            for x, tile in enumerate(row):
+                if len(tile) >= 3:
+                    tile_id, behavior, collision = tile[:3]
+                    
+                    if simplified:
+                        # Convert to simplified symbol based on collision and behavior
+                        if collision == 1:  # Impassable
+                            symbol = '#'  # Wall
+                        elif collision == 0:  # Walkable
+                            symbol = '.'  # Floor
+                        elif collision == 3:  # Ledge/special
+                            symbol = 'L'  # Ledge
+                        elif collision == 4:  # Water/surf
+                            symbol = 'W'  # Water
+                        else:
+                            symbol = '?'  # Unknown
+                        
+                        # Override based on behavior for special tiles
+                        if hasattr(behavior, 'value'):
+                            behavior_val = behavior.value
+                        else:
+                            behavior_val = behavior
+                            
+                        # Check for door/warp behaviors (common values)
+                        if behavior_val in [0x61, 0x62, 0x63, 0x64, 0x65, 0x66]:  # Common door/warp behavior values
+                            symbol = 'D'  # Door/Warp
+                            
+                        grid[(x, y)] = symbol
+                    else:
+                        # Return raw tile data
+                        grid[(x, y)] = tile
+        
+        return grid
+    
+    def get_all_location_grids(self, simplified: bool = True) -> Dict[str, Dict[Tuple[int, int], str]]:
+        """Get grids for all known locations.
+        
+        Returns:
+            Dictionary mapping location names to their grids
+        """
+        all_grids = {}
+        for area in self.map_areas.values():
+            if area.location_name and area.map_data:
+                all_grids[area.location_name] = self.get_location_grid(area.location_name, simplified)
+        return all_grids
+    
     def save_to_file(self):
         """Save stitching data to JSON file"""
         try:
             data = {
                 "map_areas": {},
-                "warp_connections": [],
                 "location_connections": {}
             }
             
             # Convert map areas to serializable format
             for map_id, area in self.map_areas.items():
-                # Save map_data for world map terrain display
+                # Save only essential data
                 area_data = {
                     "map_id": area.map_id,
                     "location_name": area.location_name,
                     "map_data": area.map_data,
-                    "player_last_position": area.player_last_position,
-                    "warp_tiles": area.warp_tiles,
-                    "boundaries": area.boundaries,
-                    "visited_count": area.visited_count,
-                    "first_seen": area.first_seen,
-                    "last_seen": area.last_seen,
-                    "overworld_coords": area.overworld_coords
+                    "player_last_position": area.player_last_position
                 }
                 data["map_areas"][str(map_id)] = area_data
             
-            # Convert connections to serializable format
-            for conn in self.warp_connections:
-                data["warp_connections"].append(asdict(conn))
-            
-            # Save location connections from state_formatter
-            try:
-                # Don't reload - just import normally to avoid state loss
-                from utils import state_formatter
-                
-                print(f"🗺️ DEBUG: MapStitcher saving - checking state_formatter.LOCATION_CONNECTIONS")
-                if hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
-                    location_connections = state_formatter.LOCATION_CONNECTIONS
-                    print(f"🗺️ DEBUG: Found LOCATION_CONNECTIONS: {location_connections}")
-                    data["location_connections"] = location_connections
-                    logger.debug(f"Saved {len(location_connections)} location connections")
-                    print(f"🗺️ DEBUG: Successfully saved {len(location_connections)} location connections to MapStitcher")
-                else:
-                    print(f"🗺️ DEBUG: state_formatter has no LOCATION_CONNECTIONS attribute")
-                    data["location_connections"] = {}
-            except ImportError as e:
-                print(f"🗺️ DEBUG: Could not import state_formatter for location connections: {e}")
-                data["location_connections"] = {}
-            except Exception as e:
-                print(f"🗺️ DEBUG: Error saving location connections: {e}")
-                data["location_connections"] = {}
+            # Generate location_connections from warp_connections
+            # MapStitcher is the single source of truth for connections
+            data["location_connections"] = self.get_location_connections()
+            logger.debug(f"Saved {len(data['location_connections'])} location connections from {len(self.warp_connections)} warp connections")
             
             with open(self.save_file, 'w') as f:
                 json.dump(data, f, indent=2)
@@ -517,6 +570,11 @@ class MapStitcher:
     def load_from_file(self):
         """Load stitching data from JSON file"""
         if not self.save_file.exists():
+            return
+        
+        # Check if file is empty
+        if self.save_file.stat().st_size == 0:
+            logger.debug(f"Map stitcher file {self.save_file} is empty, starting fresh")
             return
             
         try:
@@ -537,7 +595,6 @@ class MapStitcher:
                 location_name = area_data.get("location_name")
                 if not location_name or location_name == "Unknown":
                     # Import and use the location mapping
-                    from pokemon_env.enums import MapLocation
                     try:
                         map_enum = MapLocation(map_id)
                         location_name = map_enum.name.replace('_', ' ').title()
@@ -550,43 +607,62 @@ class MapStitcher:
                 area = MapArea(
                     map_id=area_data["map_id"],
                     location_name=location_name,
-                    map_data=area_data.get("map_data", []),  # Load saved map data
+                    map_data=area_data.get("map_data", []),
                     player_last_position=tuple(area_data["player_last_position"]),
-                    warp_tiles=[tuple(wt) for wt in area_data["warp_tiles"]],
-                    boundaries=area_data["boundaries"],
-                    visited_count=area_data["visited_count"],
-                    first_seen=area_data["first_seen"],
-                    last_seen=area_data["last_seen"],
-                    overworld_coords=area_data.get("overworld_coords")  # Handle missing field
+                    warp_tiles=[],  # Deprecated - not needed
+                    boundaries={"north": 0, "south": 10, "west": 0, "east": 10},  # Default boundaries
+                    visited_count=1,  # Default
+                    first_seen=0,  # Default
+                    last_seen=0,  # Default
+                    overworld_coords=None  # Not needed
                 )
                 self.map_areas[map_id] = area
             
-            # Restore connections (skip any involving map 0)
-            for conn_data in data.get("warp_connections", []):
-                # Skip connections involving map 0 (startup state)
-                if conn_data["from_map_id"] == 0 or conn_data["to_map_id"] == 0:
-                    logger.debug(f"Skipping connection involving map 0: {conn_data['from_map_id']} -> {conn_data['to_map_id']}")
-                    continue
-                    
-                conn = WarpConnection(
-                    from_map_id=conn_data["from_map_id"],
-                    to_map_id=conn_data["to_map_id"],
-                    from_position=tuple(conn_data["from_position"]),
-                    to_position=tuple(conn_data["to_position"]),
-                    warp_type=conn_data["warp_type"],
-                    direction=conn_data["direction"]
-                )
-                self.warp_connections.append(conn)
-            
-            # Restore location connections to state_formatter (always set, even if empty)
+            # Reconstruct warp_connections from location_connections
             location_connections = data.get("location_connections", {})
-            try:
-                from utils import state_formatter
-                state_formatter.LOCATION_CONNECTIONS = location_connections
-                logger.info(f"Loaded {len(location_connections)} location connections from file")
-                print(f"🗺️ DEBUG: MapStitcher loaded LOCATION_CONNECTIONS: {location_connections}")
-            except ImportError:
-                logger.debug("Could not import state_formatter for location connections")
+            
+            # Clear existing warp connections to avoid duplicates
+            self.warp_connections = []
+            
+            # Convert location_connections back to warp_connections
+            for from_location, connections in location_connections.items():
+                # Find the map_id for this location
+                from_map_id = None
+                for map_id, area in self.map_areas.items():
+                    if area.location_name == from_location:
+                        from_map_id = map_id
+                        break
+                
+                if from_map_id is None:
+                    continue
+                
+                for conn_data in connections:
+                    to_location = conn_data[0]
+                    from_pos = tuple(conn_data[1]) if len(conn_data) > 1 else (0, 0)
+                    to_pos = tuple(conn_data[2]) if len(conn_data) > 2 else (0, 0)
+                    
+                    # Find the map_id for the destination
+                    to_map_id = None
+                    for map_id, area in self.map_areas.items():
+                        if area.location_name == to_location:
+                            to_map_id = map_id
+                            break
+                    
+                    if to_map_id is None:
+                        continue
+                    
+                    # Create warp connection
+                    warp_conn = WarpConnection(
+                        from_map_id=from_map_id,
+                        to_map_id=to_map_id,
+                        from_position=from_pos,
+                        to_position=to_pos,
+                        warp_type="stairs",  # Default type
+                        direction=None
+                    )
+                    self.warp_connections.append(warp_conn)
+            
+            logger.info(f"Reconstructed {len(self.warp_connections)} warp connections from {len(location_connections)} location connections")
             
             logger.info(f"Loaded {len(self.map_areas)} areas and {len(self.warp_connections)} connections")
             
@@ -693,6 +769,182 @@ class MapStitcher:
             }
         }
     
+    def generate_location_map_display(self, location_name: str, player_pos: Tuple[int, int] = None, 
+                                      npcs: List[Dict] = None, connections: List[Dict] = None) -> List[str]:
+        """Generate a detailed map display for a specific location.
+        
+        Args:
+            location_name: Name of the location to display
+            player_pos: Current player position (x, y)
+            npcs: List of NPC positions and data
+            connections: List of location connections
+            
+        Returns:
+            List of display lines ready for formatting
+        """
+        lines = []
+        
+        # Get the grid for this location
+        location_grid = self.get_location_grid(location_name, simplified=True)
+        
+        if not location_grid:
+            # No map data available - return minimal display
+            lines.append(f"\n--- MAP: {location_name.upper()} ---")
+            lines.append("No map data available yet")
+            return lines
+        
+        # Find bounds of the explored area
+        all_positions = list(location_grid.keys())
+        if player_pos:
+            all_positions.append(player_pos)
+        
+        if not all_positions:
+            return []
+        
+        min_x = min(pos[0] for pos in all_positions)
+        max_x = max(pos[0] for pos in all_positions)
+        min_y = min(pos[1] for pos in all_positions)
+        max_y = max(pos[1] for pos in all_positions)
+        
+        # Build portal positions from connections
+        portal_positions = {}
+        
+        lines.append(f"\n--- MAP: {location_name.upper()} ---")
+        
+        # Create the map display
+        for y in range(min_y, max_y + 1):
+            row = ""
+            for x in range(min_x, max_x + 1):
+                # Check if this is an edge position
+                is_edge = (x == min_x or x == max_x or y == min_y or y == max_y)
+                
+                # Check for NPCs at this position
+                npc_at_pos = None
+                if npcs:
+                    for npc in npcs:
+                        npc_x = npc.get('current_x', npc.get('x'))
+                        npc_y = npc.get('current_y', npc.get('y'))
+                        if npc_x == x and npc_y == y:
+                            npc_at_pos = npc
+                            break
+                
+                if player_pos and (x, y) == player_pos:
+                    row += "P"
+                elif npc_at_pos:
+                    row += "N"
+                elif (x, y) in location_grid:
+                    tile = location_grid[(x, y)]
+                    # Check for portal markers at edges
+                    if is_edge and tile == '.' and connections:
+                        portal_added = False
+                        for conn in connections:
+                            direction = conn.get('direction', '').lower()
+                            conn_name = conn.get('name', '')
+                            if direction and conn_name and conn_name not in ['Unknown', 'None', '']:
+                                if direction == 'east' and x == max_x:
+                                    row += "→"
+                                    portal_positions[(x, y)] = conn_name
+                                    portal_added = True
+                                    break
+                                elif direction == 'west' and x == min_x:
+                                    row += "←"
+                                    portal_positions[(x, y)] = conn_name
+                                    portal_added = True
+                                    break
+                                elif direction == 'north' and y == min_y:
+                                    row += "↑"
+                                    portal_positions[(x, y)] = conn_name
+                                    portal_added = True
+                                    break
+                                elif direction == 'south' and y == max_y:
+                                    row += "↓"
+                                    portal_positions[(x, y)] = conn_name
+                                    portal_added = True
+                                    break
+                        
+                        if not portal_added:
+                            row += tile
+                    else:
+                        row += tile
+                else:
+                    # Unexplored area
+                    is_map_edge = (x == min_x or x == max_x or y == min_y or y == max_y)
+                    if is_map_edge:
+                        row += "?"
+                    elif self._is_explorable_edge(x, y, location_grid):
+                        row += "?"
+                    else:
+                        row += " "
+            
+            # Add spacing for readability
+            spaced_row = " ".join(row)
+            lines.append(spaced_row)
+        
+        # Add legend
+        legend_lines = ["", "Legend:"]
+        legend_lines.append("  Movement: P=Player")
+        if npcs:
+            legend_lines.append("            N=NPC/Trainer")
+        
+        # Check what terrain symbols are visible
+        visible_symbols = set(location_grid.values())
+        
+        terrain_items = []
+        symbol_meanings = {
+            ".": ".=Walkable path",
+            "#": "#=Wall/Blocked",
+            "~": "~=Tall grass",
+            "W": "W=Water",
+            "D": "D=Door",
+            "S": "S=Stairs/Warp",
+            "?": "?=Unknown",
+            "^": "^=Grass",
+            "!": "!=Ledge",
+            "L": "L=Ledge"
+        }
+        
+        for symbol, meaning in symbol_meanings.items():
+            if symbol in visible_symbols:
+                terrain_items.append(meaning)
+        
+        if terrain_items:
+            legend_lines.append(f"  Terrain: {', '.join(terrain_items)}")
+        
+        # Add portal markers to legend if any
+        if portal_positions:
+            unique_portals = {}
+            for pos, dest in portal_positions.items():
+                x, y = pos
+                if x == min_x:
+                    unique_portals["←"] = dest
+                elif x == max_x:
+                    unique_portals["→"] = dest
+                elif y == min_y:
+                    unique_portals["↑"] = dest
+                elif y == max_y:
+                    unique_portals["↓"] = dest
+            
+            if unique_portals:
+                portal_items = []
+                for symbol, dest in unique_portals.items():
+                    portal_items.append(f"{symbol}={dest}")
+                legend_lines.append(f"  Exits: {', '.join(portal_items)}")
+        
+        lines.extend(legend_lines)
+        return lines
+    
+    def _is_explorable_edge(self, x: int, y: int, location_grid: Dict[Tuple[int, int], str]) -> bool:
+        """Check if an unexplored coordinate is worth exploring (adjacent to walkable tiles)."""
+        # Check all 4 adjacent tiles
+        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+            adj_x, adj_y = x + dx, y + dy
+            if (adj_x, adj_y) in location_grid:
+                tile = location_grid[(adj_x, adj_y)]
+                # If adjacent to walkable tile, this is explorable
+                if tile in ['.', 'D', 'S', '^', '~']:
+                    return True
+        return False
+    
     def format_world_map_display(self, current_map_id: Optional[int] = None, max_width: int = 50) -> str:
         """Format world map for display in agent context"""
         world_map = self.generate_world_map_grid(current_map_id)
@@ -767,7 +1019,6 @@ class MapStitcher:
             
             # Save location connections from state_formatter
             try:
-                from utils import state_formatter
                 if hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
                     map_stitcher_data["location_connections"] = state_formatter.LOCATION_CONNECTIONS
                     logger.debug(f"Saved {len(state_formatter.LOCATION_CONNECTIONS)} location connections to checkpoint")
@@ -824,7 +1075,6 @@ class MapStitcher:
             location_connections = map_stitcher_data.get("location_connections", {})
             if location_connections:
                 try:
-                    from utils import state_formatter
                     state_formatter.LOCATION_CONNECTIONS = location_connections
                     logger.info(f"Loaded {len(location_connections)} location connections from checkpoint")
                 except ImportError:

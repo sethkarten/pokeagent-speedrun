@@ -68,7 +68,10 @@ video_frame_counter = 0
 video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
 
 # Frame cache for separate frame server
-FRAME_CACHE_FILE = "/tmp/pokemon_frame_cache.json"
+# Use cache directory instead of /tmp
+CACHE_DIR = ".pokeagent_cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
+FRAME_CACHE_FILE = os.path.join(CACHE_DIR, "frame_cache.json")
 frame_cache_counter = 0
 
 # Server runs headless - display handled by client
@@ -363,6 +366,7 @@ def step_environment(actions_pressed):
     if actions_pressed:
         print(f"🎯 DEBUG: Stepping emulator with actions: {actions_pressed}")
     
+    
     # Only use memory_lock for the essential emulator step
     with memory_lock:
         env.run_frame_with_buttons(actions_pressed)
@@ -378,6 +382,8 @@ def step_environment(actions_pressed):
                         env.memory_reader._cached_behaviors = None
                     if hasattr(env.memory_reader, '_cached_behaviors_map_key'):
                         env.memory_reader._cached_behaviors_map_key = None
+                    # Set flag to trigger map stitcher update outside the lock
+                    env.memory_reader._area_transition_detected = True
             except Exception as e:
                 logger.warning(f"Area transition check failed: {e}")
     
@@ -389,6 +395,57 @@ def step_environment(actions_pressed):
             update_frame_cache(screenshot)  # Update frame cache for separate frame server
             with obs_lock:
                 current_obs = np.array(screenshot)
+                
+            # Update map stitcher on position changes (lightweight approach)
+            # This ensures map data stays current as player moves
+            if hasattr(env, 'memory_reader') and env.memory_reader:
+                try:
+                    # Check if player position has changed
+                    should_update = False
+                    
+                    # Get current player coordinates and map info
+                    current_coords = env.memory_reader.read_coordinates()
+                    current_map_bank = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_BANK)
+                    current_map_number = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_NUMBER)
+                    current_map_info = (current_map_bank, current_map_number)
+                    
+                    # Initialize tracking variables if needed
+                    if not hasattr(env, '_last_player_coords'):
+                        env._last_player_coords = None
+                        env._last_map_info = None
+                    
+                    # Check for position changes
+                    if current_coords != env._last_player_coords or current_map_info != env._last_map_info:
+                        should_update = True
+                        env._last_player_coords = current_coords
+                        env._last_map_info = current_map_info
+                        print(f"📍 Position change detected: {current_coords}, map: {current_map_info}")
+                        logger.debug(f"Map stitcher update triggered by position change: {current_coords}, map: {current_map_info}")
+                    
+                    # Always update on area transitions (already detected above)
+                    if hasattr(env.memory_reader, '_area_transition_detected') and env.memory_reader._area_transition_detected:
+                        should_update = True
+                        env.memory_reader._area_transition_detected = False  # Reset flag
+                        logger.debug("Map stitcher update triggered by area transition")
+                    
+                    # Update map stitcher directly when position changes
+                    if should_update:
+                        # @TODO should do location change warps here too
+                        print(f"🗺️ Triggering map stitcher update for position change")
+                        # Call map stitcher update directly without full map reading
+                        tiles = env.memory_reader.read_map_around_player(radius=10)
+                        if tiles:
+                            print(f"🗺️ Got {len(tiles)} tiles, updating map stitcher")
+                            state = {"map": {}}  # Basic state for stitcher
+                            env.memory_reader._update_map_stitcher(tiles, state)
+                            logger.debug("Map stitcher updated for position change")
+                            print(f"✅ Map stitcher update completed")
+                        else:
+                            print(f"❌ No tiles found for map stitcher update")
+                        
+                except Exception as e:
+                    logger.error(f"Failed to update map stitcher during movement: {e}")
+                    print(f"❌ Map stitcher update failed: {e}")
     except Exception as e:
         logger.warning(f"Error updating screenshot: {e}")
 
@@ -798,8 +855,6 @@ async def get_comprehensive_state():
         
         # Include portal connections for LLM display (load from persistent storage)
         try:
-            import json
-            import os
             
             # Load from map_stitcher_data.json where location_connections is stored
             cache_file = ".pokeagent_cache/map_stitcher_data.json"

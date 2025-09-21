@@ -741,12 +741,11 @@ class EmeraldEmulator:
             else:
                 logger.info(f"No persistent grids file found for state: {grids_filename}")
             
-            # Initialize MapStitcher with cache file (files already copied above)
+            # Initialize MapStitcher with cache file 
             if hasattr(self, 'memory_reader') and self.memory_reader:
                 print(f"🗺️ DEBUG: About to initialize MapStitcher for state: {state_filename}")
-                # Use cache file as working storage
-                cache_map_stitcher_file = os.path.join(".pokeagent_cache", "map_stitcher_data.json")
-                self.memory_reader.update_map_stitcher_save_file(cache_map_stitcher_file, is_cache_file=True)
+                # Use cache file instead of state-specific file
+                self.memory_reader.update_map_stitcher_save_file(state_filename, is_cache_file=True)
                 print(f"🗺️ DEBUG: MapStitcher initialization completed for state: {state_filename}")
             else:
                 print(f"🗺️ DEBUG: No memory_reader available, cannot initialize MapStitcher")
@@ -770,10 +769,24 @@ class EmeraldEmulator:
         cache_map_stitcher_file = os.path.join(cache_dir, "map_stitcher_data.json")
         
         if os.path.exists(state_map_stitcher_file):
-            shutil.copy2(state_map_stitcher_file, cache_map_stitcher_file)
-            print(f"🗺️ DEBUG: Copied map stitcher from {state_map_stitcher_file} to {cache_map_stitcher_file}")
+            # Check if the file has content
+            if os.path.getsize(state_map_stitcher_file) > 0:
+                shutil.copy2(state_map_stitcher_file, cache_map_stitcher_file)
+                print(f"🗺️ DEBUG: Copied map stitcher from {state_map_stitcher_file} to {cache_map_stitcher_file}")
+            else:
+                # Create a valid empty JSON structure for fresh start
+                import json
+                empty_data = {"map_areas": {}, "location_connections": {}}
+                with open(cache_map_stitcher_file, 'w') as f:
+                    json.dump(empty_data, f, indent=2)
+                print(f"🗺️ DEBUG: State file empty, created fresh map stitcher cache")
         else:
-            print(f"🗺️ DEBUG: No state-specific map stitcher file found: {state_map_stitcher_file}")
+            # Create a valid empty JSON structure for fresh start  
+            import json
+            empty_data = {"map_areas": {}, "location_connections": {}}
+            with open(cache_map_stitcher_file, 'w') as f:
+                json.dump(empty_data, f, indent=2)
+            print(f"🗺️ DEBUG: No state file found, created fresh map stitcher cache")
         
         # Copy milestones file to main directory (not cache, as requested)
         state_milestones_file = os.path.join(state_dir, f"{base_name}_milestones.json")

@@ -44,7 +44,10 @@ frame_counter = 0
 last_update = time.time()
 
 # Frame cache for shared memory communication
-FRAME_CACHE_FILE = "/tmp/pokemon_frame_cache.json"
+# Use cache directory instead of /tmp
+CACHE_DIR = ".pokeagent_cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
+FRAME_CACHE_FILE = os.path.join(CACHE_DIR, "frame_cache.json")
 FRAME_UPDATE_INTERVAL = 0.025  # 40 FPS
 
 def load_frame_from_cache():

@@ -10,6 +10,7 @@ from pokemon_env.emerald_utils import ADDRESSES, Pokemon_format, parse_pokemon, 
 from .enums import MetatileBehavior, StatusCondition, Tileset, PokemonType, PokemonSpecies, Move, Badge, MapLocation
 from .types import PokemonData
 from utils.ocr_dialogue import create_ocr_detector
+from utils import state_formatter
 
 logger = logging.getLogger(__name__)
 
@@ -2615,8 +2616,8 @@ class PokemonEmeraldReader:
         else:
             state["map"]["object_events"] = []
         
-        # Update map stitcher with current area data
-        self._update_map_stitcher(tiles, state)
+        # Map stitcher updates are now handled by movement detection in step_environment()
+        # This avoids duplicate processing when pressing 'M' or calling get_comprehensive_state()
         
         # Add stitched map information to state
         stitched_info = self.get_stitched_map_info()
@@ -2633,8 +2634,8 @@ class PokemonEmeraldReader:
                 # Use default cache location if not already initialized by state loading
                 logger.info("Initializing MapStitcher with default cache location")
                 self._map_stitcher = MapStitcher()
-                # Sync loaded warp connections to state formatter on initialization
-                self._sync_warp_connections_to_state_formatter()
+                # Skip sync - let location_connections from file be the source of truth
+                # self._sync_warp_connections_to_state_formatter(force_rebuild=True)  # DISABLED - causes overwrites
                 # Set up callback to save location connections when they change
                 self._setup_location_connections_callback()
             
@@ -2642,9 +2643,20 @@ class PokemonEmeraldReader:
             map_bank = self._read_u8(self.addresses.MAP_BANK)
             map_number = self._read_u8(self.addresses.MAP_NUMBER)
             
-            # Get location name from player location
-            location_name = state.get("player", {}).get("location", "Unknown")
-            if location_name is None:
+            # Get location name from player location, with fallback to map ID resolution
+            location_name = state.get("player", {}).get("location")
+            if not location_name or location_name == "Unknown":
+                # Try to resolve from map ID directly
+                try:
+                    map_id = self._map_stitcher.get_map_id(map_bank, map_number)
+                    map_enum = MapLocation(map_id)
+                    location_name = map_enum.name.replace('_', ' ').title()
+                    logger.info(f"Resolved location name from map ID {map_id:04X}: {location_name}")
+                except ValueError:
+                    location_name = f"Map_{map_bank:02X}_{map_number:02X}"
+                    logger.debug(f"Unknown map ID, using fallback: {location_name}")
+            
+            if not location_name:
                 location_name = "Unknown"
             
             # Get player coordinates
@@ -2652,12 +2664,13 @@ class PokemonEmeraldReader:
             if not player_coords:
                 return
             
-            # Convert absolute player coordinates to local map coordinates
-            # The map data from read_map_around_player() is centered on the player
-            # With radius=5, the map is 11x11, so player is at center (5, 5)
+            # Use the ACTUAL player coordinates, not the local grid center
+            # The (5,5) logic was wrong - it should use real world coordinates
             map_height = len(tiles) if tiles else 11
             map_width = len(tiles[0]) if tiles and tiles[0] else 11
-            local_player_coords = (map_width // 2, map_height // 2)
+            
+            # Use the real player coordinates from the game world
+            actual_player_coords = player_coords  # This is the real position, not (5,5)
             
             # Get overworld coordinates for this map
             overworld_coords = self._get_overworld_coordinates(map_bank, map_number, location_name)
@@ -2675,7 +2688,8 @@ class PokemonEmeraldReader:
                 if self._map_stitcher.update_location_name(current_map_id, location_name):
                     # Location name was updated, save the changes and resync connections
                     self._map_stitcher.save_to_file()
-                    self._sync_warp_connections_to_state_formatter()
+                    # Skip sync - preserve existing location_connections data
+                    # self._sync_warp_connections_to_state_formatter(force_rebuild=True)  # DISABLED - causes overwrites
                     
                 # Also try to resolve other unknown names using current memory reader state
                 if self._map_stitcher.resolve_unknown_location_names(memory_reader=self):
@@ -2687,10 +2701,13 @@ class PokemonEmeraldReader:
                 map_number=map_number,
                 location_name=location_name,
                 map_data=tiles,
-                player_pos=local_player_coords,
+                player_pos=actual_player_coords,
                 timestamp=timestamp,
                 overworld_coords=overworld_coords
             )
+            
+            # Build location_connections directly from map areas after any updates
+            self._build_location_connections_from_map_areas()
             
             # Periodically save stitcher data
             if hasattr(self, '_last_stitcher_save'):
@@ -2896,38 +2913,110 @@ class PokemonEmeraldReader:
             return {"available": False, "reason": f"Error: {e}"}
 
     def update_map_stitcher_save_file(self, filename: str, is_cache_file: bool = False):
-        """Update MapStitcher save file and sync connections"""
-        import os
+        """Update MapStitcher save file and sync connections
         
-        if is_cache_file:
-            # Using cache file directly
-            map_stitcher_filename = filename
-        else:
-            # Generate state-specific filename
+        When loading a state:
+        1. First loads the state-specific map file (e.g. route102_save_map_stitcher.json) 
+        2. Always uses cache file (.pokeagent_cache/map_stitcher_data.json) for the MapStitcher instance
+        """
+        import os
+        import shutil
+        
+        cache_dir = ".pokeagent_cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_map_file = os.path.join(cache_dir, "map_stitcher_data.json")
+        
+        if not is_cache_file:
+            # Loading a state - check for state-specific map file to copy to cache
             state_dir = os.path.dirname(filename)
             base_name = os.path.splitext(os.path.basename(filename))[0]
-            map_stitcher_filename = os.path.join(state_dir, f"{base_name}_map_stitcher.json")
+            state_map_file = os.path.join(state_dir, f"{base_name}_map_stitcher.json")
+            
+            # Copy state map to cache if it exists
+            if os.path.exists(state_map_file) and os.path.getsize(state_map_file) > 0:
+                shutil.copy2(state_map_file, cache_map_file)
+                print(f"🗺️ DEBUG: Copied state map from {state_map_file} to cache {cache_map_file}")
+            elif not os.path.exists(cache_map_file):
+                # Create empty cache file if neither exists
+                print(f"🗺️ DEBUG: No state map found, creating empty cache file {cache_map_file}")
+                with open(cache_map_file, 'w') as f:
+                    import json
+                    json.dump({"map_areas": {}, "location_connections": {}}, f)
         
-        # Initialize MapStitcher with the state-specific file if not already initialized
+        # Always use cache file for the MapStitcher instance
+        map_stitcher_filename = cache_map_file
+        
+        # Initialize MapStitcher if not already initialized
         if self._map_stitcher is None:
             from utils.map_stitcher import MapStitcher
-            print(f"🗺️ DEBUG: Initializing MapStitcher with state-specific file: {map_stitcher_filename}")
+            print(f"🗺️ DEBUG: Initializing MapStitcher with cache file: {map_stitcher_filename}")
             self._map_stitcher = MapStitcher(save_file=map_stitcher_filename)
             print(f"🗺️ DEBUG: MapStitcher initialized, syncing connections...")
-            # Sync loaded warp connections to state formatter immediately
-            self._sync_warp_connections_to_state_formatter()
+            # Skip sync - let loaded location_connections be preserved
+            # self._sync_warp_connections_to_state_formatter(force_rebuild=True)  # DISABLED - causes overwrites
             # Set up callback to save location connections when they change
             self._setup_location_connections_callback()
         else:
-            print(f"🗺️ DEBUG: Updating MapStitcher save file to: {map_stitcher_filename}")
-            self._map_stitcher.update_save_file(map_stitcher_filename)
-            # Sync MapStitcher warp connections with state_formatter's LOCATION_CONNECTIONS
-            self._sync_warp_connections_to_state_formatter()
+            # MapStitcher already initialized, it should already be using the cache file
+            print(f"🗺️ DEBUG: MapStitcher already initialized, using cache: {map_stitcher_filename}")
+            # No need to update save file since we always use the cache
             # Set up callback to save location connections when they change
             self._setup_location_connections_callback()
     
-    def _sync_warp_connections_to_state_formatter(self):
-        """Sync MapStitcher warp connections to state_formatter's LOCATION_CONNECTIONS"""
+    def _build_location_connections_from_map_areas(self):
+        """Build location_connections directly from the MapStitcher's warp connections"""
+        if self._map_stitcher is None:
+            return
+            
+        try:
+            # Only update if we have warp connections to process
+            if not self._map_stitcher.warp_connections:
+                return
+                
+            # Initialize if needed
+            if not hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
+                state_formatter.LOCATION_CONNECTIONS = {}
+            
+            # Build connections from MapStitcher's warp data
+            for conn in self._map_stitcher.warp_connections:
+                from_area = self._map_stitcher.map_areas.get(conn.from_map_id)
+                to_area = self._map_stitcher.map_areas.get(conn.to_map_id)
+                
+                if from_area and to_area:
+                    from_name = from_area.location_name
+                    to_name = to_area.location_name
+                    
+                    # Skip if names are unknown
+                    if from_name == "Unknown" or to_name == "Unknown":
+                        continue
+                        
+                    # Initialize location entries
+                    if from_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[from_name] = []
+                    if to_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[to_name] = []
+                    
+                    # Add bidirectional connections
+                    from_to_connection = [to_name, list(conn.from_position), list(conn.to_position)]
+                    to_from_connection = [from_name, list(conn.to_position), list(conn.from_position)]
+                    
+                    # Avoid duplicates
+                    if from_to_connection not in state_formatter.LOCATION_CONNECTIONS[from_name]:
+                        state_formatter.LOCATION_CONNECTIONS[from_name].append(from_to_connection)
+                        logger.debug(f"Added connection: {from_name} -> {to_name}")
+                    if to_from_connection not in state_formatter.LOCATION_CONNECTIONS[to_name]:
+                        state_formatter.LOCATION_CONNECTIONS[to_name].append(to_from_connection)
+                        logger.debug(f"Added connection: {to_name} -> {from_name}")
+            
+        except Exception as e:
+            logger.debug(f"Failed to build location connections: {e}")
+
+    def _sync_warp_connections_to_state_formatter(self, force_rebuild=False):
+        """Sync MapStitcher warp connections to state_formatter's LOCATION_CONNECTIONS
+        
+        Args:
+            force_rebuild: If True, rebuild connections even if they exist
+        """
         if self._map_stitcher is None:
             print("🗺️ DEBUG: MapStitcher is None, cannot sync connections")
             return
@@ -2938,7 +3027,24 @@ class PokemonEmeraldReader:
             print(f"🗺️ DEBUG: Starting sync of {len(self._map_stitcher.warp_connections)} warp connections")
             print(f"🗺️ DEBUG: MapStitcher has {len(self._map_stitcher.map_areas)} map areas")
             
-            # Clear existing connections
+            # Initialize connections if they don't exist, but don't clear existing ones
+            if not hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
+                state_formatter.LOCATION_CONNECTIONS = {}
+            
+            # Check if we need to rebuild
+            has_existing_connections = len(state_formatter.LOCATION_CONNECTIONS) > 0
+            has_stitcher_connections = len(self._map_stitcher.warp_connections) > 0
+            
+            # Only rebuild if forced or if we have new stitcher data but no existing connections
+            if not force_rebuild and has_existing_connections:
+                print(f"🗺️ DEBUG: Skipping sync - already have {len(state_formatter.LOCATION_CONNECTIONS)} location connections")
+                return
+            
+            if not has_stitcher_connections:
+                print(f"🗺️ DEBUG: No stitcher connections to sync")
+                return
+                
+            # Clear and rebuild connections
             state_formatter.LOCATION_CONNECTIONS = {}
             
             # Initialize MAP_ID_CONNECTIONS (this was missing!)
@@ -2985,10 +3091,27 @@ class PokemonEmeraldReader:
                         'direction': getattr(conn, 'reverse_direction', 'unknown')
                     })
                     
+                    # Also populate LOCATION_CONNECTIONS format (used by state formatter)
+                    if from_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[from_name] = []
+                    if to_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[to_name] = []
+                    
+                    # Add bidirectional connections to LOCATION_CONNECTIONS
+                    from_to_connection = [to_name, list(conn.from_position), list(conn.to_position)]
+                    to_from_connection = [from_name, list(conn.to_position), list(conn.from_position)]
+                    
+                    # Avoid duplicates
+                    if from_to_connection not in state_formatter.LOCATION_CONNECTIONS[from_name]:
+                        state_formatter.LOCATION_CONNECTIONS[from_name].append(from_to_connection)
+                    if to_from_connection not in state_formatter.LOCATION_CONNECTIONS[to_name]:
+                        state_formatter.LOCATION_CONNECTIONS[to_name].append(to_from_connection)
+                    
                     print(f"🗺️ DEBUG: Added connection {from_name} <-> {to_name}")
             
             print(f"🗺️ DEBUG: Synced {len(self._map_stitcher.warp_connections)} warp connections to state formatter")
             print(f"🗺️ DEBUG: MAP_ID_CONNECTIONS has {len(state_formatter.MAP_ID_CONNECTIONS)} maps")
+            print(f"🗺️ DEBUG: LOCATION_CONNECTIONS has {len(state_formatter.LOCATION_CONNECTIONS)} locations")
             
         except Exception as e:
             logger.error(f"Failed to sync warp connections: {e}")
