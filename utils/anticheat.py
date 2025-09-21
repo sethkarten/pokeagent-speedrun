@@ -233,7 +233,7 @@ class AntiCheatTracker:
         
         return self.latest_milestone
     
-    def log_submission_data(self, step, state_data, action_taken, decision_time, state_hash):
+    def log_submission_data(self, step, state_data, action_taken, decision_time, state_hash, manual_mode=False, milestone_override=None):
         """Log structured data for anticheat verification"""
         # Extract key information
         player_data = state_data.get('player', {})
@@ -269,7 +269,8 @@ class AntiCheatTracker:
             
             for pokemon in pokemon_list[:6]:  # Max 6 pokemon
                 if pokemon:
-                    species = pokemon.get('species', 'Unknown')
+                    # Use same field names as get_comprehensive_state for consistency
+                    species = pokemon.get('species_name', pokemon.get('species', 'Unknown'))
                     level = pokemon.get('level', '?')
                     hp = pokemon.get('current_hp', '?')
                     max_hp = pokemon.get('max_hp', '?')
@@ -284,9 +285,12 @@ class AntiCheatTracker:
         # Current map - correctly extract from player.location
         current_map = player_data.get('location', 'Unknown')
         
-        # Update and get latest milestone
-        milestone = self.update_milestone(current_map)
-        milestone_str = milestone if milestone else "NONE"
+        # Use provided milestone or update and get latest milestone
+        if milestone_override:
+            milestone_str = milestone_override
+        else:
+            milestone = self.update_milestone(current_map)
+            milestone_str = milestone if milestone else "NONE"
         
         # Money
         money = player_data.get('money')
@@ -314,10 +318,14 @@ class AntiCheatTracker:
             seconds = int(current_runtime % 60)
             runtime_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         
-        # Log structured entry with enhanced anti-cheat data including runtime
+        # Determine mode string
+        mode_str = "MANUAL" if manual_mode else "AGENT"
+        
+        # Log structured entry with enhanced anti-cheat data including runtime and mode
         log_entry = (f"STEP={step} | POS={pos_str} | MAP={current_map} | MILESTONE={milestone_str} | "
                     f"STATE={battle_state} | MONEY=${money} | PARTY={party_str} | ACTION={action_str} | "
-                    f"DECISION_TIME={decision_time:.3f}s | RUNTIME={runtime_str} | STATE_HASH={state_hash} | "
+                    f"MODE={mode_str} | DECISION_TIME={decision_time:.3f}s | RUNTIME={runtime_str} | "
+                    f"STATE_HASH={state_hash} | "
                     f"AVG_TIME={behavioral_metrics['avg_decision_time']}s | "
                     f"ERROR_RATE={behavioral_metrics['error_rate']} | "
                     f"EXPLORE_RATIO={behavioral_metrics['exploration_ratio']} | "
@@ -340,5 +348,5 @@ class AntiCheatTracker:
         
         self.submission_logger.info("=== POKEMON EMERALD AGENT SUBMISSION LOG ===")
         self.submission_logger.info(f"Model: {model_name} | Start Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
-        self.submission_logger.info("Format: STEP | POS | MAP | MILESTONE | STATE | MONEY | PARTY | ACTION | DECISION_TIME | RUNTIME | STATE_HASH | AVG_TIME | ERROR_RATE | EXPLORE_RATIO | BACKTRACK_RATIO | TIME_VAR")
+        self.submission_logger.info("Format: STEP | POS | MAP | MILESTONE | STATE | MONEY | PARTY | ACTION | MODE | DECISION_TIME | RUNTIME | STATE_HASH | AVG_TIME | ERROR_RATE | EXPLORE_RATIO | BACKTRACK_RATIO | TIME_VAR")
         self.submission_logger.info("=" * 120) 

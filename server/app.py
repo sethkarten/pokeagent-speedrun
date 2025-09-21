@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Local application imports
 from pokemon_env.emulator import EmeraldEmulator
+from utils.anticheat import AntiCheatTracker
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -38,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 # Global state
 env = None
+anticheat_tracker = None  # AntiCheat tracker for submission logging
+step_counter = 0  # Track steps for submission logging
+last_action_time = None  # Track time of last action for decision time calculation
 running = True
 step_count = 0
 agent_step_count = 0  # Track agent steps separately from frame steps
@@ -232,6 +236,7 @@ class ComprehensiveStateResponse(BaseModel):
     game: dict
     map: dict
     milestones: dict = {}
+    location_connections: dict = {}  # Add location connections for portal display
     step_number: int
     status: str
     action_queue_length: int = 0
@@ -287,7 +292,7 @@ def signal_handler(signum, frame):
 
 def setup_environment():
     """Initialize the emulator"""
-    global env, current_obs
+    global env, current_obs, anticheat_tracker
     
     try:
         rom_path = "Emerald-GBAdvance/rom.gba"
@@ -296,6 +301,39 @@ def setup_environment():
         
         env = EmeraldEmulator(rom_path=rom_path)
         env.initialize()
+        
+        # Initialize AntiCheat tracker for submission logging
+        anticheat_tracker = AntiCheatTracker()
+        anticheat_tracker.initialize_submission_log("SERVER_MODE")
+        print("AntiCheat tracker initialized for submission logging")
+        
+        # Log initial GAME_RUNNING milestone at startup (STEP=0, time=0)
+        try:
+            # Mark GAME_RUNNING milestone as completed immediately
+            env.milestone_tracker.mark_completed("GAME_RUNNING")
+            
+            # Get initial game state for logging
+            initial_state = env.get_comprehensive_state()
+            
+            # Create state hash
+            import hashlib
+            state_str = str(initial_state)
+            state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+            
+            # Log initial entry with GAME_RUNNING milestone
+            anticheat_tracker.log_submission_data(
+                step=0,
+                state_data=initial_state,
+                action_taken="INIT",
+                decision_time=0.0,
+                state_hash=state_hash,
+                manual_mode=True,
+                milestone_override="GAME_RUNNING"
+            )
+            print("Initial GAME_RUNNING milestone logged at startup")
+            
+        except Exception as e:
+            print(f"Warning: Could not log initial milestone: {e}")
         
         screenshot = env.get_screenshot()
         if screenshot:
@@ -589,7 +627,7 @@ async def get_latest_frame():
 @app.post("/action")
 async def take_action(request: ActionRequest):
     """Take an action"""
-    global current_obs, step_count, recent_button_presses, action_queue
+    global current_obs, step_count, recent_button_presses, action_queue, anticheat_tracker, step_counter, last_action_time
     
     print(f"🔍 DEBUG: Action endpoint called with request: {request}")
     print(f"🔍 DEBUG: Request buttons: {request.buttons}")
@@ -650,6 +688,58 @@ async def take_action(request: ActionRequest):
         
         print(f"✅ DEBUG: Returning success, actions_added: {actions_added}, queue_length: {len(action_queue)}")
         
+        # Log action to submission.log if anticheat tracker is available
+        if anticheat_tracker and request.buttons:
+            try:
+                # Calculate decision time
+                current_time = time.time()
+                if last_action_time is not None:
+                    decision_time = current_time - last_action_time
+                else:
+                    decision_time = 0.0  # First action
+                last_action_time = current_time
+                
+                # Get current game state for logging
+                game_state = env.get_comprehensive_state()
+                action_taken = request.buttons[0] if request.buttons else "NONE"  # Log first action
+                
+                # Create simple state hash
+                import hashlib
+                state_str = str(game_state)
+                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+                
+                # Determine if this is manual mode (from client) or agent mode
+                # For now, assume manual mode if coming through API
+                manual_mode = request.source == "manual" if hasattr(request, 'source') else True
+                
+                # Get the latest milestone from the emulator's milestone tracker
+                # First, trigger an immediate milestone check to ensure current state is detected
+                latest_milestone = "NONE"
+                if env and hasattr(env, 'milestone_tracker'):
+                    try:
+                        # Force an immediate milestone check before logging
+                        env.check_and_update_milestones(game_state)
+                    except Exception as e:
+                        logger.debug(f"Error during immediate milestone check: {e}")
+                    
+                    milestone_name, split_time, total_time = env.milestone_tracker.get_latest_milestone_info()
+                    latest_milestone = milestone_name if milestone_name != "NONE" else "NONE"
+                
+                # Log the action
+                step_counter += 1
+                anticheat_tracker.log_submission_data(
+                    step=step_counter,
+                    state_data=game_state,
+                    action_taken=action_taken,
+                    decision_time=decision_time,
+                    state_hash=state_hash,
+                    manual_mode=manual_mode,
+                    milestone_override=latest_milestone
+                )
+                
+            except Exception as e:
+                logger.warning(f"Error logging to submission.log: {e}")
+        
         # Return lightweight response without any lock acquisition
         return {
             "status": "success", 
@@ -706,6 +796,64 @@ async def get_comprehensive_state():
         if env.milestone_tracker:
             state["milestones"] = env.milestone_tracker.milestones
         
+        # Include portal connections for LLM display (load from persistent storage)
+        try:
+            import json
+            import os
+            
+            # Load from map_stitcher_data.json where location_connections is stored
+            cache_file = ".pokeagent_cache/map_stitcher_data.json"
+            print(f"🗺️ SERVER: Checking for portal connections at {cache_file}")
+            if os.path.exists(cache_file):
+                print(f"🗺️ SERVER: Cache file exists, loading...")
+                with open(cache_file, 'r') as f:
+                    map_data = json.load(f)
+                    print(f"🗺️ SERVER: Loaded map data with keys: {list(map_data.keys())}")
+                    # Try location_connections first (more accurate coordinates)
+                    if 'location_connections' in map_data and map_data['location_connections']:
+                        print(f"🗺️ SERVER: Found {len(map_data['location_connections'])} location connections")
+                        location_connections = map_data['location_connections']
+                        
+                        # Pass location_connections to state for LLM display
+                        state["location_connections"] = location_connections
+                        print(f"🗺️ SERVER: Added location connections to state: {location_connections}")
+                        print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
+                        logger.debug(f"Loaded location connections for {len(location_connections)} locations from persistent storage")
+                    
+                    elif 'warp_connections' in map_data and map_data['warp_connections']:
+                        print(f"🗺️ SERVER: Fallback to {len(map_data['warp_connections'])} warp connections")
+                        # Convert warp_connections to MAP_ID_CONNECTIONS format for LLM display
+                        map_id_connections = {}
+                        for conn in map_data['warp_connections']:
+                            from_map = conn['from_map_id']
+                            if from_map not in map_id_connections:
+                                map_id_connections[from_map] = []
+                            
+                            # Find the location name for the destination map
+                            to_map_name = "Unknown Location"
+                            if str(conn['to_map_id']) in map_data.get('map_areas', {}):
+                                to_map_name = map_data['map_areas'][str(conn['to_map_id'])]['location_name']
+                            
+                            map_id_connections[from_map].append({
+                                'to_name': to_map_name,
+                                'from_pos': conn['from_position'],  # Keep as list for JSON serialization
+                                'to_pos': conn['to_position']       # Keep as list for JSON serialization
+                            })
+                        
+                        state["portal_connections"] = map_id_connections
+                        print(f"🗺️ SERVER: Added portal connections to state: {map_id_connections}")
+                        print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
+                        logger.debug(f"Loaded portal connections for {len(map_id_connections)} maps from persistent storage")
+                    else:
+                        print(f"🗺️ SERVER: No warp connections found in map data")
+                        logger.debug("No warp connections found in map stitcher data")
+            else:
+                print(f"🗺️ SERVER: Cache file not found at {cache_file}")
+                logger.debug(f"Map stitcher cache file not found: {cache_file}")
+        except Exception as e:
+            print(f"🗺️ SERVER: Error loading portal connections: {e}")
+            logger.debug(f"Could not load portal connections from persistent storage: {e}")
+        
         # The battle information already contains all necessary data
         # No additional analysis needed - keep it clean
         
@@ -730,6 +878,7 @@ async def get_comprehensive_state():
             game=state["game"],
             map=state["map"],
             milestones=state.get("milestones", {}),
+            location_connections=state.get("location_connections", {}),
             step_number=current_step,
             status="running",
             action_queue_length=queue_length
@@ -1072,7 +1221,11 @@ async def get_metrics():
         # If metrics haven't been initialized by client yet, try to load from checkpoint
         # BUT only if checkpoint loading is enabled (not for fresh starts with --load-state)
         if metrics.get("total_llm_calls", 0) == 0 and checkpoint_loading_enabled:
-            checkpoint_file = "checkpoint_llm.txt"
+            # Check cache folder first, then fall back to old location
+            cache_dir = ".pokeagent_cache"
+            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
+            if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
+                checkpoint_file = "checkpoint_llm.txt"
             if os.path.exists(checkpoint_file):
                 try:
                     with open(checkpoint_file, 'r', encoding='utf-8') as f:
@@ -1509,7 +1662,8 @@ async def save_agent_history():
         if llm_logger is not None:
             # Save checkpoint using current agent step count
             global agent_step_count
-            llm_logger.save_checkpoint("checkpoint_llm.txt", agent_step_count=agent_step_count)
+            # Save to cache folder (llm_logger handles path internally now)
+            llm_logger.save_checkpoint(agent_step_count=agent_step_count)
             logger.info(f"💾 Saved LLM checkpoint at step {agent_step_count}")
             return {"status": "agent_history_saved", "step_count": agent_step_count}
         else:
@@ -1597,8 +1751,14 @@ def main():
         # Initialize LLM logger and load checkpoint immediately during server startup
         from utils.llm_logger import get_llm_logger
         llm_logger = get_llm_logger()
-        if llm_logger and os.path.exists("checkpoint_llm.txt"):
-            restored_step_count = llm_logger.load_checkpoint("checkpoint_llm.txt")
+        # Check both cache folder and old location
+        cache_dir = ".pokeagent_cache"
+        checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
+        if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
+            checkpoint_file = "checkpoint_llm.txt"
+        
+        if llm_logger and os.path.exists(checkpoint_file):
+            restored_step_count = llm_logger.load_checkpoint(checkpoint_file)
             if restored_step_count is not None:
                 global agent_step_count
                 agent_step_count = restored_step_count

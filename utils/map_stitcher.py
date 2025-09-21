@@ -8,6 +8,7 @@ a unified world map showing connections between routes, towns, and buildings.
 
 import json
 import logging
+import os
 from typing import Dict, List, Tuple, Optional, Set, Any
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -71,7 +72,14 @@ class MapArea:
 class MapStitcher:
     """Main class for managing map stitching and connections"""
     
-    def __init__(self, save_file: str = "map_stitcher_data.json"):
+    def __init__(self, save_file: str = None):
+        # Setup cache directory
+        self.cache_dir = ".pokeagent_cache"
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # Use cache folder for default save file
+        if save_file is None:
+            save_file = os.path.join(self.cache_dir, "map_stitcher_data.json")
         self.save_file = Path(save_file)
         self.map_areas: Dict[int, MapArea] = {}
         self.warp_connections: List[WarpConnection] = []
@@ -90,11 +98,25 @@ class MapStitcher:
         """Convert map ID back to bank/number"""
         return (map_id >> 8, map_id & 0xFF)
     
+    def update_save_file(self, new_save_file: str):
+        """Update the save file path and reload data"""
+        self.save_file = Path(new_save_file)
+        # Clear current data and reload from new file
+        self.map_areas = {}
+        self.warp_connections = []
+        self.pending_warps = []
+        self.load_from_file()
+    
     def update_map_area(self, map_bank: int, map_number: int, location_name: str,
                        map_data: List[List[Tuple]], player_pos: Tuple[int, int],
                        timestamp: float, overworld_coords: Optional[Tuple[int, int]] = None):
         """Update or create a map area with new data"""
         map_id = self.get_map_id(map_bank, map_number)
+        
+        # Skip map 0 (startup/initialization state) as it's not a real location
+        if map_id == 0:
+            logger.debug(f"Skipping map 0 (startup state)")
+            return
         
         # Detect warp tiles in the map data
         warp_tiles = self._detect_warp_tiles(map_data)
@@ -102,7 +124,18 @@ class MapStitcher:
         if map_id in self.map_areas:
             # Update existing area
             area = self.map_areas[map_id]
-            area.location_name = location_name  # Update location name
+            # Update location name if we have a better one (not empty or "Unknown")
+            if location_name and location_name.strip() and location_name != "Unknown":
+                if area.location_name == "Unknown" or not area.location_name:
+                    logger.info(f"Updating location name for map {map_id:04X}: '{area.location_name}' -> '{location_name}'")
+                    area.location_name = location_name
+                    # Try to resolve other unknown names since we got new location info
+                    self.resolve_unknown_location_names()
+                elif area.location_name != location_name:
+                    # Handle case where we get a different name (e.g. more specific location)
+                    logger.info(f"Found different location name for map {map_id:04X}: '{area.location_name}' vs '{location_name}', keeping current")
+                else:
+                    area.location_name = location_name
             area.map_data = map_data
             area.player_last_position = player_pos
             area.warp_tiles = warp_tiles
@@ -110,13 +143,28 @@ class MapStitcher:
             area.last_seen = timestamp
             # Keep overworld_coords as None to indicate separate maps
             area.overworld_coords = None
-            logger.debug(f"Updated map area {location_name} (ID: {map_id:04X})")
+            logger.debug(f"Updated map area {area.location_name} (ID: {map_id:04X})")
         else:
             # Create new area without global coordinates
             boundaries = self._calculate_boundaries(map_data)
+            # Try to resolve location name from map ID if empty
+            if not location_name or not location_name.strip():
+                # Import and use the location mapping
+                from pokemon_env.enums import MapLocation
+                try:
+                    map_enum = MapLocation(map_id)
+                    final_location_name = map_enum.name.replace('_', ' ').title()
+                    logger.info(f"Resolved location name for map {map_id:04X}: {final_location_name}")
+                except ValueError:
+                    # Fallback for unknown map IDs
+                    final_location_name = f"Map_{map_id:04X}"
+                    logger.debug(f"Unknown map ID {map_id:04X}, using fallback name")
+            else:
+                final_location_name = location_name
+            
             area = MapArea(
                 map_id=map_id,
-                location_name=location_name,
+                location_name=final_location_name,
                 map_data=map_data,
                 player_last_position=player_pos,
                 warp_tiles=warp_tiles,
@@ -127,12 +175,18 @@ class MapStitcher:
                 overworld_coords=None  # Each location is separate
             )
             self.map_areas[map_id] = area
-            logger.info(f"Added new map area: {location_name} (ID: {map_id:04X}) as separate location")
+            logger.info(f"Added new map area: {final_location_name} (ID: {map_id:04X}) as separate location")
             
         # Check for area transitions and potential warp connections
         if self.last_map_id is not None and self.last_map_id != map_id:
             self._detect_warp_connection(self.last_map_id, map_id, 
                                        self.last_position, player_pos, timestamp)
+            
+            # Try to resolve any unknown location names after adding connections  
+            # Note: resolve_unknown_location_names() can be called with memory_reader from calling code
+            if self.resolve_unknown_location_names():
+                logger.info("Resolved unknown location names after area transition")
+                # Save will be handled by the calling code
         
         self.last_map_id = map_id
         self.last_position = player_pos
@@ -285,6 +339,76 @@ class MapStitcher:
             self.map_areas[map_id].overworld_coords = coords
             logger.info(f"Updated coordinates for {self.map_areas[map_id].location_name}: {coords}")
     
+    def update_location_name(self, map_id: int, location_name: str):
+        """Update location name for an existing area"""
+        if map_id in self.map_areas and location_name and location_name.strip() and location_name != "Unknown":
+            area = self.map_areas[map_id]
+            if area.location_name == "Unknown" or not area.location_name:
+                logger.info(f"Updating location name for map {map_id:04X}: '{area.location_name}' -> '{location_name}'")
+                area.location_name = location_name
+                # Try to resolve other unknown names since we got new location info
+                self.resolve_unknown_location_names()
+                return True
+        return False
+    
+    def resolve_unknown_location_names(self, memory_reader=None):
+        """Try to resolve 'Unknown' location names using the memory reader if available"""
+        resolved_count = 0
+        
+        # If we have a memory reader, we can potentially resolve current location
+        if memory_reader is not None:
+            try:
+                current_location = memory_reader.read_location()
+                current_map_bank = memory_reader._read_u8(memory_reader.addresses.MAP_BANK)
+                current_map_number = memory_reader._read_u8(memory_reader.addresses.MAP_NUMBER)
+                current_map_id = (current_map_bank << 8) | current_map_number
+                
+                # Update current map if it's unknown
+                if current_map_id in self.map_areas:
+                    area = self.map_areas[current_map_id]
+                    if area.location_name == "Unknown" and current_location and current_location.strip() and current_location != "Unknown":
+                        old_name = area.location_name
+                        area.location_name = current_location
+                        logger.info(f"Resolved current location name for map {current_map_id:04X}: '{old_name}' -> '{area.location_name}'")
+                        resolved_count += 1
+            except Exception as e:
+                logger.debug(f"Could not resolve current location: {e}")
+        
+        # For now, we keep a basic approach for some common areas if no memory reader
+        # In the future, we could implement a system to revisit areas and get their names
+        if memory_reader is None and resolved_count == 0:
+            # Basic fallback for common map IDs - only the most essential ones
+            # NOTE: Be careful with map ID mappings - check pokemon_env/enums.py for correct values
+            basic_mappings = {
+                0x0009: "LITTLEROOT TOWN",                 # Map 9 - actual outdoor town map
+                0x0011: "ROUTE 102",                       # Map 17 - ROUTE_102 = 0x11
+                0x0012: "ROUTE 103",                       # Map 18 - ROUTE_103 = 0x12
+                0x0101: "LITTLEROOT TOWN BRENDANS HOUSE 2F", # Map 257 - LITTLEROOT_TOWN_BRENDANS_HOUSE_2F = 0x101
+                0x0102: "LITTLEROOT TOWN MAYS HOUSE 1F",   # Map 258 - LITTLEROOT_TOWN_MAYS_HOUSE_1F = 0x102
+                0x0103: "LITTLEROOT TOWN MAYS HOUSE 2F",   # Map 259 - LITTLEROOT_TOWN_MAYS_HOUSE_2F = 0x103  
+            }
+            
+            for map_id, area in self.map_areas.items():
+                if map_id in basic_mappings:
+                    correct_name = basic_mappings[map_id]
+                    if area.location_name == "Unknown":
+                        # Resolve unknown names
+                        old_name = area.location_name
+                        area.location_name = correct_name
+                        logger.info(f"Resolved location name for map {map_id:04X}: '{old_name}' -> '{area.location_name}'")
+                        resolved_count += 1
+                    elif area.location_name != correct_name:
+                        # Fix incorrect existing names (e.g., house interiors mislabeled as routes)
+                        old_name = area.location_name
+                        area.location_name = correct_name
+                        logger.info(f"Corrected location name for map {map_id:04X}: '{old_name}' -> '{area.location_name}'")
+                        resolved_count += 1
+        
+        if resolved_count > 0:
+            logger.info(f"Resolved {resolved_count} unknown location names")
+            return True
+        return False
+    
     def get_connected_areas(self, map_id: int) -> List[Tuple[int, str, str]]:
         """Get all areas connected to the given map ID"""
         connections = []
@@ -335,7 +459,8 @@ class MapStitcher:
         try:
             data = {
                 "map_areas": {},
-                "warp_connections": []
+                "warp_connections": [],
+                "location_connections": {}
             }
             
             # Convert map areas to serializable format
@@ -359,6 +484,28 @@ class MapStitcher:
             for conn in self.warp_connections:
                 data["warp_connections"].append(asdict(conn))
             
+            # Save location connections from state_formatter
+            try:
+                # Don't reload - just import normally to avoid state loss
+                from utils import state_formatter
+                
+                print(f"🗺️ DEBUG: MapStitcher saving - checking state_formatter.LOCATION_CONNECTIONS")
+                if hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
+                    location_connections = state_formatter.LOCATION_CONNECTIONS
+                    print(f"🗺️ DEBUG: Found LOCATION_CONNECTIONS: {location_connections}")
+                    data["location_connections"] = location_connections
+                    logger.debug(f"Saved {len(location_connections)} location connections")
+                    print(f"🗺️ DEBUG: Successfully saved {len(location_connections)} location connections to MapStitcher")
+                else:
+                    print(f"🗺️ DEBUG: state_formatter has no LOCATION_CONNECTIONS attribute")
+                    data["location_connections"] = {}
+            except ImportError as e:
+                print(f"🗺️ DEBUG: Could not import state_formatter for location connections: {e}")
+                data["location_connections"] = {}
+            except Exception as e:
+                print(f"🗺️ DEBUG: Error saving location connections: {e}")
+                data["location_connections"] = {}
+            
             with open(self.save_file, 'w') as f:
                 json.dump(data, f, indent=2)
             
@@ -380,9 +527,29 @@ class MapStitcher:
             # Restore map areas (with map_data for world map display)
             for map_id_str, area_data in data.get("map_areas", {}).items():
                 map_id = int(map_id_str)
+                
+                # Skip map 0 during loading as well (cleanup old data)
+                if map_id == 0:
+                    logger.debug(f"Skipping load of map 0 (startup state) during file load")
+                    continue
+                    
+                # Try to resolve location name if it's Unknown or missing
+                location_name = area_data.get("location_name")
+                if not location_name or location_name == "Unknown":
+                    # Import and use the location mapping
+                    from pokemon_env.enums import MapLocation
+                    try:
+                        map_enum = MapLocation(map_id)
+                        location_name = map_enum.name.replace('_', ' ').title()
+                        logger.info(f"Resolved location name for map {map_id:04X} during load: {location_name}")
+                    except ValueError:
+                        # Fallback for unknown map IDs
+                        location_name = f"Map_{map_id:04X}"
+                        logger.debug(f"Unknown map ID {map_id:04X} during load, using fallback name")
+                
                 area = MapArea(
                     map_id=area_data["map_id"],
-                    location_name=area_data["location_name"] or "Unknown",  # Handle None values
+                    location_name=location_name,
                     map_data=area_data.get("map_data", []),  # Load saved map data
                     player_last_position=tuple(area_data["player_last_position"]),
                     warp_tiles=[tuple(wt) for wt in area_data["warp_tiles"]],
@@ -394,8 +561,13 @@ class MapStitcher:
                 )
                 self.map_areas[map_id] = area
             
-            # Restore connections
+            # Restore connections (skip any involving map 0)
             for conn_data in data.get("warp_connections", []):
+                # Skip connections involving map 0 (startup state)
+                if conn_data["from_map_id"] == 0 or conn_data["to_map_id"] == 0:
+                    logger.debug(f"Skipping connection involving map 0: {conn_data['from_map_id']} -> {conn_data['to_map_id']}")
+                    continue
+                    
                 conn = WarpConnection(
                     from_map_id=conn_data["from_map_id"],
                     to_map_id=conn_data["to_map_id"],
@@ -406,7 +578,22 @@ class MapStitcher:
                 )
                 self.warp_connections.append(conn)
             
+            # Restore location connections to state_formatter (always set, even if empty)
+            location_connections = data.get("location_connections", {})
+            try:
+                from utils import state_formatter
+                state_formatter.LOCATION_CONNECTIONS = location_connections
+                logger.info(f"Loaded {len(location_connections)} location connections from file")
+                print(f"🗺️ DEBUG: MapStitcher loaded LOCATION_CONNECTIONS: {location_connections}")
+            except ImportError:
+                logger.debug("Could not import state_formatter for location connections")
+            
             logger.info(f"Loaded {len(self.map_areas)} areas and {len(self.warp_connections)} connections")
+            
+            # Try to resolve any "Unknown" location names
+            if self.resolve_unknown_location_names():
+                # Save the updated names
+                self.save_to_file()
             
         except Exception as e:
             logger.error(f"Failed to load map stitching data: {e}")
@@ -554,7 +741,8 @@ class MapStitcher:
         try:
             map_stitcher_data = {
                 "map_areas": {},
-                "warp_connections": []
+                "warp_connections": [],
+                "location_connections": {}
             }
             
             # Convert map areas to serializable format (without map_data)
@@ -576,6 +764,15 @@ class MapStitcher:
             # Convert connections to serializable format
             for conn in self.warp_connections:
                 map_stitcher_data["warp_connections"].append(asdict(conn))
+            
+            # Save location connections from state_formatter
+            try:
+                from utils import state_formatter
+                if hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
+                    map_stitcher_data["location_connections"] = state_formatter.LOCATION_CONNECTIONS
+                    logger.debug(f"Saved {len(state_formatter.LOCATION_CONNECTIONS)} location connections to checkpoint")
+            except ImportError:
+                logger.debug("Could not import state_formatter for location connections in checkpoint")
             
             checkpoint_data["map_stitcher"] = map_stitcher_data
             logger.debug(f"Saved {len(self.map_areas)} areas and {len(self.warp_connections)} connections to checkpoint")
@@ -622,6 +819,16 @@ class MapStitcher:
                     direction=conn_data["direction"]
                 )
                 self.warp_connections.append(conn)
+            
+            # Restore location connections to state_formatter
+            location_connections = map_stitcher_data.get("location_connections", {})
+            if location_connections:
+                try:
+                    from utils import state_formatter
+                    state_formatter.LOCATION_CONNECTIONS = location_connections
+                    logger.info(f"Loaded {len(location_connections)} location connections from checkpoint")
+                except ImportError:
+                    logger.debug("Could not import state_formatter for location connections from checkpoint")
             
             logger.info(f"Loaded {len(self.map_areas)} areas and {len(self.warp_connections)} connections from checkpoint")
             

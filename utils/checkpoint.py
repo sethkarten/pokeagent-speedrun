@@ -68,9 +68,13 @@ def save_checkpoint(emulator, llm_logger=None, agent_step_count=0):
                     "timestamp": datetime.now().isoformat()
                 }
             
-            with open("checkpoint_llm.txt", "w") as f:
+            # Save to cache folder
+            cache_dir = ".pokeagent_cache"
+            os.makedirs(cache_dir, exist_ok=True)
+            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
+            with open(checkpoint_file, "w") as f:
                 json.dump(checkpoint_data, f, indent=2)
-            print(f"   ✅ Saved LLM history to checkpoint_llm.txt")
+            print(f"   ✅ Saved LLM history to {checkpoint_file}")
         
         print(f"✅ Checkpoint saved at step {agent_step_count}")
         return True
@@ -125,8 +129,13 @@ def load_checkpoint(emulator, llm_logger=None):
             print(f"   ⚠️ Failed to load location maps: {e}")
         
         # Load LLM history if logger available
-        if llm_logger and os.path.exists("checkpoint_llm.txt"):
-            with open("checkpoint_llm.txt", "r") as f:
+        cache_dir = ".pokeagent_cache"
+        checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
+        if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
+            checkpoint_file = "checkpoint_llm.txt"
+        
+        if llm_logger and os.path.exists(checkpoint_file):
+            with open(checkpoint_file, "r") as f:
                 llm_data = json.load(f)
             
             # Restore conversation history

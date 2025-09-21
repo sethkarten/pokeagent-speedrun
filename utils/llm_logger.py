@@ -336,14 +336,19 @@ class LLMLogger:
             logger.error(f"Failed to get session summary: {e}")
             return {"error": str(e)}
     
-    def save_checkpoint(self, checkpoint_file: str, agent_step_count: int = None):
+    def save_checkpoint(self, checkpoint_file: str = None, agent_step_count: int = None):
         """Save current LLM interaction history to checkpoint file
         
         Args:
-            checkpoint_file: Path to save the checkpoint
+            checkpoint_file: Path to save the checkpoint (defaults to cache folder)
             agent_step_count: Current agent step count for persistence
         """
         try:
+            # Use cache folder by default
+            if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
+                cache_dir = ".pokeagent_cache"
+                os.makedirs(cache_dir, exist_ok=True)
+                checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
             # Read all current log entries
             log_entries = []
             if os.path.exists(self.log_file):
@@ -384,16 +389,24 @@ class LLMLogger:
         except Exception as e:
             logger.error(f"Failed to save LLM checkpoint: {e}")
     
-    def load_checkpoint(self, checkpoint_file: str) -> Optional[int]:
+    def load_checkpoint(self, checkpoint_file: str = None) -> Optional[int]:
         """Load LLM interaction history from checkpoint file
         
         Args:
-            checkpoint_file: Path to load the checkpoint from
+            checkpoint_file: Path to load the checkpoint from (defaults to cache folder)
             
         Returns:
             Last agent step count from the checkpoint, or None if not found
         """
         try:
+            # Use cache folder by default
+            if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
+                cache_dir = ".pokeagent_cache"
+                checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
+            
+            if not os.path.exists(checkpoint_file):
+                logger.info(f"No checkpoint file found at {checkpoint_file}")
+                return None
             with open(checkpoint_file, 'r', encoding='utf-8') as f:
                 checkpoint_data = json.load(f)
             
