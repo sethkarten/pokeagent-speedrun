@@ -1345,7 +1345,7 @@ class EmeraldEmulator:
                     if not self.milestone_tracker.is_completed("STARTER_CHOSEN"):
                         return False
                     location = game_state.get("player", {}).get("location", "")
-                    return "ROUTE_103" in str(location).upper()
+                    return "ROUTE_103" in str(location).upper() or "ROUTE 103" in str(location).upper()
                 return False
             elif milestone_id == "RIVAL_BATTLE_1":
                 # Check for specific state hash from dialog after the battle (c9086d56)
@@ -1414,7 +1414,7 @@ class EmeraldEmulator:
                     if not self.milestone_tracker.is_completed("OLDALE_TOWN"):
                         return False
                     location = game_state.get("player", {}).get("location", "")
-                    return "ROUTE_102" in str(location).upper()
+                    return "ROUTE_102" in str(location).upper() or "ROUTE 102" in str(location).upper()
                 return False
             elif milestone_id == "FIRST_TRAINER_BATTLE":
                 # Assume first trainer battle happens on Route 102
@@ -1439,7 +1439,7 @@ class EmeraldEmulator:
                     if not self.milestone_tracker.is_completed("PETALBURG_CITY"):
                         return False
                     location = game_state.get("player", {}).get("location", "")
-                    return "ROUTE_104" in str(location).upper()
+                    return "ROUTE_104" in str(location).upper() or "ROUTE 104" in str(location).upper()
                 return False
             elif milestone_id == "MR_BRINEY_MET":
                 # Assume meeting Mr. Briney happens on Route 104
@@ -1452,7 +1452,7 @@ class EmeraldEmulator:
                     if not self.milestone_tracker.is_completed("ROUTE_104_SOUTH"):
                         return False
                     location = game_state.get("player", {}).get("location", "")
-                    return "PETALBURG_WOODS" in str(location).upper()
+                    return "PETALBURG_WOODS" in str(location).upper() or "PETALBURG WOODS" in str(location).upper()
                 return False
             elif milestone_id == "TEAM_AQUA_GRUNT_DEFEATED":
                 # Assume Team Aqua grunt defeated in Petalburg Woods
@@ -1472,7 +1472,7 @@ class EmeraldEmulator:
                     if not self.milestone_tracker.is_completed("PETALBURG_WOODS"):
                         return False
                     location = game_state.get("player", {}).get("location", "")
-                    return ("ROUTE_104" in str(location).upper() and 
+                    return (("ROUTE_104" in str(location).upper() or "ROUTE 104" in str(location).upper()) and 
                             self.milestone_tracker.is_completed("DEVON_GOODS_OBTAINED"))
                 return False
             elif milestone_id == "DEVON_CORP_VISITED":
