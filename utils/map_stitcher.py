@@ -133,6 +133,31 @@ class MapStitcher:
         offset_x = area.origin_offset.get('x', 0)
         offset_y = area.origin_offset.get('y', 0)
         
+        # CRITICAL: Check for unreasonable coordinate jumps that indicate a map transition error
+        # If the player position would require massive grid expansion, it's likely a different map
+        grid_center_x = player_pos[0] + offset_x
+        grid_center_y = player_pos[1] + offset_y
+        
+        MAX_REASONABLE_SIZE = 200  # Maximum reasonable size for a single map area
+        
+        # Check if this would cause unreasonable expansion
+        if (grid_center_x < -50 or grid_center_x > MAX_REASONABLE_SIZE + 50 or
+            grid_center_y < -50 or grid_center_y > MAX_REASONABLE_SIZE + 50):
+            logger.warning(f"Detected unreasonable coordinate jump for map {area.map_id:04X}: "
+                         f"player at {player_pos}, grid position would be ({grid_center_x}, {grid_center_y})")
+            logger.warning(f"This likely indicates map areas are being incorrectly merged. "
+                         f"Resetting origin offset for this area.")
+            
+            # Reset the map data for this area to prevent corruption
+            area.map_data = [[None for _ in range(100)] for _ in range(100)]
+            area.explored_bounds = {
+                'min_x': 50, 'max_x': 50,
+                'min_y': 50, 'max_y': 50
+            }
+            area.origin_offset = {'x': 50 - player_pos[0], 'y': 50 - player_pos[1]}
+            offset_x = area.origin_offset['x']
+            offset_y = area.origin_offset['y']
+        
         # Merge the new tiles into the existing map
         for dy in range(new_height):
             for dx in range(new_width):
@@ -144,17 +169,26 @@ class MapStitcher:
                 grid_x = world_x + offset_x
                 grid_y = world_y + offset_y
                 
-                # Expand grid if necessary
-                if grid_y >= len(area.map_data):
+                # Sanity check to prevent excessive memory usage
+                if grid_x < 0 or grid_y < 0 or grid_x >= MAX_REASONABLE_SIZE or grid_y >= MAX_REASONABLE_SIZE:
+                    logger.debug(f"Skipping tile at grid position ({grid_x}, {grid_y}) - out of reasonable bounds")
+                    continue
+                
+                # Expand grid if necessary (but within reasonable limits)
+                if grid_y >= len(area.map_data) and grid_y < MAX_REASONABLE_SIZE:
                     # Expand vertically
-                    for _ in range(grid_y - len(area.map_data) + 1):
+                    expansion_needed = min(grid_y - len(area.map_data) + 1, 
+                                         MAX_REASONABLE_SIZE - len(area.map_data))
+                    for _ in range(expansion_needed):
                         area.map_data.append([None] * len(area.map_data[0]))
                 
-                if grid_x >= len(area.map_data[0]):
+                if grid_x >= len(area.map_data[0]) and grid_x < MAX_REASONABLE_SIZE:
                     # Expand horizontally
-                    new_width_needed = grid_x + 1
+                    new_width_needed = min(grid_x + 1, MAX_REASONABLE_SIZE)
                     for row in area.map_data:
-                        row.extend([None] * (new_width_needed - len(row)))
+                        expansion = new_width_needed - len(row)
+                        if expansion > 0:
+                            row.extend([None] * expansion)
                 
                 # Store the tile (always update with latest data)
                 if 0 <= grid_x < len(area.map_data[0]) and 0 <= grid_y < len(area.map_data):
@@ -207,9 +241,24 @@ class MapStitcher:
             logger.debug(f"Skipping map 0 (startup state)")
             return
         
+        # Validate map ID is reasonable
+        if map_id < 0 or map_id > 0xFFFF:
+            logger.error(f"Invalid map ID {map_id} from bank={map_bank}, number={map_number}")
+            return
+        
+        # Validate player position - check for invalid values
+        if player_pos:
+            px, py = player_pos
+            # Check for invalid coordinates (65535 = 0xFFFF is a common error value)
+            if px < 0 or px > 1000 or py < 0 or py > 1000 or px == 0xFFFF or py == 0xFFFF:
+                logger.warning(f"Invalid player position {player_pos} for map {map_id:04X}, ignoring update")
+                return
+        
         if map_id in self.map_areas:
-            # Update existing area
+            # Update existing area - we're revisiting this location
             area = self.map_areas[map_id]
+            logger.info(f"Revisiting existing map area {area.location_name} (ID: {map_id:04X})")
+            area.visited_count = getattr(area, 'visited_count', 0) + 1
             # Update location name if we have a better one (not empty or "Unknown")
             if location_name and location_name.strip() and location_name != "Unknown":
                 if area.location_name == "Unknown" or not area.location_name:
@@ -218,18 +267,42 @@ class MapStitcher:
                     # Try to resolve other unknown names since we got new location info
                     self.resolve_unknown_location_names()
                 elif area.location_name != location_name:
-                    # Handle case where we get a different name (e.g. more specific location)
-                    logger.info(f"Found different location name for map {map_id:04X}: '{area.location_name}' vs '{location_name}', keeping current")
+                    # Check if this is a significant name difference that might indicate a problem
+                    name1_words = set(area.location_name.lower().split())
+                    name2_words = set(location_name.lower().split())
+                    
+                    # If the names share no common words, this might be a misidentified map
+                    if not name1_words.intersection(name2_words):
+                        logger.warning(f"Significant location name mismatch for map {map_id:04X}: "
+                                     f"existing='{area.location_name}' vs new='{location_name}'. "
+                                     f"This might indicate incorrect map identification.")
+                    else:
+                        logger.info(f"Found different location name for map {map_id:04X}: '{area.location_name}' vs '{location_name}', keeping current")
                 else:
                     area.location_name = location_name
             
             # MERGE map data instead of replacing - this is the key to stitching!
             if map_data and player_pos:
-                # Merge new tiles into existing map data
-                self._merge_map_tiles(area, map_data, player_pos)
-                logger.debug(f"Merged {len(map_data) * len(map_data[0]) if map_data else 0} new tiles into area")
+                # When revisiting, check if player position makes sense with existing map
+                if hasattr(area, 'origin_offset') and area.origin_offset:
+                    expected_grid_x = player_pos[0] + area.origin_offset['x']
+                    expected_grid_y = player_pos[1] + area.origin_offset['y']
+                    
+                    # Check if player position is reasonable for this map
+                    if (0 <= expected_grid_x <= 200 and 0 <= expected_grid_y <= 200):
+                        # Position is reasonable - merge tiles
+                        self._merge_map_tiles(area, map_data, player_pos)
+                        logger.debug(f"Merged {len(map_data) * len(map_data[0]) if map_data else 0} new tiles into area")
+                    else:
+                        logger.warning(f"Player position {player_pos} seems incorrect for map {map_id:04X} "
+                                     f"(would be at grid {expected_grid_x},{expected_grid_y})")
+                else:
+                    # First visit to this area after loading - merge normally
+                    self._merge_map_tiles(area, map_data, player_pos)
+                    logger.debug(f"Merged {len(map_data) * len(map_data[0]) if map_data else 0} new tiles into area")
             
             area.player_last_position = player_pos
+            area.last_seen = timestamp
             # Remove deprecated fields - keep it simple
             logger.debug(f"Updated map area {area.location_name} (ID: {map_id:04X})")
         else:
@@ -527,6 +600,23 @@ class MapStitcher:
         
         return layout
     
+    def get_player_position_for_location(self, location_name: str) -> Optional[Tuple[int, int]]:
+        """Get the last known player position for a specific location.
+        
+        Returns:
+            Tuple of (x, y) coordinates or None if not found or invalid
+        """
+        # Find the map area with this location name
+        for area in self.map_areas.values():
+            if area.location_name and location_name and area.location_name.lower() == location_name.lower():
+                if hasattr(area, 'player_last_position') and area.player_last_position:
+                    px, py = area.player_last_position
+                    # Validate the position
+                    if px >= 0 and px < 1000 and py >= 0 and py < 1000 and px != 0xFFFF and py != 0xFFFF:
+                        return (px, py)
+                break
+        return None
+    
     def get_location_connections(self, location_name=None):
         """Get connections for a specific location or all locations.
         
@@ -718,13 +808,24 @@ class MapStitcher:
             
             # Convert map areas to serializable format
             for map_id, area in self.map_areas.items():
+                # Trim null rows from map_data before saving
+                if area.map_data:
+                    trimmed_map_data, trim_offsets = self._trim_null_rows(area.map_data)
+                else:
+                    trimmed_map_data, trim_offsets = [], {}
+                
                 # Save only essential data
                 area_data = {
                     "map_id": area.map_id,
                     "location_name": area.location_name,
-                    "map_data": area.map_data,
+                    "map_data": trimmed_map_data,
                     "player_last_position": area.player_last_position
                 }
+                
+                # Save trim offsets if we trimmed the data
+                if trim_offsets:
+                    area_data["trim_offsets"] = trim_offsets
+                
                 # Save additional attributes for map stitching
                 if hasattr(area, 'explored_bounds'):
                     area_data["explored_bounds"] = area.explored_bounds
@@ -738,7 +839,8 @@ class MapStitcher:
             logger.debug(f"Saved {len(data['location_connections'])} location connections from {len(self.warp_connections)} warp connections")
             
             with open(self.save_file, 'w') as f:
-                json.dump(data, f, indent=2)
+                # Save in minified format to reduce file size
+                json.dump(data, f, separators=(',', ':'))
             
             logger.debug(f"Saved map stitching data to {self.save_file}")
             
@@ -782,11 +884,77 @@ class MapStitcher:
                         location_name = f"Map_{map_id:04X}"
                         logger.debug(f"Unknown map ID {map_id:04X} during load, using fallback name")
                 
+                # Reconstruct full map data from trimmed version
+                trimmed_data = area_data.get("map_data", [])
+                trim_offsets = area_data.get("trim_offsets", {})
+                
+                if trim_offsets and trim_offsets.get('compacted'):
+                    # New compacted format - reconstruct from tile list
+                    row_offset = trim_offsets.get('row_offset', 0)
+                    col_offset = trim_offsets.get('col_offset', 0)
+                    original_height = trim_offsets.get('original_height', 100)
+                    original_width = trim_offsets.get('original_width', 100)
+                    
+                    # Create full-sized map data array
+                    full_map_data = [[None for _ in range(original_width)] for _ in range(original_height)]
+                    
+                    # Restore tiles from compacted format
+                    if isinstance(trimmed_data, list):
+                        # New list format: [[rel_row, rel_col, tile], ...]
+                        for item in trimmed_data:
+                            if len(item) >= 3:
+                                rel_row, rel_col, tile = item[0], item[1], item[2]
+                                actual_row = row_offset + rel_row
+                                actual_col = col_offset + rel_col
+                                if actual_row < original_height and actual_col < original_width:
+                                    full_map_data[actual_row][actual_col] = tile
+                    elif isinstance(trimmed_data, dict) and 'tiles' in trimmed_data:
+                        # Old dict format (backward compatibility)
+                        for pos_key, tile in trimmed_data['tiles'].items():
+                            rel_row, rel_col = map(int, pos_key.split(','))
+                            actual_row = row_offset + rel_row
+                            actual_col = col_offset + rel_col
+                            if actual_row < original_height and actual_col < original_width:
+                                full_map_data[actual_row][actual_col] = tile
+                    
+                    map_data = full_map_data
+                elif trimmed_data and trim_offsets:
+                    # Old trimmed format (backward compatibility)
+                    row_offset = trim_offsets.get('row_offset', 0)
+                    col_offset = trim_offsets.get('col_offset', 0)
+                    original_height = trim_offsets.get('original_height', len(trimmed_data) + row_offset)
+                    original_width = trim_offsets.get('original_width', 100)
+                    
+                    # Create full-sized map data array
+                    full_map_data = [[None for _ in range(original_width)] for _ in range(original_height)]
+                    
+                    # Place trimmed data back at correct position
+                    for i, row in enumerate(trimmed_data):
+                        for j, tile in enumerate(row):
+                            if tile is not None:
+                                full_map_data[row_offset + i][col_offset + j] = tile
+                    
+                    map_data = full_map_data
+                else:
+                    # No trim offsets, use data as-is (backward compatibility)
+                    map_data = trimmed_data
+                
+                # Validate and clean player position when loading
+                player_pos_data = area_data.get("player_last_position", [0, 0])
+                if player_pos_data:
+                    px, py = player_pos_data[0], player_pos_data[1] if len(player_pos_data) > 1 else 0
+                    # Clean up invalid positions (65535 = 0xFFFF is an error value)
+                    if px < 0 or px > 1000 or py < 0 or py > 1000 or px == 0xFFFF or py == 0xFFFF:
+                        logger.warning(f"Cleaning invalid player position {player_pos_data} for map {map_id:04X}")
+                        player_pos_data = [0, 0]  # Reset to origin
+                else:
+                    player_pos_data = [0, 0]
+                
                 area = MapArea(
                     map_id=area_data["map_id"],
                     location_name=location_name,
-                    map_data=area_data.get("map_data", []),
-                    player_last_position=tuple(area_data["player_last_position"]),
+                    map_data=map_data,
+                    player_last_position=tuple(player_pos_data),
                     warp_tiles=[],  # Deprecated - not needed
                     boundaries={"north": 0, "south": 10, "west": 0, "east": 10},  # Default boundaries
                     visited_count=1,  # Default
@@ -797,6 +965,14 @@ class MapStitcher:
                 # Restore additional stitching attributes if present
                 if "explored_bounds" in area_data:
                     area.explored_bounds = area_data["explored_bounds"]
+                    # When loading trimmed data, adjust explored_bounds to match
+                    # Since we trimmed null rows/columns, the bounds are now relative to the trimmed data
+                    if area.map_data:
+                        # The trimmed data starts at (0,0), so adjust bounds accordingly
+                        actual_height = len(area.map_data)
+                        actual_width = max(len(row) for row in area.map_data) if area.map_data else 0
+                        # Keep the existing explored_bounds as they track the original coordinate space
+                        # The map_data is now compact but explored_bounds maintains the relationship
                 else:
                     # Initialize explored bounds from map data if not present
                     if area.map_data:
@@ -990,6 +1166,70 @@ class MapStitcher:
         # Trim if it's all walls or mostly walls with no content
         return non_wall_count == 0
     
+    def _trim_null_rows(self, map_data: List[List]) -> Tuple[List[List], Dict[str, int]]:
+        """Trim rows that are entirely null/None from map data to reduce file size.
+        
+        Returns a tuple of (trimmed_data, trim_offsets) where trim_offsets contains
+        the offsets needed to reconstruct original positions.
+        """
+        if not map_data:
+            return [], {}
+        
+        # Find bounds of actual data
+        start_row = None
+        end_row = None
+        start_col = None
+        end_col = None
+        
+        # Find row bounds
+        for i, row in enumerate(map_data):
+            if row and any(tile is not None for tile in row):
+                if start_row is None:
+                    start_row = i
+                end_row = i
+        
+        if start_row is None:
+            # All data is null
+            return [], {}
+        
+        # Find column bounds across all rows
+        for row in map_data[start_row:end_row + 1]:
+            if row:
+                for j, tile in enumerate(row):
+                    if tile is not None:
+                        if start_col is None or j < start_col:
+                            start_col = j
+                        if end_col is None or j > end_col:
+                            end_col = j
+        
+        if start_col is None:
+            return [], {}
+        
+        # Create compacted data - use a list of [row, col, tile] to save space
+        # This eliminates ALL null-only rows while preserving position information
+        tiles_list = []
+        
+        # Store only non-null tiles with their positions
+        for i in range(start_row, end_row + 1):
+            if map_data[i]:
+                for j in range(start_col, end_col + 1):
+                    if j < len(map_data[i]) and map_data[i][j] is not None:
+                        # Store as [relative_row, relative_col, tile_data]
+                        # This is more compact than dict with string keys
+                        rel_row = i - start_row
+                        rel_col = j - start_col
+                        tiles_list.append([rel_row, rel_col, map_data[i][j]])
+        
+        trim_offsets = {
+            'row_offset': start_row,
+            'col_offset': start_col,
+            'original_height': len(map_data),
+            'original_width': max(len(row) for row in map_data) if map_data else 0,
+            'compacted': True  # Flag to indicate new format
+        }
+        
+        return tiles_list, trim_offsets
+    
     def generate_location_map_display(self, location_name: str, player_pos: Tuple[int, int] = None, 
                                       npcs: List[Dict] = None, connections: List[Dict] = None) -> List[str]:
         """Generate a detailed map display for a specific location.
@@ -1041,29 +1281,47 @@ class MapStitcher:
         
         # Find player position in the grid if available
         local_player_pos = None
-        if player_pos and explored_width <= 30 and explored_height <= 30:
-            # Find the stored map area to get coordinate conversion info
-            map_area = None
-            for area in self.map_areas.values():
-                if area.location_name and location_name and area.location_name.lower() == location_name.lower():
-                    map_area = area
-                    break
-            
-            if map_area and hasattr(map_area, 'origin_offset'):
-                # Convert player world coordinates to grid-relative coordinates
-                offset_x = map_area.origin_offset.get('x', 0)
-                offset_y = map_area.origin_offset.get('y', 0)
+        if player_pos:
+            # Validate player position first
+            px, py = player_pos
+            if px >= 0 and px < 1000 and py >= 0 and py < 1000 and px != 0xFFFF and py != 0xFFFF:
+                # Find the stored map area to get coordinate conversion info
+                map_area = None
+                for area in self.map_areas.values():
+                    if area.location_name and location_name and area.location_name.lower() == location_name.lower():
+                        map_area = area
+                        break
                 
-                # Calculate player's position relative to the explored bounds
-                grid_player_x = player_pos[0] + offset_x
-                grid_player_y = player_pos[1] + offset_y
-                
-                # Convert to relative coordinates in the location_grid
-                if hasattr(map_area, 'explored_bounds'):
-                    bounds = map_area.explored_bounds
-                    rel_x = grid_player_x - bounds['min_x']
-                    rel_y = grid_player_y - bounds['min_y']
-                    local_player_pos = (rel_x, rel_y)
+                if map_area:
+                    # Use the stored player position from the map area if available
+                    if hasattr(map_area, 'player_last_position') and map_area.player_last_position:
+                        last_px, last_py = map_area.player_last_position
+                        # Validate the stored position
+                        if last_px >= 0 and last_px < 1000 and last_py >= 0 and last_py < 1000 and last_px != 0xFFFF and last_py != 0xFFFF:
+                            player_pos = map_area.player_last_position
+                            px, py = player_pos
+                    
+                    if hasattr(map_area, 'origin_offset') and map_area.origin_offset:
+                        # Convert player world coordinates to grid-relative coordinates
+                        offset_x = map_area.origin_offset.get('x', 0)
+                        offset_y = map_area.origin_offset.get('y', 0)
+                        
+                        # Calculate player's position relative to the explored bounds
+                        grid_player_x = px + offset_x
+                        grid_player_y = py + offset_y
+                        
+                        # Convert to relative coordinates in the location_grid
+                        if hasattr(map_area, 'explored_bounds'):
+                            bounds = map_area.explored_bounds
+                            rel_x = grid_player_x - bounds['min_x']
+                            rel_y = grid_player_y - bounds['min_y']
+                            
+                            # Check if player is within the displayed area
+                            if 0 <= rel_x <= (max_x - min_x) and 0 <= rel_y <= (max_y - min_y):
+                                local_player_pos = (rel_x, rel_y)
+                                logger.debug(f"Player at relative position {local_player_pos} in {location_name}")
+                            else:
+                                logger.debug(f"Player at {player_pos} is outside displayed area of {location_name}")
         
         if not all_positions:
             return []
@@ -1196,6 +1454,7 @@ class MapStitcher:
             "s": "s=Sand",
             "D": "D=Door",
             "S": "S=Stairs/Ladder",
+            "C": "C=Computer/PC",
             "→": "→=Ledge (jump east)",
             "←": "←=Ledge (jump west)",
             "↑": "↑=Ledge (jump north)",
@@ -1315,7 +1574,7 @@ class MapStitcher:
         
         # PC and other interactables
         elif behavior_val in [131, 197]:  # PC, PLAYER_ROOM_PC_ON
-            return 'P'  # PC (but will be overridden by player position)
+            return 'C'  # Computer/PC (changed from 'P' to avoid conflict with Player)
         elif behavior_val == 134:  # TELEVISION
             return 'T'  # TV
         
