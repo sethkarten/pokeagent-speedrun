@@ -211,7 +211,7 @@ def cleanup_video_recording():
 app = FastAPI(
     title="PokeAgent Challenge",
     description="Streamer display FastAPI endpoints",
-    version="3.0.0",
+    version="3.0.0-preview",
 )
 
 # Add CORS middleware
