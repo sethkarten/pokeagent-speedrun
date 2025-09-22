@@ -110,7 +110,7 @@ pokeagent-speedrun/
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10 - 3.11
 - Pokémon Emerald ROM (not included - obtain legally)
 - One of the supported VLM backends (see VLM Setup section)
 
@@ -123,12 +123,17 @@ git clone https://github.com/sethkarten/pokeagent-speedrun
 cd pokeagent-speedrun
 ```
 
-### 2. Create Conda Environment (Recommended)
+### 2. Install uv and Set Up Environment
 
 ```bash
-# Create and activate the environment
-conda create -n pokeagent python=3.10 -y
-conda activate pokeagent
+# Install uv if not already installed
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv sync
+
+# Activate the virtual environment
+source .venv/bin/activate
 ```
 
 ### 3. Install mgba System Library (Required for Python bindings)
@@ -148,21 +153,23 @@ Mac OS x86_64 Instructions:
 brew install mgba
 ```
 
-### 4. Install Compatible libffi in Conda (Important!)
+### 4. Install Python Dependencies
 
-Before installing Python dependencies, ensure you have a compatible libffi version (3.3 or 7.x) in your conda environment:
+The dependencies are automatically installed when you run `uv sync` in step 2.
 
-```bash
-conda install -n pokeagent libffi=3.3 -y
-```
-
-### 5. Install Python Dependencies
+If you need to reinstall or update dependencies:
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-### 6. Set up Game ROM
+For development dependencies:
+
+```bash
+uv sync --dev
+```
+
+### 5. Set up Game ROM
 
 **Important**: You must obtain a Pokémon Emerald ROM file legally (e.g., dump from your own cartridge).
 
@@ -694,7 +701,7 @@ python run.py --backend local --model-name "your-model"
 
 1. **"Module not found" errors**:
    ```bash
-   pip install -r requirements.txt
+   uv sync
    export PYTHONPATH="${PYTHONPATH}:$(pwd)"
    ```
 

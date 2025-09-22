@@ -185,3 +185,4 @@ cython_debug/
 
 
 *.mp4
+.pokeagent_cache/*
