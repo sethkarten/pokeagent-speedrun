@@ -106,10 +106,35 @@ def run_multiprocess_client(server_port=8000, args=None):
         print("⚠️ Pygame not available, running in headless mode")
         headless = True
     
+    # Auto-display comprehensive state in manual mode for debugging
+    auto_state_timer = None
+    if args and args.manual:
+        auto_state_timer = time.time() + 5  # Display state after 5 seconds in manual mode (allow map to initialize)
+    
     # Main loop
     running = True
     while running:
         try:
+            # Auto-display comprehensive state in manual mode (one time)
+            if auto_state_timer and time.time() >= auto_state_timer:
+                print("🔍 Auto-displaying comprehensive state in manual mode...")
+                try:
+                    response = requests.get(f"{server_url}/state", timeout=5)
+                    if response.status_code == 200:
+                        state_data = response.json()
+                        print("=" * 80)
+                        print("📊 COMPREHENSIVE STATE (LLM View)")
+                        print("=" * 80)
+                        from utils.state_formatter import format_state_for_llm
+                        formatted_state = format_state_for_llm(state_data)
+                        print(formatted_state)
+                        print("=" * 80)
+                    else:
+                        print(f"❌ Failed to get state: {response.status_code}")
+                except Exception as e:
+                    print(f"❌ Error getting state: {e}")
+                auto_state_timer = None  # Only display once
+            
             # Handle pygame events and display
             if not headless:
                 # Process events
@@ -208,10 +233,10 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 print("💾 Saving state...")
                                 try:
                                     response = requests.post(f"{server_url}/save_state", 
-                                                           json={"filepath": "manual_save.state"}, 
+                                                           json={"filepath": ".pokeagent_cache/manual_save.state"}, 
                                                            timeout=5)
                                     if response.status_code == 200:
-                                        print("✅ State saved to manual_save.state")
+                                        print("✅ State saved to .pokeagent_cache/manual_save.state")
                                     else:
                                         print(f"❌ Failed to save state: {response.status_code}")
                                 except Exception as e:
@@ -221,10 +246,10 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 print("📂 Loading state...")
                                 try:
                                     response = requests.post(f"{server_url}/load_state", 
-                                                           json={"filepath": "manual_save.state"}, 
+                                                           json={"filepath": ".pokeagent_cache/manual_save.state"}, 
                                                            timeout=5)
                                     if response.status_code == 200:
-                                        print("✅ State loaded from manual_save.state")
+                                        print("✅ State loaded from .pokeagent_cache/manual_save.state")
                                     else:
                                         print(f"❌ Failed to load state: {response.status_code}")
                                 except Exception as e:

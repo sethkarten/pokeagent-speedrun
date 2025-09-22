@@ -2024,7 +2024,7 @@ class PokemonEmeraldReader:
             logger.debug(f"Buffer currency validation failed for 0x{buffer_addr:08X}: {e}")
             return False
 
-    def read_map_around_player(self, radius: int = 10) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
+    def read_map_around_player(self, radius: int = 7) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
         """Read map area around player with improved error handling for area transitions"""
         # Check for area transitions (re-enabled with minimal logic)
         location = self.read_location()
@@ -2085,7 +2085,7 @@ class PokemonEmeraldReader:
                 location_name = ""
             
             # Only apply validation for outdoor areas, skip for indoor/house areas
-            is_outdoor = location_name and any(keyword in location_name.upper() for keyword in ['TOWN', 'ROUTE', 'CITY', 'ROAD', 'PATH'])
+            is_outdoor = location_name and any(keyword in location_name.upper() for keyword in ['TOWN', 'ROUTE', 'CITY', 'ROAD', 'PATH']) if location_name else False
             
             if is_outdoor:
                 total_tiles = sum(len(row) for row in map_data)
@@ -2162,7 +2162,7 @@ class PokemonEmeraldReader:
         
         return []
     
-    def _read_map_data_internal(self, radius: int = 10) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
+    def _read_map_data_internal(self, radius: int = 7) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
         """Internal method to read map data without validation/retry logic"""
         
         try:
@@ -2183,8 +2183,8 @@ class PokemonEmeraldReader:
             map_x = player_x + 7
             map_y = player_y + 7
             
-            # Ensure consistent 11x11 output by adjusting boundaries
-            target_width = 2 * radius + 1  # Should be 11 for radius=5
+            # Ensure consistent 15x15 output by adjusting boundaries
+            target_width = 2 * radius + 1  # Should be 15 for radius=7
             target_height = 2 * radius + 1
             
             # Calculate ideal boundaries
@@ -2409,12 +2409,19 @@ class PokemonEmeraldReader:
             state = self.read_map(state)
             # Player information
             coords = self.read_coordinates()
-            if coords:
-                state["player"]["position"] = {"x": coords[0], "y": coords[1]}
+            # Always set position - (0,0) is a valid coordinate
+            # read_coordinates() always returns a tuple, never None
+            state["player"]["position"] = {"x": coords[0], "y": coords[1]}
+            print(f"DEBUG: Player coords: {coords}")
             
-            location = self.read_location()
-            if location:
+            try:
+                location = self.read_location()
+                print(f"DEBUG: read_location() returned: '{location}'")
+                # Always set location, even if it's 'Unknown' or 'TITLE_SEQUENCE'
                 state["player"]["location"] = location
+            except Exception as e:
+                print(f"DEBUG: Exception reading location: {e}")
+                state["player"]["location"] = "Unknown"
             
             player_name = self.read_player_name()
             if player_name:
@@ -2517,7 +2524,9 @@ class PokemonEmeraldReader:
         
                 
         except Exception as e:
+            import traceback
             logger.warning(f"Failed to read comprehensive state: {e}")
+            logger.debug(f"Traceback: {traceback.format_exc()}")
         
         # Add screenshot to visual state if provided
         if screenshot is not None:
@@ -2526,7 +2535,7 @@ class PokemonEmeraldReader:
         return state
     
     def read_map(self, state): 
-        tiles = self.read_map_around_player(radius=5)  # 11x11 grid to match agent's pixel view
+        tiles = self.read_map_around_player(radius=7)  # 15x15 grid for better context
         if tiles:
             # DEBUG: Print tile data before processing for HTTP API
             total_tiles = sum(len(row) for row in tiles)
@@ -2616,26 +2625,65 @@ class PokemonEmeraldReader:
         else:
             state["map"]["object_events"] = []
         
-        # Map stitcher updates are now handled by movement detection in step_environment()
-        # This avoids duplicate processing when pressing 'M' or calling get_comprehensive_state()
+        # Update map stitcher with current tiles
+        if tiles:
+            self._update_map_stitcher(tiles, state)
         
         # Add stitched map information to state
         stitched_info = self.get_stitched_map_info()
         state["map"]["stitched_map_info"] = stitched_info
+        
+        # Generate map visualization directly for the LLM
+        # This ensures the map is available even when passed through JSON
+        if self._map_stitcher and state.get("player"):
+            location = state["player"].get("location", "Unknown")
+            coords = state["player"].get("position")
+            player_pos = (coords.get("x"), coords.get("y")) if coords else None
+            
+            # Always try to generate visual map if we have valid data, even if it was None before
+            # This handles cases where early calls failed but later calls have valid data
+            if location and location not in [None, "None", "Unknown"] and coords:
+                # Get connections with coordinates for this location
+                connections_with_coords = []
+                if location and self._map_stitcher:
+                    try:
+                        location_connections = self._map_stitcher.get_location_connections(location)
+                        for conn in location_connections:
+                            if len(conn) >= 3:
+                                other_loc, my_coords, their_coords = conn[0], conn[1], conn[2]
+                                connections_with_coords.append({
+                                    "to": other_loc,
+                                    "from_pos": list(my_coords) if my_coords else [],
+                                    "to_pos": list(their_coords) if their_coords else []
+                                })
+                    except Exception as e:
+                        logger.debug(f"Error getting location connections: {e}")
+                
+                # Generate the map display lines using stored map data, focused on 15x15 agent view
+                map_lines = self._map_stitcher.generate_location_map_display(
+                    location_name=location,
+                    player_pos=player_pos,
+                    npcs=state["map"].get("object_events", []),
+                    connections=connections_with_coords
+                )
+                
+                # Store as formatted text for direct use
+                state["map"]["visual_map"] = "\n".join(map_lines) if map_lines else None
+        
+        # Pass the MapStitcher instance for state_formatter to use
+        # This ensures the same instance with all the data is used
+        state["map"]["_map_stitcher_instance"] = self._map_stitcher
             
         return state
     
     def _update_map_stitcher(self, tiles, state):
         """Update the map stitcher with current map data"""
         try:
-            # Initialize map stitcher on first use (only if not already initialized by state loading)
+            # Get the global shared MapStitcher instance
             if self._map_stitcher is None:
-                from utils.map_stitcher import MapStitcher
-                # Use default cache location if not already initialized by state loading
-                logger.info("Initializing MapStitcher with default cache location")
-                self._map_stitcher = MapStitcher()
-                # Skip sync - let location_connections from file be the source of truth
-                # self._sync_warp_connections_to_state_formatter(force_rebuild=True)  # DISABLED - causes overwrites
+                from utils import map_stitcher_singleton
+                self._map_stitcher = map_stitcher_singleton.get_instance()
+                logger.info(f"Using shared MapStitcher instance with {len(self._map_stitcher.map_areas)} areas")
                 # Set up callback to save location connections when they change
                 self._setup_location_connections_callback()
             
@@ -2709,13 +2757,15 @@ class PokemonEmeraldReader:
             # Build location_connections directly from map areas after any updates
             self._build_location_connections_from_map_areas()
             
-            # Periodically save stitcher data
+            # Save more frequently to preserve accumulated map data
             if hasattr(self, '_last_stitcher_save'):
-                if timestamp - self._last_stitcher_save > 10.0:  # Save every 10 seconds
+                if timestamp - self._last_stitcher_save > 3.0:  # Save every 3 seconds
                     self._map_stitcher.save_to_file()
                     self._last_stitcher_save = timestamp
             else:
                 self._last_stitcher_save = timestamp
+                # Also save immediately on first update
+                self._map_stitcher.save_to_file()
                 
         except Exception as e:
             print(f"🗺️ DEBUG: Failed to update map stitcher: {e}")
@@ -4669,7 +4719,7 @@ class PokemonEmeraldReader:
         """
         try:
             # Read map tiles around player to check for doors
-            map_tiles = self.read_map_around_player(radius=5)  # 11x11 grid to match agent's pixel view
+            map_tiles = self.read_map_around_player(radius=7)  # 15x15 grid for better context
             if not map_tiles:
                 # If we can't read map, return all NPCs (better to have false positives than miss real ones)
                 return object_events

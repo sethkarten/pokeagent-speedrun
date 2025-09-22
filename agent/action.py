@@ -1,8 +1,9 @@
-import random
 import logging
-from utils.vlm import VLM
-from utils.state_formatter import format_state_for_llm, format_state_summary, get_movement_options, get_party_health_summary
+import random
+import sys
 from agent.system_prompt import system_prompt
+from utils.state_formatter import format_state_for_llm, format_state_summary, get_movement_options, get_party_health_summary
+from utils.vlm import VLM
 
 # Set up module logging
 logger = logging.getLogger(__name__)
@@ -113,6 +114,7 @@ def action_step(memory_context, current_plan, latest_observation, frame, state_d
     3. For movement: repeat directions based on movement options (e.g., "UP, UP, UP, UP" if UP shows "Normal path")
     4. If uncertain, output single action and reassess
     5. Use traversability data: move toward open paths, avoid obstacles
+    6. If movement doesn't change coordinates (e.g., RIGHT but X doesn't increase), check map for walls (#) blocking your path
     
     Valid buttons: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT, L, R
     - A: Interact with NPCs/objects, confirm selections, advance dialogue, use moves in battle
@@ -131,28 +133,8 @@ def action_step(memory_context, current_plan, latest_observation, frame, state_d
     # Construct complete prompt for VLM
     complete_prompt = system_prompt + action_prompt
     
-    # Print complete prompt to terminal for debugging
-    print("\n" + "="*120)
-    print("🤖 COMPLETE AGENT PROMPT SENT TO VLM:")
-    print("="*120)
-    
-    # Print prompt in chunks to avoid terminal truncation
-    import sys
-    sys.stdout.write(complete_prompt)
-    sys.stdout.write("\n")
-    sys.stdout.flush()
-    
-    print("="*120)
-    print("🤖 END OF PROMPT")
-    print("="*120 + "\n")
-    sys.stdout.flush()
-    
     action_response = vlm.get_text_query(complete_prompt, "ACTION").strip().upper()
     valid_buttons = ['A', 'B', 'SELECT', 'START', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R']
-    
-    # Print VLM response for debugging
-    print("🤖 VLM RESPONSE:")
-    print(f"Raw response: '{action_response}'")
     
     # Split the response by commas and clean up
     actions = [btn.strip() for btn in action_response.split(',') if btn.strip() in valid_buttons]

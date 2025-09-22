@@ -26,8 +26,9 @@ def save_checkpoint(emulator, llm_logger=None, agent_step_count=0):
     try:
         # Save emulator state
         print("💾 Saving checkpoint...")
-        emulator.save_state("checkpoint.state")
-        print(f"   ✅ Saved emulator state to checkpoint.state")
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        emulator.save_state(".pokeagent_cache/checkpoint.state")
+        print(f"   ✅ Saved emulator state to .pokeagent_cache/checkpoint.state")
         
         # Save milestones
         milestone_data = {
@@ -35,15 +36,17 @@ def save_checkpoint(emulator, llm_logger=None, agent_step_count=0):
             "step_count": agent_step_count,
             "timestamp": datetime.now().isoformat()
         }
-        with open("checkpoint_milestones.json", "w") as f:
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        with open(".pokeagent_cache/checkpoint_milestones.json", "w") as f:
             json.dump(milestone_data, f, indent=2)
-        print(f"   ✅ Saved milestones to checkpoint_milestones.json")
+        print(f"   ✅ Saved milestones to .pokeagent_cache/checkpoint_milestones.json")
         
         # Save location maps
         try:
             from utils.state_formatter import save_persistent_world_map
-            save_persistent_world_map("checkpoint_maps.json")
-            print(f"   ✅ Saved location maps to checkpoint_maps.json")
+            os.makedirs(".pokeagent_cache", exist_ok=True)
+            save_persistent_world_map(".pokeagent_cache/checkpoint_maps.json")
+            print(f"   ✅ Saved location maps to .pokeagent_cache/checkpoint_maps.json")
         except Exception as e:
             print(f"   ⚠️ Failed to save location maps: {e}")
         
@@ -100,31 +103,31 @@ def load_checkpoint(emulator, llm_logger=None):
         checkpoint_data = {}
         
         # Load emulator state
-        if os.path.exists("checkpoint.state"):
+        if os.path.exists(".pokeagent_cache/checkpoint.state"):
             print("🔄 Loading checkpoint...")
-            emulator.load_state("checkpoint.state")
-            print(f"   ✅ Loaded emulator state from checkpoint.state")
+            emulator.load_state(".pokeagent_cache/checkpoint.state")
+            print(f"   ✅ Loaded emulator state from .pokeagent_cache/checkpoint.state")
         else:
-            print("   ⚠️ No checkpoint.state found")
+            print("   ⚠️ No .pokeagent_cache/checkpoint.state found")
             return None
         
         # Load milestones
-        if os.path.exists("checkpoint_milestones.json"):
-            with open("checkpoint_milestones.json", "r") as f:
+        if os.path.exists(".pokeagent_cache/checkpoint_milestones.json"):
+            with open(".pokeagent_cache/checkpoint_milestones.json", "r") as f:
                 milestone_data = json.load(f)
             if emulator.memory_reader:
                 emulator.memory_reader.milestones = milestone_data.get("milestones", {})
             checkpoint_data['step_count'] = milestone_data.get("step_count", 0)
-            print(f"   ✅ Loaded milestones from checkpoint_milestones.json")
+            print(f"   ✅ Loaded milestones from .pokeagent_cache/checkpoint_milestones.json")
         
         # Load location maps
         try:
             from utils.state_formatter import load_persistent_world_map
-            if os.path.exists("checkpoint_maps.json"):
-                load_persistent_world_map("checkpoint_maps.json")
-                print(f"   ✅ Loaded location maps from checkpoint_maps.json")
+            if os.path.exists(".pokeagent_cache/checkpoint_maps.json"):
+                load_persistent_world_map(".pokeagent_cache/checkpoint_maps.json")
+                print(f"   ✅ Loaded location maps from .pokeagent_cache/checkpoint_maps.json")
             else:
-                print(f"   ⚠️ No checkpoint_maps.json found")
+                print(f"   ⚠️ No .pokeagent_cache/checkpoint_maps.json found")
         except Exception as e:
             print(f"   ⚠️ Failed to load location maps: {e}")
         

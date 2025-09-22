@@ -293,7 +293,7 @@ def signal_handler(signum, frame):
         env.stop()
     sys.exit(0)
 
-def setup_environment():
+def setup_environment(skip_initial_state=False):
     """Initialize the emulator"""
     global env, current_obs, anticheat_tracker
     
@@ -311,32 +311,34 @@ def setup_environment():
         print("AntiCheat tracker initialized for submission logging")
         
         # Log initial GAME_RUNNING milestone at startup (STEP=0, time=0)
-        try:
-            # Mark GAME_RUNNING milestone as completed immediately
-            env.milestone_tracker.mark_completed("GAME_RUNNING")
-            
-            # Get initial game state for logging
-            initial_state = env.get_comprehensive_state()
-            
-            # Create state hash
-            import hashlib
-            state_str = str(initial_state)
-            state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
-            
-            # Log initial entry with GAME_RUNNING milestone
-            anticheat_tracker.log_submission_data(
-                step=0,
-                state_data=initial_state,
-                action_taken="INIT",
-                decision_time=0.0,
-                state_hash=state_hash,
-                manual_mode=True,
-                milestone_override="GAME_RUNNING"
-            )
-            print("Initial GAME_RUNNING milestone logged at startup")
-            
-        except Exception as e:
-            print(f"Warning: Could not log initial milestone: {e}")
+        # Skip this if we're going to load a state anyway
+        if not skip_initial_state:
+            try:
+                # Mark GAME_RUNNING milestone as completed immediately
+                env.milestone_tracker.mark_completed("GAME_RUNNING")
+                
+                # Get initial game state for logging
+                initial_state = env.get_comprehensive_state()
+                
+                # Create state hash
+                import hashlib
+                state_str = str(initial_state)
+                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+                
+                # Log initial entry with GAME_RUNNING milestone
+                anticheat_tracker.log_submission_data(
+                    step=0,
+                    state_data=initial_state,
+                    action_taken="INIT",
+                    decision_time=0.0,
+                    state_hash=state_hash,
+                    manual_mode=True,
+                    milestone_override="GAME_RUNNING"
+                )
+                print("Initial GAME_RUNNING milestone logged at startup")
+                
+            except Exception as e:
+                print(f"Warning: Could not log initial milestone: {e}")
         
         screenshot = env.get_screenshot()
         if screenshot:
@@ -433,7 +435,7 @@ def step_environment(actions_pressed):
                         # @TODO should do location change warps here too
                         print(f"🗺️ Triggering map stitcher update for position change")
                         # Call map stitcher update directly without full map reading
-                        tiles = env.memory_reader.read_map_around_player(radius=10)
+                        tiles = env.memory_reader.read_map_around_player(radius=7)
                         if tiles:
                             print(f"🗺️ Got {len(tiles)} tiles, updating map stitcher")
                             state = {"map": {}}  # Basic state for stitcher
@@ -853,64 +855,150 @@ async def get_comprehensive_state():
         if env.milestone_tracker:
             state["milestones"] = env.milestone_tracker.milestones
         
-        # Include portal connections for LLM display (load from persistent storage)
-        try:
-            
-            # Load from map_stitcher_data.json where location_connections is stored
-            cache_file = ".pokeagent_cache/map_stitcher_data.json"
-            print(f"🗺️ SERVER: Checking for portal connections at {cache_file}")
-            if os.path.exists(cache_file):
-                print(f"🗺️ SERVER: Cache file exists, loading...")
-                with open(cache_file, 'r') as f:
-                    map_data = json.load(f)
-                    print(f"🗺️ SERVER: Loaded map data with keys: {list(map_data.keys())}")
-                    # Try location_connections first (more accurate coordinates)
-                    if 'location_connections' in map_data and map_data['location_connections']:
-                        print(f"🗺️ SERVER: Found {len(map_data['location_connections'])} location connections")
-                        location_connections = map_data['location_connections']
-                        
-                        # Pass location_connections to state for LLM display
-                        state["location_connections"] = location_connections
-                        print(f"🗺️ SERVER: Added location connections to state: {location_connections}")
-                        print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
-                        logger.debug(f"Loaded location connections for {len(location_connections)} locations from persistent storage")
-                    
-                    elif 'warp_connections' in map_data and map_data['warp_connections']:
-                        print(f"🗺️ SERVER: Fallback to {len(map_data['warp_connections'])} warp connections")
-                        # Convert warp_connections to MAP_ID_CONNECTIONS format for LLM display
-                        map_id_connections = {}
-                        for conn in map_data['warp_connections']:
-                            from_map = conn['from_map_id']
-                            if from_map not in map_id_connections:
-                                map_id_connections[from_map] = []
-                            
-                            # Find the location name for the destination map
-                            to_map_name = "Unknown Location"
-                            if str(conn['to_map_id']) in map_data.get('map_areas', {}):
-                                to_map_name = map_data['map_areas'][str(conn['to_map_id'])]['location_name']
-                            
-                            map_id_connections[from_map].append({
-                                'to_name': to_map_name,
-                                'from_pos': conn['from_position'],  # Keep as list for JSON serialization
-                                'to_pos': conn['to_position']       # Keep as list for JSON serialization
+        # Get map stitcher data for enhanced map display
+        # Use the memory_reader's MapStitcher instance which has the accumulated data
+        map_stitcher = None
+        if env and env.memory_reader and hasattr(env.memory_reader, '_map_stitcher'):
+            map_stitcher = env.memory_reader._map_stitcher
+            num_areas = len(map_stitcher.map_areas) if map_stitcher and hasattr(map_stitcher, 'map_areas') else 0
+            logger.debug(f"Using memory_reader's MapStitcher with {num_areas} areas")
+        else:
+            logger.debug("No MapStitcher available from memory_reader")
+        
+        # Get current location name
+        current_location = state.get("player", {}).get("location", "Unknown")
+        player_pos = state.get("player", {}).get("position")
+        if player_pos:
+            player_coords = (player_pos.get("x", 0), player_pos.get("y", 0))
+        else:
+            player_coords = None
+        
+        # Add stitched map info to the map section
+        if not "map" in state:
+            state["map"] = {}
+        
+        # Check if visual_map was already generated by memory_reader
+        # If so, preserve it as it has the proper accumulated map data
+        visual_map_from_memory_reader = state.get("map", {}).get("visual_map")
+        if visual_map_from_memory_reader:
+            logger.debug("Using visual_map generated by memory_reader")
+            # Keep the visual_map as-is
+        elif map_stitcher:
+            # Generate visual map if not already present
+            try:
+                # Get NPCs from state if available
+                npcs = state.get("map", {}).get("object_events", [])
+                
+                # Get connections for this location
+                connections_with_coords = []
+                if current_location and current_location != "Unknown":
+                    location_connections = map_stitcher.get_location_connections(current_location)
+                    for conn in location_connections:
+                        if len(conn) >= 3:
+                            other_loc, my_coords, their_coords = conn[0], conn[1], conn[2]
+                            connections_with_coords.append({
+                                "to": other_loc,
+                                "from_pos": list(my_coords) if my_coords else [],
+                                "to_pos": list(their_coords) if their_coords else []
                             })
-                        
-                        state["portal_connections"] = map_id_connections
-                        print(f"🗺️ SERVER: Added portal connections to state: {map_id_connections}")
-                        print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
-                        logger.debug(f"Loaded portal connections for {len(map_id_connections)} maps from persistent storage")
-                    else:
-                        print(f"🗺️ SERVER: No warp connections found in map data")
-                        logger.debug("No warp connections found in map stitcher data")
+                
+                # Generate the map display
+                map_lines = map_stitcher.generate_location_map_display(
+                    location_name=current_location,
+                    player_pos=player_coords,
+                    npcs=npcs,
+                    connections=connections_with_coords
+                )
+                
+                # Store as formatted text
+                if map_lines:
+                    state["map"]["visual_map"] = "\n".join(map_lines)
+                    logger.debug(f"Generated visual_map with {len(map_lines)} lines")
+            except Exception as e:
+                logger.error(f"Failed to generate visual_map: {e}")
+        
+        # Add stitched map info for the client/frontend
+        if map_stitcher:
+            # Get the location grid and connections
+            if current_location and current_location != "Unknown":
+                location_grid = map_stitcher.get_location_grid(current_location)
+                connections = []
+                
+                # Get connections for this location
+                for other_loc, my_coords, their_coords in map_stitcher.get_location_connections(current_location):
+                    connections.append({
+                        "to": other_loc,
+                        "from_pos": list(my_coords),
+                        "to_pos": list(their_coords)
+                    })
+                
+                state["map"]["stitched_map_info"] = {
+                    "available": True,
+                    "current_area": {
+                        "name": current_location,
+                        "connections": connections,
+                        "player_pos": player_coords
+                    },
+                    "player_local_pos": player_coords
+                }
             else:
-                print(f"🗺️ SERVER: Cache file not found at {cache_file}")
-                logger.debug(f"Map stitcher cache file not found: {cache_file}")
-        except Exception as e:
-            print(f"🗺️ SERVER: Error loading portal connections: {e}")
-            logger.debug(f"Could not load portal connections from persistent storage: {e}")
+                state["map"]["stitched_map_info"] = {
+                    "available": False,
+                    "reason": "Unknown location"
+                }
+            
+            # Also include location connections directly for backward compatibility
+            try:
+                cache_file = ".pokeagent_cache/map_stitcher_data.json"
+                if os.path.exists(cache_file):
+                    with open(cache_file, 'r') as f:
+                        map_data = json.load(f)
+                        if 'location_connections' in map_data and map_data['location_connections']:
+                            location_connections = map_data['location_connections']
+                            state["location_connections"] = location_connections
+                            logger.debug(f"Loaded location connections for {len(location_connections) if location_connections else 0} locations")
+                        elif 'warp_connections' in map_data and map_data['warp_connections']:
+                            # Convert warp_connections to portal_connections format for LLM display
+                            map_id_connections = {}
+                            for conn in map_data['warp_connections']:
+                                from_map = conn['from_map_id']
+                                if from_map not in map_id_connections:
+                                    map_id_connections[from_map] = []
+                                
+                                # Find the location name for the destination map
+                                to_map_name = "Unknown Location"
+                                if str(conn['to_map_id']) in map_data.get('map_areas', {}):
+                                    to_map_name = map_data['map_areas'][str(conn['to_map_id'])]['location_name']
+                                
+                                map_id_connections[from_map].append({
+                                    'to_name': to_map_name,
+                                    'from_pos': conn['from_position'],  # Keep as list for JSON serialization
+                                    'to_pos': conn['to_position']       # Keep as list for JSON serialization
+                                })
+                            
+                            state["portal_connections"] = map_id_connections
+                            print(f"🗺️ SERVER: Added portal connections to state: {map_id_connections}")
+                            print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
+                            logger.debug(f"Loaded portal connections for {len(map_id_connections) if map_id_connections else 0} maps from persistent storage")
+                        else:
+                            print(f"🗺️ SERVER: No warp connections found in map data")
+                            logger.debug("No warp connections found in map stitcher data")
+                else:
+                    print(f"🗺️ SERVER: Cache file not found at {cache_file}")
+                    logger.debug(f"Map stitcher cache file not found: {cache_file}")
+            except Exception as e:
+                import traceback
+                print(f"🗺️ SERVER: Error loading portal connections: {e}")
+                print(f"🗺️ SERVER: Full traceback: {traceback.format_exc()}")
+                logger.debug(f"Could not load portal connections from persistent storage: {e}")
         
         # The battle information already contains all necessary data
         # No additional analysis needed - keep it clean
+        
+        # Remove MapStitcher instance to avoid serialization issues
+        # The instance is only for internal use by state_formatter
+        if "_map_stitcher_instance" in state.get("map", {}):
+            del state["map"]["_map_stitcher_instance"]
         
         # Convert screenshot to base64 if available
         if state["visual"]["screenshot"]:
@@ -1603,7 +1691,8 @@ async def stop_server():
 async def save_state_endpoint(request: dict):
     """Save the current emulator state to a file"""
     try:
-        filepath = request.get("filepath", "manual_save.state")
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        filepath = request.get("filepath", ".pokeagent_cache/manual_save.state")
         if env:
             env.save_state(filepath)
             logger.info(f"💾 State saved to: {filepath}")
@@ -1618,7 +1707,8 @@ async def save_state_endpoint(request: dict):
 async def load_state_endpoint(request: dict):
     """Load an emulator state from a file"""
     try:
-        filepath = request.get("filepath", "manual_save.state")
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        filepath = request.get("filepath", ".pokeagent_cache/manual_save.state")
         if env:
             if not os.path.exists(filepath):
                 return JSONResponse(status_code=404, content={"error": f"State file not found: {filepath}"})
@@ -1638,7 +1728,8 @@ async def save_checkpoint(request_data: dict = None):
         step_count = request_data.get("step_count", 0) if request_data else 0
         
         # Save emulator state
-        checkpoint_state = "checkpoint.state"
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        checkpoint_state = ".pokeagent_cache/checkpoint.state"
         if env:
             env.save_state(checkpoint_state)
             logger.info(f"💾 Server: Saved checkpoint state at step {step_count}")
@@ -1653,8 +1744,8 @@ async def save_checkpoint(request_data: dict = None):
                 "step_count": step_count,
                 "files": {
                     "state": checkpoint_state,
-                    "milestones": f"checkpoint_milestones.json",
-                    "map": f"checkpoint_grids.json"
+                    "milestones": f".pokeagent_cache/checkpoint_milestones.json",
+                    "map": f".pokeagent_cache/checkpoint_grids.json"
                 }
             }
         else:
@@ -1732,10 +1823,10 @@ async def save_agent_history():
 async def load_checkpoint():
     """Load checkpoint state - called by client on startup if --load-checkpoint flag is used"""
     try:
-        checkpoint_state = "checkpoint.state"
+        checkpoint_state = ".pokeagent_cache/checkpoint.state"
         
         if not os.path.exists(checkpoint_state):
-            return {"status": "no_checkpoint", "message": "No checkpoint.state file found"}
+            return {"status": "no_checkpoint", "message": "No .pokeagent_cache/checkpoint.state file found"}
         
         if env:
             env.load_state(checkpoint_state)
@@ -1753,8 +1844,8 @@ async def load_checkpoint():
                 "status": "checkpoint_loaded",
                 "files": {
                     "state": checkpoint_state,
-                    "milestones": f"checkpoint_milestones.json",
-                    "map": f"checkpoint_grids.json"
+                    "milestones": f".pokeagent_cache/checkpoint_milestones.json",
+                    "map": f".pokeagent_cache/checkpoint_grids.json"
                 }
             }
         else:
@@ -1789,11 +1880,11 @@ def main():
     if env_load_state and not args.load_state:
         args.load_state = env_load_state
         print(f"📂 Using load state from environment: {env_load_state}")
-        if env_load_state == "checkpoint.state":
-            if os.path.exists("checkpoint.state"):
-                print(f"✅ Server startup: checkpoint.state file exists")
+        if env_load_state == ".pokeagent_cache/checkpoint.state":
+            if os.path.exists(".pokeagent_cache/checkpoint.state"):
+                print(f"✅ Server startup: .pokeagent_cache/checkpoint.state file exists")
             else:
-                print(f"❌ Server startup: checkpoint.state file MISSING!")
+                print(f"❌ Server startup: .pokeagent_cache/checkpoint.state file MISSING!")
     
     # Set checkpoint loading flag based on whether this is a true checkpoint load
     global checkpoint_loading_enabled
@@ -1844,7 +1935,8 @@ def main():
     print("Press Ctrl+C to stop")
     
     # Initialize emulator
-    if not setup_environment():
+    # Skip initial state reading if we're going to load a state
+    if not setup_environment(skip_initial_state=(args.load_state is not None)):
         print("Failed to initialize emulator")
         return
     
@@ -1876,6 +1968,54 @@ def main():
             # Map buffer should already be found by emulator.load_state()
             if env.memory_reader and env.memory_reader._map_buffer_addr:
                 print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
+                
+            # Now log the initial GAME_RUNNING milestone after state is loaded
+            try:
+                env.milestone_tracker.mark_completed("GAME_RUNNING")
+                initial_state = env.get_comprehensive_state()
+                
+                import hashlib
+                state_str = str(initial_state)
+                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+                
+                anticheat_tracker.log_submission_data(
+                    step=0,
+                    state_data=initial_state,
+                    action_taken="INIT",
+                    decision_time=0.0,
+                    state_hash=state_hash,
+                    manual_mode=True,
+                    milestone_override="GAME_RUNNING"
+                )
+                print("Initial GAME_RUNNING milestone logged after state load")
+                
+                # Trigger a map stitcher update to ensure visual map is ready
+                try:
+                    if env.memory_reader and env.memory_reader._map_stitcher:
+                        # Check if map stitcher is empty and collect initial map data if needed
+                        map_areas = env.memory_reader._map_stitcher.map_areas
+                        if not map_areas:
+                            print("🗺️ Map stitcher is empty, collecting initial map data...")
+                            # Collect initial map data
+                            tiles = env.memory_reader.read_map_around_player(radius=7)
+                            if tiles:
+                                print(f"🗺️ Collected {len(tiles)} tiles, updating map stitcher")
+                                # Create minimal state for stitcher update
+                                initial_state = {"map": {}}
+                                env.memory_reader._update_map_stitcher(tiles, initial_state)
+                                print("✅ Initial map data collection completed")
+                            else:
+                                print("❌ Could not collect initial map data")
+                        
+                        # Get current state for map stitcher update
+                        current_state = env.get_comprehensive_state()
+                        # The map stitcher should now have data
+                        # This just ensures the visual_map is generated
+                        print("Ensuring map stitcher visual data is ready after state load")
+                except Exception as e:
+                    print(f"Note: Could not update map stitcher after state load: {e}")
+            except Exception as e:
+                print(f"Warning: Could not log initial milestone: {e}")
         except Exception as e:
             print(f"Failed to load state from {args.load_state}: {e}")
             print("Continuing with fresh game state...")

@@ -5,7 +5,6 @@ Manual mode utilities for debugging and testing the Pokemon agent.
 
 from utils.state_formatter import format_state_for_llm
 from utils.map_formatter import format_map_for_display
-from utils.map_visualizer import visualize_map_state
 from pokemon_env.enums import MetatileBehavior
 
 
@@ -190,13 +189,15 @@ def handle_debug_command(key, emulator, agent_mode=False):
         print(f"💾 Screenshot saved to {filename}")
     elif key == '1':
         # Save state
-        emulator.save_state("manual_save.state")
-        print("💾 State saved to manual_save.state")
+        import os
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        emulator.save_state(".pokeagent_cache/manual_save.state")
+        print("💾 State saved to .pokeagent_cache/manual_save.state")
     elif key == '2':
         # Load state
         try:
-            emulator.load_state("manual_save.state")
-            print("📂 State loaded from manual_save.state")
+            emulator.load_state(".pokeagent_cache/manual_save.state")
+            print("📂 State loaded from .pokeagent_cache/manual_save.state")
         except:
             print("⚠️ No save state found")
     elif key == 'tab':

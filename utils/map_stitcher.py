@@ -91,6 +91,94 @@ class MapStitcher:
         # Load existing data
         self.load_from_file()
     
+    def _merge_map_tiles(self, area: MapArea, new_tiles: List[List[Tuple]], player_pos: Tuple[int, int]):
+        """Merge new tiles into existing map data, building up complete map over time.
+        
+        This is the core stitching logic - it takes the new 15x15 view around
+        the player and merges it into the accumulated map data for this area.
+        """
+        if not new_tiles:
+            return
+            
+        # Get dimensions of new tile data (usually 15x15)
+        new_height = len(new_tiles)
+        new_width = len(new_tiles[0]) if new_tiles else 0
+        
+        if new_height == 0 or new_width == 0:
+            return
+        
+        # Calculate the offset of the new tiles relative to player position
+        # The player is at the center of the new tiles
+        center_y = new_height // 2
+        center_x = new_width // 2
+        
+        # If this is the first data for this area, initialize with a large empty grid
+        if area.map_data is None or not area.map_data:
+            # Create a 100x100 grid initially (can expand as needed)
+            # Use None to indicate unexplored tiles
+            area.map_data = [[None for _ in range(100)] for _ in range(100)]
+            # Track the actual bounds of explored area
+            area.explored_bounds = {
+                'min_x': 50, 'max_x': 50,
+                'min_y': 50, 'max_y': 50
+            }
+            # Place player at center of our coordinate system initially
+            area.origin_offset = {'x': 50 - player_pos[0], 'y': 50 - player_pos[1]}
+            
+        # Ensure origin_offset exists
+        if not hasattr(area, 'origin_offset'):
+            area.origin_offset = {'x': 50 - player_pos[0], 'y': 50 - player_pos[1]}
+        
+        # Get the offset to map player coordinates to our stored grid
+        offset_x = area.origin_offset.get('x', 0)
+        offset_y = area.origin_offset.get('y', 0)
+        
+        # Merge the new tiles into the existing map
+        for dy in range(new_height):
+            for dx in range(new_width):
+                # Calculate the world position of this tile
+                world_x = player_pos[0] - center_x + dx
+                world_y = player_pos[1] - center_y + dy
+                
+                # Calculate the position in our stored grid
+                grid_x = world_x + offset_x
+                grid_y = world_y + offset_y
+                
+                # Expand grid if necessary
+                if grid_y >= len(area.map_data):
+                    # Expand vertically
+                    for _ in range(grid_y - len(area.map_data) + 1):
+                        area.map_data.append([None] * len(area.map_data[0]))
+                
+                if grid_x >= len(area.map_data[0]):
+                    # Expand horizontally
+                    new_width_needed = grid_x + 1
+                    for row in area.map_data:
+                        row.extend([None] * (new_width_needed - len(row)))
+                
+                # Store the tile (always update with latest data)
+                if 0 <= grid_x < len(area.map_data[0]) and 0 <= grid_y < len(area.map_data):
+                    tile = new_tiles[dy][dx]
+                    # Store all tiles including 1023 (which represents walls/boundaries)
+                    # The display logic will handle showing them correctly
+                    if tile:
+                        area.map_data[grid_y][grid_x] = tile
+                        
+                        # Update explored bounds for all tiles including boundaries
+                        # tile_id 1023 represents trees/walls at map edges - we want to include these
+                        tile_id = tile[0] if tile and len(tile) > 0 else None
+                        if tile_id is not None:  # Include all tiles, even 1023
+                            if not hasattr(area, 'explored_bounds'):
+                                area.explored_bounds = {
+                                    'min_x': grid_x, 'max_x': grid_x,
+                                    'min_y': grid_y, 'max_y': grid_y
+                                }
+                            else:
+                                area.explored_bounds['min_x'] = min(area.explored_bounds['min_x'], grid_x)
+                                area.explored_bounds['max_x'] = max(area.explored_bounds['max_x'], grid_x)
+                                area.explored_bounds['min_y'] = min(area.explored_bounds['min_y'], grid_y)
+                                area.explored_bounds['max_y'] = max(area.explored_bounds['max_y'], grid_y)
+    
     def get_map_id(self, map_bank: int, map_number: int) -> int:
         """Convert map bank/number to unique ID"""
         return (map_bank << 8) | map_number
@@ -134,13 +222,18 @@ class MapStitcher:
                     logger.info(f"Found different location name for map {map_id:04X}: '{area.location_name}' vs '{location_name}', keeping current")
                 else:
                     area.location_name = location_name
-            area.map_data = map_data
+            
+            # MERGE map data instead of replacing - this is the key to stitching!
+            if map_data and player_pos:
+                # Merge new tiles into existing map data
+                self._merge_map_tiles(area, map_data, player_pos)
+                logger.debug(f"Merged {len(map_data) * len(map_data[0]) if map_data else 0} new tiles into area")
+            
             area.player_last_position = player_pos
             # Remove deprecated fields - keep it simple
             logger.debug(f"Updated map area {area.location_name} (ID: {map_id:04X})")
         else:
-            # Create new area without global coordinates
-            boundaries = self._calculate_boundaries(map_data)
+            # Create new area
             # Try to resolve location name from map ID if empty
             if not location_name or not location_name.strip():
                 # Import and use the location mapping
@@ -158,7 +251,7 @@ class MapStitcher:
             area = MapArea(
                 map_id=map_id,
                 location_name=final_location_name,
-                map_data=map_data,
+                map_data=None,  # Start with empty data - will be populated by merge
                 player_last_position=player_pos,
                 warp_tiles=[],  # Deprecated - not needed
                 boundaries={"north": 0, "south": 10, "west": 0, "east": 10},  # Simple default
@@ -168,6 +261,11 @@ class MapStitcher:
                 overworld_coords=None  # Not needed
             )
             self.map_areas[map_id] = area
+            
+            # Now merge the initial tiles
+            if map_data and player_pos:
+                self._merge_map_tiles(area, map_data, player_pos)
+                logger.debug(f"Initialized new area with {len(map_data) * len(map_data[0]) if map_data else 0} tiles")
             logger.info(f"Added new map area: {final_location_name} (ID: {map_id:04X}) as separate location")
             
         # Check for area transitions and potential warp connections
@@ -429,8 +527,17 @@ class MapStitcher:
         
         return layout
     
-    def get_location_connections(self):
-        """Convert warp_connections to location_connections format for display"""
+    def get_location_connections(self, location_name=None):
+        """Get connections for a specific location or all locations.
+        
+        Args:
+            location_name: Optional location name to get connections for.
+                          If None, returns all location connections.
+        
+        Returns:
+            If location_name provided: List of (to_location, from_coords, to_coords) tuples
+            Otherwise: Dict mapping location names to connection lists
+        """
         location_connections = {}
         
         # Process each warp connection
@@ -465,6 +572,14 @@ class MapStitcher:
                         to_pos
                     ])
         
+        # If specific location requested, return just its connections (case-insensitive)
+        if location_name:
+            # Try to find the location with case-insensitive matching
+            for loc_name, connections in location_connections.items():
+                if loc_name and loc_name.lower() == location_name.lower():
+                    return connections
+            return []
+        
         return location_connections
     
     def get_location_grid(self, location_name: str, simplified: bool = True) -> Dict[Tuple[int, int], str]:
@@ -477,49 +592,107 @@ class MapStitcher:
         Returns:
             Dictionary mapping (x, y) coordinates to tile symbols
         """
-        # Find the map area with this location name
+        # Find the map area with this location name (case-insensitive)
         map_area = None
         for area in self.map_areas.values():
-            if area.location_name == location_name:
+            if area.location_name and location_name and area.location_name.lower() == location_name.lower():
                 map_area = area
                 break
         
-        if not map_area or not map_area.map_data:
+        if not map_area:
+            # Debug: print available locations
+            logger.debug(f"Could not find map area for '{location_name}'")
+            logger.debug(f"Available locations: {[a.location_name for a in self.map_areas.values() if a.location_name][:5]}")
+            return {}
+        
+        if not map_area.map_data:
+            logger.debug(f"Map area found for '{location_name}' but has no map_data")
             return {}
         
         grid = {}
-        for y, row in enumerate(map_area.map_data):
-            for x, tile in enumerate(row):
-                if len(tile) >= 3:
-                    tile_id, behavior, collision = tile[:3]
-                    
-                    if simplified:
-                        # Convert to simplified symbol based on collision and behavior
-                        if collision == 1:  # Impassable
-                            symbol = '#'  # Wall
-                        elif collision == 0:  # Walkable
-                            symbol = '.'  # Floor
-                        elif collision == 3:  # Ledge/special
-                            symbol = 'L'  # Ledge
-                        elif collision == 4:  # Water/surf
-                            symbol = 'W'  # Water
-                        else:
-                            symbol = '?'  # Unknown
+        
+        # If we have explored bounds, use them to extract only the explored portion
+        if hasattr(map_area, 'explored_bounds'):
+            bounds = map_area.explored_bounds
+            for y in range(bounds['min_y'], bounds['max_y'] + 1):
+                for x in range(bounds['min_x'], bounds['max_x'] + 1):
+                    if y < len(map_area.map_data) and x < len(map_area.map_data[0]):
+                        tile = map_area.map_data[y][x]
+                        if tile is not None:  # Only include explored tiles
+                            # Adjust coordinates to be relative to the explored area
+                            rel_x = x - bounds['min_x']
+                            rel_y = y - bounds['min_y']
+                            
+                            if simplified:
+                                # Convert to simplified symbol
+                                symbol = self._tile_to_symbol(tile)
+                                if symbol is not None:  # Only add if it's a valid tile
+                                    # Debug specific problematic position
+                                    if rel_x == 2 and rel_y == 1:
+                                        logger.debug(f"Tile at rel(2,1) from grid[{y}][{x}]: {tile[:3] if len(tile) >= 3 else tile} -> symbol '{symbol}'")
+                                    grid[(rel_x, rel_y)] = symbol
+                            else:
+                                grid[(rel_x, rel_y)] = tile
+            
+            # Add '?' for unexplored but adjacent tiles
+            if simplified:
+                # Find all positions adjacent to explored walkable tiles
+                to_check = set()
+                for (x, y), symbol in list(grid.items()):
+                    # Only add ? next to truly walkable tiles, not walls
+                    if symbol in ['.', 'D', 'S', '^', '~', 's', 'I',  # Walkable terrain
+                                  '→', '←', '↑', '↓', '↗', '↖', '↘', '↙']:  # Ledges
+                        # Check all 4 adjacent positions (not diagonal)
+                        for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                            adj_pos = (x + dx, y + dy)
+                            if adj_pos not in grid:
+                                to_check.add(adj_pos)
+                
+                # Add '?' for these unexplored adjacent positions
+                for pos in to_check:
+                    grid[pos] = '?'
+            
+            return grid
+        
+        # Fallback: old logic for non-accumulated maps
+        # Check if we should extract a focused area from the stored map
+        extract_bounds = getattr(map_area, '_display_extract_bounds', None)
+        if extract_bounds:
+            extract_start_x, extract_start_y, display_size = extract_bounds
+            # Extract only the specified area
+            for y in range(display_size):
+                for x in range(display_size):
+                    stored_y = extract_start_y + y
+                    stored_x = extract_start_x + x
+                    if (stored_y < len(map_area.map_data) and 
+                        stored_x < len(map_area.map_data[stored_y])):
+                        tile = map_area.map_data[stored_y][stored_x]
+                        if tile and len(tile) >= 3:
+                            tile_id, behavior, collision = tile[:3]
+                            
+                            if simplified:
+                                # Use the centralized tile_to_symbol function
+                                symbol = self._tile_to_symbol(tile)
+                                if symbol is not None:  # Only add if it's a valid tile
+                                    grid[(x, y)] = symbol
+                            else:
+                                # Return raw tile data
+                                grid[(x, y)] = tile
+        else:
+            # Use full stored map (fallback for old behavior)
+            for y, row in enumerate(map_area.map_data):
+                for x, tile in enumerate(row):
+                    if tile and len(tile) >= 3:
+                        tile_id, behavior, collision = tile[:3]
                         
-                        # Override based on behavior for special tiles
-                        if hasattr(behavior, 'value'):
-                            behavior_val = behavior.value
+                        if simplified:
+                            # Use the centralized tile_to_symbol function
+                            symbol = self._tile_to_symbol(tile)
+                            if symbol is not None:  # Only add if it's a valid tile
+                                grid[(x, y)] = symbol
                         else:
-                            behavior_val = behavior
-                            
-                        # Check for door/warp behaviors (common values)
-                        if behavior_val in [0x61, 0x62, 0x63, 0x64, 0x65, 0x66]:  # Common door/warp behavior values
-                            symbol = 'D'  # Door/Warp
-                            
-                        grid[(x, y)] = symbol
-                    else:
-                        # Return raw tile data
-                        grid[(x, y)] = tile
+                            # Return raw tile data
+                            grid[(x, y)] = tile
         
         return grid
     
@@ -552,6 +725,11 @@ class MapStitcher:
                     "map_data": area.map_data,
                     "player_last_position": area.player_last_position
                 }
+                # Save additional attributes for map stitching
+                if hasattr(area, 'explored_bounds'):
+                    area_data["explored_bounds"] = area.explored_bounds
+                if hasattr(area, 'origin_offset'):
+                    area_data["origin_offset"] = area.origin_offset
                 data["map_areas"][str(map_id)] = area_data
             
             # Generate location_connections from warp_connections
@@ -616,7 +794,39 @@ class MapStitcher:
                     last_seen=0,  # Default
                     overworld_coords=None  # Not needed
                 )
+                # Restore additional stitching attributes if present
+                if "explored_bounds" in area_data:
+                    area.explored_bounds = area_data["explored_bounds"]
+                else:
+                    # Initialize explored bounds from map data if not present
+                    if area.map_data:
+                        min_x, max_x = 100, 0
+                        min_y, max_y = 100, 0
+                        for y, row in enumerate(area.map_data):
+                            for x, tile in enumerate(row):
+                                if tile is not None:
+                                    min_x = min(min_x, x)
+                                    max_x = max(max_x, x)
+                                    min_y = min(min_y, y)
+                                    max_y = max(max_y, y)
+                        if min_x <= max_x:
+                            area.explored_bounds = {
+                                'min_x': min_x, 'max_x': max_x,
+                                'min_y': min_y, 'max_y': max_y
+                            }
+                
+                if "origin_offset" in area_data:
+                    area.origin_offset = area_data["origin_offset"]
+                else:
+                    # Initialize origin offset based on player position
+                    if area.player_last_position:
+                        # Assume player was at center of initial explored area
+                        area.origin_offset = {'x': 50 - area.player_last_position[0], 
+                                             'y': 50 - area.player_last_position[1]}
                 self.map_areas[map_id] = area
+                # Debug: log if map_data was loaded
+                if area.map_data:
+                    logger.debug(f"Loaded map_data for {location_name}: {len(area.map_data)}x{len(area.map_data[0]) if area.map_data else 0}")
             
             # Reconstruct warp_connections from location_connections
             location_connections = data.get("location_connections", {})
@@ -769,6 +979,17 @@ class MapStitcher:
             }
         }
     
+    def _should_trim_edge(self, tiles, is_row=True):
+        """Check if an edge (row or column) should be trimmed.
+        An edge should be trimmed if it's all walls (#) with no meaningful content."""
+        # Count non-wall tiles
+        non_wall_count = 0
+        for tile in tiles:
+            if tile and tile not in ['#', ' ', None]:
+                non_wall_count += 1
+        # Trim if it's all walls or mostly walls with no content
+        return non_wall_count == 0
+    
     def generate_location_map_display(self, location_name: str, player_pos: Tuple[int, int] = None, 
                                       npcs: List[Dict] = None, connections: List[Dict] = None) -> List[str]:
         """Generate a detailed map display for a specific location.
@@ -784,19 +1005,65 @@ class MapStitcher:
         """
         lines = []
         
-        # Get the grid for this location
+        # Get stored map data for this location
         location_grid = self.get_location_grid(location_name, simplified=True)
         
         if not location_grid:
-            # No map data available - return minimal display
-            lines.append(f"\n--- MAP: {location_name.upper()} ---")
-            lines.append("No map data available yet")
-            return lines
+            # No map data available - return empty to trigger memory fallback
+            return []
         
-        # Find bounds of the explored area
+        # For accumulated maps, show the full explored area
+        # Get the dimensions of the explored area
+        max_x = max(x for x, y in location_grid.keys()) if location_grid else 0
+        max_y = max(y for x, y in location_grid.keys()) if location_grid else 0
+        min_x = min(x for x, y in location_grid.keys()) if location_grid else 0
+        min_y = min(y for x, y in location_grid.keys()) if location_grid else 0
+        
+        explored_width = max_x - min_x + 1
+        explored_height = max_y - min_y + 1
+        
+        # Show the full accumulated map (up to reasonable size)
+        # Don't try to focus on player for accumulated maps
+        if explored_width <= 30 and explored_height <= 30:
+            # Show the entire accumulated map
+            display_radius = max(explored_width, explored_height) // 2
+            display_size = max(explored_width, explored_height)
+        else:
+            # Very large area, limit to 30x30 for readability
+            display_radius = 15
+            display_size = 30
+        
+        display_center = display_radius  # Player at center
+        
+        # For accumulated maps, just use the entire grid without focusing
+        # This shows the full explored area
         all_positions = list(location_grid.keys())
-        if player_pos:
-            all_positions.append(player_pos)
+        
+        # Find player position in the grid if available
+        local_player_pos = None
+        if player_pos and explored_width <= 30 and explored_height <= 30:
+            # Find the stored map area to get coordinate conversion info
+            map_area = None
+            for area in self.map_areas.values():
+                if area.location_name and location_name and area.location_name.lower() == location_name.lower():
+                    map_area = area
+                    break
+            
+            if map_area and hasattr(map_area, 'origin_offset'):
+                # Convert player world coordinates to grid-relative coordinates
+                offset_x = map_area.origin_offset.get('x', 0)
+                offset_y = map_area.origin_offset.get('y', 0)
+                
+                # Calculate player's position relative to the explored bounds
+                grid_player_x = player_pos[0] + offset_x
+                grid_player_y = player_pos[1] + offset_y
+                
+                # Convert to relative coordinates in the location_grid
+                if hasattr(map_area, 'explored_bounds'):
+                    bounds = map_area.explored_bounds
+                    rel_x = grid_player_x - bounds['min_x']
+                    rel_y = grid_player_y - bounds['min_y']
+                    local_player_pos = (rel_x, rel_y)
         
         if not all_positions:
             return []
@@ -805,6 +1072,39 @@ class MapStitcher:
         max_x = max(pos[0] for pos in all_positions)
         min_y = min(pos[1] for pos in all_positions)
         max_y = max(pos[1] for pos in all_positions)
+        
+        # Minimal trimming - only remove completely empty space
+        # Don't trim '?' as those are unexplored areas we want to show
+        # Don't aggressively trim walls as they show room boundaries
+        
+        # Only trim rows that are completely empty (all spaces/None)
+        while min_y < max_y:
+            row_tiles = [location_grid.get((x, min_y), ' ') for x in range(min_x, max_x + 1)]
+            # Keep the row if it has ANY content (including ? and #)
+            if any(t not in [' ', None] for t in row_tiles):
+                break
+            min_y += 1
+        
+        # Check bottom rows - only trim completely empty
+        while max_y > min_y:
+            row_tiles = [location_grid.get((x, max_y), ' ') for x in range(min_x, max_x + 1)]
+            if any(t not in [' ', None] for t in row_tiles):
+                break
+            max_y -= 1
+        
+        # Check left columns - only trim completely empty
+        while min_x < max_x:
+            col_tiles = [location_grid.get((min_x, y), ' ') for y in range(min_y, max_y + 1)]
+            if any(t not in [' ', None] for t in col_tiles):
+                break
+            min_x += 1
+        
+        # Check right columns - only trim completely empty
+        while max_x > min_x:
+            col_tiles = [location_grid.get((max_x, y), ' ') for y in range(min_y, max_y + 1)]
+            if any(t not in [' ', None] for t in col_tiles):
+                break
+            max_x -= 1
         
         # Build portal positions from connections
         portal_positions = {}
@@ -828,7 +1128,7 @@ class MapStitcher:
                             npc_at_pos = npc
                             break
                 
-                if player_pos and (x, y) == player_pos:
+                if local_player_pos and (x, y) == local_player_pos:
                     row += "P"
                 elif npc_at_pos:
                     row += "N"
@@ -867,16 +1167,12 @@ class MapStitcher:
                     else:
                         row += tile
                 else:
-                    # Unexplored area
-                    is_map_edge = (x == min_x or x == max_x or y == min_y or y == max_y)
-                    if is_map_edge:
-                        row += "?"
-                    elif self._is_explorable_edge(x, y, location_grid):
-                        row += "?"
-                    else:
-                        row += " "
+                    # Position not in grid - just show as space
+                    # The grid already has '?' symbols where needed from get_location_grid
+                    row += " "
             
-            # Add spacing for readability
+            # Add spacing between characters for square aspect ratio
+            # Most terminals have characters ~2x taller than wide, so spacing helps
             spaced_row = " ".join(row)
             lines.append(spaced_row)
         
@@ -894,13 +1190,23 @@ class MapStitcher:
             ".": ".=Walkable path",
             "#": "#=Wall/Blocked",
             "~": "~=Tall grass",
-            "W": "W=Water",
-            "D": "D=Door",
-            "S": "S=Stairs/Warp",
-            "?": "?=Unknown",
             "^": "^=Grass",
-            "!": "!=Ledge",
-            "L": "L=Ledge"
+            "W": "W=Water",
+            "I": "I=Ice",
+            "s": "s=Sand",
+            "D": "D=Door",
+            "S": "S=Stairs/Ladder",
+            "→": "→=Ledge (jump east)",
+            "←": "←=Ledge (jump west)",
+            "↑": "↑=Ledge (jump north)",
+            "↓": "↓=Ledge (jump south)",
+            "↗": "↗=Ledge (jump NE)",
+            "↖": "↖=Ledge (jump NW)",
+            "↘": "↘=Ledge (jump SE)",
+            "↙": "↙=Ledge (jump SW)",
+            "L": "L=Ledge",
+            "T": "T=TV",
+            "?": "?=Unknown"
         }
         
         for symbol, meaning in symbol_meanings.items():
@@ -931,7 +1237,117 @@ class MapStitcher:
                 legend_lines.append(f"  Exits: {', '.join(portal_items)}")
         
         lines.extend(legend_lines)
+        
+        # Add explicit portal connections with coordinates
+        if connections:
+            lines.append("")
+            lines.append("Portal Connections:")
+            for conn in connections:
+                to_location = conn.get('to', 'Unknown')
+                from_pos = conn.get('from_pos', [])
+                to_pos = conn.get('to_pos', [])
+                
+                if from_pos and to_pos and len(from_pos) >= 2 and len(to_pos) >= 2:
+                    lines.append(f"  {location_name} ({from_pos[0]},{from_pos[1]}) → {to_location} ({to_pos[0]},{to_pos[1]})")
+                elif from_pos and len(from_pos) >= 2:
+                    lines.append(f"  {location_name} ({from_pos[0]},{from_pos[1]}) → {to_location}")
+                else:
+                    lines.append(f"  → {to_location}")
+        
         return lines
+    
+    def _tile_to_symbol(self, tile) -> str:
+        """Convert a tile tuple to a simplified symbol for display."""
+        if tile is None:
+            # This will be handled specially - unexplored areas next to walkable will show ?
+            return None  # Mark as unexplored for special handling
+        
+        if len(tile) < 3:
+            return None  # Invalid tile - unexplored
+        
+        tile_id, behavior, collision = tile[:3]
+        
+        # tile_id 1023 (0x3FF) means out-of-bounds/unloaded area
+        # These are trees/boundaries at the edge of maps - show as walls
+        if tile_id == 1023:
+            return '#'  # Display as wall/blocked
+        
+        # Get behavior value
+        if hasattr(behavior, 'value'):
+            behavior_val = behavior.value
+        else:
+            behavior_val = behavior
+        
+        # Check behavior first for special terrain (even if impassable)
+        # Grass types (from MetatileBehavior enum)
+        if behavior_val == 2:  # TALL_GRASS
+            return '~'  # Tall grass (encounters)
+        elif behavior_val == 3:  # LONG_GRASS
+            return '^'  # Long grass
+        elif behavior_val == 7:  # SHORT_GRASS
+            return '^'  # Short grass
+        elif behavior_val == 36:  # ASHGRASS
+            return '^'  # Ash grass
+        
+        # Water types
+        elif behavior_val in [16, 17, 18, 19, 20, 21, 22, 23, 24, 26]:  # Various water types
+            return 'W'  # Water
+        
+        # Ice
+        elif behavior_val in [32, 38, 39]:  # ICE, THIN_ICE, CRACKED_ICE
+            return 'I'  # Ice
+        
+        # Sand
+        elif behavior_val in [6, 33]:  # DEEP_SAND, SAND
+            return 's'  # Sand
+        
+        # Doors and warps
+        elif behavior_val == 96:  # NON_ANIMATED_DOOR
+            return 'D'  # Door
+        elif behavior_val == 105:  # ANIMATED_DOOR
+            return 'D'  # Door
+        elif behavior_val in [98, 99, 100, 101]:  # Arrow warps
+            return 'D'  # Warp/Door
+        elif behavior_val == 97:  # LADDER
+            return 'S'  # Stairs/Ladder
+        elif behavior_val in [106, 107]:  # Escalators
+            return 'S'  # Stairs
+        
+        # PC and other interactables
+        elif behavior_val in [131, 197]:  # PC, PLAYER_ROOM_PC_ON
+            return 'P'  # PC (but will be overridden by player position)
+        elif behavior_val == 134:  # TELEVISION
+            return 'T'  # TV
+        
+        # Ledges/Jumps with directional arrows
+        elif behavior_val == 56:  # JUMP_EAST
+            return '→'  # Ledge east
+        elif behavior_val == 57:  # JUMP_WEST
+            return '←'  # Ledge west
+        elif behavior_val == 58:  # JUMP_NORTH
+            return '↑'  # Ledge north
+        elif behavior_val == 59:  # JUMP_SOUTH
+            return '↓'  # Ledge south
+        elif behavior_val == 60:  # JUMP_NORTHEAST
+            return '↗'  # Ledge northeast
+        elif behavior_val == 61:  # JUMP_NORTHWEST
+            return '↖'  # Ledge northwest
+        elif behavior_val == 62:  # JUMP_SOUTHEAST
+            return '↘'  # Ledge southeast
+        elif behavior_val == 63:  # JUMP_SOUTHWEST
+            return '↙'  # Ledge southwest
+        
+        # Now check collision for basic terrain
+        elif collision == 1:  # Impassable
+            return '#'  # Wall
+        elif collision == 0:  # Walkable
+            return '.'  # Floor
+        elif collision == 3:  # Ledge/special
+            return 'L'  # Ledge
+        elif collision == 4:  # Water/surf
+            return 'W'  # Water
+        else:
+            return '?'  # Unknown
     
     def _is_explorable_edge(self, x: int, y: int, location_grid: Dict[Tuple[int, int], str]) -> bool:
         """Check if an unexplored coordinate is worth exploring (adjacent to walkable tiles)."""
@@ -941,7 +1357,9 @@ class MapStitcher:
             if (adj_x, adj_y) in location_grid:
                 tile = location_grid[(adj_x, adj_y)]
                 # If adjacent to walkable tile, this is explorable
-                if tile in ['.', 'D', 'S', '^', '~']:
+                # Include all walkable terrain types and ledges
+                if tile in ['.', 'D', 'S', '^', '~', 's', 'I',  # Floor, doors, stairs, grass, sand, ice
+                           '→', '←', '↑', '↓', '↗', '↖', '↘', '↙']:  # Ledges in all directions
                     return True
         return False
     

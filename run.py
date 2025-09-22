@@ -18,7 +18,9 @@ from server.client import run_multiprocess_client
 
 def start_server(args):
     """Start the server process with appropriate arguments"""
-    server_cmd = ["python", "-m", "server.app", "--port", str(args.port)]
+    # Use the same Python executable that's running this script
+    python_exe = sys.executable
+    server_cmd = [python_exe, "-m", "server.app", "--port", str(args.port)]
     
     # Pass through server-relevant arguments
     if args.record:
@@ -26,13 +28,13 @@ def start_server(args):
     
     if args.load_checkpoint:
         # Auto-load checkpoint.state when --load-checkpoint is used
-        checkpoint_state = "checkpoint.state"
+        checkpoint_state = ".pokeagent_cache/checkpoint.state"
         if os.path.exists(checkpoint_state):
             server_cmd.extend(["--load-state", checkpoint_state])
             # Set environment variable to enable LLM checkpoint loading
             os.environ["LOAD_CHECKPOINT_MODE"] = "true"
             print(f"🔄 Server will load checkpoint: {checkpoint_state}")
-            print(f"🔄 LLM metrics will be restored from checkpoint_llm.txt")
+            print(f"🔄 LLM metrics will be restored from .pokeagent_cache/checkpoint_llm.txt")
         else:
             print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
     elif args.load_state:

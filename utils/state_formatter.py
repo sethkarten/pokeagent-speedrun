@@ -494,7 +494,7 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.extend(map_context)
 
         # Game state information (including dialogue if not in battle)
-        game_context = _format_game_state(game_data)
+        game_context = _format_game_state(game_data, state_data)
         context_parts.extend(game_context)
     
     # Debug information if requested (shown in both modes)
@@ -550,8 +550,13 @@ def _get_player_position(player_data):
     """Extract player position from various possible locations in player data."""
     if 'coordinates' in player_data:
         return player_data['coordinates']
-    elif 'position' in player_data and player_data['position']:
-        return player_data['position']
+    elif 'position' in player_data:
+        pos = player_data['position']
+        print(f"DEBUG: _get_player_position found position: {pos}, type: {type(pos)}")
+        # Check if it's a valid position dict with x,y keys
+        if pos and isinstance(pos, dict) and 'x' in pos and 'y' in pos:
+            return pos
+        print(f"DEBUG: position invalid - missing x,y or not dict")
     return None
 
 def _get_party_size(party_data):
@@ -616,6 +621,11 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         else:
             location_name = str(location)
         context_parts.append(f"Current Location: {location_name}")
+    else:
+        # Debug: log what we have
+        print(f"DEBUG: No location found. player_data keys: {list(player_data.keys()) if player_data else 'None'}")
+        if player_data:
+            print(f"DEBUG: player_data['location'] = {player_data.get('location', 'KEY_NOT_FOUND')}")
     
     # Also add current map if different
     if 'current_map' in map_info and map_info['current_map'] != location_name:
@@ -632,8 +642,11 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         pos = player_data['position']
         player_coords = (pos.get('x', 0), pos.get('y', 0))
     
-    # Get MapStitcher instance
-    map_stitcher = _get_map_stitcher_instance()
+    # Get MapStitcher instance - prefer the one from memory_reader if available
+    # This ensures we use the instance that has the actual map data
+    map_stitcher = map_info.get('_map_stitcher_instance') if map_info else None
+    if not map_stitcher:
+        map_stitcher = _get_map_stitcher_instance()
     
     # Get NPCs if available
     npcs = []
@@ -646,8 +659,20 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         current_area = map_info['stitched_map_info'].get('current_area', {})
         connections = current_area.get('connections', [])
     
-    # Use MapStitcher to generate the map display
-    if location_name:
+    # Check for pre-generated visual map first (from memory_reader)
+    if map_info.get('visual_map'):
+        # Use the pre-generated map visualization
+        context_parts.append(map_info['visual_map'])
+    elif location_name:
+        # Generate map display using MapStitcher
+        print(f"🗺️ DEBUG: Attempting to generate map for location: '{location_name}'")
+        print(f"🗺️ DEBUG: MapStitcher exists: {map_stitcher is not None}")
+        if map_stitcher:
+            print(f"🗺️ DEBUG: MapStitcher has {len(map_stitcher.map_areas)} areas")
+            for map_id in list(map_stitcher.map_areas.keys())[:3]:
+                area = map_stitcher.map_areas[map_id]
+                print(f"🗺️ DEBUG:   Area {map_id}: '{area.location_name}'")
+        
         map_lines = map_stitcher.generate_location_map_display(
             location_name=location_name,
             player_pos=player_coords,
@@ -656,12 +681,23 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         )
         
         if map_lines:
+            print(f"🗺️ DEBUG: Generated {len(map_lines)} map lines from MapStitcher")
             context_parts.extend(map_lines)
+            # Add exploration statistics
+            location_grid = map_stitcher.get_location_grid(location_name)
+            if location_grid:
+                total_tiles = len(location_grid)
+                context_parts.append("")
+                context_parts.append(f"Total explored: {total_tiles} tiles")
         else:
-            # Fallback if MapStitcher doesn't have data for this location
-            context_parts.append("\n--- LOCAL MAP (No stitched data) ---")
+            print(f"🗺️ DEBUG: MapStitcher returned empty, falling back to memory tiles")
+            # Fallback if MapStitcher doesn't have data for this location - use memory tiles
             if 'tiles' in map_info and map_info['tiles']:
+                context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
                 _add_local_map_fallback(context_parts, map_info, include_npcs)
+            else:
+                context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
+                context_parts.append("No map data available")
     else:
         # No location name - use local map fallback
         context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
@@ -712,12 +748,11 @@ def _format_world_map_display(stitched_data, full_state_data=None):
         return []
 
 def _get_map_stitcher_instance():
-    """Get or create the MapStitcher instance"""
-    global MAP_STITCHER_INSTANCE
-    if MAP_STITCHER_INSTANCE is None:
-        from utils.map_stitcher import MapStitcher
-        MAP_STITCHER_INSTANCE = MapStitcher()
-    return MAP_STITCHER_INSTANCE
+    """Get the MapStitcher instance - always reload from cache for multiprocess compatibility"""
+    from utils.map_stitcher import MapStitcher
+    # Always create fresh instance to read latest cache
+    # This is needed because server and client run in different processes
+    return MapStitcher()
 
 def save_persistent_world_map(file_path=None):
     """Deprecated - MapStitcher handles all persistence now"""
@@ -769,8 +804,11 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
     global CURRENT_LOCATION, LAST_LOCATION, LAST_TRANSITION
     LAST_TRANSITION = None  # Will store transition info
     
-    # Get MapStitcher instance
-    map_stitcher = _get_map_stitcher_instance()
+    # Get MapStitcher instance - prefer the one from memory_reader if available
+    # This ensures we use the instance that has the actual map data
+    map_stitcher = map_info.get('_map_stitcher_instance') if map_info else None
+    if not map_stitcher:
+        map_stitcher = _get_map_stitcher_instance()
     
     # Get player position for transition tracking
     player_local_pos = stitched_data.get('player_local_pos', (0, 0))
@@ -1051,7 +1089,7 @@ def _format_stitched_map_info(map_info):
     # Old world map knowledge system removed - replaced by location-based maps with portal coordinates
     return context_parts
 
-def _format_game_state(game_data):
+def _format_game_state(game_data, state_data=None):
     """Format game state information (for non-battle mode)."""
     context_parts = []
     
@@ -1080,6 +1118,13 @@ def _format_game_state(game_data):
     
     if 'game_state' in game_data:
         context_parts.append(f"Game State: {game_data['game_state']}")
+    
+    # Add movement preview for overworld navigation
+    if state_data and not is_in_battle and game_data.get('game_state') == 'overworld':
+        movement_preview = format_movement_preview_for_llm(state_data)
+        if movement_preview:
+            context_parts.append("")
+            context_parts.append(movement_preview)
     
     return context_parts
 
@@ -1165,6 +1210,7 @@ def get_movement_preview(state_data):
     player_position = _get_player_position(player_data)
     
     if not player_position or 'x' not in player_position or 'y' not in player_position:
+        print(f"DEBUG: Movement preview - No player position. player_position={player_position}")
         return {}
     
     current_x = int(player_position['x'])
@@ -1175,6 +1221,7 @@ def get_movement_preview(state_data):
     raw_tiles = map_info.get('tiles', [])
     
     if not raw_tiles:
+        print(f"DEBUG: Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
     directions = {

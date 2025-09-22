@@ -61,7 +61,7 @@ The system is built with a modular architecture that separates perception, plann
 pokeagent-speedrun/
 ├── README.md
 ├── requirements.txt
-├── agent.py                 # Main AI agent implementation (direct emulator integration)
+├── run.py                 # Main AI agent implementation (direct emulator integration)
 ├── server/                  # Server components (multiprocess mode)
 │   ├── __init__.py
 │   ├── app.py               # FastAPI server for multiprocess mode
@@ -190,7 +190,7 @@ export OPENAI_API_KEY="your-api-key-here"
 
 2. Run agent:
 ```bash
-python agent.py --backend openai --model-name "gpt-4o"
+python run.py --backend openai --model-name "gpt-4o"
 ```
 
 Supported models: `gpt-4o`, `gpt-4-turbo`, `o3-mini`, etc.
@@ -206,7 +206,7 @@ export OPENROUTER_API_KEY="your-api-key-here"
 
 2. Run agent:
 ```bash
-python agent.py --backend openrouter --model-name "anthropic/claude-3.5-sonnet"
+python run.py --backend openrouter --model-name "anthropic/claude-3.5-sonnet"
 ```
 
 Supported models: `anthropic/claude-3.5-sonnet`, `google/gemini-pro-vision`, `openai/gpt-4o`, etc.
@@ -224,7 +224,7 @@ export GOOGLE_API_KEY="your-api-key-here"
 
 2. Run agent:
 ```bash
-python agent.py --backend gemini --model-name "gemini-2.5-flash"
+python run.py --backend gemini --model-name "gemini-2.5-flash"
 ```
 
 Supported models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, etc.
@@ -240,82 +240,67 @@ pip install torch transformers bitsandbytes accelerate
 
 2. Run agent:
 ```bash
-# With 4-bit quantization (default - recommended for 2B model)
-python agent.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct" --device auto --load-in-4bit
-
-# Without quantization (requires more VRAM)
-python agent.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct" --device cuda
+python run.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
 ```
 
 Supported models: `Qwen/Qwen2-VL-2B-Instruct`, `Qwen/Qwen2-VL-7B-Instruct`, `microsoft/Phi-3.5-vision-instruct`, `llava-hf/llava-1.5-7b-hf`, etc.
 
-### 🔸 Auto Backend Detection
-
-**Best for: Easy switching between models**
-
-```bash
-# Automatically detects backend based on model name
-python agent.py --backend auto --model-name "gpt-4o"          # → OpenAI
-python agent.py --backend auto --model-name "gemini-1.5-pro"  # → Gemini
-python agent.py --backend auto --model-name "Qwen/Qwen2-VL-2B-Instruct"  # → Local
-```
-
 ## Running the Agent
 
-`agent.py` runs the emulator and agent in a single process, providing better integration and real-time control.
+`run.py` runs the emulator and agent in a single process, providing better integration and real-time control.
 
 ### Quick Start
 
 ```bash
 # Start with default settings (Gemini backend, agent mode)
-python agent.py
+python run.py
 
 # OpenAI example
-python agent.py --backend openai --model-name "gpt-4o"
+python run.py --backend openai --model-name "gpt-4o"
 
 # Local model example
-python agent.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
+python run.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
 ```
 
 ### Starting from Saved States
 
 ```bash
 # Load from a saved state
-python agent.py --load-state Emerald-GBAdvance/start.state --backend gemini --model-name gemini-2.5-flash
+python run.py --load-state Emerald-GBAdvance/start.state --backend gemini --model-name gemini-2.5-flash
 
 # Load from test states
-python agent.py --load-state tests/states/torchic.state --backend gemini --model-name gemini-2.5-flash
+python run.py --load-state tests/states/torchic.state --backend gemini --model-name gemini-2.5-flash
 ```
 
 ### Advanced Options
 
 ```bash
 # Start in manual mode (keyboard control)
-python agent.py --manual-mode
+python run.py --manual-mode
 
 # Enable auto agent (agent acts continuously)
-python agent.py --agent-auto
+python run.py --agent-auto
 
 # Run without display window (headless)
-python agent.py --no-display --agent-auto
+python run.py --no-display --agent-auto
 
 # Custom port for web interface
-python agent.py --port 8080
+python run.py --port 8080
 
 # Video recording (saves MP4 file with timestamp)
-python agent.py --record --agent-auto
+python run.py --record --agent-auto
 
 # Simple mode (lightweight processing, frame + LLM only, skips perception/planning/memory)
-python agent.py --simple --agent-auto
+python run.py --simple --agent-auto
 
 # Disable OCR dialogue detection (forces overworld state, no dialogue processing)
-python agent.py --no-ocr --agent-auto
+python run.py --no-ocr --agent-auto
 
 # Multiprocess mode (separate server/client processes for improved stability)
-python agent.py --multiprocess --agent-auto
+python run.py --multiprocess --agent-auto
 
 # Combine multiple features (recommended for production runs)
-python agent.py --multiprocess --record --simple --no-ocr --agent-auto --backend gemini
+python run.py --multiprocess --record --simple --no-ocr --agent-auto --backend gemini
 ```
 
 ### Debug Controls
@@ -339,7 +324,7 @@ The agent automatically starts a web server at `http://localhost:8000` (or custo
 
 ```bash
 # With additional debugging options
-python agent.py \
+python run.py \
     --backend openai \
     --model-name "gpt-4o" \
     --debug-state  # Enable detailed state logging
@@ -366,10 +351,10 @@ Automatically records gameplay to MP4 files with timestamps.
 **Usage:**
 ```bash
 # Direct mode recording
-python agent.py --record --agent-auto
+python run.py --record --agent-auto
 
 # Multiprocess mode recording (recommended)
-python agent.py --multiprocess --record --agent-auto
+python run.py --multiprocess --record --agent-auto
 ```
 
 ### ⚡ Simple Mode (`--simple`)
@@ -385,10 +370,10 @@ Lightweight processing mode that bypasses the four-module agent architecture.
 **Usage:**
 ```bash
 # Simple mode for fast iterations
-python agent.py --simple --agent-auto
+python run.py --simple --agent-auto
 
 # Combined with other features
-python agent.py --simple --multiprocess --record --agent-auto
+python run.py --simple --multiprocess --record --agent-auto
 ```
 
 ### 🔇 No OCR Mode (`--no-ocr`)
@@ -404,10 +389,10 @@ Completely disables dialogue detection and forces overworld state.
 **Usage:**
 ```bash
 # Disable all dialogue detection
-python agent.py --no-ocr --agent-auto
+python run.py --no-ocr --agent-auto
 
 # Recommended for production speedruns
-python agent.py --no-ocr --simple --multiprocess --agent-auto
+python run.py --no-ocr --simple --multiprocess --agent-auto
 ```
 
 ### 🔄 Multiprocess Mode (`--multiprocess`)
@@ -428,14 +413,14 @@ Runs the emulator/pygame in a separate process from the agent decision-making.
 **Usage:**
 ```bash
 # Basic multiprocess mode
-python agent.py --multiprocess --agent-auto
+python run.py --multiprocess --agent-auto
 
 # Production configuration (recommended)
-python agent.py --multiprocess --record --simple --no-ocr --agent-auto --backend gemini
+python run.py --multiprocess --record --simple --no-ocr --agent-auto --backend gemini
 
 # Manual server/client (advanced)
 # Terminal 1: python -m server.app --load-state your_state.state
-# Terminal 2: python agent.py --multiprocess --backend gemini
+# Terminal 2: python run.py --multiprocess --backend gemini
 ```
 
 ### 🧭 Navigation & Pathfinding System
@@ -471,7 +456,7 @@ This system provides the LLM with complete spatial awareness while maintaining f
 For the most stable and efficient agent runs:
 
 ```bash
-python agent.py \
+python run.py \
     --multiprocess \
     --record \
     --simple \
@@ -493,7 +478,7 @@ This combination provides:
 ## Command Line Options
 
 ```bash
-python agent.py [OPTIONS]
+python run.py [OPTIONS]
 
 Basic Options:
   --rom PATH               Path to Pokemon Emerald ROM (default: Emerald-GBAdvance/rom.gba)
@@ -515,8 +500,6 @@ Feature Options:
 
 VLM Options:
   --vlm-port INTEGER       Port for Ollama server (default: 11434)
-  --device TEXT            Device for local models (auto/cpu/cuda, default: "auto")
-  --load-in-4bit          Use 4-bit quantization for local models
 ```
 
 ## Customizing Agent Behavior (Prompt Editing Guide)
@@ -666,7 +649,7 @@ You are playing Pokemon Emerald under strict Nuzlocke rules:
 ### 🔧 Testing Your Changes
 
 1. Make your prompt edits
-2. Restart the agent: `python agent.py --backend your-backend --model-name your-model`
+2. Restart the agent: `python run.py --backend your-backend --model-name your-model`
 3. Monitor the logs to see how behavior changes
 4. Use `--debug-state` flag for detailed insights
 
@@ -698,10 +681,10 @@ For better performance with local models:
 
 ```bash
 # Use specific GPU
-python agent.py --backend local --device cuda:0 --model-name "your-model"
+python run.py --backend local --model-name "your-model"
 
 # Disable quantization for speed (requires more VRAM)
-python agent.py --backend local --model-name "your-model" --device cuda
+python run.py --backend local --model-name "your-model"
 
 ```
 
@@ -718,11 +701,11 @@ python agent.py --backend local --model-name "your-model" --device cuda
 2. **Out of memory with local models**:
    ```bash
    # Try 4-bit quantization
-   python agent.py --backend local --load-in-4bit --model-name "your-model"
+   python run.py --backend local --load-in-4bit --model-name "your-model"
    ```
 
 3. **Web interface connection issues**:
-   - Ensure agent.py is running
+   - Ensure run.py is running
    - Check that the specified port (default 8000) is available
    - Try accessing http://localhost:8000 directly
 
@@ -790,7 +773,7 @@ Your submission must include **all three** of the following components:
 
 #### 2. **Action & State Logs**
 - Detailed logs automatically created by this starter kit during your agent's run
-- These logs are generated when you run `python agent.py` and include:
+- These logs are generated when you run `python run.py` and include:
   - All agent actions and decisions with timestamps
   - Game state information at each step with cryptographic hashes
   - Performance metrics and decision timing analysis

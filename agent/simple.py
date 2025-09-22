@@ -38,7 +38,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 
-from utils.state_formatter import format_state_for_llm, format_movement_preview_for_llm
+from utils.state_formatter import format_state_for_llm
 
 logger = logging.getLogger(__name__)
 
@@ -145,13 +145,6 @@ class SimpleAgent:
                 "objective_type": "system",
                 "target_value": "Game Running",
                 "milestone_id": "GAME_RUNNING"
-            },
-            {
-                "id": "story_truck_pokedollars", 
-                "description": "Complete intro sequence until pokedollars appear (truck scene)",
-                "objective_type": "progress",
-                "target_value": "1000 Pokedollars",
-                "milestone_id": "EARNED_1000_POKEDOLLARS"
             },
             {
                 "id": "story_littleroot_town",
@@ -561,11 +554,8 @@ class SimpleAgent:
             context = self.get_game_context(game_state)
             map_id = self.get_map_id(game_state)
             
-            # Format the current state for LLM
+            # Format the current state for LLM (includes movement preview)
             formatted_state = format_state_for_llm(game_state)
-            
-            # Get movement preview only
-            movement_preview = format_movement_preview_for_llm(game_state)
             
             # Get movement memory for the current area
             movement_memory = ""
@@ -603,8 +593,6 @@ CURRENT OBJECTIVES:
 
 CURRENT GAME STATE:
 {formatted_state}
-
-{movement_preview}
 
 {movement_memory}
 
@@ -1170,7 +1158,7 @@ Context: {context} | Coords: {coords} """
             traceback.print_exc()
             return False
     
-    def save_history_to_llm_checkpoint(self, checkpoint_file: str = "checkpoint_llm.txt"):
+    def save_history_to_llm_checkpoint(self, checkpoint_file: str = None):
         """Save SimpleAgent history using LLM logger checkpoint system"""
         try:
             from utils.llm_logger import get_llm_logger
@@ -1183,6 +1171,7 @@ Context: {context} | Coords: {coords} """
             
             # Save checkpoint using LLM logger which includes cumulative metrics
             # The LLM logger will handle saving log_entries AND cumulative_metrics
+            # If checkpoint_file is None, it will use the cache folder
             llm_logger.save_checkpoint(checkpoint_file, agent_step_count=self.state.step_counter)
             
             logger.info(f"💾 Saved LLM checkpoint to {checkpoint_file}")
@@ -1232,7 +1221,7 @@ Context: {context} | Coords: {coords} """
         
         return " | ".join(memory_parts) if memory_parts else ""
     
-    def get_area_movement_memory(self, center_coords: Tuple[int, int], radius: int = 5) -> str:
+    def get_area_movement_memory(self, center_coords: Tuple[int, int], radius: int = 7) -> str:
         """Get movement memory for the area around the player"""
         cx, cy = center_coords
         memory_lines = []
@@ -1283,7 +1272,11 @@ def get_simple_agent(vlm) -> SimpleAgent:
         # Check if we should load from checkpoint
         import os
         if os.environ.get("LOAD_CHECKPOINT_MODE") == "true":
-            checkpoint_file = "checkpoint_llm.txt"
+            # Check cache folder first, then fall back to old location
+            cache_dir = ".pokeagent_cache"
+            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
+            if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
+                checkpoint_file = "checkpoint_llm.txt"
             if os.path.exists(checkpoint_file):
                 logger.info(f"🔄 Loading SimpleAgent history from {checkpoint_file}")
                 _global_simple_agent.load_history_from_llm_checkpoint(checkpoint_file)
@@ -1297,7 +1290,11 @@ def get_simple_agent(vlm) -> SimpleAgent:
         # Load checkpoint for new instance too if mode is set
         import os
         if os.environ.get("LOAD_CHECKPOINT_MODE") == "true":
-            checkpoint_file = "checkpoint_llm.txt"
+            # Check cache folder first, then fall back to old location
+            cache_dir = ".pokeagent_cache"
+            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
+            if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
+                checkpoint_file = "checkpoint_llm.txt"
             if os.path.exists(checkpoint_file):
                 logger.info(f"🔄 Loading SimpleAgent history from {checkpoint_file}")
                 _global_simple_agent.load_history_from_llm_checkpoint(checkpoint_file)
