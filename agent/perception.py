@@ -63,43 +63,6 @@ def perception_step(frame, state_data, vlm):
     scene_response = vlm.get_query(frame, scene_check_prompt, "PERCEPTION-SCENE_CHECK").strip().lower()
     slow_thinking_needed = ("yes" in scene_response)
 
-    '''
-    # If on a map, try to generate a traversability analysis
-    if ("map" in observation.lower() or "navigating" in observation.lower() or "terrain" in observation.lower()) and not state_data.get('game', {}).get('in_battle', False):
-        map_prompt = f"""
-        ★★★ COMPREHENSIVE GAME STATE DATA ★★★
-        
-        {state_context}
-        
-        ★★★ TRAVERSABILITY MAP GENERATION ★★★
-        
-        Based on the current game frame and your position data above:
-        
-        Analyze the traversability of the visible area. Output a text-based map using these symbols:
-        - . for traversable ground/paths
-        - # for walls, trees, or obstacles  
-        - P for the player character
-        - D for doors/building entrances
-        - N for NPCs you can interact with
-        - I for items on the ground
-        - W for water (might need Surf)
-        - ~ for tall grass (wild pokemon encounters)
-        
-        The map should be a small grid showing the immediate area around the player.
-        Example:
-        #####
-        #~.~#
-        #.P.#
-        #D.N#
-        #####
-        Legend: P=Player, D=Door, N=NPC, I=Item, .=path, #=obstacle, ~=grass, W=water
-        
-        Only output the map and legend, nothing else.
-        """
-        text_map = vlm.get_query(frame, map_prompt, "PERCEPTION-MAP")
-        observation = {"description": observation, "text_map": text_map, "state_data": state_context}
-    else:
-    '''
     observation = {"description": observation, "state_data": state_context}
     
     logger.info(f"[PERCEPTION] Slow thinking needed: {slow_thinking_needed}")

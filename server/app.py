@@ -1,49 +1,64 @@
 #!/usr/bin/env python3
 """
-Fixed Simple Pokemon Emerald server - handles FastAPI and pygame properly
+Fixed Simple Pokemon Emerald server - headless FastAPI server
 """
 
-import os
-import pygame
-import numpy as np
-import time
+# Standard library imports
 import base64
+import datetime
+import glob
 import io
+import json
+import logging
+import os
 import signal
 import sys
-import asyncio
 import threading
-import json
-from PIL import Image
+import time
+
+# Third-party imports
 import cv2
-
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import numpy as np
 import uvicorn
-import socketio     # for streamer setup
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
+from PIL import Image
+from pydantic import BaseModel
 
+# Add parent directory to path for local modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Local application imports
 from pokemon_env.emulator import EmeraldEmulator
-from pokemon_env.emerald_utils import (
-    SYSTEM_FLAGS_START, FLAG_VISITED_LITTLEROOT_TOWN, FLAG_VISITED_OLDALE_TOWN,
-    FLAG_VISITED_PETALBURG_CITY, FLAG_VISITED_RUSTBORO_CITY, FLAG_VISITED_DEWFORD_TOWN,
-    FLAG_VISITED_SLATEPORT_CITY, FLAG_VISITED_MAUVILLE_CITY, FLAG_BADGE01_GET,
-    FLAG_BADGE02_GET, FLAG_BADGE03_GET, FLAG_SYS_POKEMON_GET, FLAG_SYS_POKEDEX_GET,
-    FLAG_DEFEATED_RUSTBORO_GYM, FLAG_DEFEATED_DEWFORD_GYM, FLAG_DEFEATED_MAUVILLE_GYM
-)
+from utils.anticheat import AntiCheatTracker
 
 # Set up logging - reduced verbosity for multiprocess mode
-import logging
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Global state
 env = None
+anticheat_tracker = None  # AntiCheat tracker for submission logging
+step_counter = 0  # Track steps for submission logging
+last_action_time = None  # Track time of last action for decision time calculation
 running = True
 step_count = 0
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
-fps = 60
+fps = 80
+
+# Performance monitoring
+last_fps_log = time.time()
+frame_count_since_log = 0
+action_queue = []  # Queue for multi-action sequences
+current_action = None  # Current action being held
+action_frames_remaining = 0  # Frames left to hold current action
+release_frames_remaining = 0  # Frames left to wait after release
+
+### IMPORTANT: DO NOT REDUCE THESE OR BUTTONS MAY NOT WORK! ###
+ACTION_HOLD_FRAMES = 12   # Hold each action for 12 frames 
+ACTION_RELEASE_DELAY = 24   # Delay between actions for processing
 
 # Video recording state
 video_writer = None
@@ -52,12 +67,14 @@ video_filename = ""
 video_frame_counter = 0
 video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
 
-# Pygame display
-screen_width = 480  # 240 * 2 (upscaled)
-screen_height = 320  # 160 * 2 (upscaled)
-screen = None
-font = None
-clock = None
+# Frame cache for separate frame server
+# Use cache directory instead of /tmp
+CACHE_DIR = ".pokeagent_cache"
+os.makedirs(CACHE_DIR, exist_ok=True)
+FRAME_CACHE_FILE = os.path.join(CACHE_DIR, "frame_cache.json")
+frame_cache_counter = 0
+
+# Server runs headless - display handled by client
 
 # Threading locks for thread safety
 obs_lock = threading.Lock()
@@ -68,17 +85,7 @@ memory_lock = threading.Lock()  # New lock for memory operations to prevent race
 state_update_thread = None
 state_update_running = False
 
-# Button mapping
-button_map = {
-    pygame.K_z: 'A',
-    pygame.K_x: 'B', 
-    pygame.K_RETURN: 'START',
-    pygame.K_RSHIFT: 'SELECT',
-    pygame.K_UP: 'UP',
-    pygame.K_DOWN: 'DOWN',
-    pygame.K_LEFT: 'LEFT',
-    pygame.K_RIGHT: 'RIGHT',
-}
+# Button mapping removed - handled by client
 
 # Video recording functions
 def init_video_recording(record_enabled=False):
@@ -90,7 +97,6 @@ def init_video_recording(record_enabled=False):
     
     try:
         # Create video filename with timestamp
-        import datetime
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         video_filename = f"pokegent_recording_{timestamp}.mp4"
         
@@ -110,6 +116,45 @@ def init_video_recording(record_enabled=False):
     except Exception as e:
         print(f"❌ Video recording initialization error: {e}")
         video_writer = None
+
+def update_frame_cache(screenshot):
+    """Update the frame cache file for the separate frame server"""
+    global frame_cache_counter, FRAME_CACHE_FILE
+    
+    if screenshot is None:
+        return
+        
+    try:
+        # Convert screenshot to base64
+        if hasattr(screenshot, 'save'):  # PIL image
+            buffer = io.BytesIO()
+            screenshot.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+        elif isinstance(screenshot, np.ndarray):  # Numpy array
+            pil_image = Image.fromarray(screenshot)
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+        else:
+            return
+            
+        frame_cache_counter += 1
+        
+        # Write to cache file atomically
+        cache_data = {
+            "frame_data": img_str,
+            "frame_counter": frame_cache_counter,
+            "timestamp": time.time()
+        }
+        
+        # Write to temporary file first, then move (atomic operation)
+        temp_file = FRAME_CACHE_FILE + ".tmp"
+        with open(temp_file, 'w') as f:
+            json.dump(cache_data, f)
+        os.rename(temp_file, FRAME_CACHE_FILE)
+        
+    except Exception as e:
+        pass  # Silently handle cache write errors
 
 def record_frame(screenshot):
     """Record frame to video if recording is enabled with frame skipping"""
@@ -164,9 +209,9 @@ def cleanup_video_recording():
 
 # FastAPI app
 app = FastAPI(
-    title="Pokemon Emerald Simple Server",
-    description="Simple server with pygame display and FastAPI endpoints",
-    version="1.0.0",
+    title="PokeAgent Challenge",
+    description="Streamer display FastAPI endpoints",
+    version="3.0.0-preview",
 )
 
 # Add CORS middleware
@@ -193,8 +238,11 @@ class ComprehensiveStateResponse(BaseModel):
     player: dict
     game: dict
     map: dict
+    milestones: dict = {}
+    location_connections: dict = {}  # Add location connections for portal display
     step_number: int
     status: str
+    action_queue_length: int = 0
 
 def periodic_milestone_updater():
     """Lightweight background thread that only updates milestones occasionally"""
@@ -243,12 +291,11 @@ def signal_handler(signum, frame):
     cleanup_video_recording()
     if env:
         env.stop()
-    pygame.quit()
     sys.exit(0)
 
-def setup_environment():
+def setup_environment(skip_initial_state=False):
     """Initialize the emulator"""
-    global env, current_obs
+    global env, current_obs, anticheat_tracker
     
     try:
         rom_path = "Emerald-GBAdvance/rom.gba"
@@ -257,6 +304,41 @@ def setup_environment():
         
         env = EmeraldEmulator(rom_path=rom_path)
         env.initialize()
+        
+        # Initialize AntiCheat tracker for submission logging
+        anticheat_tracker = AntiCheatTracker()
+        anticheat_tracker.initialize_submission_log("SERVER_MODE")
+        print("AntiCheat tracker initialized for submission logging")
+        
+        # Log initial GAME_RUNNING milestone at startup (STEP=0, time=0)
+        # Skip this if we're going to load a state anyway
+        if not skip_initial_state:
+            try:
+                # Mark GAME_RUNNING milestone as completed immediately
+                env.milestone_tracker.mark_completed("GAME_RUNNING")
+                
+                # Get initial game state for logging
+                initial_state = env.get_comprehensive_state()
+                
+                # Create state hash
+                import hashlib
+                state_str = str(initial_state)
+                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+                
+                # Log initial entry with GAME_RUNNING milestone
+                anticheat_tracker.log_submission_data(
+                    step=0,
+                    state_data=initial_state,
+                    action_taken="INIT",
+                    decision_time=0.0,
+                    state_hash=state_hash,
+                    manual_mode=True,
+                    milestone_override="GAME_RUNNING"
+                )
+                print("Initial GAME_RUNNING milestone logged at startup")
+                
+            except Exception as e:
+                print(f"Warning: Could not log initial milestone: {e}")
         
         screenshot = env.get_screenshot()
         if screenshot:
@@ -274,161 +356,110 @@ def setup_environment():
         return False
 
 def handle_input(manual_mode=False):
-    """Handle keyboard input and convert to game actions"""
-    global recent_button_presses
-    actions_pressed = []
-    
-    if not manual_mode:
-        # Server mode - no keyboard input
-        return True, []
-    
-    # Manual mode - handle keyboard input
-    # This handles continuous key presses
-    keys = pygame.key.get_pressed()
-    for key, button in button_map.items():
-        if keys[key]:
-            actions_pressed.append(button)
-
-    # This handles single key events
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            return False, []
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_ESCAPE:
-                return False, []
-            elif event.key == pygame.K_s:
-                save_screenshot()
-            elif event.key == pygame.K_r:
-                reset_game()
-            elif event.key == pygame.K_1:
-                # Use currently loaded state file if one exists, otherwise use default
-                save_file = env._current_state_file if env._current_state_file else "server/simple_test.state"
-                env.save_state(save_file)
-            elif event.key == pygame.K_2:
-                # Use currently loaded state file if one exists, otherwise use default
-                load_file = env._current_state_file if env._current_state_file else "server/simple_test.state"
-                env.load_state(load_file)
-    
-    # Track manual button presses for the action queue display
-    if actions_pressed:
-        current_time = time.time()
-        for button in actions_pressed:
-            # Avoid duplicate consecutive buttons within 100ms
-            should_add = True
-            if recent_button_presses:
-                last_entry = recent_button_presses[-1]
-                if (last_entry["button"] == button and 
-                    current_time - last_entry["timestamp"] < 0.1):  # 100ms threshold
-                    should_add = False
-            
-            if should_add:
-                recent_button_presses.append({
-                    "button": button,
-                    "timestamp": current_time
-                })
-        
-        # Keep only last 50 button presses to avoid memory issues
-        if len(recent_button_presses) > 50:
-            recent_button_presses = recent_button_presses[-50:]
-    
-    return True, actions_pressed
+    """Handle input - server runs headless, no input handling needed"""
+    # Server always runs headless - input handled by client via HTTP API
+    return True, []
 
 def step_environment(actions_pressed):
-    """Take a step in the environment with comprehensive locking for race condition prevention"""
+    """Take a step in the environment with optimized locking for better performance"""
     global current_obs
     
-    # Use memory_lock to prevent race conditions with state reading during area transitions
+    # Debug: print what actions are being sent to emulator
+    if actions_pressed:
+        print(f"🎯 DEBUG: Stepping emulator with actions: {actions_pressed}")
+    
+    
+    # Only use memory_lock for the essential emulator step
     with memory_lock:
-        with step_lock:
-            env.run_frame_with_buttons(actions_pressed)
-            
-            # IMPROVED AREA TRANSITION DETECTION: Use proper _check_area_transition method
+        env.run_frame_with_buttons(actions_pressed)
+        
+        # Do lightweight area transition detection inside the lock
+        if hasattr(env, 'memory_reader') and env.memory_reader:
+            try:
+                transition_detected = env.memory_reader._check_area_transition()
+                if transition_detected:
+                    logger.info("Area transition detected")
+                    env.memory_reader.invalidate_map_cache()
+                    if hasattr(env.memory_reader, '_cached_behaviors'):
+                        env.memory_reader._cached_behaviors = None
+                    if hasattr(env.memory_reader, '_cached_behaviors_map_key'):
+                        env.memory_reader._cached_behaviors_map_key = None
+                    # Set flag to trigger map stitcher update outside the lock
+                    env.memory_reader._area_transition_detected = True
+            except Exception as e:
+                logger.warning(f"Area transition check failed: {e}")
+    
+    # Update screenshot outside the memory lock to reduce contention
+    try:
+        screenshot = env.get_screenshot()
+        if screenshot:
+            record_frame(screenshot)
+            update_frame_cache(screenshot)  # Update frame cache for separate frame server
+            with obs_lock:
+                current_obs = np.array(screenshot)
+                
+            # Update map stitcher on position changes (lightweight approach)
+            # This ensures map data stays current as player moves
             if hasattr(env, 'memory_reader') and env.memory_reader:
                 try:
-                    # Use the built-in area transition detection
-                    transition_detected = env.memory_reader._check_area_transition()
+                    # Check if player position has changed
+                    should_update = False
                     
-                    if transition_detected:
-                        logger.info("Area transition detected by _check_area_transition()")
-                        
-                        # Force complete cache invalidation
-                        env.memory_reader.invalidate_map_cache()
-                        
-                        # Clear behavior cache specifically - this is the key fix
-                        if hasattr(env.memory_reader, '_cached_behaviors'):
-                            env.memory_reader._cached_behaviors = None
-                        if hasattr(env.memory_reader, '_cached_behaviors_map_key'):
-                            env.memory_reader._cached_behaviors_map_key = None
-                        
-                        # Clear memory region cache for EWRAM (where map buffer lives)
-                        if hasattr(env.memory_reader, '_mem_cache'):
-                            env.memory_reader._mem_cache.clear()
-                        
-                        # Let the system naturally refresh rather than forcing immediate re-detection
-                        logger.info("Caches cleared for area transition")
+                    # Get current player coordinates and map info
+                    current_coords = env.memory_reader.read_coordinates()
+                    current_map_bank = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_BANK)
+                    current_map_number = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_NUMBER)
+                    current_map_info = (current_map_bank, current_map_number)
                     
-                    # Also do a basic location name check as backup
-                    current_location = env.memory_reader.read_location()
-                    if hasattr(env, '_last_location_check'):
-                        if current_location != env._last_location_check:
-                            logger.info(f"Location name changed: {env._last_location_check} -> {current_location}")
-                            # Additional cache clearing for location name changes
-                            env.memory_reader.invalidate_map_cache()
+                    # Initialize tracking variables if needed
+                    if not hasattr(env, '_last_player_coords'):
+                        env._last_player_coords = None
+                        env._last_map_info = None
                     
-                    env._last_location_check = current_location
+                    # Check for position changes
+                    if current_coords != env._last_player_coords or current_map_info != env._last_map_info:
+                        should_update = True
+                        env._last_player_coords = current_coords
+                        env._last_map_info = current_map_info
+                        print(f"📍 Position change detected: {current_coords}, map: {current_map_info}")
+                        logger.debug(f"Map stitcher update triggered by position change: {current_coords}, map: {current_map_info}")
+                    
+                    # Always update on area transitions (already detected above)
+                    if hasattr(env.memory_reader, '_area_transition_detected') and env.memory_reader._area_transition_detected:
+                        should_update = True
+                        env.memory_reader._area_transition_detected = False  # Reset flag
+                        logger.debug("Map stitcher update triggered by area transition")
+                    
+                    # Update map stitcher directly when position changes
+                    if should_update:
+                        # @TODO should do location change warps here too
+                        print(f"🗺️ Triggering map stitcher update for position change")
+                        # Call map stitcher update directly without full map reading
+                        tiles = env.memory_reader.read_map_around_player(radius=7)
+                        if tiles:
+                            print(f"🗺️ Got {len(tiles)} tiles, updating map stitcher")
+                            state = {"map": {}}  # Basic state for stitcher
+                            env.memory_reader._update_map_stitcher(tiles, state)
+                            logger.debug("Map stitcher updated for position change")
+                            print(f"✅ Map stitcher update completed")
+                        else:
+                            print(f"❌ No tiles found for map stitcher update")
+                        
                 except Exception as e:
-                    logger.debug(f"Location check failed: {e}")
-
-            screenshot = env.get_screenshot()
-            if screenshot:
-                # Record frame for video if enabled
-                record_frame(screenshot)
-                with obs_lock:
-                    current_obs = np.array(screenshot)
+                    logger.error(f"Failed to update map stitcher during movement: {e}")
+                    print(f"❌ Map stitcher update failed: {e}")
+    except Exception as e:
+        logger.warning(f"Error updating screenshot: {e}")
 
 def update_display(manual_mode=False):
-    """Update the display with current game state"""
-    global current_obs, screen, step_count
-    
-    with obs_lock:
-        obs_copy = current_obs.copy() if current_obs is not None else None
-    
-    if obs_copy is not None and screen:
-        obs_surface = pygame.surfarray.make_surface(obs_copy.swapaxes(0, 1))
-        scaled_surface = pygame.transform.scale(obs_surface, (screen_width, screen_height))
-        screen.blit(scaled_surface, (0, 0))
-    
-    # if manual_mode:
-    #     draw_info_overlay()
-    pygame.display.flip()
+    """Update display - server runs headless, no display update needed"""
+    # Server runs headless - display handled by client
+    pass
 
 def draw_info_overlay():
-    """Draw information overlay on the screen"""
-    global screen, step_count, font
-    
-    if not screen or not font:
-        return
-        
-    overlay_height = 80
-    overlay = pygame.Surface((screen_width, overlay_height))
-    overlay.set_alpha(200)
-    overlay.fill((0, 0, 0))
-    
-    # Position overlay at the bottom of the screen
-    overlay_y = screen_height - overlay_height
-    screen.blit(overlay, (0, overlay_y))
-    
-    info_lines = [
-        f"Step: {step_count}",
-        f"Controls: Z=A, X=B, Enter=Start, RShift=Select, Arrows=Move",
-        f"Special: S=Screenshot, R=Reset, 1=Save State, 2=Load State, Esc=Quit"
-    ]
-    
-    y_offset = overlay_y + 8
-    for line in info_lines:
-        text_surface = font.render(line, True, (255, 255, 255))
-        screen.blit(text_surface, (10, y_offset))
-        y_offset += 22
+    """Draw info overlay - server runs headless, no overlay needed"""
+    # Server runs headless - overlay handled by client
+    pass
 
 def save_screenshot():
     """Save current screenshot"""
@@ -456,15 +487,10 @@ def reset_game():
     print("Game and milestone reset complete")
 
 def game_loop(manual_mode=False):
-    """Main game loop - runs in main thread"""
-    global running, step_count, clock
+    """Main game loop - runs in main thread, always headless"""
+    global running, step_count
     
-    if manual_mode:
-        print("Starting game loop in manual mode...")
-        print("Controls: Z=A, X=B, Enter=Start, RShift=Select, Arrows=Move")
-        print("Special: S=Screenshot, R=Reset, 1=Save State, 2=Load State, Esc=Quit")
-    else:
-        print("Starting game loop in server mode...")
+    print("Starting headless game loop...")
     
     while running:
         # Handle input
@@ -472,51 +498,98 @@ def game_loop(manual_mode=False):
         if not should_continue:
             break
             
+        # In server mode, handle action queue with proper button hold timing
+        action_completed = False
+        if not manual_mode:
+            global current_action, action_frames_remaining, release_frames_remaining
+            
+            if current_action and action_frames_remaining > 0:
+                # Continue holding the current action
+                actions_pressed = [current_action]
+                action_frames_remaining -= 1
+                if action_frames_remaining == 0:
+                    # Action finished, start release delay
+                    current_action = None
+                    release_frames_remaining = ACTION_RELEASE_DELAY
+                    action_completed = True  # Mark action as completed
+                    print(f"✅ Action completed: step_count will increment")
+            elif release_frames_remaining > 0:
+                # Release delay (no button pressed)
+                actions_pressed = []
+                release_frames_remaining -= 1
+            elif action_queue:
+                # Start a new action from the queue
+                current_action = action_queue.pop(0)
+                action_frames_remaining = ACTION_HOLD_FRAMES
+                actions_pressed = [current_action]
+                queue_len = len(action_queue)
+                # Get current FPS for estimation
+                current_fps_for_calc = env.get_current_fps(fps) if env else fps
+                estimated_time = queue_len * (ACTION_HOLD_FRAMES + ACTION_RELEASE_DELAY) / current_fps_for_calc
+                print(f"🎮 Server processing action: {current_action}, Queue remaining: {queue_len} actions (~{estimated_time:.1f}s)")
+            else:
+                # No action to process
+                actions_pressed = []
+            
         # Step environment
         step_environment(actions_pressed)
         
-        # Milestones are now updated in background thread to avoid blocking pygame
+        # Milestones are now updated in background thread
         
-        # Update display
+        # Server runs headless - no display update needed
         update_display(manual_mode)
         
-        with step_lock:
-            step_count += 1
+        # Only increment step count when an action is completed
+        if action_completed:
+            with step_lock:
+                step_count += 1
+                print(f"📈 Step count incremented to: {step_count}")
+        
+        # Performance monitoring - log actual FPS every 5 seconds
+        global last_fps_log, frame_count_since_log
+        frame_count_since_log += 1
+        current_time = time.time()
+        if current_time - last_fps_log >= 5.0:  # Log every 5 seconds
+            actual_fps = frame_count_since_log / (current_time - last_fps_log)
+            queue_len = len(action_queue)
+            print(f"📊 Server FPS: {actual_fps:.1f} (target: {fps}), Queue: {queue_len} actions")
+            last_fps_log = current_time
+            frame_count_since_log = 0
         
         # Use dynamic FPS - 2x speed during dialog
         current_fps = env.get_current_fps(fps) if env else fps
-        clock.tick(current_fps)
-
-def init_pygame():
-    """Initialize pygame"""
-    global screen, font, clock
-    
-    pygame.init()
-    screen = pygame.display.set_mode((screen_width, screen_height))
-    pygame.display.set_caption("Pokemon Emerald Simple Server")
-    font = pygame.font.Font(None, 24)
-    clock = pygame.time.Clock()
+        # Server runs headless - always use sleep for timing
+        time.sleep(1.0 / current_fps)
 
 def run_fastapi_server(port):
     """Run FastAPI server in background thread"""
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="error", access_log=False)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port, 
+        log_level="error", 
+        access_log=False,
+        timeout_keep_alive=60,  # Keep connections alive longer
+        timeout_graceful_shutdown=30  # More time for graceful shutdown
+    )
 
-    # Create a new Socket.IO server
-    sio = socketio.AsyncServer(cors_allowed_origins='*')
-
-    # Attach the Socket.IO server to the FastAPI app
-    sio_app = socketio.ASGIApp(sio, app)
-
-    # Define event handlers for the Socket.IO server
-    @sio.event
-    async def connect(sid, environ):
-        print('Client connected:', sid)
-
-    @sio.event
-    async def disconnect(sid):
-        print('Client disconnected:', sid)
+# Serve stream.html
+@app.get("/stream")
+async def get_stream():
+    """Serve the stream.html interface"""
+    try:
+        with open("server/stream.html", "r") as f:
+            content = f.read()
+        return HTMLResponse(content=content)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Stream interface not found")
 
 # FastAPI endpoints
+@app.get("/health")
+async def get_health():
+    """Health check endpoint for server monitoring"""
+    return {"status": "healthy", "timestamp": time.time()}
+
 @app.get("/status")
 async def get_status():
     """Get server status"""
@@ -574,68 +647,189 @@ async def get_screenshot():
         logger.error(f"Error getting screenshot: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/frame")
+async def get_latest_frame():
+    """Get latest game frame in same format as single-process mode"""
+    global current_obs, env
+    
+    with obs_lock:
+        obs_copy = current_obs.copy() if current_obs is not None else None
+    
+    # If current_obs is None (e.g., after server restart), try to get a fresh screenshot
+    if obs_copy is None and env:
+        try:
+            screenshot = env.get_screenshot()
+            if screenshot:
+                obs_copy = np.array(screenshot)
+                # Update current_obs for future requests
+                with obs_lock:
+                    current_obs = obs_copy.copy()
+                logger.debug("Frame endpoint: Retrieved fresh screenshot after restart")
+        except Exception as e:
+            logger.warning(f"Frame endpoint: Failed to get fresh screenshot: {e}")
+    
+    if obs_copy is None:
+        return {"frame": ""}
+    
+    try:
+        # Convert to base64
+        pil_image = Image.fromarray(obs_copy)
+        buffer = io.BytesIO()
+        pil_image.save(buffer, format='PNG')
+        img_str = base64.b64encode(buffer.getvalue()).decode()
+        
+        return {"frame": img_str}
+    except Exception as e:
+        logger.warning(f"Frame endpoint: Error encoding frame: {e}")
+        return {"frame": ""}
+
 @app.post("/action")
 async def take_action(request: ActionRequest):
     """Take an action"""
-    global current_obs, step_count, recent_button_presses
+    global current_obs, step_count, recent_button_presses, action_queue, anticheat_tracker, step_counter, last_action_time
+    
+    print(f"🔍 DEBUG: Action endpoint called with request: {request}")
+    print(f"🔍 DEBUG: Request buttons: {request.buttons}")
     
     if env is None:
+        print(f"❌ DEBUG: Emulator not initialized")
         raise HTTPException(status_code=400, detail="Emulator not initialized")
     
     try:
-        # Track button presses for recent actions display
+        # Add all actions to the queue (handle both single actions and lists)
         if request.buttons:
+            # Add ALL actions to the queue - let the game loop handle execution
+            print(f"📡 Server received actions: {request.buttons}")
+            print(f"📋 Action queue before extend: {action_queue}")
+            action_queue.extend(request.buttons)
+            print(f"📋 Action queue after extend: {action_queue}")
+            
+            # Track button presses for recent actions display
             current_time = time.time()
             for button in request.buttons:
-                # Avoid duplicate consecutive buttons within 100ms
-                should_add = True
-                if recent_button_presses:
-                    last_entry = recent_button_presses[-1]
-                    if (last_entry["button"] == button and 
-                        current_time - last_entry["timestamp"] < 0.1):  # 100ms threshold
-                        should_add = False
+                # Add all buttons to recent actions (removed duplicate filtering for debugging)
+                recent_button_presses.append({
+                    "button": button,
+                    "timestamp": current_time
+                })
+            
+            # Update total actions count in metrics
+            with step_lock:
+                latest_metrics["total_actions"] = latest_metrics.get("total_actions", 0) + len(request.buttons)
                 
-                if should_add:
-                    recent_button_presses.append({
-                        "button": button,
-                        "timestamp": current_time
-                    })
+                # Also update the LLM logger's action count for checkpoint persistence
+                try:
+                    from utils.llm_logger import get_llm_logger
+                    llm_logger = get_llm_logger()
+                    if llm_logger:
+                        llm_logger.cumulative_metrics["total_actions"] = latest_metrics["total_actions"]
+                        
+                        # Sync LLM logger's cumulative metrics back to latest_metrics
+                        # This ensures token usage and costs from LLM interactions are displayed
+                        cumulative_metrics_to_sync = ["total_tokens", "prompt_tokens", "completion_tokens", "total_cost", "total_llm_calls", "total_run_time"]
+                        for metric_key in cumulative_metrics_to_sync:
+                            if metric_key in llm_logger.cumulative_metrics:
+                                latest_metrics[metric_key] = llm_logger.cumulative_metrics[metric_key]
+                except Exception as e:
+                    logger.debug(f"Failed to sync metrics with LLM logger: {e}")
             
             # Keep only last 50 button presses to avoid memory issues
             if len(recent_button_presses) > 50:
                 recent_button_presses = recent_button_presses[-50:]
-        
-        # Execute action - step_environment now handles its own memory locking
-        step_environment(request.buttons)
-        
-        with step_lock:
-            step_count += 1
-            current_step = step_count
-        
-        # Milestones are now updated in background thread to avoid blocking pygame
-        
-        # Get updated screenshot
-        with obs_lock:
-            obs_copy = current_obs.copy() if current_obs is not None else None
-        
-        if obs_copy is not None:
-            pil_image = Image.fromarray(obs_copy)
-            buffer = io.BytesIO()
-            pil_image.save(buffer, format='PNG')
-            img_str = base64.b64encode(buffer.getvalue()).decode()
-            
-            return GameStateResponse(
-                screenshot_base64=img_str,
-                step_number=current_step,
-                resolution=[obs_copy.shape[1], obs_copy.shape[0]],
-                status="running"
-            )
         else:
-            raise HTTPException(status_code=500, detail="No screenshot available")
+            print(f"⚠️ DEBUG: No buttons in request")
+        
+        # DON'T execute action here - let the game loop handle it from the queue
+        # This prevents conflicts between the API thread and pygame thread
+        
+        # Return immediate success - avoid all locks to prevent deadlocks
+        actions_added = len(request.buttons) if request.buttons else 0
+        
+        print(f"✅ DEBUG: Returning success, actions_added: {actions_added}, queue_length: {len(action_queue)}")
+        
+        # Log action to submission.log if anticheat tracker is available
+        if anticheat_tracker and request.buttons:
+            try:
+                # Calculate decision time
+                current_time = time.time()
+                if last_action_time is not None:
+                    decision_time = current_time - last_action_time
+                else:
+                    decision_time = 0.0  # First action
+                last_action_time = current_time
+                
+                # Get current game state for logging
+                game_state = env.get_comprehensive_state()
+                action_taken = request.buttons[0] if request.buttons else "NONE"  # Log first action
+                
+                # Create simple state hash
+                import hashlib
+                state_str = str(game_state)
+                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+                
+                # Determine if this is manual mode (from client) or agent mode
+                # For now, assume manual mode if coming through API
+                manual_mode = request.source == "manual" if hasattr(request, 'source') else True
+                
+                # Get the latest milestone from the emulator's milestone tracker
+                # First, trigger an immediate milestone check to ensure current state is detected
+                latest_milestone = "NONE"
+                if env and hasattr(env, 'milestone_tracker'):
+                    try:
+                        # Force an immediate milestone check before logging
+                        env.check_and_update_milestones(game_state)
+                    except Exception as e:
+                        logger.debug(f"Error during immediate milestone check: {e}")
+                    
+                    milestone_name, split_time, total_time = env.milestone_tracker.get_latest_milestone_info()
+                    latest_milestone = milestone_name if milestone_name != "NONE" else "NONE"
+                
+                # Log the action
+                step_counter += 1
+                anticheat_tracker.log_submission_data(
+                    step=step_counter,
+                    state_data=game_state,
+                    action_taken=action_taken,
+                    decision_time=decision_time,
+                    state_hash=state_hash,
+                    manual_mode=manual_mode,
+                    milestone_override=latest_milestone
+                )
+                
+            except Exception as e:
+                logger.warning(f"Error logging to submission.log: {e}")
+        
+        # Return lightweight response without any lock acquisition
+        return {
+            "status": "success", 
+            "actions_queued": actions_added,
+            "queue_length": len(action_queue),  # action_queue access is atomic for lists
+            "message": f"Added {actions_added} actions to queue"
+        }
             
     except Exception as e:
+        print(f"❌ DEBUG: Exception in action endpoint: {e}")
         logger.error(f"Error taking action: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/queue_status")
+async def get_queue_status():
+    """Get action queue status"""
+    global action_queue, current_action, action_frames_remaining, release_frames_remaining
+    
+    queue_empty = (len(action_queue) == 0 and 
+                   current_action is None and 
+                   action_frames_remaining == 0 and 
+                   release_frames_remaining == 0)
+    
+    return {
+        "queue_empty": queue_empty,
+        "queue_length": len(action_queue),
+        "current_action": current_action,
+        "action_frames_remaining": action_frames_remaining,
+        "release_frames_remaining": release_frames_remaining
+    }
 
 @app.get("/state")
 async def get_comprehensive_state():
@@ -657,10 +851,154 @@ async def get_comprehensive_state():
             # Force overworld if not in dialog (respect 5-second timeout)
             state["game"]["game_state"] = "overworld"
         
-        # Milestones are updated in the action endpoint, no need to duplicate here
+        # Include milestones for storyline objective auto-completion
+        if env.milestone_tracker:
+            state["milestones"] = env.milestone_tracker.milestones
+        
+        # Get map stitcher data for enhanced map display
+        # Use the memory_reader's MapStitcher instance which has the accumulated data
+        map_stitcher = None
+        if env and env.memory_reader and hasattr(env.memory_reader, '_map_stitcher'):
+            map_stitcher = env.memory_reader._map_stitcher
+            num_areas = len(map_stitcher.map_areas) if map_stitcher and hasattr(map_stitcher, 'map_areas') else 0
+            logger.debug(f"Using memory_reader's MapStitcher with {num_areas} areas")
+        else:
+            logger.debug("No MapStitcher available from memory_reader")
+        
+        # Get current location name
+        current_location = state.get("player", {}).get("location", "Unknown")
+        player_pos = state.get("player", {}).get("position")
+        if player_pos:
+            player_coords = (player_pos.get("x", 0), player_pos.get("y", 0))
+        else:
+            player_coords = None
+        
+        # Add stitched map info to the map section
+        if not "map" in state:
+            state["map"] = {}
+        
+        # Check if visual_map was already generated by memory_reader
+        # If so, preserve it as it has the proper accumulated map data
+        visual_map_from_memory_reader = state.get("map", {}).get("visual_map")
+        if visual_map_from_memory_reader:
+            logger.debug("Using visual_map generated by memory_reader")
+            # Keep the visual_map as-is
+        elif map_stitcher:
+            # Generate visual map if not already present
+            try:
+                # Get NPCs from state if available
+                npcs = state.get("map", {}).get("object_events", [])
+                
+                # Get connections for this location
+                connections_with_coords = []
+                if current_location and current_location != "Unknown":
+                    location_connections = map_stitcher.get_location_connections(current_location)
+                    for conn in location_connections:
+                        if len(conn) >= 3:
+                            other_loc, my_coords, their_coords = conn[0], conn[1], conn[2]
+                            connections_with_coords.append({
+                                "to": other_loc,
+                                "from_pos": list(my_coords) if my_coords else [],
+                                "to_pos": list(their_coords) if their_coords else []
+                            })
+                
+                # Generate the map display
+                map_lines = map_stitcher.generate_location_map_display(
+                    location_name=current_location,
+                    player_pos=player_coords,
+                    npcs=npcs,
+                    connections=connections_with_coords
+                )
+                
+                # Store as formatted text
+                if map_lines:
+                    state["map"]["visual_map"] = "\n".join(map_lines)
+                    logger.debug(f"Generated visual_map with {len(map_lines)} lines")
+            except Exception as e:
+                logger.error(f"Failed to generate visual_map: {e}")
+        
+        # Add stitched map info for the client/frontend
+        if map_stitcher:
+            # Get the location grid and connections
+            if current_location and current_location != "Unknown":
+                location_grid = map_stitcher.get_location_grid(current_location)
+                connections = []
+                
+                # Get connections for this location
+                for other_loc, my_coords, their_coords in map_stitcher.get_location_connections(current_location):
+                    connections.append({
+                        "to": other_loc,
+                        "from_pos": list(my_coords),
+                        "to_pos": list(their_coords)
+                    })
+                
+                state["map"]["stitched_map_info"] = {
+                    "available": True,
+                    "current_area": {
+                        "name": current_location,
+                        "connections": connections,
+                        "player_pos": player_coords
+                    },
+                    "player_local_pos": player_coords
+                }
+            else:
+                state["map"]["stitched_map_info"] = {
+                    "available": False,
+                    "reason": "Unknown location"
+                }
+            
+            # Also include location connections directly for backward compatibility
+            try:
+                cache_file = ".pokeagent_cache/map_stitcher_data.json"
+                if os.path.exists(cache_file):
+                    with open(cache_file, 'r') as f:
+                        map_data = json.load(f)
+                        if 'location_connections' in map_data and map_data['location_connections']:
+                            location_connections = map_data['location_connections']
+                            state["location_connections"] = location_connections
+                            logger.debug(f"Loaded location connections for {len(location_connections) if location_connections else 0} locations")
+                        elif 'warp_connections' in map_data and map_data['warp_connections']:
+                            # Convert warp_connections to portal_connections format for LLM display
+                            map_id_connections = {}
+                            for conn in map_data['warp_connections']:
+                                from_map = conn['from_map_id']
+                                if from_map not in map_id_connections:
+                                    map_id_connections[from_map] = []
+                                
+                                # Find the location name for the destination map
+                                to_map_name = "Unknown Location"
+                                if str(conn['to_map_id']) in map_data.get('map_areas', {}):
+                                    to_map_name = map_data['map_areas'][str(conn['to_map_id'])]['location_name']
+                                
+                                map_id_connections[from_map].append({
+                                    'to_name': to_map_name,
+                                    'from_pos': conn['from_position'],  # Keep as list for JSON serialization
+                                    'to_pos': conn['to_position']       # Keep as list for JSON serialization
+                                })
+                            
+                            state["portal_connections"] = map_id_connections
+                            print(f"🗺️ SERVER: Added portal connections to state: {map_id_connections}")
+                            print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
+                            logger.debug(f"Loaded portal connections for {len(map_id_connections) if map_id_connections else 0} maps from persistent storage")
+                        else:
+                            print(f"🗺️ SERVER: No warp connections found in map data")
+                            logger.debug("No warp connections found in map stitcher data")
+                else:
+                    print(f"🗺️ SERVER: Cache file not found at {cache_file}")
+                    logger.debug(f"Map stitcher cache file not found: {cache_file}")
+            except Exception as e:
+                import traceback
+                print(f"🗺️ SERVER: Error loading portal connections: {e}")
+                print(f"🗺️ SERVER: Full traceback: {traceback.format_exc()}")
+                logger.debug(f"Could not load portal connections from persistent storage: {e}")
         
         # The battle information already contains all necessary data
         # No additional analysis needed - keep it clean
+        
+        # Remove MapStitcher instance to avoid serialization issues
+        # The instance is only for internal use by state_formatter
+        if "_map_stitcher_instance" in state.get("map", {}):
+            del state["map"]["_map_stitcher_instance"]
         
         # Convert screenshot to base64 if available
         if state["visual"]["screenshot"]:
@@ -674,80 +1012,24 @@ async def get_comprehensive_state():
         with step_lock:
             current_step = step_count
         
+        # Include action queue info for multiprocess coordination
+        queue_length = len(action_queue)  # Action queue access is atomic for len()
+        
         return ComprehensiveStateResponse(
             visual=state["visual"],
             player=state["player"],
             game=state["game"],
             map=state["map"],
+            milestones=state.get("milestones", {}),
+            location_connections=state.get("location_connections", {}),
             step_number=current_step,
-            status="running"
+            status="running",
+            action_queue_length=queue_length
         )
         
     except Exception as e:
         logger.error(f"Error getting comprehensive state: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    
-    
-def format_map_for_comparison(self, tiles, title, location, position):
-    """Format map tiles for comparison with ground truth format"""
-    if not tiles:
-        return f"=== {title} ===\nNo tiles available\n"
-    
-    output = []
-    output.append(f"=== {title} ===")
-    output.append(f"Format: (MetatileID, Behavior, X, Y)")
-    output.append(f"Map dimensions: {len(tiles)}x{len(tiles[0]) if tiles else 0}")
-    output.append("")
-    output.append("--- TRAVERSABILITY MAP ---")
-    
-    # Header with column numbers
-    header = "      " + "  ".join(f"{i:2}" for i in range(len(tiles[0]) if tiles else 0))
-    output.append(header)
-    output.append("    " + "-" * (len(header) - 4))
-    
-    # Map rows
-    for row_idx, row in enumerate(tiles):
-        traversability_row = []
-        for col_idx, tile in enumerate(row):
-            if len(tile) >= 4:
-                tile_id, behavior, collision, elevation = tile
-                behavior_val = behavior if not hasattr(behavior, 'value') else behavior.value
-                
-                # Convert to traversability symbol
-                if behavior_val == 0:  # NORMAL
-                    symbol = "." if collision == 0 else "#"
-                elif behavior_val == 1:  # SECRET_BASE_WALL
-                    symbol = "#"
-                elif behavior_val == 51:  # IMPASSABLE_SOUTH
-                    symbol = "IM"
-                elif behavior_val == 96:  # NON_ANIMATED_DOOR
-                    symbol = "D"
-                elif behavior_val == 101:  # SOUTH_ARROW_WARP
-                    symbol = "SO"
-                elif behavior_val == 105:  # ANIMATED_DOOR
-                    symbol = "D"
-                elif behavior_val == 134:  # TELEVISION
-                    symbol = "TE"
-                else:
-                    symbol = "."  # Default to walkable for other behaviors
-                
-                # Mark player position
-                if position and len(position) >= 2:
-                    # Calculate if this tile is player position
-                    # Player is at center of 15x15 map (position 7,7)
-                    if row_idx == 7 and col_idx == 7:
-                        symbol = "P"
-                
-                traversability_row.append(symbol)
-            else:
-                traversability_row.append("?")
-        
-        # Format row with row number
-        row_str = f"{row_idx:2}: " + " ".join(f"{symbol:1}" for symbol in traversability_row)
-        output.append(row_str)
-    
-    return "\n".join(output)
-    
+        raise HTTPException(status_code=500, detail=str(e)) 
 
 @app.get("/debug/memory")
 async def debug_memory():
@@ -862,13 +1144,141 @@ async def debug_memory_dump(start: int = 0x02000000, length: int = 0x1000):
 
 
 
+@app.get("/test_stream")
+async def test_stream():
+    """Simple test stream to verify SSE works"""
+    from fastapi.responses import StreamingResponse
+    import asyncio
+    
+    async def simple_stream():
+        for i in range(5):
+            yield f"data: {{'test': {i}, 'timestamp': {time.time()}}}\n\n"
+            await asyncio.sleep(1)
+        yield f"data: {{'done': true}}\n\n"
+    
+    return StreamingResponse(simple_stream(), media_type="text/event-stream")
+
+@app.get("/agent_stream")
+async def stream_agent_thinking():
+    """Stream agent thinking in real-time using Server-Sent Events"""
+    from fastapi.responses import StreamingResponse
+    import asyncio
+    
+    async def event_stream():
+        """Generate server-sent events for agent thinking"""
+        logger.info("SSE: Starting event stream")
+        last_timestamp = ""  # Track last seen timestamp instead of count
+        sent_timestamps = set()  # Track all sent timestamps to avoid duplicates
+        heartbeat_counter = 0
+        
+        try:
+            # Send initial connection message
+            yield f"data: {json.dumps({'status': 'connected', 'timestamp': time.time()})}\n\n"
+            
+            # On startup, mark all existing interactions as "sent" to avoid flooding with old messages
+            # We only want to stream NEW interactions from this point forward
+            try:
+                log_files = sorted(glob.glob("llm_logs/llm_log_*.jsonl"))
+                for log_file in log_files:
+                    if os.path.exists(log_file):
+                        with open(log_file, 'r', encoding='utf-8') as f:
+                            for line in f:
+                                try:
+                                    entry = json.loads(line.strip())
+                                    if entry.get("type") == "interaction":
+                                        timestamp = entry.get("timestamp", "")
+                                        if timestamp:
+                                            sent_timestamps.add(timestamp)
+                                except:
+                                    continue
+                logger.info(f"SSE: Marked {len(sent_timestamps)} existing interactions as already sent")
+            except Exception as init_e:
+                logger.warning(f"SSE: Error initializing sent timestamps: {init_e}")
+            
+            while True:
+                try:
+                    heartbeat_counter += 1
+                    
+                    # Use simple file reading instead of complex get_agent_thinking()
+                    current_step = 0
+                    
+                    with step_lock:
+                        current_step = agent_step_count
+                    
+                    new_interactions = []
+                    try:
+                        # Read LLM log files directly (same as working /agent endpoint)
+                        log_files = sorted(glob.glob("llm_logs/llm_log_*.jsonl"))
+                        
+                        # Check all recent log files for new entries
+                        for log_file in log_files[-2:]:  # Check last 2 files to catch session changes
+                            if os.path.exists(log_file):
+                                with open(log_file, 'r', encoding='utf-8') as f:
+                                    lines = f.readlines()
+                                    # Check all lines, not just last 5
+                                    for line in lines:
+                                        try:
+                                            entry = json.loads(line.strip())
+                                            if entry.get("type") == "interaction":
+                                                timestamp = entry.get("timestamp", "")
+                                                # Only add if we haven't sent this timestamp before
+                                                if timestamp and timestamp not in sent_timestamps:
+                                                    new_interactions.append({
+                                                        "type": entry.get("interaction_type", "unknown"),
+                                                        "response": entry.get("response", ""),
+                                                        "duration": entry.get("duration", 0),
+                                                        "timestamp": timestamp
+                                                    })
+                                        except:
+                                            continue
+                    except Exception as file_e:
+                        logger.warning(f"SSE: File reading error: {file_e}")
+                    
+                    # Sort by timestamp to ensure chronological order
+                    new_interactions.sort(key=lambda x: x.get("timestamp", ""))
+                    
+                    # Check if there are new interactions
+                    if new_interactions:
+                        logger.info(f"SSE: Found {len(new_interactions)} new interactions to send")
+                        # Send new interactions
+                        for interaction in new_interactions:
+                            
+                            event_data = {
+                                "step": current_step,
+                                "type": interaction.get("type", "unknown"),
+                                "response": interaction.get("response", ""),
+                                "duration": interaction.get("duration", 0),
+                                "timestamp": interaction.get("timestamp", ""),
+                                "is_new": True
+                            }
+                            
+                            yield f"data: {json.dumps(event_data)}\n\n"
+                            # Mark this timestamp as sent
+                            sent_timestamps.add(interaction.get("timestamp", ""))
+                    
+                    # Send periodic heartbeat to keep connection alive (every 10 cycles = 5 seconds)
+                    elif heartbeat_counter % 10 == 0:
+                        yield f"data: {json.dumps({'heartbeat': True, 'timestamp': time.time(), 'step': current_step})}\n\n"
+                    
+                    # Wait before checking again
+                    await asyncio.sleep(0.5)
+                    
+                except Exception as e:
+                    logger.error(f"SSE: Error in stream loop: {e}")
+                    yield f"data: {json.dumps({'error': str(e), 'timestamp': time.time()})}\n\n"
+                    await asyncio.sleep(2)
+                    
+        except Exception as outer_e:
+            logger.error(f"SSE: Fatal error in event stream: {outer_e}")
+            yield f"data: {json.dumps({'fatal_error': str(outer_e), 'timestamp': time.time()})}\n\n"
+    
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "Connection": "keep-alive"})
+
 @app.get("/agent")
 async def get_agent_thinking():
     """Get current agent thinking status and recent LLM interactions"""
     try:
         # Get the most recent LLM log file
-        import glob
-        import os
         from utils.llm_logger import get_llm_logger
         
         # Get recent LLM interactions
@@ -904,18 +1314,17 @@ async def get_agent_thinking():
                 except Exception as e:
                     logger.error(f"Error reading LLM log {log_file}: {e}")
         
-        # Sort by timestamp and keep only the last 3 interactions
+        # Sort by timestamp and keep only the most recent interaction (current step)
         recent_interactions.sort(key=lambda x: x.get("timestamp", ""))
-        recent_interactions = recent_interactions[-3:]
-        logger.info(f"Found {len(recent_interactions)} recent interactions")
+        recent_interactions = recent_interactions[-1:] if recent_interactions else []
+        logger.info(f"Found {len(recent_interactions)} recent interactions (showing current step only)")
         
         # Format the agent thinking display
         if recent_interactions:
-            current_thought = f"Recent LLM interactions:\n"
-            for i, interaction in enumerate(reversed(recent_interactions)):
-                current_thought += f"\n{i+1}. {interaction['type'].upper()} ({interaction['duration']:.2f}s)\n"
-                current_thought += f"   Q: {interaction['prompt']}\n"
-                current_thought += f"   A: {interaction['response']}\n"
+            interaction = recent_interactions[-1]  # Get the most recent interaction
+            current_thought = f"Current step LLM output:\n"
+            current_thought += f"{interaction['type'].upper()} ({interaction['duration']:.2f}s)\n"
+            current_thought += f"Response: {interaction['response']}"
         else:
             current_thought = "No recent LLM interactions. Agent is ready to process game state."
         
@@ -941,11 +1350,132 @@ async def get_agent_thinking():
             "timestamp": time.time()
         }
 
-@app.post("/agent_step")
-async def update_agent_step():
-    """Update the agent step count (called by agent.py)"""
-    global agent_step_count
+@app.get("/metrics")
+async def get_metrics():
+    """Get cumulative metrics for the run"""
+    global latest_metrics
     
+    try:
+        # Return the latest metrics received from client (with thread safety)
+        with step_lock:
+            metrics = latest_metrics.copy()
+            metrics["agent_step_count"] = agent_step_count
+        
+        # If metrics haven't been initialized by client yet, try to load from checkpoint
+        # BUT only if checkpoint loading is enabled (not for fresh starts with --load-state)
+        if metrics.get("total_llm_calls", 0) == 0 and checkpoint_loading_enabled:
+            # Check cache folder first, then fall back to old location
+            cache_dir = ".pokeagent_cache"
+            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
+            if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
+                checkpoint_file = "checkpoint_llm.txt"
+            if os.path.exists(checkpoint_file):
+                try:
+                    with open(checkpoint_file, 'r', encoding='utf-8') as f:
+                        checkpoint_data = json.load(f)
+                        if "cumulative_metrics" in checkpoint_data:
+                            checkpoint_metrics = checkpoint_data["cumulative_metrics"]
+                            metrics.update(checkpoint_metrics)
+                            
+                            # Recalculate total_run_time based on original start_time
+                            if "start_time" in checkpoint_metrics:
+                                metrics["total_run_time"] = time.time() - checkpoint_metrics["start_time"]
+                            
+                            # Update agent step count from checkpoint
+                            if "agent_step_count" in checkpoint_data:
+                                metrics["agent_step_count"] = checkpoint_data["agent_step_count"]
+                except:
+                    pass
+        
+        return metrics
+        
+    except Exception as e:
+        logger.error(f"Error getting metrics: {e}")
+        return {
+            "total_tokens": 0,
+            "prompt_tokens": 0, 
+            "completion_tokens": 0,
+            "total_cost": 0.0,
+            "total_actions": 0,
+            "total_run_time": 0,
+            "total_llm_calls": 0,
+            "agent_step_count": agent_step_count
+        }
+
+# Store latest metrics from client
+latest_metrics = {
+    "total_tokens": 0,
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_cost": 0.0,
+    "total_actions": 0,
+    "total_run_time": 0,
+    "total_llm_calls": 0,
+    "start_time": time.time()  # Will be overwritten if checkpoint is loaded
+}
+
+# Flag to track whether checkpoint loading should be enabled
+checkpoint_loading_enabled = True  # Will be set based on startup args
+
+@app.post("/reset_metrics")
+async def reset_metrics():
+    """Reset all metrics to zero for fresh start"""
+    global latest_metrics, agent_step_count, checkpoint_loading_enabled
+    
+    with step_lock:
+        latest_metrics.update({
+            "total_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_cost": 0.0,
+            "total_actions": 0,
+            "total_run_time": 0,
+            "total_llm_calls": 0,
+            "start_time": time.time()
+        })
+        agent_step_count = 0
+        # Disable checkpoint loading to prevent loading from checkpoint_llm.txt
+        checkpoint_loading_enabled = False
+    
+    print("🔄 Server metrics reset for fresh start - checkpoint loading disabled")
+    return {"status": "reset", "timestamp": time.time()}
+
+@app.post("/agent_step")
+async def update_agent_step(request: Request = None):
+    """Update the agent step count and metrics (called by agent.py)"""
+    global agent_step_count, latest_metrics
+    
+    try:
+        # Check if this is a direct set operation or has metrics
+        if request:
+            try:
+                request_data = await request.json()
+                
+                # Update metrics if provided (with thread safety)
+                if "metrics" in request_data and isinstance(request_data["metrics"], dict):
+                    with step_lock:  # Use existing lock for thread safety
+                        # Safely update each metric individually to avoid race conditions
+                        for key, value in request_data["metrics"].items():
+                            if key in latest_metrics:
+                                # Always protect total_actions as it's managed by server
+                                if key == "total_actions":
+                                    continue
+                                else:
+                                    latest_metrics[key] = value
+                    
+                # Handle set_step for initialization
+                if "set_step" in request_data:
+                    with step_lock:
+                        agent_step_count = request_data["set_step"]
+                    return {"status": "set", "agent_step": agent_step_count}
+            except Exception as e:
+                logger.error(f"Error processing agent_step request: {e}")
+                # Continue with default increment behavior
+    except Exception as e:
+        logger.error(f"Error in agent_step endpoint: {e}")
+        # Continue with default increment behavior
+    
+    # Default increment behavior
     with step_lock:
         agent_step_count += 1
     
@@ -1157,6 +1687,174 @@ async def stop_server():
     running = False
     return {"status": "stopping"}
 
+@app.post("/save_state")
+async def save_state_endpoint(request: dict):
+    """Save the current emulator state to a file"""
+    try:
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        filepath = request.get("filepath", ".pokeagent_cache/manual_save.state")
+        if env:
+            env.save_state(filepath)
+            logger.info(f"💾 State saved to: {filepath}")
+            return {"status": "success", "message": f"State saved to {filepath}"}
+        else:
+            return JSONResponse(status_code=500, content={"error": "Emulator not initialized"})
+    except Exception as e:
+        logger.error(f"Error saving state: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/load_state")
+async def load_state_endpoint(request: dict):
+    """Load an emulator state from a file"""
+    try:
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        filepath = request.get("filepath", ".pokeagent_cache/manual_save.state")
+        if env:
+            if not os.path.exists(filepath):
+                return JSONResponse(status_code=404, content={"error": f"State file not found: {filepath}"})
+            env.load_state(filepath)
+            logger.info(f"📂 State loaded from: {filepath}")
+            return {"status": "success", "message": f"State loaded from {filepath}"}
+        else:
+            return JSONResponse(status_code=500, content={"error": "Emulator not initialized"})
+    except Exception as e:
+        logger.error(f"Error loading state: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.post("/checkpoint")
+async def save_checkpoint(request_data: dict = None):
+    """Save checkpoint - called by client when step count reaches checkpoint interval"""
+    try:
+        step_count = request_data.get("step_count", 0) if request_data else 0
+        
+        # Save emulator state
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        checkpoint_state = ".pokeagent_cache/checkpoint.state"
+        if env:
+            env.save_state(checkpoint_state)
+            logger.info(f"💾 Server: Saved checkpoint state at step {step_count}")
+            
+            # Save milestones
+            if env.milestone_tracker:
+                milestone_file = env.milestone_tracker.save_milestones_for_state(checkpoint_state)
+                logger.info(f"💾 Server: Saved checkpoint milestones")
+            
+            return {
+                "status": "checkpoint_saved",
+                "step_count": step_count,
+                "files": {
+                    "state": checkpoint_state,
+                    "milestones": f".pokeagent_cache/checkpoint_milestones.json",
+                    "map": f".pokeagent_cache/checkpoint_grids.json"
+                }
+            }
+        else:
+            return {"status": "error", "message": "No emulator available"}
+            
+    except Exception as e:
+        logger.error(f"Failed to save checkpoint: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/sync_llm_metrics")
+async def sync_llm_metrics(request: Request):
+    """Sync LLM cumulative metrics from client to server"""
+    try:
+        request_data = await request.json()
+        cumulative_metrics = request_data.get("cumulative_metrics", {})
+        
+        if not cumulative_metrics:
+            return {"status": "error", "message": "No metrics provided"}, 400
+        
+        # Update server's LLM logger with client's cumulative metrics
+        from utils.llm_logger import get_llm_logger
+        llm_logger = get_llm_logger()
+        if llm_logger is not None:
+            # Update cumulative metrics (but preserve server-managed metrics like start_time and total_actions)
+            server_start_time = llm_logger.cumulative_metrics.get("start_time")
+            server_total_actions = llm_logger.cumulative_metrics.get("total_actions")
+            
+            llm_logger.cumulative_metrics.update(cumulative_metrics)
+            
+            # Restore server-managed metrics
+            if server_start_time:
+                llm_logger.cumulative_metrics["start_time"] = server_start_time
+            if server_total_actions is not None:
+                llm_logger.cumulative_metrics["total_actions"] = server_total_actions
+            
+            # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
+            global latest_metrics
+            with step_lock:
+                for key, value in cumulative_metrics.items():
+                    if key in latest_metrics and key not in ["total_actions", "start_time"]:
+                        latest_metrics[key] = value
+            
+            logger.info(f"🔄 Synced LLM metrics: {cumulative_metrics.get('total_llm_calls', 0)} calls, {cumulative_metrics.get('total_tokens', 0)} tokens, ${cumulative_metrics.get('total_cost', 0):.6f}")
+            return {"status": "metrics_synced"}
+        else:
+            logger.error("No LLM logger available for sync")
+            return {"status": "error", "message": "No LLM logger available"}, 500
+    except Exception as e:
+        logger.error(f"Error syncing LLM metrics: {e}")
+        return {"status": "error", "message": str(e)}, 500
+
+@app.post("/save_agent_history")
+async def save_agent_history():
+    """Save agent history to checkpoint_llm.txt (called by client after each step)"""
+    try:
+        # Use server-side LLM logger to save checkpoint
+        from utils.llm_logger import get_llm_logger
+        
+        llm_logger = get_llm_logger()
+        if llm_logger is not None:
+            # Save checkpoint using current agent step count
+            global agent_step_count
+            # Save to cache folder (llm_logger handles path internally now)
+            llm_logger.save_checkpoint(agent_step_count=agent_step_count)
+            logger.info(f"💾 Saved LLM checkpoint at step {agent_step_count}")
+            return {"status": "agent_history_saved", "step_count": agent_step_count}
+        else:
+            return {"status": "no_logger", "message": "No LLM logger available"}
+            
+    except Exception as e:
+        logger.error(f"Failed to save agent history: {e}")
+        return {"status": "error", "message": str(e)}
+
+@app.post("/load_checkpoint")
+async def load_checkpoint():
+    """Load checkpoint state - called by client on startup if --load-checkpoint flag is used"""
+    try:
+        checkpoint_state = ".pokeagent_cache/checkpoint.state"
+        
+        if not os.path.exists(checkpoint_state):
+            return {"status": "no_checkpoint", "message": "No .pokeagent_cache/checkpoint.state file found"}
+        
+        if env:
+            env.load_state(checkpoint_state)
+            logger.info(f"📂 Server: Loaded checkpoint state")
+            
+            # Load milestones if available
+            if env.milestone_tracker:
+                try:
+                    env.milestone_tracker.load_milestones_for_state(checkpoint_state)
+                    logger.info(f"📂 Server: Loaded checkpoint milestones")
+                except:
+                    logger.warning(f"Could not load checkpoint milestones")
+            
+            return {
+                "status": "checkpoint_loaded",
+                "files": {
+                    "state": checkpoint_state,
+                    "milestones": f".pokeagent_cache/checkpoint_milestones.json",
+                    "map": f".pokeagent_cache/checkpoint_grids.json"
+                }
+            }
+        else:
+            return {"status": "error", "message": "No emulator available"}
+            
+    except Exception as e:
+        logger.error(f"Failed to load checkpoint: {e}")
+        return {"status": "error", "message": str(e)}
+
 def main():
     """Main function"""
     import argparse
@@ -1173,25 +1871,72 @@ def main():
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
+    # Server always runs headless - display handled by client
     
     args = parser.parse_args()
+    
+    # Check for environment variables from multiprocess mode
+    env_load_state = os.environ.get("LOAD_STATE")
+    if env_load_state and not args.load_state:
+        args.load_state = env_load_state
+        print(f"📂 Using load state from environment: {env_load_state}")
+        if env_load_state == ".pokeagent_cache/checkpoint.state":
+            if os.path.exists(".pokeagent_cache/checkpoint.state"):
+                print(f"✅ Server startup: .pokeagent_cache/checkpoint.state file exists")
+            else:
+                print(f"❌ Server startup: .pokeagent_cache/checkpoint.state file MISSING!")
+    
+    # Set checkpoint loading flag based on whether this is a true checkpoint load
+    global checkpoint_loading_enabled
+    env_load_checkpoint_mode = os.environ.get("LOAD_CHECKPOINT_MODE")
+    
+    if env_load_checkpoint_mode == "true":
+        checkpoint_loading_enabled = True
+        print("🔄 Checkpoint loading enabled - will restore LLM metrics from checkpoint_llm.txt")
+        
+        # Initialize LLM logger and load checkpoint immediately during server startup
+        from utils.llm_logger import get_llm_logger
+        llm_logger = get_llm_logger()
+        # Check both cache folder and old location
+        cache_dir = ".pokeagent_cache"
+        checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
+        if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
+            checkpoint_file = "checkpoint_llm.txt"
+        
+        if llm_logger and os.path.exists(checkpoint_file):
+            restored_step_count = llm_logger.load_checkpoint(checkpoint_file)
+            if restored_step_count is not None:
+                global agent_step_count
+                agent_step_count = restored_step_count
+                print(f"✅ Server startup: restored LLM checkpoint with step count {restored_step_count}")
+                
+                # Sync latest_metrics with loaded cumulative metrics
+                global latest_metrics
+                latest_metrics.update(llm_logger.cumulative_metrics)
+                print(f"✅ Server startup: synced metrics - actions: {latest_metrics.get('total_actions', 0)}, cost: {latest_metrics.get('total_cost', 0)}")
+            else:
+                print("❌ Server startup: failed to load LLM checkpoint")
+        else:
+            print("ℹ️ Server startup: no checkpoint_llm.txt file found")
+    elif env_load_checkpoint_mode == "false":
+        checkpoint_loading_enabled = False
+        print("✨ Fresh start mode - will NOT load LLM metrics from checkpoint_llm.txt")
+    else:
+        # Default behavior: allow checkpoint loading unless explicitly disabled
+        checkpoint_loading_enabled = True
+        print("🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
     # Initialize video recording if requested
     init_video_recording(args.record)
-    if args.manual:
-        print("Manual mode enabled - keyboard input and overlay active")
-    else:
-        print("Server mode - no keyboard input, no overlay")
+    print("Server mode - headless operation, display handled by client")
     if args.no_ocr:
         print("OCR dialogue detection disabled")
     print("Press Ctrl+C to stop")
     
-    # Initialize pygame
-    init_pygame()
-    
     # Initialize emulator
-    if not setup_environment():
+    # Skip initial state reading if we're going to load a state
+    if not setup_environment(skip_initial_state=(args.load_state is not None)):
         print("Failed to initialize emulator")
         return
     
@@ -1207,9 +1952,70 @@ def main():
             env.load_state(args.load_state)
             print(f"Loaded state from: {args.load_state}")
             
+            # Milestones and map data are automatically loaded by env.load_state()
+            # Check what was loaded
+            state_dir = os.path.dirname(args.load_state)
+            base_name = os.path.splitext(os.path.basename(args.load_state))[0]
+            
+            milestone_file = os.path.join(state_dir, f"{base_name}_milestones.json")
+            if os.path.exists(milestone_file):
+                print(f"📂 Loaded milestones from: {milestone_file}")
+            
+            grids_file = os.path.join(state_dir, f"{base_name}_grids.json")
+            if os.path.exists(grids_file):
+                print(f"🗺️  Loaded map grids from: {grids_file}")
+            
             # Map buffer should already be found by emulator.load_state()
             if env.memory_reader and env.memory_reader._map_buffer_addr:
                 print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
+                
+            # Now log the initial GAME_RUNNING milestone after state is loaded
+            try:
+                env.milestone_tracker.mark_completed("GAME_RUNNING")
+                initial_state = env.get_comprehensive_state()
+                
+                import hashlib
+                state_str = str(initial_state)
+                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+                
+                anticheat_tracker.log_submission_data(
+                    step=0,
+                    state_data=initial_state,
+                    action_taken="INIT",
+                    decision_time=0.0,
+                    state_hash=state_hash,
+                    manual_mode=True,
+                    milestone_override="GAME_RUNNING"
+                )
+                print("Initial GAME_RUNNING milestone logged after state load")
+                
+                # Trigger a map stitcher update to ensure visual map is ready
+                try:
+                    if env.memory_reader and env.memory_reader._map_stitcher:
+                        # Check if map stitcher is empty and collect initial map data if needed
+                        map_areas = env.memory_reader._map_stitcher.map_areas
+                        if not map_areas:
+                            print("🗺️ Map stitcher is empty, collecting initial map data...")
+                            # Collect initial map data
+                            tiles = env.memory_reader.read_map_around_player(radius=7)
+                            if tiles:
+                                print(f"🗺️ Collected {len(tiles)} tiles, updating map stitcher")
+                                # Create minimal state for stitcher update
+                                initial_state = {"map": {}}
+                                env.memory_reader._update_map_stitcher(tiles, initial_state)
+                                print("✅ Initial map data collection completed")
+                            else:
+                                print("❌ Could not collect initial map data")
+                        
+                        # Get current state for map stitcher update
+                        current_state = env.get_comprehensive_state()
+                        # The map stitcher should now have data
+                        # This just ensures the visual_map is generated
+                        print("Ensuring map stitcher visual data is ready after state load")
+                except Exception as e:
+                    print(f"Note: Could not update map stitcher after state load: {e}")
+            except Exception as e:
+                print(f"Warning: Could not log initial milestone: {e}")
         except Exception as e:
             print(f"Failed to load state from {args.load_state}: {e}")
             print("Continuing with fresh game state...")
@@ -1223,7 +2029,15 @@ def main():
     server_thread = threading.Thread(target=run_fastapi_server, args=(args.port,), daemon=True)
     server_thread.start()
     
-    print(f"FastAPI server running on http://127.0.0.1:{args.port}")
+    # Get local IP for network access
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from utils.get_local_ip import get_local_ip
+    local_ip = get_local_ip()
+    
+    print(f"🌐 FastAPI server running:")
+    print(f"   Local: http://localhost:{args.port}")
+    print(f"   Network: http://{local_ip}:{args.port}")
+    print(f"📺 Stream interface: http://{local_ip}:{args.port}/stream")
     print("Available endpoints:")
     print("  /status - Server status")
     print("  /screenshot - Current screenshot")
@@ -1240,8 +2054,8 @@ def main():
     print("  /stop - Stop server")
     
     try:
-        # Run pygame loop in main thread
-        game_loop(manual_mode=args.manual)
+        # Run headless game loop in main thread
+        game_loop(manual_mode=False)  # Server always runs in server mode
     except KeyboardInterrupt:
         print("Interrupted by user")
     except Exception as e:
@@ -1253,8 +2067,86 @@ def main():
         state_update_running = False
         if env:
             env.stop()
-        pygame.quit()
         print("Server stopped")
+
+# Initialize emulator when imported for multiprocess mode
+def init_for_multiprocess():
+    """Initialize emulator when server is imported for multiprocess mode"""
+    global env
+    
+    if env is None:  # Only initialize once
+        # Check for environment variables set by agent.py multiprocess mode
+        rom_path = os.environ.get("ROM_PATH", "Emerald-GBAdvance/rom.gba")
+        load_state = os.environ.get("LOAD_STATE")
+        record_video = os.environ.get("RECORD_VIDEO") == "1"
+        no_ocr = os.environ.get("NO_OCR") == "1"
+        
+        print(f"🔧 Initializing server for multiprocess mode...")
+        print(f"   ROM: {rom_path}")
+        if load_state:
+            print(f"   Load state: {load_state}")
+        
+        # Initialize emulator
+        try:
+            if not os.path.exists(rom_path):
+                raise RuntimeError(f"ROM not found at {rom_path}")
+            
+            env = EmeraldEmulator(rom_path=rom_path)
+            env.initialize()
+            
+            # Initialize video recording if requested
+            init_video_recording(record_video)
+            
+            # Disable OCR if requested
+            if no_ocr and env and env.memory_reader:
+                env.memory_reader._dialog_detection_enabled = False
+                print("🚫 All dialogue detection disabled (--no-ocr flag)")
+            
+            # Load state if specified
+            if load_state:
+                try:
+                    print(f"🔄 Attempting to load state from: {load_state}")
+                    env.load_state(load_state)
+                    print(f"📂 Successfully loaded state from: {load_state}")
+                    
+                    # Milestones and map data are automatically loaded by env.load_state()
+                    # Check what was loaded
+                    state_dir = os.path.dirname(load_state)
+                    base_name = os.path.splitext(os.path.basename(load_state))[0]
+                    
+                    milestone_file = os.path.join(state_dir, f"{base_name}_milestones.json")
+                    if os.path.exists(milestone_file):
+                        print(f"📋 Loaded milestones from: {milestone_file}")
+                    
+                    grids_file = os.path.join(state_dir, f"{base_name}_grids.json")
+                    if os.path.exists(grids_file):
+                        print(f"🗺️  Loaded map grids from: {grids_file}")
+                    
+                    # Map buffer should already be found by emulator.load_state()
+                    if env.memory_reader and env.memory_reader._map_buffer_addr:
+                        print(f"📍 Map buffer initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
+                    
+                    print(f"✅ State loading complete for {load_state}")
+                    
+                except Exception as e:
+                    print(f"❌ Failed to load state from {load_state}: {e}")
+                    print("   Continuing with fresh game state...")
+            
+            # Start lightweight milestone updater thread
+            global state_update_running, state_update_thread
+            state_update_running = True
+            state_update_thread = threading.Thread(target=periodic_milestone_updater, daemon=True)
+            state_update_thread.start()
+            
+            print("✅ Server initialized successfully for multiprocess mode")
+            
+        except Exception as e:
+            print(f"❌ Failed to initialize server for multiprocess mode: {e}")
+            raise
+
+# Auto-initialize when imported for multiprocess mode (when ROM_PATH env var is set)
+if os.environ.get("ROM_PATH") and __name__ != "__main__":
+    init_for_multiprocess()
 
 if __name__ == "__main__":
     main() 

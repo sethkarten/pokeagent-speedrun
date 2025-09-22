@@ -10,6 +10,7 @@ from pokemon_env.emerald_utils import ADDRESSES, Pokemon_format, parse_pokemon, 
 from .enums import MetatileBehavior, StatusCondition, Tileset, PokemonType, PokemonSpecies, Move, Badge, MapLocation
 from .types import PokemonData
 from utils.ocr_dialogue import create_ocr_detector
+from utils import state_formatter
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,9 @@ class PokemonEmeraldReader:
         # Dialog content tracking for FPS adjustment
         self._last_dialog_content = None
         self._dialog_fps_start_time = None
+        
+        # Map stitching system (import on-demand to avoid circular import)
+        self._map_stitcher = None
         self._dialog_fps_duration = 5.0  # Run at 120 FPS for 5 seconds when dialog detected
         
         # Recent dialogue cache system to prevent residual text issues
@@ -950,8 +954,8 @@ class PokemonEmeraldReader:
         special_ratio = special_tiles / total_tiles if total_tiles > 0 else 0
         
         # Validation rules based on location type
-        is_indoor = "HOUSE" in location_name.upper() or "ROOM" in location_name.upper()
-        is_outdoor = "TOWN" in location_name.upper() or "ROUTE" in location_name.upper()
+        is_indoor = location_name and ("HOUSE" in location_name.upper() or "ROOM" in location_name.upper())
+        is_outdoor = location_name and ("TOWN" in location_name.upper() or "ROUTE" in location_name.upper())
         
         # Rule 1: Too many unknown tiles (> 20%)
         if unknown_ratio > 0.2:
@@ -2081,7 +2085,7 @@ class PokemonEmeraldReader:
                 location_name = ""
             
             # Only apply validation for outdoor areas, skip for indoor/house areas
-            is_outdoor = any(keyword in location_name.upper() for keyword in ['TOWN', 'ROUTE', 'CITY', 'ROAD', 'PATH'])
+            is_outdoor = location_name and any(keyword in location_name.upper() for keyword in ['TOWN', 'ROUTE', 'CITY', 'ROAD', 'PATH']) if location_name else False
             
             if is_outdoor:
                 total_tiles = sum(len(row) for row in map_data)
@@ -2405,21 +2409,28 @@ class PokemonEmeraldReader:
             state = self.read_map(state)
             # Player information
             coords = self.read_coordinates()
-            if coords:
-                state["player"]["position"] = {"x": coords[0], "y": coords[1]}
+            # Always set position - (0,0) is a valid coordinate
+            # read_coordinates() always returns a tuple, never None
+            state["player"]["position"] = {"x": coords[0], "y": coords[1]}
+            print(f"DEBUG: Player coords: {coords}")
             
-            location = self.read_location()
-            if location:
+            try:
+                location = self.read_location()
+                print(f"DEBUG: read_location() returned: '{location}'")
+                # Always set location, even if it's 'Unknown' or 'TITLE_SEQUENCE'
                 state["player"]["location"] = location
+            except Exception as e:
+                print(f"DEBUG: Exception reading location: {e}")
+                state["player"]["location"] = "Unknown"
             
             player_name = self.read_player_name()
             if player_name:
                 state["player"]["name"] = player_name
             
-            # Player facing direction
-            facing = self.read_player_facing()
-            if facing:
-                state["player"]["facing"] = facing
+            # Player facing direction - removed as it's often unreliable
+            # facing = self.read_player_facing()
+            # if facing:
+            #     state["player"]["facing"] = facing
             
             # Game information
             state["game"].update({
@@ -2513,12 +2524,18 @@ class PokemonEmeraldReader:
         
                 
         except Exception as e:
+            import traceback
             logger.warning(f"Failed to read comprehensive state: {e}")
+            logger.debug(f"Traceback: {traceback.format_exc()}")
+        
+        # Add screenshot to visual state if provided
+        if screenshot is not None:
+            state["visual"]["screenshot"] = screenshot
         
         return state
     
     def read_map(self, state): 
-        tiles = self.read_map_around_player(radius=7)
+        tiles = self.read_map_around_player(radius=7)  # 15x15 grid for better context
         if tiles:
             # DEBUG: Print tile data before processing for HTTP API
             total_tiles = sum(len(row) for row in tiles)
@@ -2607,8 +2624,547 @@ class PokemonEmeraldReader:
                 state["map"]["player_coords"] = {'x': player_coords[0], 'y': player_coords[1]}
         else:
             state["map"]["object_events"] = []
+        
+        # Update map stitcher with current tiles
+        if tiles:
+            self._update_map_stitcher(tiles, state)
+        
+        # Add stitched map information to state
+        stitched_info = self.get_stitched_map_info()
+        state["map"]["stitched_map_info"] = stitched_info
+        
+        # Generate map visualization directly for the LLM
+        # This ensures the map is available even when passed through JSON
+        if self._map_stitcher and state.get("player"):
+            location = state["player"].get("location", "Unknown")
+            coords = state["player"].get("position")
+            player_pos = (coords.get("x"), coords.get("y")) if coords else None
+            
+            # Always try to generate visual map if we have valid data, even if it was None before
+            # This handles cases where early calls failed but later calls have valid data
+            if location and location not in [None, "None", "Unknown"] and coords:
+                # Get connections with coordinates for this location
+                connections_with_coords = []
+                if location and self._map_stitcher:
+                    try:
+                        location_connections = self._map_stitcher.get_location_connections(location)
+                        for conn in location_connections:
+                            if len(conn) >= 3:
+                                other_loc, my_coords, their_coords = conn[0], conn[1], conn[2]
+                                connections_with_coords.append({
+                                    "to": other_loc,
+                                    "from_pos": list(my_coords) if my_coords else [],
+                                    "to_pos": list(their_coords) if their_coords else []
+                                })
+                    except Exception as e:
+                        logger.debug(f"Error getting location connections: {e}")
+                
+                # Generate the map display lines using stored map data, focused on 15x15 agent view
+                map_lines = self._map_stitcher.generate_location_map_display(
+                    location_name=location,
+                    player_pos=player_pos,
+                    npcs=state["map"].get("object_events", []),
+                    connections=connections_with_coords
+                )
+                
+                # Store as formatted text for direct use
+                state["map"]["visual_map"] = "\n".join(map_lines) if map_lines else None
+        
+        # Pass the MapStitcher instance for state_formatter to use
+        # This ensures the same instance with all the data is used
+        state["map"]["_map_stitcher_instance"] = self._map_stitcher
             
         return state
+    
+    def _update_map_stitcher(self, tiles, state):
+        """Update the map stitcher with current map data"""
+        try:
+            # Get the global shared MapStitcher instance
+            if self._map_stitcher is None:
+                from utils import map_stitcher_singleton
+                self._map_stitcher = map_stitcher_singleton.get_instance()
+                logger.info(f"Using shared MapStitcher instance with {len(self._map_stitcher.map_areas)} areas")
+                # Set up callback to save location connections when they change
+                self._setup_location_connections_callback()
+            
+            # Get current map identifiers
+            map_bank = self._read_u8(self.addresses.MAP_BANK)
+            map_number = self._read_u8(self.addresses.MAP_NUMBER)
+            
+            # Get location name from player location, with fallback to map ID resolution
+            location_name = state.get("player", {}).get("location")
+            if not location_name or location_name == "Unknown":
+                # Try to resolve from map ID directly
+                try:
+                    map_id = self._map_stitcher.get_map_id(map_bank, map_number)
+                    map_enum = MapLocation(map_id)
+                    location_name = map_enum.name.replace('_', ' ').title()
+                    logger.info(f"Resolved location name from map ID {map_id:04X}: {location_name}")
+                except ValueError:
+                    location_name = f"Map_{map_bank:02X}_{map_number:02X}"
+                    logger.debug(f"Unknown map ID, using fallback: {location_name}")
+            
+            if not location_name:
+                location_name = "Unknown"
+            
+            # Get player coordinates
+            player_coords = self.read_coordinates()
+            if not player_coords:
+                return
+            
+            # Use the ACTUAL player coordinates, not the local grid center
+            # The (5,5) logic was wrong - it should use real world coordinates
+            map_height = len(tiles) if tiles else 11
+            map_width = len(tiles[0]) if tiles and tiles[0] else 11
+            
+            # Use the real player coordinates from the game world
+            actual_player_coords = player_coords  # This is the real position, not (5,5)
+            
+            # Get overworld coordinates for this map
+            overworld_coords = self._get_overworld_coordinates(map_bank, map_number, location_name)
+            
+            # Debug logging
+            logger.info(f"🗺️ Map stitcher update: Bank {map_bank}, Map {map_number}, Location: {location_name}")
+            logger.info(f"🎯 Overworld coordinates: {overworld_coords}")
+                
+            # Update the stitcher
+            timestamp = time.time()
+            current_map_id = self._map_stitcher.get_map_id(map_bank, map_number)
+            
+            # Try to update location name for existing areas if we have a better name
+            if location_name and location_name.strip() and location_name != "Unknown":
+                if self._map_stitcher.update_location_name(current_map_id, location_name):
+                    # Location name was updated, save the changes and resync connections
+                    self._map_stitcher.save_to_file()
+                    # Skip sync - preserve existing location_connections data
+                    # self._sync_warp_connections_to_state_formatter(force_rebuild=True)  # DISABLED - causes overwrites
+                    
+                # Also try to resolve other unknown names using current memory reader state
+                if self._map_stitcher.resolve_unknown_location_names(memory_reader=self):
+                    logger.info("Resolved additional unknown location names using memory reader")
+                    self._map_stitcher.save_to_file()
+            
+            self._map_stitcher.update_map_area(
+                map_bank=map_bank,
+                map_number=map_number,
+                location_name=location_name,
+                map_data=tiles,
+                player_pos=actual_player_coords,
+                timestamp=timestamp,
+                overworld_coords=overworld_coords
+            )
+            
+            # Build location_connections directly from map areas after any updates
+            self._build_location_connections_from_map_areas()
+            
+            # Save more frequently to preserve accumulated map data
+            if hasattr(self, '_last_stitcher_save'):
+                if timestamp - self._last_stitcher_save > 3.0:  # Save every 3 seconds
+                    self._map_stitcher.save_to_file()
+                    self._last_stitcher_save = timestamp
+            else:
+                self._last_stitcher_save = timestamp
+                # Also save immediately on first update
+                self._map_stitcher.save_to_file()
+                
+        except Exception as e:
+            print(f"🗺️ DEBUG: Failed to update map stitcher: {e}")
+            logger.debug(f"Failed to update map stitcher: {e}")
+            import traceback
+            print(f"🗺️ DEBUG: Traceback: {traceback.format_exc()}")
+    
+    def _get_overworld_coordinates(self, map_bank: int, map_number: int, location_name: Optional[str]) -> Optional[Tuple[int, int]]:
+        """Get overworld coordinates for a given map bank/number combination"""
+        # Map Pokemon Emerald's map bank/number to overworld coordinates
+        # This is based on the actual Pokemon Emerald map layout
+        # Is this correct? since each map has local coords?
+        
+        # Safety check for None location_name
+        if location_name is None:
+            location_name = "Unknown"
+        
+        map_coords = {
+            # Bank 0 - Overworld maps
+            (0, 0): (8, 18),   # PETALBURG_CITY
+            (0, 1): (13, 30),  # SLATEPORT_CITY  
+            (0, 2): (17, 15),  # MAUVILLE_CITY
+            (0, 3): (8, 9),    # RUSTBORO_CITY
+            (0, 4): (30, 6),   # FORTREE_CITY
+            (0, 5): (35, 8),   # LILYCOVE_CITY
+            (0, 6): (42, 12),  # MOSSDEEP_CITY
+            (0, 7): (37, 20),  # SOOTOPOLIS_CITY
+            (0, 8): (44, 15),  # EVER_GRANDE_CITY
+            (0, 9): (16, 23),  # LITTLEROOT_TOWN
+            (0, 10): (16, 19), # OLDALE_TOWN
+            (0, 11): (3, 27),  # DEWFORD_TOWN
+            (0, 12): (17, 9),  # LAVARIDGE_TOWN
+            (0, 13): (15, 8),  # FALLARBOR_TOWN
+            (0, 14): (11, 14), # VERDANTURF_TOWN
+            (0, 15): (30, 28), # PACIFIDLOG_TOWN
+            
+            # Routes
+            (0, 16): (16, 21), # ROUTE_101
+            (0, 17): (14, 18), # ROUTE_102
+            (0, 18): (18, 21), # ROUTE_103
+            (0, 19): (10, 12), # ROUTE_104
+            (0, 20): (5, 25),  # ROUTE_105
+            (0, 21): (6, 27),  # ROUTE_106
+            (0, 22): (7, 30),  # ROUTE_107
+            (0, 23): (10, 32), # ROUTE_108
+            (0, 24): (12, 32), # ROUTE_109
+            (0, 25): (16, 16), # ROUTE_110
+            (0, 26): (17, 12), # ROUTE_111
+            (0, 27): (17, 10), # ROUTE_112
+            (0, 28): (15, 10), # ROUTE_113
+            (0, 29): (13, 8),  # ROUTE_114
+            (0, 30): (6, 15),  # ROUTE_115
+            (0, 31): (11, 9),  # ROUTE_116
+            (0, 32): (13, 14), # ROUTE_117
+            (0, 33): (20, 15), # ROUTE_118
+            (0, 34): (25, 12), # ROUTE_119
+            (0, 35): (27, 10), # ROUTE_120
+            (0, 36): (30, 12), # ROUTE_121
+            (0, 37): (32, 15), # ROUTE_122
+            (0, 38): (33, 14), # ROUTE_123
+            (0, 39): (35, 18), # ROUTE_124
+            (0, 40): (28, 25), # ROUTE_125
+            (0, 41): (25, 28), # ROUTE_126
+            (0, 42): (30, 32), # ROUTE_127
+            (0, 43): (35, 32), # ROUTE_128
+            (0, 44): (38, 30), # ROUTE_129
+            (0, 45): (40, 25), # ROUTE_130
+            (0, 46): (42, 20), # ROUTE_131
+            (0, 47): (40, 15), # ROUTE_132
+            (0, 48): (38, 12), # ROUTE_133
+            (0, 49): (35, 12), # ROUTE_134
+        }
+        
+        # Check for exact match
+        coords = map_coords.get((map_bank, map_number))
+        if coords:
+            return coords
+        
+        # For indoor locations (banks 1+), inherit coordinates from parent outdoor area
+        if map_bank > 0 and location_name:
+            # Try to infer from location name
+            name_upper = location_name.upper()
+            
+            # Match building names to their town coordinates
+            if "LITTLEROOT" in name_upper:
+                return (16, 23)
+            elif "OLDALE" in name_upper:
+                return (16, 19)
+            elif "PETALBURG" in name_upper:
+                return (8, 18)
+            elif "RUSTBORO" in name_upper:
+                return (8, 9)
+            elif "DEWFORD" in name_upper:
+                return (3, 27)
+            elif "SLATEPORT" in name_upper:
+                return (13, 30)
+            elif "MAUVILLE" in name_upper:
+                return (17, 15)
+            elif "VERDANTURF" in name_upper:
+                return (11, 14)
+            elif "FALLARBOR" in name_upper:
+                return (15, 8)
+            elif "LAVARIDGE" in name_upper:
+                return (17, 9)
+            elif "FORTREE" in name_upper:
+                return (30, 6)
+            elif "LILYCOVE" in name_upper:
+                return (35, 8)
+            elif "MOSSDEEP" in name_upper:
+                return (42, 12)
+            elif "SOOTOPOLIS" in name_upper:
+                return (37, 20)
+            elif "EVER_GRANDE" in name_upper:
+                return (44, 15)
+            elif "PACIFIDLOG" in name_upper:
+                return (30, 28)
+        
+        # If no coordinates found, return None (unknown location)
+        return None
+    
+    def get_stitched_map_info(self) -> Dict[str, Any]:
+        """Get stitched map information for agent use"""
+        if self._map_stitcher is None:
+            return {"available": False, "reason": "Map stitcher not initialized"}
+        
+        try:
+            stats = self._map_stitcher.get_stats()
+            
+            # Get current area info
+            current_map_bank = self._read_u8(self.addresses.MAP_BANK)
+            current_map_number = self._read_u8(self.addresses.MAP_NUMBER)
+            current_map_id = (current_map_bank << 8) | current_map_number
+            
+            current_area = self._map_stitcher.map_areas.get(current_map_id)
+            current_connections = self._map_stitcher.get_connected_areas(current_map_id)
+            
+            # Get nearby areas (areas reachable in 1-2 connections)
+            nearby_areas = []
+            visited_ids = set()
+            
+            def add_connected_areas(area_id, depth=0, max_depth=2):
+                if depth > max_depth or area_id in visited_ids:
+                    return
+                visited_ids.add(area_id)
+                
+                area = self._map_stitcher.map_areas.get(area_id)
+                if area:
+                    connections = self._map_stitcher.get_connected_areas(area_id)
+                    nearby_areas.append({
+                        "name": area.location_name,
+                        "id": f"{area_id:04X}",
+                        "depth": depth,
+                        "overworld_coords": area.overworld_coords,
+                        "connections": [{"name": name, "direction": direction} 
+                                      for _, name, direction in connections]
+                    })
+                    
+                    # Recursively add connected areas
+                    for conn_id, _, _ in connections:
+                        add_connected_areas(conn_id, depth + 1, max_depth)
+            
+            add_connected_areas(current_map_id)
+            
+            # Include terrain data for world map display
+            terrain_areas = []
+            for area_id, area in self._map_stitcher.map_areas.items():
+                if area.overworld_coords and area.map_data:
+                    terrain_areas.append({
+                        "id": f"{area_id:04X}",
+                        "name": area.location_name or "Unknown",
+                        "overworld_coords": area.overworld_coords,
+                        "map_data": area.map_data,
+                        "player_pos": area.player_last_position
+                    })
+            
+            return {
+                "available": True,
+                "stats": stats,
+                "current_area": {
+                    "name": current_area.location_name if current_area else "Unknown",
+                    "id": f"{current_map_id:04X}",
+                    "overworld_coords": current_area.overworld_coords if current_area else None,
+                    "connections": [{"name": name, "direction": direction} 
+                                   for _, name, direction in current_connections]
+                },
+                "nearby_areas": nearby_areas[:10],  # Limit to 10 areas
+                "terrain_areas": terrain_areas,  # Include terrain data for world map
+                "total_discovered": len(self._map_stitcher.map_areas)
+            }
+            
+        except Exception as e:
+            import traceback
+            logger.debug(f"Failed to get stitched map info: {e}")
+            logger.debug(f"Full traceback: {traceback.format_exc()}")
+            return {"available": False, "reason": f"Error: {e}"}
+
+    def update_map_stitcher_save_file(self, filename: str, is_cache_file: bool = False):
+        """Update MapStitcher save file and sync connections
+        
+        When loading a state:
+        1. First loads the state-specific map file (e.g. route102_save_map_stitcher.json) 
+        2. Always uses cache file (.pokeagent_cache/map_stitcher_data.json) for the MapStitcher instance
+        """
+        import os
+        import shutil
+        
+        cache_dir = ".pokeagent_cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_map_file = os.path.join(cache_dir, "map_stitcher_data.json")
+        
+        if not is_cache_file:
+            # Loading a state - check for state-specific map file to copy to cache
+            state_dir = os.path.dirname(filename)
+            base_name = os.path.splitext(os.path.basename(filename))[0]
+            state_map_file = os.path.join(state_dir, f"{base_name}_map_stitcher.json")
+            
+            # Copy state map to cache if it exists
+            if os.path.exists(state_map_file) and os.path.getsize(state_map_file) > 0:
+                shutil.copy2(state_map_file, cache_map_file)
+                print(f"🗺️ DEBUG: Copied state map from {state_map_file} to cache {cache_map_file}")
+            elif not os.path.exists(cache_map_file):
+                # Create empty cache file if neither exists
+                print(f"🗺️ DEBUG: No state map found, creating empty cache file {cache_map_file}")
+                with open(cache_map_file, 'w') as f:
+                    import json
+                    json.dump({"map_areas": {}, "location_connections": {}}, f)
+        
+        # Always use cache file for the MapStitcher instance
+        map_stitcher_filename = cache_map_file
+        
+        # Initialize MapStitcher if not already initialized
+        if self._map_stitcher is None:
+            from utils.map_stitcher import MapStitcher
+            print(f"🗺️ DEBUG: Initializing MapStitcher with cache file: {map_stitcher_filename}")
+            self._map_stitcher = MapStitcher(save_file=map_stitcher_filename)
+            print(f"🗺️ DEBUG: MapStitcher initialized, syncing connections...")
+            # Skip sync - let loaded location_connections be preserved
+            # self._sync_warp_connections_to_state_formatter(force_rebuild=True)  # DISABLED - causes overwrites
+            # Set up callback to save location connections when they change
+            self._setup_location_connections_callback()
+        else:
+            # MapStitcher already initialized, it should already be using the cache file
+            print(f"🗺️ DEBUG: MapStitcher already initialized, using cache: {map_stitcher_filename}")
+            # No need to update save file since we always use the cache
+            # Set up callback to save location connections when they change
+            self._setup_location_connections_callback()
+    
+    def _build_location_connections_from_map_areas(self):
+        """Build location_connections directly from the MapStitcher's warp connections"""
+        if self._map_stitcher is None:
+            return
+            
+        try:
+            # Only update if we have warp connections to process
+            if not self._map_stitcher.warp_connections:
+                return
+                
+            # Initialize if needed
+            if not hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
+                state_formatter.LOCATION_CONNECTIONS = {}
+            
+            # Build connections from MapStitcher's warp data
+            for conn in self._map_stitcher.warp_connections:
+                from_area = self._map_stitcher.map_areas.get(conn.from_map_id)
+                to_area = self._map_stitcher.map_areas.get(conn.to_map_id)
+                
+                if from_area and to_area:
+                    from_name = from_area.location_name
+                    to_name = to_area.location_name
+                    
+                    # Skip if names are unknown
+                    if from_name == "Unknown" or to_name == "Unknown":
+                        continue
+                        
+                    # Initialize location entries
+                    if from_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[from_name] = []
+                    if to_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[to_name] = []
+                    
+                    # Add bidirectional connections
+                    from_to_connection = [to_name, list(conn.from_position), list(conn.to_position)]
+                    to_from_connection = [from_name, list(conn.to_position), list(conn.from_position)]
+                    
+                    # Avoid duplicates
+                    if from_to_connection not in state_formatter.LOCATION_CONNECTIONS[from_name]:
+                        state_formatter.LOCATION_CONNECTIONS[from_name].append(from_to_connection)
+                        logger.debug(f"Added connection: {from_name} -> {to_name}")
+                    if to_from_connection not in state_formatter.LOCATION_CONNECTIONS[to_name]:
+                        state_formatter.LOCATION_CONNECTIONS[to_name].append(to_from_connection)
+                        logger.debug(f"Added connection: {to_name} -> {from_name}")
+            
+        except Exception as e:
+            logger.debug(f"Failed to build location connections: {e}")
+
+    def _sync_warp_connections_to_state_formatter(self, force_rebuild=False):
+        """Sync MapStitcher warp connections to state_formatter's LOCATION_CONNECTIONS
+        
+        Args:
+            force_rebuild: If True, rebuild connections even if they exist
+        """
+        if self._map_stitcher is None:
+            print("🗺️ DEBUG: MapStitcher is None, cannot sync connections")
+            return
+        
+        try:
+            from utils import state_formatter
+            
+            print(f"🗺️ DEBUG: Starting sync of {len(self._map_stitcher.warp_connections)} warp connections")
+            print(f"🗺️ DEBUG: MapStitcher has {len(self._map_stitcher.map_areas)} map areas")
+            
+            # Initialize connections if they don't exist, but don't clear existing ones
+            if not hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
+                state_formatter.LOCATION_CONNECTIONS = {}
+            
+            # Check if we need to rebuild
+            has_existing_connections = len(state_formatter.LOCATION_CONNECTIONS) > 0
+            has_stitcher_connections = len(self._map_stitcher.warp_connections) > 0
+            
+            # Only rebuild if forced or if we have new stitcher data but no existing connections
+            if not force_rebuild and has_existing_connections:
+                print(f"🗺️ DEBUG: Skipping sync - already have {len(state_formatter.LOCATION_CONNECTIONS)} location connections")
+                return
+            
+            if not has_stitcher_connections:
+                print(f"🗺️ DEBUG: No stitcher connections to sync")
+                return
+                
+            # Clear and rebuild connections
+            state_formatter.LOCATION_CONNECTIONS = {}
+            
+            # Initialize MAP_ID_CONNECTIONS (this was missing!)
+            state_formatter.MAP_ID_CONNECTIONS = {}
+            print(f"🗺️ DEBUG: Initialized MAP_ID_CONNECTIONS in state_formatter module")
+            
+            # Convert MapStitcher warp_connections to LOCATION_CONNECTIONS format
+            for conn in self._map_stitcher.warp_connections:
+                # Get areas from map IDs
+                from_area = self._map_stitcher.map_areas.get(conn.from_map_id)
+                to_area = self._map_stitcher.map_areas.get(conn.to_map_id)
+                
+                print(f"🗺️ DEBUG: Processing connection: {conn.from_map_id} -> {conn.to_map_id}")
+                print(f"🗺️ DEBUG: From area: {from_area.location_name if from_area else 'None'}")
+                print(f"🗺️ DEBUG: To area: {to_area.location_name if to_area else 'None'}")
+                
+                if from_area and to_area:
+                    # Use map ID as a fallback key if location names are unknown
+                    from_name = from_area.location_name if from_area.location_name != "Unknown" else f"MAP_{conn.from_map_id:04X}"
+                    to_name = to_area.location_name if to_area.location_name != "Unknown" else f"MAP_{conn.to_map_id:04X}"
+                    
+                    print(f"🗺️ DEBUG: Using names: {from_name} -> {to_name}")
+                    
+                    # Store bidirectional connections by map ID
+                    if conn.from_map_id not in state_formatter.MAP_ID_CONNECTIONS:
+                        state_formatter.MAP_ID_CONNECTIONS[conn.from_map_id] = []
+                    if conn.to_map_id not in state_formatter.MAP_ID_CONNECTIONS:
+                        state_formatter.MAP_ID_CONNECTIONS[conn.to_map_id] = []
+                    
+                    # Add connections
+                    state_formatter.MAP_ID_CONNECTIONS[conn.from_map_id].append({
+                        'to_map_id': conn.to_map_id,
+                        'to_name': to_name,
+                        'from_pos': conn.from_position,
+                        'to_pos': conn.to_position,
+                        'direction': conn.direction
+                    })
+                    
+                    state_formatter.MAP_ID_CONNECTIONS[conn.to_map_id].append({
+                        'to_map_id': conn.from_map_id,
+                        'to_name': from_name,
+                        'from_pos': conn.to_position,
+                        'to_pos': conn.from_position,
+                        'direction': getattr(conn, 'reverse_direction', 'unknown')
+                    })
+                    
+                    # Also populate LOCATION_CONNECTIONS format (used by state formatter)
+                    if from_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[from_name] = []
+                    if to_name not in state_formatter.LOCATION_CONNECTIONS:
+                        state_formatter.LOCATION_CONNECTIONS[to_name] = []
+                    
+                    # Add bidirectional connections to LOCATION_CONNECTIONS
+                    from_to_connection = [to_name, list(conn.from_position), list(conn.to_position)]
+                    to_from_connection = [from_name, list(conn.to_position), list(conn.from_position)]
+                    
+                    # Avoid duplicates
+                    if from_to_connection not in state_formatter.LOCATION_CONNECTIONS[from_name]:
+                        state_formatter.LOCATION_CONNECTIONS[from_name].append(from_to_connection)
+                    if to_from_connection not in state_formatter.LOCATION_CONNECTIONS[to_name]:
+                        state_formatter.LOCATION_CONNECTIONS[to_name].append(to_from_connection)
+                    
+                    print(f"🗺️ DEBUG: Added connection {from_name} <-> {to_name}")
+            
+            print(f"🗺️ DEBUG: Synced {len(self._map_stitcher.warp_connections)} warp connections to state formatter")
+            print(f"🗺️ DEBUG: MAP_ID_CONNECTIONS has {len(state_formatter.MAP_ID_CONNECTIONS)} maps")
+            print(f"🗺️ DEBUG: LOCATION_CONNECTIONS has {len(state_formatter.LOCATION_CONNECTIONS)} locations")
+            
+        except Exception as e:
+            logger.error(f"Failed to sync warp connections: {e}")
 
     def _is_encounter_tile(self, behavior) -> bool:
         """Check if tile can trigger encounters"""
@@ -4163,7 +4719,7 @@ class PokemonEmeraldReader:
         """
         try:
             # Read map tiles around player to check for doors
-            map_tiles = self.read_map_around_player(radius=7)
+            map_tiles = self.read_map_around_player(radius=7)  # 15x15 grid for better context
             if not map_tiles:
                 # If we can't read map, return all NPCs (better to have false positives than miss real ones)
                 return object_events
@@ -4258,3 +4814,14 @@ class PokemonEmeraldReader:
         except Exception:
             # If we can't extract properties, return defaults
             return 1, 0, 0
+    
+    def _setup_location_connections_callback(self):
+        """Set up callback to save location connections when they change"""
+        from utils import state_formatter
+        
+        def save_callback():
+            if self._map_stitcher:
+                self._map_stitcher.save_to_file()
+        
+        state_formatter.MAP_STITCHER_SAVE_CALLBACK = save_callback
+        print(f"🗺️ DEBUG: Set up location connections save callback")
