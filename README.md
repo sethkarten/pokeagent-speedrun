@@ -283,13 +283,13 @@ python run.py --load-state tests/states/torchic.state --backend gemini --model-n
 
 ```bash
 # Start in manual mode (keyboard control)
-python run.py --manual-mode
+python run.py --manual
 
 # Enable auto agent (agent acts continuously)
 python run.py --agent-auto
 
 # Run without display window (headless)
-python run.py --no-display --agent-auto
+python run.py --headless --agent-auto
 
 # Custom port for web interface
 python run.py --port 8080
@@ -303,11 +303,8 @@ python run.py --simple --agent-auto
 # Disable OCR dialogue detection (forces overworld state, no dialogue processing)
 python run.py --no-ocr --agent-auto
 
-# Multiprocess mode (separate server/client processes for improved stability)
-python run.py --multiprocess --agent-auto
-
 # Combine multiple features (recommended for production runs)
-python run.py --multiprocess --record --simple --no-ocr --agent-auto --backend gemini
+python run.py --record --simple --no-ocr --agent-auto --backend gemini
 ```
 
 ### Debug Controls
@@ -325,7 +322,7 @@ When running with display (default):
 
 ### Web Interface
 
-The agent automatically starts a web server at `http://localhost:8000` (or custom port) that serves the game stream and agent status in real-time.
+The agent automatically starts a web server at `http://localhost:8000/stream` (or custom port) that serves the game stream and agent status in real-time.
 
 #### Other Options
 
@@ -339,7 +336,7 @@ python run.py \
 
 ### 3. Monitor the Agent
 
-- **Web Interface**: View game state at `http://localhost:8000`
+- **Web Interface**: View game state at `http://localhost:8000/stream`
 - **Logs**: Monitor agent decisions in the terminal
 - **Debug**: Use `--debug-state` flag for detailed state information
 
@@ -357,11 +354,8 @@ Automatically records gameplay to MP4 files with timestamps.
 
 **Usage:**
 ```bash
-# Direct mode recording
+# Recording gameplay to MP4
 python run.py --record --agent-auto
-
-# Multiprocess mode recording (recommended)
-python run.py --multiprocess --record --agent-auto
 ```
 
 ### ⚡ Simple Mode (`--simple`)
@@ -380,7 +374,7 @@ Lightweight processing mode that bypasses the four-module agent architecture.
 python run.py --simple --agent-auto
 
 # Combined with other features
-python run.py --simple --multiprocess --record --agent-auto
+python run.py --simple --record --agent-auto
 ```
 
 ### 🔇 No OCR Mode (`--no-ocr`)
@@ -399,36 +393,22 @@ Completely disables dialogue detection and forces overworld state.
 python run.py --no-ocr --agent-auto
 
 # Recommended for production speedruns
-python run.py --no-ocr --simple --multiprocess --agent-auto
+python run.py --no-ocr --simple --agent-auto
 ```
 
-### 🔄 Multiprocess Mode (`--multiprocess`)
+### 🔄 Architecture
 
-Runs the emulator/pygame in a separate process from the agent decision-making.
+The agent uses a multiprocess architecture for improved stability and performance:
 
-**Advantages:**
-- **Improved Stability**: Isolates emulator crashes from agent crashes
-- **Better Performance**: Eliminates memory corruption issues from multithreading
-- **Resource Separation**: Agent and emulator can use different CPU cores
-- **Auto-Start**: Automatically starts and manages the server process
-
-**Architecture:**
-- **Server Process**: Runs emulator, pygame display, handles game state
+**Components:**
+- **Server Process**: Runs emulator, pygame display, handles game state (automatically launched by run.py)
 - **Client Process**: Runs agent decision-making, sends actions via HTTP
 - **Communication**: RESTful API between processes
 
-**Usage:**
-```bash
-# Basic multiprocess mode
-python run.py --multiprocess --agent-auto
-
-# Production configuration (recommended)
-python run.py --multiprocess --record --simple --no-ocr --agent-auto --backend gemini
-
-# Manual server/client (advanced)
-# Terminal 1: python -m server.app --load-state your_state.state
-# Terminal 2: python run.py --multiprocess --backend gemini
-```
+**Advantages:**
+- **Improved Stability**: Isolates emulator from agent crashes
+- **Better Performance**: Eliminates memory corruption from multithreading
+- **Resource Separation**: Agent and emulator can use different CPU cores
 
 ### 🧭 Navigation & Pathfinding System
 
@@ -464,7 +444,6 @@ For the most stable and efficient agent runs:
 
 ```bash
 python run.py \
-    --multiprocess \
     --record \
     --simple \
     --no-ocr \
@@ -475,7 +454,7 @@ python run.py \
 ```
 
 This combination provides:
-- ✅ Maximum stability (multiprocess isolation)
+- ✅ Maximum stability (multiprocess architecture)
 - ✅ Video evidence (automatic recording)
 - ✅ Fast processing (simple mode)
 - ✅ No dialogue hanging (no-ocr)
@@ -490,15 +469,15 @@ python run.py [OPTIONS]
 Basic Options:
   --rom PATH               Path to Pokemon Emerald ROM (default: Emerald-GBAdvance/rom.gba)
   --load-state PATH        Load from a saved state file
+  --load-checkpoint        Load from checkpoint.state and checkpoint_milestones.json
   --backend TEXT           VLM backend (openai/gemini/local/auto, default: gemini)
   --model-name TEXT        Model name (default: gemini-2.5-flash)
   --port INTEGER           Server port for web interface (default: 8000)
 
 Mode Options:
-  --no-display            Run without PyGame display window
+  --headless              Run without PyGame display window
   --agent-auto            Enable automatic agent actions on startup
-  --manual-mode           Start in manual mode instead of agent mode
-  --multiprocess          Run mGBA/pygame in separate process (recommended for stability)
+  --manual                Start in manual mode instead of agent mode
 
 Feature Options:
   --record                Record video of gameplay (saves MP4 with timestamp)
@@ -687,12 +666,8 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 For better performance with local models:
 
 ```bash
-# Use specific GPU
-python run.py --backend local --model-name "your-model"
-
-# Disable quantization for speed (requires more VRAM)
-python run.py --backend local --model-name "your-model"
-
+# Use local models with appropriate hardware
+python run.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
 ```
 
 ## Troubleshooting
@@ -707,14 +682,14 @@ python run.py --backend local --model-name "your-model"
 
 2. **Out of memory with local models**:
    ```bash
-   # Try 4-bit quantization
-   python run.py --backend local --load-in-4bit --model-name "your-model"
+   # Try a smaller model or use cloud-based VLMs
+   python run.py --backend gemini --model-name "gemini-2.5-flash"
    ```
 
 3. **Web interface connection issues**:
    - Ensure run.py is running
    - Check that the specified port (default 8000) is available
-   - Try accessing http://localhost:8000 directly
+   - Try accessing http://localhost:8000/stream directly
 
 4. **API rate limits**:
    - Use OpenRouter for better rate limits
