@@ -8,14 +8,30 @@ from collections import deque
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Milestone tracking for progression verification
+# Milestone tracking for progression verification - exact milestones for submission.log
 MILESTONES = [
-    'LITTLEROOT_TOWN', 'ROUTE_101', 'OLDALE_TOWN', 'ROUTE_103', 'ROUTE_102', 
-    'PETALBURG_CITY', 'ROUTE_104', 'PETALBURG_WOODS', 'RUSTBORO_CITY', 
-    'RUSTBORO_GYM', 'DEVON_CORPORATION_3F', 'ROUTE_116', 'RUSTURF_TUNNEL', 
-    'MR_BRINEYS_COTTAGE', 'ROUTE_105', 'DEWFORD_TOWN', 'GRANITE_CAVE_STEVEN_ROOM', 
-    'ROUTE_109', 'SLATEPORT_CITY', 'SLATEPORT_MUSEUM_1F', 'ROUTE_110', 
-    'MAUVILLE_CITY', 'MAUVILLE_GYM'
+    # Phase 1: Game Initialization
+    'GAME_RUNNING', 'PLAYER_NAME_SET', 'INTRO_CUTSCENE_COMPLETE',
+    
+    # Phase 2: Tutorial & Starting Town
+    'LITTLEROOT_TOWN', 'PLAYER_HOUSE_ENTERED', 'PLAYER_BEDROOM', 
+    'RIVAL_HOUSE', 'RIVAL_BEDROOM',
+    
+    # Phase 3: Professor Birch & Starter
+    'ROUTE_101', 'STARTER_CHOSEN', 'BIRCH_LAB_VISITED',
+    
+    # Phase 4: Rival
+    'OLDALE_TOWN', 'ROUTE_103', 'RECEIVED_POKEDEX',
+    
+    # Phase 5: Route 102 & Petalburg
+    'ROUTE_102', 'PETALBURG_CITY', 'DAD_FIRST_MEETING', 'GYM_EXPLANATION',
+    
+    # Phase 6: Road to Rustboro City
+    'ROUTE_104_SOUTH', 'PETALBURG_WOODS', 'TEAM_AQUA_GRUNT_DEFEATED',
+    'ROUTE_104_NORTH', 'RUSTBORO_CITY',
+    
+    # Phase 7: First Gym Challenge
+    'RUSTBORO_GYM_ENTERED', 'ROXANNE_DEFEATED', 'FIRST_GYM_COMPLETE'
 ]
 
 class AntiCheatTracker:
@@ -168,39 +184,43 @@ class AntiCheatTracker:
         
         # Special mappings for locations that might have different names
         location_mappings = {
+            # Phase 1: Game Initialization
+            'MOVING_VAN': 'INTRO_CUTSCENE_COMPLETE',
+            
+            # Phase 2: Tutorial & Starting Town
             'LITTLEROOT': 'LITTLEROOT_TOWN',
-            'ROUTE101': 'ROUTE_101',
+            'BRENDANS_HOUSE_1F': 'PLAYER_HOUSE_ENTERED',
+            'BRENDANS_HOUSE_2F': 'PLAYER_BEDROOM',
+            'MAYS_HOUSE_1F': 'RIVAL_HOUSE',
+            'MAYS_HOUSE_2F': 'RIVAL_BEDROOM',
+            
+            # Phase 3: Professor Birch & Starter
             'ROUTE_101': 'ROUTE_101',
+            'ROUTE101': 'ROUTE_101',
+            'BIRCHS_LAB': 'BIRCH_LAB_VISITED',
+            'PROFESSOR_BIRCHS_LAB': 'BIRCH_LAB_VISITED',
+            
+            # Phase 4: Rival
             'OLDALE': 'OLDALE_TOWN',
-            'ROUTE103': 'ROUTE_103',
             'ROUTE_103': 'ROUTE_103',
-            'ROUTE102': 'ROUTE_102',
+            'ROUTE103': 'ROUTE_103',
+            
+            # Phase 5: Route 102 & Petalburg
             'ROUTE_102': 'ROUTE_102',
+            'ROUTE102': 'ROUTE_102',
             'PETALBURG': 'PETALBURG_CITY',
-            'ROUTE104': 'ROUTE_104',
-            'ROUTE_104': 'ROUTE_104',
+            'PETALBURG_CITY_GYM': 'DAD_FIRST_MEETING',
+            'PETALBURG_GYM': 'DAD_FIRST_MEETING',
+            
+            # Phase 6: Road to Rustboro City
+            'ROUTE_104': 'ROUTE_104_SOUTH',
+            'ROUTE104': 'ROUTE_104_SOUTH',
             'PETALBURG_WOODS': 'PETALBURG_WOODS',
+            
+            # Phase 7: First Gym Challenge
             'RUSTBORO': 'RUSTBORO_CITY',
-            'RUSTBORO_GYM': 'RUSTBORO_GYM',
-            'DEVON_CORP': 'DEVON_CORPORATION_3F',
-            'DEVON_CORPORATION': 'DEVON_CORPORATION_3F',
-            'ROUTE116': 'ROUTE_116',
-            'ROUTE_116': 'ROUTE_116',
-            'RUSTURF': 'RUSTURF_TUNNEL',
-            'MR_BRINEY': 'MR_BRINEYS_COTTAGE',
-            'BRINEYS_COTTAGE': 'MR_BRINEYS_COTTAGE',
-            'ROUTE105': 'ROUTE_105',
-            'ROUTE_105': 'ROUTE_105',
-            'DEWFORD': 'DEWFORD_TOWN',
-            'GRANITE_CAVE': 'GRANITE_CAVE_STEVEN_ROOM',
-            'ROUTE109': 'ROUTE_109',
-            'ROUTE_109': 'ROUTE_109',
-            'SLATEPORT': 'SLATEPORT_CITY',
-            'SLATEPORT_MUSEUM': 'SLATEPORT_MUSEUM_1F',
-            'ROUTE110': 'ROUTE_110',
-            'ROUTE_110': 'ROUTE_110',
-            'MAUVILLE': 'MAUVILLE_CITY',
-            'MAUVILLE_GYM': 'MAUVILLE_GYM'
+            'RUSTBORO_GYM': 'RUSTBORO_GYM_ENTERED',
+            'RUSTBORO_CITY_GYM': 'RUSTBORO_GYM_ENTERED'
         }
         
         # Check for partial matches

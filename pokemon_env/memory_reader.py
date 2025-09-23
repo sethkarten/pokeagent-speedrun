@@ -1045,15 +1045,28 @@ class PokemonEmeraldReader:
             except:
                 return True
                 
-            # Check if map data looks invalid (like being at 0,0 in PETALBURG_CITY immediately)
+            # Check if we have invalid map coordinates that indicate title sequence
+            # Note: We removed the check for Petalburg City (0,0) as it's a valid location
+            # Instead, check for truly invalid map values
             map_bank = self._read_u8(self.addresses.MAP_BANK)
             map_num = self._read_u8(self.addresses.MAP_NUMBER)
-            player_x = self._read_u16(self.addresses.PLAYER_X)
-            player_y = self._read_u16(self.addresses.PLAYER_Y)
             
-            # If we're at position (0,0) in PETALBURG_CITY, this is likely incorrect title sequence data
-            if map_bank == 0 and map_num == 0 and player_x == 0 and player_y == 0:
+            # Map banks above 0x2A are invalid in Pokemon Emerald
+            if map_bank > 0x2A:
                 return True
+            
+            # Check if game state indicates we haven't started yet
+            # If player has no party Pokemon, we're still in title/intro
+            try:
+                party_size = self.read_party_size()
+                if party_size == 0:
+                    # But make exception for specific early game sequences
+                    # where party is temporarily 0 (like the moving van)
+                    map_id = (map_bank << 8) | map_num
+                    if map_id != 0x1928:  # Not BATTLE_FRONTIER_RANKING_HALL (moving van)
+                        return True
+            except:
+                pass
                 
             return False
             
@@ -1068,6 +1081,9 @@ class PokemonEmeraldReader:
             map_num = self._read_u8(self.addresses.MAP_NUMBER)
             map_id = (map_bank << 8) | map_num
             
+            # Log the raw map values for debugging location issues
+            if map_id in [0x1200, 0x1100]:  # Mr. Briney's House or Meteor Falls
+                logger.debug(f"Location debug: map_bank=0x{map_bank:02X}, map_num=0x{map_num:02X}, map_id=0x{map_id:04X}")
             
             # Check if we're in title sequence (no valid map data)
             if self.is_in_title_sequence():

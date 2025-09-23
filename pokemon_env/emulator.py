@@ -145,31 +145,21 @@ class MilestoneTracker:
             # Phase 3: Professor Birch & Starter
             "ROUTE_101", "STARTER_CHOSEN", "BIRCH_LAB_VISITED",
             
-            # Phase 4: Early Route Progression
-            "OLDALE_TOWN", "ROUTE_103", "RIVAL_BATTLE_1", "RECEIVED_POKEDEX",
-            "POKEMART_FIRST_VISIT", "POKECENTER_FIRST_VISIT", "NURSE_JOY_FIRST_HEAL",
+            # Phase 4: Rival
+            "OLDALE_TOWN", "ROUTE_103", "RECEIVED_POKEDEX",
             
-            # Phase 5: Catching & Training
-            "FIRST_POKEBALL_OBTAINED", "FIRST_WILD_ENCOUNTER", "FIRST_POKEMON_CAUGHT", 
-            "PARTY_OF_TWO", "LEVEL_10_REACHED",
+            # Phase 5: Route 102 & Petalburg
+            "ROUTE_102", "PETALBURG_CITY", "DAD_FIRST_MEETING", "GYM_EXPLANATION",
             
-            # Phase 6: Route 102 & Petalburg
-            "ROUTE_102", "FIRST_TRAINER_BATTLE", "PETALBURG_CITY", "DAD_FIRST_MEETING", 
-            "GYM_EXPLANATION",
+            # Phase 6: Road to Rustboro City
+            "ROUTE_104_SOUTH", "PETALBURG_WOODS", "TEAM_AQUA_GRUNT_DEFEATED",
+            "ROUTE_104_NORTH", "RUSTBORO_CITY",
             
-            # Phase 7: Pre-Gym Preparation
-            "POKEDEX_5_SEEN", "EARNED_1000_POKEDOLLARS", "ROUTE_104_SOUTH", "MR_BRINEY_MET",
-            "PETALBURG_WOODS", "TEAM_AQUA_GRUNT_DEFEATED", "DEVON_GOODS_OBTAINED",
+            # Phase 7: First Gym Challenge
+            "RUSTBORO_GYM_ENTERED", "ROXANNE_DEFEATED", "FIRST_GYM_COMPLETE",
             
-            # Phase 8: Rustboro City Approach
-            "ROUTE_104_NORTH", "RUSTBORO_CITY", "DEVON_CORP_VISITED", "DEVON_GOODS_DELIVERED",
-            "LETTER_RECEIVED", "POKEBALLS_PURCHASED",
-            
-            # Phase 9: Gym Preparation
-            "RUSTBORO_GYM_ENTERED", "GYM_TRAINERS_DEFEATED", "ROXANNE_BATTLE_STARTED",
-            
-            # Phase 10: First Gym Victory
-            "ROXANNE_DEFEATED", "STONE_BADGE", "TM_ROCK_TOMB_RECEIVED", "FIRST_GYM_COMPLETE"
+            # Badge milestones (tracked separately)
+            "STONE_BADGE"
         ]
         
         try:
@@ -1123,10 +1113,18 @@ class EmeraldEmulator:
                 # Phase 3: Professor Birch & Starter
                 "ROUTE_101", "STARTER_CHOSEN", "BIRCH_LAB_VISITED",
                 
-                # Phase 4: Early Route Progression
-                "OLDALE_TOWN", "ROUTE_103", "RIVAL_BATTLE_1", "RECEIVED_POKEDEX"
+                # Phase 4: Rival
+                "OLDALE_TOWN", "ROUTE_103", "RECEIVED_POKEDEX",
                 
-                # -- STOP HERE - Additional milestones will be added later --
+                # Phase 5: Route 102 & Petalburg
+                "ROUTE_102", "PETALBURG_CITY", "DAD_FIRST_MEETING", "GYM_EXPLANATION",
+                
+                # Phase 6: Road to Rustboro City
+                "ROUTE_104_SOUTH", "PETALBURG_WOODS", "TEAM_AQUA_GRUNT_DEFEATED", 
+                "ROUTE_104_NORTH", "RUSTBORO_CITY",
+                
+                # Phase 7: First Gym Challenge
+                "RUSTBORO_GYM_ENTERED", "ROXANNE_DEFEATED", "FIRST_GYM_COMPLETE"
             ]
             
             for milestone_id in milestones_to_check:
@@ -1165,11 +1163,7 @@ class EmeraldEmulator:
                     location = game_state.get("player", {}).get("location", "")
                     return "LITTLEROOT" in str(location).upper()
                 return False
-            elif milestone_id == "ROUTE_101":
-                if game_state:
-                    location = game_state.get("player", {}).get("location", "")
-                    return "ROUTE_101" in str(location).upper() or "ROUTE 101" in str(location).upper()
-                return False
+
             elif milestone_id == "OLDALE_TOWN":
                 if game_state:
                     # Only count Oldale Town if we've already been to Littleroot Town
@@ -1177,16 +1171,6 @@ class EmeraldEmulator:
                         return False
                     location = game_state.get("player", {}).get("location", "")
                     return "OLDALE" in str(location).upper()
-                return False
-            elif milestone_id == "PETALBURG_CITY":
-                if game_state:
-                    # Enforce proper game progression through required towns
-                    if not self.milestone_tracker.is_completed("LITTLEROOT_TOWN"):
-                        return False
-                    if not self.milestone_tracker.is_completed("OLDALE_TOWN"):
-                        return False
-                    location = game_state.get("player", {}).get("location", "")
-                    return "PETALBURG" in str(location).upper()
                 return False
             elif milestone_id == "RUSTBORO_CITY":
                 if game_state:
@@ -1221,17 +1205,7 @@ class EmeraldEmulator:
                     return "MAUVILLE" in str(location).upper()
                 return False
                 
-            # Pokemon system milestones - check party/pokedex state  
-            elif milestone_id == "STARTER_CHOSEN":
-                if game_state:
-                    party = game_state.get("player", {}).get("party", [])
-                    return len(party) >= 1 and any(p.get("species_name", "").strip() for p in party)
-                return False
-            elif milestone_id == "POKEDEX_RECEIVED":
-                if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 1
-                return False
+
                 
             # Badge milestones - check badge count/list
             elif milestone_id == "STONE_BADGE":
@@ -1257,39 +1231,6 @@ class EmeraldEmulator:
                         return len(badges) >= 3 or any("Dynamo" in str(b) for b in badges)
                     elif isinstance(badges, int):
                         return badges >= 3
-                return False
-                
-            # Progress-based milestones
-            elif milestone_id == "FIRST_POKEMON_CAUGHT":
-                if game_state:
-                    pokedex_caught = game_state.get("game", {}).get("pokedex_caught", 0)
-                    return (pokedex_caught if isinstance(pokedex_caught, int) else 0) >= 1
-                return False
-            elif milestone_id == "FIRST_WILD_ENCOUNTER":
-                if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 2
-                return False
-            elif milestone_id == "PARTY_OF_TWO":
-                if game_state:
-                    party = game_state.get("player", {}).get("party", [])
-                    valid_pokemon = [p for p in party if p.get("species_name", "").strip() and p.get("species_name", "").strip() != "NONE"]
-                    return len(valid_pokemon) >= 2
-                return False
-            elif milestone_id == "EARNED_1000_POKEDOLLARS":
-                if game_state:
-                    money = game_state.get("game", {}).get("money", 0)
-                    return (money if isinstance(money, int) else 0) >= 1000
-                return False
-            elif milestone_id == "POKEDEX_5_SEEN":
-                if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 5
-                return False
-            elif milestone_id == "POKEDEX_10_SEEN":
-                if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 10
                 return False
                 
             # Phase 1: Game Initialization milestones
@@ -1330,6 +1271,16 @@ class EmeraldEmulator:
                 return False
                 
             # Phase 3: Professor Birch & Starter milestones
+            elif milestone_id == "ROUTE_101":
+                if game_state:
+                    location = game_state.get("player", {}).get("location", "")
+                    return "ROUTE_101" in str(location).upper() or "ROUTE 101" in str(location).upper()
+                return False
+            elif milestone_id == "STARTER_CHOSEN":
+                if game_state:
+                    party = game_state.get("player", {}).get("party", [])
+                    return len(party) >= 1 and any(p.get("species_name", "").strip() for p in party)
+                return False
             elif milestone_id == "BIRCH_LAB_VISITED":
                 if game_state:
                     location = game_state.get("player", {}).get("location", "")
@@ -1347,92 +1298,64 @@ class EmeraldEmulator:
                     location = game_state.get("player", {}).get("location", "")
                     return "ROUTE_103" in str(location).upper() or "ROUTE 103" in str(location).upper()
                 return False
-            elif milestone_id == "RIVAL_BATTLE_1":
-                # Check for specific state hash from dialog after the battle (c9086d56)
-                if game_state:
-                    # Create state hash for comparison
-                    state_str = str(game_state)
-                    state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+            # elif milestone_id == "RIVAL_BATTLE_1":
+            #     # Check for specific state hash from dialog after the battle (c9086d56)
+            #     if game_state:
+            #         # Create state hash for comparison
+            #         state_str = str(game_state)
+            #         state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
                     
-                    # Check for battle completion state hash or traditional conditions
-                    return (state_hash == "c9086d56" or 
-                            (self.milestone_tracker.is_completed("ROUTE_103") and
-                             self.milestone_tracker.is_completed("STARTER_CHOSEN")))
-                return False
+            #         # Check for battle completion state hash or traditional conditions
+            #         return (state_hash == "c9086d56" or 
+            #                 (self.milestone_tracker.is_completed("ROUTE_103") and
+            #                  self.milestone_tracker.is_completed("STARTER_CHOSEN")))
+            #     return False
             elif milestone_id == "RECEIVED_POKEDEX":
                 if game_state:
-                    # Create state hash for comparison
-                    state_str = str(game_state)
-                    state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
-                    
-                    # Check for specific state hash (015cb0fa) or traditional conditions
-                    if state_hash == "015cb0fa":
-                        return True
-                    
-                    # Fallback to traditional checks
-                    flags = game_state.get("game", {}).get("flags", {})
-                    has_pokedex_flag = flags.get("has_pokedex", False)
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return has_pokedex_flag or ((pokedex_seen if pokedex_seen is not None else 0) >= 2)
-                return False
-            elif milestone_id == "POKEMART_FIRST_VISIT":
-                # Assume first Pokemart visit is in Oldale Town
-                if game_state:
+                    # Check if we're in Birch's lab AND have completed Route 103
                     location = game_state.get("player", {}).get("location", "")
-                    return ("POKEMART" in str(location).upper() and 
-                            self.milestone_tracker.is_completed("OLDALE_TOWN"))
+                    return (self.milestone_tracker.is_completed("ROUTE_103") and 
+                            "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" in str(location).upper())
                 return False
-            elif milestone_id == "POKECENTER_FIRST_VISIT":
-                # Assume first Pokemon Center visit is in Oldale Town
-                if game_state:
-                    location = game_state.get("player", {}).get("location", "")
-                    return ("POKEMON CENTER" in str(location).upper() and 
-                            self.milestone_tracker.is_completed("OLDALE_TOWN"))
-                return False
-            elif milestone_id == "NURSE_JOY_FIRST_HEAL":
-                # Assume this happens after visiting Pokemon Center
-                if game_state:
-                    return self.milestone_tracker.is_completed("POKECENTER_FIRST_VISIT")
-                return False
-                
-            # Phase 5: Catching & Training milestones
-            elif milestone_id == "FIRST_POKEBALL_OBTAINED":
-                # Assume Pokeballs obtained after receiving Pokedex
-                if game_state:
-                    return self.milestone_tracker.is_completed("RECEIVED_POKEDEX")
-                return False
-            elif milestone_id == "LEVEL_10_REACHED":
-                if game_state:
-                    party = game_state.get("player", {}).get("party", [])
-                    return any(p.get("level", 0) >= 10 for p in party if p.get("species_name", "").strip())
-                return False
-                
-            # Phase 6: Route 102 & Petalburg milestones
+            ## Phase 5: Route 102 & Petalburg
             elif milestone_id == "ROUTE_102":
                 if game_state:
-                    # Only count Route 102 if we've been to Oldale
-                    if not self.milestone_tracker.is_completed("OLDALE_TOWN"):
+                    # Only count Route 102 if we've received Pokedex
+                    if not self.milestone_tracker.is_completed("RECEIVED_POKEDEX"):
                         return False
                     location = game_state.get("player", {}).get("location", "")
                     return "ROUTE_102" in str(location).upper() or "ROUTE 102" in str(location).upper()
                 return False
-            elif milestone_id == "FIRST_TRAINER_BATTLE":
-                # Assume first trainer battle happens on Route 102
+            elif milestone_id == "PETALBURG_CITY":
                 if game_state:
-                    return self.milestone_tracker.is_completed("ROUTE_102")
+                    # Enforce proper game progression through required towns
+                    if not self.milestone_tracker.is_completed("LITTLEROOT_TOWN"):
+                        return False
+                    if not self.milestone_tracker.is_completed("OLDALE_TOWN"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "PETALBURG" in str(location).upper()
                 return False
             elif milestone_id == "DAD_FIRST_MEETING":
-                # Assume meeting Dad happens in Petalburg City
+                # Meeting Dad happens in Petalburg Gym
                 if game_state:
-                    return self.milestone_tracker.is_completed("PETALBURG_CITY")
+                    # Must have visited Petalburg City first
+                    if not self.milestone_tracker.is_completed("PETALBURG_CITY"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "PETALBURG CITY GYM" in str(location).upper() or "PETALBURG_CITY_GYM" in str(location).upper()
                 return False
             elif milestone_id == "GYM_EXPLANATION":
-                # Assume gym explanation happens after meeting Dad
+                # Gym explanation happens after meeting Dad in the gym
                 if game_state:
-                    return self.milestone_tracker.is_completed("DAD_FIRST_MEETING")
+                    # Must have met Dad and still be in gym
+                    if not self.milestone_tracker.is_completed("DAD_FIRST_MEETING"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "PETALBURG CITY GYM" in str(location).upper() or "PETALBURG_CITY_GYM" in str(location).upper()
                 return False
                 
-            # Phase 7: Pre-Gym Preparation milestones
+            # Phase 6: Pre-Gym Preparation milestones
             elif milestone_id == "ROUTE_104_SOUTH":
                 if game_state:
                     # Only count if we've been to Petalburg
@@ -1455,8 +1378,20 @@ class EmeraldEmulator:
                     return "PETALBURG_WOODS" in str(location).upper() or "PETALBURG WOODS" in str(location).upper()
                 return False
             elif milestone_id == "TEAM_AQUA_GRUNT_DEFEATED":
-                # Assume Team Aqua grunt defeated in Petalburg Woods
+                # Team Aqua grunt defeated at specific location in Petalburg Woods
                 if game_state:
+                    # Must have visited Petalburg Woods
+                    if not self.milestone_tracker.is_completed("PETALBURG_WOODS"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    # Check if in Petalburg Woods and at specific coordinates
+                    if "PETALBURG_WOODS" in str(location).upper() or "PETALBURG WOODS" in str(location).upper():
+                        # Check for Map_18_0B at coords (26,23) or (27,23)
+                        pos = game_state.get("player", {}).get("pos", [])
+                        if len(pos) >= 2:
+                            x, y = pos[0], pos[1]
+                            if y == 23 and x in [26, 27]:
+                                return True
                     return self.milestone_tracker.is_completed("PETALBURG_WOODS")
                 return False
             elif milestone_id == "DEVON_GOODS_OBTAINED":
@@ -1500,9 +1435,11 @@ class EmeraldEmulator:
             # Phase 9: Gym Preparation milestones
             elif milestone_id == "RUSTBORO_GYM_ENTERED":
                 if game_state:
+                    # Must have visited Rustboro City first
+                    if not self.milestone_tracker.is_completed("RUSTBORO_CITY"):
+                        return False
                     location = game_state.get("player", {}).get("location", "")
-                    return ("GYM" in str(location).upper() and 
-                            "RUSTBORO" in str(location).upper())
+                    return "RUSTBORO_GYM" in str(location).upper() or "RUSTBORO CITY GYM" in str(location).upper()
                 return False
             elif milestone_id == "GYM_TRAINERS_DEFEATED":
                 # Assume gym trainers defeated after entering gym
@@ -1517,13 +1454,10 @@ class EmeraldEmulator:
                 
             # Phase 10: First Gym Victory milestones
             elif milestone_id == "ROXANNE_DEFEATED":
-                # Check if Stone Badge is obtained (Roxanne gives Stone Badge)
+                # Roxanne defeated when Stone Badge is obtained
                 if game_state:
-                    badges = game_state.get("game", {}).get("badges", [])
-                    if isinstance(badges, list):
-                        return len(badges) >= 1 or any("Stone" in str(b) for b in badges)
-                    elif isinstance(badges, int):
-                        return badges >= 1
+                    # Must have Stone Badge
+                    return self.milestone_tracker.is_completed("STONE_BADGE")
                 return False
             elif milestone_id == "TM_ROCK_TOMB_RECEIVED":
                 # Assume TM received after defeating Roxanne
@@ -1531,11 +1465,14 @@ class EmeraldEmulator:
                     return self.milestone_tracker.is_completed("ROXANNE_DEFEATED")
                 return False
             elif milestone_id == "FIRST_GYM_COMPLETE":
-                # Complete after exiting gym with Stone Badge
+                # Complete after getting Stone Badge and exiting gym
                 if game_state:
+                    # Must have Stone Badge and not be in gym
+                    if not self.milestone_tracker.is_completed("STONE_BADGE"):
+                        return False
                     location = game_state.get("player", {}).get("location", "")
-                    return (self.milestone_tracker.is_completed("STONE_BADGE") and 
-                            "GYM" not in str(location).upper())
+                    # Not in any gym
+                    return "GYM" not in str(location).upper()
                 return False
                 
             return False
