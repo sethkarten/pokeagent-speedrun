@@ -1061,10 +1061,15 @@ class PokemonEmeraldReader:
                 party_size = self.read_party_size()
                 if party_size == 0:
                     # But make exception for specific early game sequences
-                    # where party is temporarily 0 (like the moving van)
+                    # where party is temporarily 0 (like the moving van or Littleroot Town)
                     map_id = (map_bank << 8) | map_num
-                    if map_id != 0x1928:  # Not BATTLE_FRONTIER_RANKING_HALL (moving van)
-                        return True
+                    # Allow these maps even with no party:
+                    # 0x1928: BATTLE_FRONTIER_RANKING_HALL (moving van)
+                    # 0x0009: LITTLEROOT_TOWN (post-intro, pre-starter)
+                    # 0x0100-0x0104: Littleroot Town buildings (houses and lab)
+                    if map_id in [0x1928, 0x0009] or (0x0100 <= map_id <= 0x0104):
+                        return False  # Not in title sequence, just early game
+                    return True
             except:
                 pass
                 
@@ -2428,15 +2433,15 @@ class PokemonEmeraldReader:
             # Always set position - (0,0) is a valid coordinate
             # read_coordinates() always returns a tuple, never None
             state["player"]["position"] = {"x": coords[0], "y": coords[1]}
-            print(f"DEBUG: Player coords: {coords}")
+            # print(f"DEBUG: Player coords: {coords}")
             
             try:
                 location = self.read_location()
-                print(f"DEBUG: read_location() returned: '{location}'")
+                # print(f"DEBUG: read_location() returned: '{location}'")
                 # Always set location, even if it's 'Unknown' or 'TITLE_SEQUENCE'
                 state["player"]["location"] = location
             except Exception as e:
-                print(f"DEBUG: Exception reading location: {e}")
+                # print(f"DEBUG: Exception reading location: {e}")
                 state["player"]["location"] = "Unknown"
             
             player_name = self.read_player_name()
@@ -2784,10 +2789,10 @@ class PokemonEmeraldReader:
                 self._map_stitcher.save_to_file()
                 
         except Exception as e:
-            print(f"🗺️ DEBUG: Failed to update map stitcher: {e}")
+            # print( Failed to update map stitcher: {e}")
             logger.debug(f"Failed to update map stitcher: {e}")
             import traceback
-            print(f"🗺️ DEBUG: Traceback: {traceback.format_exc()}")
+            # print( Traceback: {traceback.format_exc()}")
     
     def _get_overworld_coordinates(self, map_bank: int, map_number: int, location_name: Optional[str]) -> Optional[Tuple[int, int]]:
         """Get overworld coordinates for a given map bank/number combination"""
@@ -3001,10 +3006,10 @@ class PokemonEmeraldReader:
             # Copy state map to cache if it exists
             if os.path.exists(state_map_file) and os.path.getsize(state_map_file) > 0:
                 shutil.copy2(state_map_file, cache_map_file)
-                print(f"🗺️ DEBUG: Copied state map from {state_map_file} to cache {cache_map_file}")
+            # print( Copied state map from {state_map_file} to cache {cache_map_file}")
             elif not os.path.exists(cache_map_file):
                 # Create empty cache file if neither exists
-                print(f"🗺️ DEBUG: No state map found, creating empty cache file {cache_map_file}")
+            # print( No state map found, creating empty cache file {cache_map_file}")
                 with open(cache_map_file, 'w') as f:
                     import json
                     json.dump({"map_areas": {}, "location_connections": {}}, f)
@@ -3015,16 +3020,16 @@ class PokemonEmeraldReader:
         # Initialize MapStitcher if not already initialized
         if self._map_stitcher is None:
             from utils.map_stitcher import MapStitcher
-            print(f"🗺️ DEBUG: Initializing MapStitcher with cache file: {map_stitcher_filename}")
+            # print( Initializing MapStitcher with cache file: {map_stitcher_filename}")
             self._map_stitcher = MapStitcher(save_file=map_stitcher_filename)
-            print(f"🗺️ DEBUG: MapStitcher initialized, syncing connections...")
+            # print( MapStitcher initialized, syncing connections...")
             # Skip sync - let loaded location_connections be preserved
             # self._sync_warp_connections_to_state_formatter(force_rebuild=True)  # DISABLED - causes overwrites
             # Set up callback to save location connections when they change
             self._setup_location_connections_callback()
         else:
             # MapStitcher already initialized, it should already be using the cache file
-            print(f"🗺️ DEBUG: MapStitcher already initialized, using cache: {map_stitcher_filename}")
+            # print( MapStitcher already initialized, using cache: {map_stitcher_filename}")
             # No need to update save file since we always use the cache
             # Set up callback to save location connections when they change
             self._setup_location_connections_callback()
@@ -3084,14 +3089,14 @@ class PokemonEmeraldReader:
             force_rebuild: If True, rebuild connections even if they exist
         """
         if self._map_stitcher is None:
-            print("🗺️ DEBUG: MapStitcher is None, cannot sync connections")
+            # print( MapStitcher is None, cannot sync connections")
             return
         
         try:
             from utils import state_formatter
             
-            print(f"🗺️ DEBUG: Starting sync of {len(self._map_stitcher.warp_connections)} warp connections")
-            print(f"🗺️ DEBUG: MapStitcher has {len(self._map_stitcher.map_areas)} map areas")
+            # print( Starting sync of {len(self._map_stitcher.warp_connections)} warp connections")
+            # print( MapStitcher has {len(self._map_stitcher.map_areas)} map areas")
             
             # Initialize connections if they don't exist, but don't clear existing ones
             if not hasattr(state_formatter, 'LOCATION_CONNECTIONS'):
@@ -3103,11 +3108,11 @@ class PokemonEmeraldReader:
             
             # Only rebuild if forced or if we have new stitcher data but no existing connections
             if not force_rebuild and has_existing_connections:
-                print(f"🗺️ DEBUG: Skipping sync - already have {len(state_formatter.LOCATION_CONNECTIONS)} location connections")
+            # print( Skipping sync - already have {len(state_formatter.LOCATION_CONNECTIONS)} location connections")
                 return
             
             if not has_stitcher_connections:
-                print(f"🗺️ DEBUG: No stitcher connections to sync")
+            # print( No stitcher connections to sync")
                 return
                 
             # Clear and rebuild connections
@@ -3115,7 +3120,7 @@ class PokemonEmeraldReader:
             
             # Initialize MAP_ID_CONNECTIONS (this was missing!)
             state_formatter.MAP_ID_CONNECTIONS = {}
-            print(f"🗺️ DEBUG: Initialized MAP_ID_CONNECTIONS in state_formatter module")
+            # print( Initialized MAP_ID_CONNECTIONS in state_formatter module")
             
             # Convert MapStitcher warp_connections to LOCATION_CONNECTIONS format
             for conn in self._map_stitcher.warp_connections:
@@ -3123,16 +3128,16 @@ class PokemonEmeraldReader:
                 from_area = self._map_stitcher.map_areas.get(conn.from_map_id)
                 to_area = self._map_stitcher.map_areas.get(conn.to_map_id)
                 
-                print(f"🗺️ DEBUG: Processing connection: {conn.from_map_id} -> {conn.to_map_id}")
-                print(f"🗺️ DEBUG: From area: {from_area.location_name if from_area else 'None'}")
-                print(f"🗺️ DEBUG: To area: {to_area.location_name if to_area else 'None'}")
+            # print( Processing connection: {conn.from_map_id} -> {conn.to_map_id}")
+            # print( From area: {from_area.location_name if from_area else 'None'}")
+            # print( To area: {to_area.location_name if to_area else 'None'}")
                 
                 if from_area and to_area:
                     # Use map ID as a fallback key if location names are unknown
                     from_name = from_area.location_name if from_area.location_name != "Unknown" else f"MAP_{conn.from_map_id:04X}"
                     to_name = to_area.location_name if to_area.location_name != "Unknown" else f"MAP_{conn.to_map_id:04X}"
                     
-                    print(f"🗺️ DEBUG: Using names: {from_name} -> {to_name}")
+            # print( Using names: {from_name} -> {to_name}")
                     
                     # Store bidirectional connections by map ID
                     if conn.from_map_id not in state_formatter.MAP_ID_CONNECTIONS:
@@ -3173,11 +3178,11 @@ class PokemonEmeraldReader:
                     if to_from_connection not in state_formatter.LOCATION_CONNECTIONS[to_name]:
                         state_formatter.LOCATION_CONNECTIONS[to_name].append(to_from_connection)
                     
-                    print(f"🗺️ DEBUG: Added connection {from_name} <-> {to_name}")
+            # print( Added connection {from_name} <-> {to_name}")
             
-            print(f"🗺️ DEBUG: Synced {len(self._map_stitcher.warp_connections)} warp connections to state formatter")
-            print(f"🗺️ DEBUG: MAP_ID_CONNECTIONS has {len(state_formatter.MAP_ID_CONNECTIONS)} maps")
-            print(f"🗺️ DEBUG: LOCATION_CONNECTIONS has {len(state_formatter.LOCATION_CONNECTIONS)} locations")
+            # print( Synced {len(self._map_stitcher.warp_connections)} warp connections to state formatter")
+            # print( MAP_ID_CONNECTIONS has {len(state_formatter.MAP_ID_CONNECTIONS)} maps")
+            # print( LOCATION_CONNECTIONS has {len(state_formatter.LOCATION_CONNECTIONS)} locations")
             
         except Exception as e:
             logger.error(f"Failed to sync warp connections: {e}")
@@ -4840,4 +4845,4 @@ class PokemonEmeraldReader:
                 self._map_stitcher.save_to_file()
         
         state_formatter.MAP_STITCHER_SAVE_CALLBACK = save_callback
-        print(f"🗺️ DEBUG: Set up location connections save callback")
+            # print( Set up location connections save callback")

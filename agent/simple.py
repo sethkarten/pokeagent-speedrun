@@ -37,6 +37,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
+import numpy as np
+from PIL import Image
 
 from utils.state_formatter import format_state_for_llm
 
@@ -251,6 +253,21 @@ class SimpleAgent:
     def get_game_context(self, game_state: Dict[str, Any]) -> str:
         """Determine current game context (overworld, battle, menu, dialogue)"""
         try:
+            # Check if in title sequence first
+            player_location = game_state.get("player", {}).get("location", "")
+            if player_location == "TITLE_SEQUENCE":
+                return "title"
+            
+            # Check game state for title/intro
+            game_state_value = game_state.get("game", {}).get("game_state", "").lower()
+            if "title" in game_state_value or "intro" in game_state_value:
+                return "title"
+            
+            # Check if player name is not set (indicates title sequence)
+            player_name = game_state.get("player", {}).get("name", "").strip()
+            if not player_name or player_name == "????????":
+                return "title"
+            
             # Check if in battle
             is_in_battle = game_state.get("game", {}).get("is_in_battle", False)
             if is_in_battle:
@@ -416,12 +433,13 @@ class SimpleAgent:
     
     def detect_stuck_pattern(self, coords: Optional[Tuple[int, int]], context: str, game_state: Dict[str, Any] = None) -> bool:
         """Detect if the agent appears to be stuck in a location/context"""
-        if not coords:
+        # Don't trigger stuck detection during contexts where staying in place is expected
+        if context in ["battle", "dialogue", "menu", "title"]:
+            logger.debug(f"Skipping stuck detection - context: {context}")
             return False
         
-        # Don't trigger stuck detection during contexts where staying in place is expected
-        if context in ["battle", "dialogue", "menu"]:
-            logger.debug(f"Skipping stuck detection - context: {context}")
+        # Need valid coordinates for stuck detection
+        if not coords or coords[0] is None or coords[1] is None:
             return False
         
         # Check for title sequence if game state is available
@@ -436,11 +454,63 @@ class SimpleAgent:
             if "title" in game_state_value or "intro" in game_state_value:
                 return False
             
+            # Check location for title sequence
+            player_location = game_state.get("player", {}).get("location", "")
+            if player_location == "TITLE_SEQUENCE":
+                return False
+            
         key = f"{coords[0]}_{coords[1]}_{context}"
         self.state.stuck_detection[key] = self.state.stuck_detection.get(key, 0) + 1
         
         # Consider stuck if we've been in the same location/context for 8+ consecutive steps
         return self.state.stuck_detection[key] >= 8
+    
+    def is_black_frame(self, frame) -> bool:
+        """
+        Check if the frame is mostly black (transition/loading screen).
+        
+        Args:
+            frame: PIL Image or numpy array
+            
+        Returns:
+            bool: True if frame is mostly black, False otherwise
+        """
+        try:
+            
+            # Convert to PIL Image if needed
+            if hasattr(frame, 'convert'):  # It's already a PIL Image
+                img = frame
+            elif hasattr(frame, 'shape'):  # It's a numpy array
+                img = Image.fromarray(frame)
+            else:
+                return False  # Unknown type, assume not black
+            
+            # Convert to numpy array for analysis
+            img_array = np.array(img)
+            
+            # Calculate the mean brightness
+            # For RGB images, average across all channels
+            if len(img_array.shape) == 3:
+                mean_brightness = np.mean(img_array)
+            else:
+                mean_brightness = np.mean(img_array)
+            
+            # Also check the standard deviation to catch completely uniform frames
+            std_dev = np.std(img_array)
+            
+            # A frame is considered "black" if:
+            # 1. Mean brightness is very low (< 10 out of 255)
+            # 2. OR standard deviation is very low (< 5) indicating uniform color
+            is_black = mean_brightness < 10 or (mean_brightness < 30 and std_dev < 5)
+            
+            if is_black:
+                logger.debug(f"Black frame detected: mean_brightness={mean_brightness:.2f}, std_dev={std_dev:.2f}")
+            
+            return is_black
+            
+        except Exception as e:
+            logger.warning(f"Error checking for black frame: {e}")
+            return False  # On error, assume not black to continue processing
     
     def get_relevant_history_summary(self, current_context: str, coords: Optional[Tuple[int, int]]) -> str:
         """Get a concise summary of relevant recent history"""
@@ -462,6 +532,10 @@ class SimpleAgent:
     
     def get_stuck_warning(self, coords: Optional[Tuple[int, int]], context: str, game_state: Dict[str, Any] = None) -> str:
         """Generate warning text if stuck pattern detected"""
+        # Never show stuck warning in title sequence
+        if context == "title":
+            return ""
+            
         if self.detect_stuck_pattern(coords, context, game_state):
             return "\n⚠️ WARNING: You appear to be stuck at this location/context. Try a different approach!\n" \
                    "💡 TIP: If you try an action like RIGHT but coordinates don't change from (X,Y) to (X+1,Y), there's likely an obstacle. Check the map around player P for walls (#) or other barriers blocking your path."
@@ -545,6 +619,11 @@ class SimpleAgent:
                 logger.error(f"🚫 CRITICAL: SimpleAgent.process_step called with invalid frame size {width}x{height} - cannot proceed")
                 return "WAIT"
         
+        # Check for black frame (transition screen)
+        if self.is_black_frame(frame):
+            logger.info("⏳ Black frame detected (likely a transition), waiting for next frame...")
+            return "WAIT"  # Return WAIT to skip this frame and wait for the next one
+        
         try:
             # Increment step counter
             self.state.step_counter += 1
@@ -578,6 +657,44 @@ class SimpleAgent:
             completed_objectives_list = self.get_completed_objectives()
             objectives_summary = self._format_objectives_for_llm(active_objectives, completed_objectives_list)
             
+            # Build pathfinding rules section (only if not in title sequence)
+            pathfinding_rules = ""
+            if context != "title":
+                pathfinding_rules = """
+🚨 PATHFINDING RULES:
+1. **SINGLE STEP FIRST**: Always prefer single actions (UP, DOWN, LEFT, RIGHT, A, B) unless you're 100% certain about multi-step paths
+2. **CHECK EVERY STEP**: Before chaining movements, verify EACH step in your sequence using the MOVEMENT PREVIEW and map
+3. **BLOCKED = STOP**: If ANY step shows BLOCKED in the movement preview, the entire sequence will fail
+4. **NO BLIND CHAINS**: Never chain movements through areas you can't see or verify as walkable
+5. **PERFORM PATHFINDING**: Find a path to a target location (X',Y') from the player position (X,Y) on the map. DO NOT TRAVERSE THROUGH OBSTACLES (#) -- it will not work.
+
+💡 SMART MOVEMENT STRATEGY:
+- Use MOVEMENT PREVIEW to see exactly what happens with each direction
+- If your target requires multiple steps, plan ONE step at a time
+- Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
+- When stuck, try a different direction rather than repeating the same blocked move
+
+EXAMPLE - DON'T DO THIS:
+❌ "I want to go right 5 tiles" → "RIGHT, RIGHT, RIGHT, RIGHT, RIGHT" (may hit wall on step 2!)
+
+EXAMPLE - DO THIS INSTEAD:
+✅ Check movement preview → "RIGHT shows (X+1,Y) WALKABLE" → "RIGHT" (single safe step)
+✅ Next turn, check again → "RIGHT shows (X+2,Y) WALKABLE" → "RIGHT" (another safe step)
+
+💡 SMART NAVIGATION:
+- Check the VISUAL FRAME for NPCs (people/trainers) before moving - they're not always on the map!
+- Review MOVEMENT MEMORY for locations where you've failed to move before
+- Only explore areas marked with ? (these are confirmed explorable edges)
+- Avoid areas surrounded by # (walls) - they're fully blocked
+- Use doors (D), stairs (S), or walk around obstacles when pathfinding suggests it
+
+💡 NPC & OBSTACLE HANDLING:
+- If you see NPCs in the image, avoid walking into them or interact with A/B if needed
+- If a movement fails (coordinates don't change), that location likely has an NPC or obstacle
+- Use your MOVEMENT MEMORY to remember problem areas and plan around them
+- NPCs can trigger battles or dialogue, which may be useful for objectives
+"""
+
             # Create enhanced prompt with objectives, history context and chain of thought request
             prompt = f"""You are playing Pokemon Emerald. Progress quickly to the milestones by balancing exploration and exploitation of things you know. 
             Based on the current game frame and state information, think through your next move and choose the best button action.
@@ -622,39 +739,7 @@ REASONING:
 ACTION:
 [Your final action choice - PREFER SINGLE ACTIONS like 'RIGHT' or 'A'. Only use multiple actions like 'UP, UP, RIGHT' if you've verified each step is WALKABLE in the movement preview and map.]
 
-🚨 PATHFINDING RULES:
-1. **SINGLE STEP FIRST**: Always prefer single actions (UP, DOWN, LEFT, RIGHT, A, B) unless you're 100% certain about multi-step paths
-2. **CHECK EVERY STEP**: Before chaining movements, verify EACH step in your sequence using the MOVEMENT PREVIEW and map
-3. **BLOCKED = STOP**: If ANY step shows BLOCKED in the movement preview, the entire sequence will fail
-4. **NO BLIND CHAINS**: Never chain movements through areas you can't see or verify as walkable
-5. **PERFORM PATHFINDING**: Find a path to a target location (X',Y') from the player position (X,Y) on the map. DO NOT TRAVERSE THROUGH OBSTACLES (#) -- it will not work.
-
-💡 SMART MOVEMENT STRATEGY:
-- Use MOVEMENT PREVIEW to see exactly what happens with each direction
-- If your target requires multiple steps, plan ONE step at a time
-- Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
-- When stuck, try a different direction rather than repeating the same blocked move
-
-EXAMPLE - DON'T DO THIS:
-❌ "I want to go right 5 tiles" → "RIGHT, RIGHT, RIGHT, RIGHT, RIGHT" (may hit wall on step 2!)
-
-EXAMPLE - DO THIS INSTEAD:
-✅ Check movement preview → "RIGHT shows (X+1,Y) WALKABLE" → "RIGHT" (single safe step)
-✅ Next turn, check again → "RIGHT shows (X+2,Y) WALKABLE" → "RIGHT" (another safe step)
-
-💡 SMART NAVIGATION:
-- Check the VISUAL FRAME for NPCs (people/trainers) before moving - they're not always on the map!
-- Review MOVEMENT MEMORY for locations where you've failed to move before
-- Only explore areas marked with ? (these are confirmed explorable edges)
-- Avoid areas surrounded by # (walls) - they're fully blocked
-- Use doors (D), stairs (S), or walk around obstacles when pathfinding suggests it
-
-💡 NPC & OBSTACLE HANDLING:
-- If you see NPCs in the image, avoid walking into them or interact with A/B if needed
-- If a movement fails (coordinates don't change), that location likely has an NPC or obstacle
-- Use your MOVEMENT MEMORY to remember problem areas and plan around them
-- NPCs can trigger battles or dialogue, which may be useful for objectives
-
+{pathfinding_rules}
 
 Context: {context} | Coords: {coords} """
             
@@ -687,7 +772,7 @@ Context: {context} | Coords: {coords} """
                 return "WAIT"
             
             # Extract action(s) from structured response
-            actions, reasoning = self._parse_structured_response(response)
+            actions, reasoning = self._parse_structured_response(response, game_state)
             
             # Check for failed movement by comparing previous coordinates
             if len(self.state.history) > 0:
@@ -765,10 +850,10 @@ Context: {context} | Coords: {coords} """
         except Exception as e:
             logger.warning(f"Error updating server metrics: {e}")
     
-    def _parse_actions(self, response: str) -> List[str]:
+    def _parse_actions(self, response: str, game_state: Dict[str, Any] = None) -> List[str]:
         """Parse action response from LLM into list of valid actions"""
         response_upper = response.upper().strip()
-        valid_actions = ['A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT']
+        valid_actions = ['A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'WAIT']
         
         # Parse multiple actions (could be comma or space separated)
         actions_found = []
@@ -778,11 +863,23 @@ Context: {context} | Coords: {coords} """
         
         for token in tokens:
             if token in valid_actions:
-                # Skip if this token appears to be part of a section header
-                # (i.e., preceded by other letters without space)
                 actions_found.append(token)
                 if len(actions_found) >= 10:  # Max 10 actions
                     break
+        
+        # Validate movement sequences if we have game state
+        if game_state and len(actions_found) > 1:
+            # Check if this is a movement sequence
+            movement_actions = [a for a in actions_found if a in ['UP', 'DOWN', 'LEFT', 'RIGHT']]
+            if movement_actions:
+                # Validate the movement sequence
+                is_valid, reason = self.validate_movement_sequence(movement_actions, game_state)
+                if not is_valid:
+                    logger.warning(f"Movement sequence validation failed: {reason}")
+                    # Only take the first movement if sequence is invalid
+                    if movement_actions:
+                        actions_found = [movement_actions[0]]
+                        logger.info(f"Reduced to single movement: {actions_found[0]}")
         
         # If no valid actions found, use default
         if not actions_found:
@@ -810,7 +907,7 @@ Context: {context} | Coords: {coords} """
         
         return "\n".join(lines)
     
-    def _parse_structured_response(self, response: str) -> Tuple[List[str], str]:
+    def _parse_structured_response(self, response: str, game_state: Dict[str, Any] = None) -> Tuple[List[str], str]:
         """Parse structured chain-of-thought response and extract actions and reasoning"""
         try:
             # Extract sections from structured response
@@ -845,7 +942,7 @@ Context: {context} | Coords: {coords} """
                     # Extract actions from this line
                     action_text = line[7:].strip()  # Remove "ACTION:" prefix
                     if action_text:  # Only parse if there's content
-                        actions = self._parse_actions(action_text)
+                        actions = self._parse_actions(action_text, game_state)
                 elif line and current_section:
                     # Continue content of current section
                     if current_section == 'analysis':
@@ -859,7 +956,7 @@ Context: {context} | Coords: {coords} """
                     elif current_section == 'action':
                         # Additional action parsing from action section content
                         if line.strip():  # Only process non-empty lines
-                            additional_actions = self._parse_actions(line)
+                            additional_actions = self._parse_actions(line, game_state)
                             actions.extend(additional_actions)
                             if len(actions) >= 10:  # Max 10 actions
                                 actions = actions[:10]
@@ -871,7 +968,7 @@ Context: {context} | Coords: {coords} """
             
             # If no actions found in structured format, fall back to parsing entire response
             if not actions:
-                actions = self._parse_actions(response)
+                actions = self._parse_actions(response, game_state)
             
             # Create concise reasoning summary
             reasoning_parts = []
@@ -891,7 +988,7 @@ Context: {context} | Coords: {coords} """
         except Exception as e:
             logger.warning(f"Error parsing structured response: {e}")
             # Fall back to basic action parsing
-            return self._parse_actions(response), "Error parsing reasoning"
+            return self._parse_actions(response, game_state), "Error parsing reasoning"
     
     def _process_objectives_from_response(self, objectives_text: str):
         """Process objective management commands from LLM response"""
@@ -1244,6 +1341,95 @@ Context: {context} | Coords: {coords} """
                 memory_lines.append(f"  {memory}")
         
         return "\n".join(memory_lines)
+    
+    def analyze_movement_preview(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze the movement preview data from game state to find valid moves.
+        
+        Returns:
+            Dict with 'walkable_directions', 'blocked_directions', and 'special_tiles'
+        """
+        walkable_directions = []
+        blocked_directions = []
+        special_tiles = {}
+        
+        # Look for movement preview in the formatted state
+        formatted_state = format_state_for_llm(game_state)
+        lines = formatted_state.split('\n')
+        
+        in_movement_preview = False
+        for line in lines:
+            if 'MOVEMENT PREVIEW:' in line:
+                in_movement_preview = True
+                continue
+            
+            if in_movement_preview:
+                # Parse movement preview lines
+                # Format: "  UP   : ( 15, 10) [.] WALKABLE - Optional description"
+                if line.strip() and ':' in line:
+                    parts = line.strip().split(':')
+                    if len(parts) >= 2:
+                        direction = parts[0].strip()
+                        rest = parts[1].strip()
+                        
+                        if direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+                            if 'WALKABLE' in rest:
+                                walkable_directions.append(direction)
+                                # Check for special tiles
+                                if 'Door/Entrance' in rest:
+                                    special_tiles[direction] = 'door'
+                                elif 'Stairs/Warp' in rest:
+                                    special_tiles[direction] = 'stairs'
+                                elif 'Tall grass' in rest:
+                                    special_tiles[direction] = 'grass'
+                                elif 'Jump ledge' in rest and 'can jump' in rest:
+                                    special_tiles[direction] = 'ledge'
+                            elif 'BLOCKED' in rest:
+                                blocked_directions.append(direction)
+                elif not line.strip():
+                    # Empty line typically ends the movement preview section
+                    in_movement_preview = False
+        
+        return {
+            'walkable_directions': walkable_directions,
+            'blocked_directions': blocked_directions,
+            'special_tiles': special_tiles
+        }
+    
+    def validate_movement_sequence(self, movements: List[str], game_state: Dict[str, Any]) -> Tuple[bool, str]:
+        """
+        Validate if a sequence of movements is valid based on current state.
+        
+        Args:
+            movements: List of movement directions
+            game_state: Current game state
+            
+        Returns:
+            Tuple of (is_valid, reason)
+        """
+        if not movements:
+            return True, "No movements to validate"
+        
+        # Analyze current movement options
+        movement_info = self.analyze_movement_preview(game_state)
+        walkable = movement_info['walkable_directions']
+        blocked = movement_info['blocked_directions']
+        
+        # Check first movement
+        first_move = movements[0].upper()
+        if first_move in blocked:
+            return False, f"First movement {first_move} is BLOCKED"
+        
+        if first_move not in walkable and first_move in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+            return False, f"First movement {first_move} is not confirmed WALKABLE"
+        
+        # For multiple movements, only allow if we're very confident
+        if len(movements) > 1:
+            # We can't predict beyond the first move accurately
+            # So we should discourage chaining unless explicitly safe
+            return False, "Cannot validate multi-step movements - use single steps instead"
+        
+        return True, "Movement validated"
 
     def get_history_stats(self) -> Dict[str, int]:
         """Get current history tracking statistics"""

@@ -70,6 +70,16 @@ def format_tile_to_symbol(tile):
         return "="  # Bed
     elif "TABLE" in behavior_name or "CHAIR" in behavior_name:
         return "t"  # Table/Chair
+    elif "CLOCK" in behavior_name:
+        return "O"  # Clock (O for clock face)
+    elif "PICTURE" in behavior_name or "PAINTING" in behavior_name:
+        return "^"  # Picture/Painting on wall
+    elif "TRASH" in behavior_name or "BIN" in behavior_name:
+        return "U"  # Trash can/bin
+    elif "POT" in behavior_name or "VASE" in behavior_name:
+        return "V"  # Pot/Vase
+    elif "MACHINE" in behavior_name or "DEVICE" in behavior_name:
+        return "M"  # Machine/Device
     elif "JUMP" in behavior_name:
         if "SOUTH" in behavior_name:
             return "↓"
@@ -307,7 +317,16 @@ def get_symbol_legend():
         "C": "Counter/Desk",
         "=": "Bed",
         "t": "Table/Chair",
+        "O": "Clock",
+        "^": "Picture/Painting",
+        "U": "Trash can",
+        "V": "Pot/Vase",
+        "M": "Machine/Device",
         "J": "Jump ledge",
+        "↓": "Jump South",
+        "↑": "Jump North",
+        "←": "Jump West",
+        "→": "Jump East",
         "↗": "Jump Northeast",
         "↖": "Jump Northwest", 
         "↘": "Jump Southeast",
@@ -345,8 +364,8 @@ def generate_dynamic_legend(grid):
     player_symbols = ["P"]
     terrain_symbols = [".", "#", "W", "~", "?"] 
     structure_symbols = ["D", "S"]
-    jump_symbols = ["J", "↗", "↖", "↘", "↙"]
-    furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t"]
+    jump_symbols = ["J", "↓", "↑", "←", "→", "↗", "↖", "↘", "↙"]
+    furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t", "O", "^", "U", "V", "M"]
     npc_symbols = ["N", "@"]
     
     categories = [

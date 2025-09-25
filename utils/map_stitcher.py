@@ -342,7 +342,7 @@ class MapStitcher:
             logger.info(f"Added new map area: {final_location_name} (ID: {map_id:04X}) as separate location")
             
         # Check for area transitions and potential warp connections
-        print(f"🔍 Transition check: last_map_id={self.last_map_id}, current_map_id={map_id}, last_pos={self.last_position}, current_pos={player_pos}")
+        # print(f"🔍 Transition check: last_map_id={self.last_map_id}, current_map_id={map_id}, last_pos={self.last_position}, current_pos={player_pos}")
         if self.last_map_id is not None and self.last_map_id != map_id:
             logger.info(f"🔄 Map transition detected! {self.last_map_id} -> {map_id}")
             
@@ -1687,7 +1687,7 @@ class MapStitcher:
                     "last_seen": area.last_seen,
                     "overworld_coords": area.overworld_coords
                 }
-                print(f"🗺️ DEBUG: Saving area {map_id} with overworld_coords = {area.overworld_coords}")
+            # print( Saving area {map_id} with overworld_coords = {area.overworld_coords}")
                 map_stitcher_data["map_areas"][str(map_id)] = area_data
             
             # Convert connections to serializable format
