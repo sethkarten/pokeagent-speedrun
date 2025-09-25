@@ -32,7 +32,7 @@ def display_comprehensive_state(emulator):
         
         # Show additional debug info
         print("\n" + "="*80)
-        print("ADDITIONAL DEBUG INFO")
+        # print("ADDITIONAL DEBUG INFO")
         print("="*80)
         
         # Show raw game state
@@ -149,7 +149,7 @@ def display_map_visualization(emulator):
 def show_debug_menu():
     """Display the debug menu with available commands"""
     print("\n" + "="*50)
-    print("DEBUG MENU")
+    # print("DEBUG MENU")
     print("="*50)
     print("M       - Display comprehensive state (LLM view)")
     print("Shift+M - Display map visualization")

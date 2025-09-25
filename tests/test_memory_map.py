@@ -311,7 +311,7 @@ def test_upstairs_state_map_reading(emulator):
     assert isinstance(center_behavior, MetatileBehavior), "Tile behavior should be MetatileBehavior enum"
     
     # Print detailed information for debugging
-    print(f"\n=== UPSTAIRS STATE DEBUG INFO ===")
+    # print(f"\n=== UPSTAIRS STATE DEBUG INFO ===")
     print(f"Map dimensions: {width}x{height}")
     print(f"Center tile: {center_tile}")
     print(f"Center behavior: {center_behavior}")
@@ -396,7 +396,7 @@ def test_upstairs_state_map_reading(emulator):
         f.write(formatted_map)
     
     print(f"\nMap data saved to {truth_path}")
-    print("=== END UPSTAIRS STATE DEBUG INFO ===\n")
+    # print("=== END UPSTAIRS STATE DEBUG INFO ===\n")
 
 def test_map_reading_area_transitions(emulator):
     """Test that map reading handles area transitions and new saves correctly"""
@@ -473,7 +473,7 @@ def test_simple_test_state_map_reading(emulator):
     assert len(center_tile) == 4, "Tile data should contain metatile ID, behavior, x, and y coordinates"
     
     # Print detailed information for debugging
-    print(f"\n=== SIMPLE TEST STATE DEBUG INFO ===")
+    # print(f"\n=== SIMPLE TEST STATE DEBUG INFO ===")
     print(f"Map dimensions: {width}x{height}")
     print(f"Center tile: {center_tile}")
     print(f"Center behavior: {center_tile[1]}")
@@ -569,7 +569,7 @@ def test_simple_test_state_map_reading(emulator):
         f.write(formatted_map)
     
     print(f"\nMap data saved to {truth_path}")
-    print("=== END SIMPLE TEST STATE DEBUG INFO ===\n")
+    # print("=== END SIMPLE TEST STATE DEBUG INFO ===\n")
     
     # Simple test state is actually outdoors in tall grass, so it should have outdoor characteristics
     assert normal_tiles > 0 or wall_tiles > 0, "Simple test state should have normal walkable tiles or walls"

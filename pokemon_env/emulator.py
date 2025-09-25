@@ -645,7 +645,7 @@ class EmeraldEmulator:
                 
                 # Load corresponding milestones for this state
                 if path:
-                    print(f"🗺️ DEBUG: Loading state from path: {path}")
+            # print( Loading state from path: {path}")
                     # Copy state files to cache first
                     self._copy_state_files_to_cache(path)
                     # Load milestones from cache file
@@ -661,9 +661,9 @@ class EmeraldEmulator:
                         logger.info(f"Milestones loaded for state {path}")
                     
                     # Load the persistent location grids (contains all map data)
-                    print(f"🗺️ DEBUG: About to call _load_persistent_grids_for_state")
+            # print( About to call _load_persistent_grids_for_state")
                     self._load_persistent_grids_for_state(path)
-                    print(f"🗺️ DEBUG: Completed _load_persistent_grids_for_state")
+            # print( Completed _load_persistent_grids_for_state")
         except Exception as e:
             logger.error(f"Failed to load state: {e}")
 
@@ -717,7 +717,7 @@ class EmeraldEmulator:
     def _load_persistent_grids_for_state(self, state_filename: str):
         """Load persistent location grids for a specific state file"""
         try:
-            print(f"🗺️ DEBUG: _load_persistent_grids_for_state called with: {state_filename}")
+            # print( _load_persistent_grids_for_state called with: {state_filename}")
             # Get the directory and base name of the state file
             state_dir = os.path.dirname(state_filename)
             base_name = os.path.splitext(os.path.basename(state_filename))[0]
@@ -731,14 +731,14 @@ class EmeraldEmulator:
             else:
                 logger.info(f"No persistent grids file found for state: {grids_filename}")
             
-            # Initialize MapStitcher with cache file 
-            if hasattr(self, 'memory_reader') and self.memory_reader:
-                print(f"🗺️ DEBUG: About to initialize MapStitcher for state: {state_filename}")
-                # Use cache file instead of state-specific file
-                self.memory_reader.update_map_stitcher_save_file(state_filename, is_cache_file=True)
-                print(f"🗺️ DEBUG: MapStitcher initialization completed for state: {state_filename}")
-            else:
-                print(f"🗺️ DEBUG: No memory_reader available, cannot initialize MapStitcher")
+            # # Initialize MapStitcher with cache file 
+            # if hasattr(self, 'memory_reader') and self.memory_reader:
+            # # print( About to initialize MapStitcher for state: {state_filename}")
+            #     # Use cache file instead of state-specific file
+            #     self.memory_reader.update_map_stitcher_save_file(state_filename, is_cache_file=True)
+            # # print( MapStitcher initialization completed for state: {state_filename}")
+            # else:
+            # # print( No memory_reader available, cannot initialize MapStitcher")
             
         except Exception as e:
             logger.error(f"Error loading persistent grids for state: {e}")
@@ -762,21 +762,21 @@ class EmeraldEmulator:
             # Check if the file has content
             if os.path.getsize(state_map_stitcher_file) > 0:
                 shutil.copy2(state_map_stitcher_file, cache_map_stitcher_file)
-                print(f"🗺️ DEBUG: Copied map stitcher from {state_map_stitcher_file} to {cache_map_stitcher_file}")
+            # print( Copied map stitcher from {state_map_stitcher_file} to {cache_map_stitcher_file}")
             else:
                 # Create a valid empty JSON structure for fresh start
                 import json
                 empty_data = {"map_areas": {}, "location_connections": {}}
                 with open(cache_map_stitcher_file, 'w') as f:
                     json.dump(empty_data, f, indent=2)
-                print(f"🗺️ DEBUG: State file empty, created fresh map stitcher cache")
+            # print( State file empty, created fresh map stitcher cache")
         else:
             # Create a valid empty JSON structure for fresh start  
             import json
             empty_data = {"map_areas": {}, "location_connections": {}}
             with open(cache_map_stitcher_file, 'w') as f:
                 json.dump(empty_data, f, indent=2)
-            print(f"🗺️ DEBUG: No state file found, created fresh map stitcher cache")
+            # print( No state file found, created fresh map stitcher cache")
         
         # Copy milestones file to main directory (not cache, as requested)
         state_milestones_file = os.path.join(state_dir, f"{base_name}_milestones.json")
@@ -784,9 +784,9 @@ class EmeraldEmulator:
         
         if os.path.exists(state_milestones_file):
             shutil.copy2(state_milestones_file, cache_milestones_file)
-            print(f"🗺️ DEBUG: Copied milestones from {state_milestones_file} to {cache_milestones_file}")
-        else:
-            print(f"🗺️ DEBUG: No state-specific milestones file found: {state_milestones_file}")
+        #     # print( Copied milestones from {state_milestones_file} to {cache_milestones_file}")
+        # else:
+        #     # print( No state-specific milestones file found: {state_milestones_file}")
     
     def start_frame_capture(self, fps: int = 30):
         """Start asynchronous frame capture"""
@@ -1100,7 +1100,7 @@ class EmeraldEmulator:
         try:
             # Debug: Show current state
             location = game_state.get("player", {}).get("location", "Unknown")
-            print(f"🔍 Checking milestones for location: {location}")
+            # print(f"🔍 Checking milestones for location: {location}")
             # Only check milestones that aren't already completed
             milestones_to_check = [
                 # Phase 1: Game Initialization  
@@ -1132,16 +1132,6 @@ class EmeraldEmulator:
                     if self._check_milestone_condition(milestone_id, game_state):
                         print(f"🎯 Milestone detected: {milestone_id}")
                         self.milestone_tracker.mark_completed(milestone_id)
-                    else:
-                        # Debug: Log why condition failed for key milestones
-                        if milestone_id in ["INTRO_CUTSCENE_COMPLETE", "PLAYER_NAME_SET", "LITTLEROOT_TOWN"]:
-                            location = game_state.get("player", {}).get("location", "")
-                            print(f"❌ {milestone_id} condition not met (location: {location})")
-                else:
-                    # Debug: Log already completed milestones
-                    if milestone_id in ["INTRO_CUTSCENE_COMPLETE", "PLAYER_NAME_SET", "LITTLEROOT_TOWN"]:
-                        print(f"✅ {milestone_id} already completed")
-        
         except Exception as e:
             logger.warning(f"Error checking milestones: {e}")
     
