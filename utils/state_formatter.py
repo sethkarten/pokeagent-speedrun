@@ -224,8 +224,9 @@ def _format_state_summary(state_data):
     
     summary_parts = []
     
-    # Player name
-    if player_data.get('name'):
+    # Player name (don't show during title sequence)
+    player_location = player_data.get('location', '')
+    if player_data.get('name') and player_location != 'TITLE_SEQUENCE':
         summary_parts.append(f"Player: {player_data['name']}")
     
     # Location
@@ -467,8 +468,9 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         # NORMAL MODE: Full state information
         context_parts.append("=== PLAYER INFO ===")
         
-        # Player name and basic info
-        if 'name' in player_data and player_data['name']:
+        # Player name and basic info (don't show during title sequence as it hasn't been set yet)
+        player_location = player_data.get('location', '')
+        if 'name' in player_data and player_data['name'] and player_location != 'TITLE_SEQUENCE':
             context_parts.append(f"Player Name: {player_data['name']}")
         
         # Position information
@@ -610,8 +612,6 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     if not map_info:
         return context_parts
     
-    context_parts.append("\n=== LOCATION & MAP INFO ===")
-    
     # Get location name from player data
     location_name = None
     if player_data and 'location' in player_data and player_data['location']:
@@ -620,6 +620,16 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
             location_name = location.get('map_name', str(location))
         else:
             location_name = str(location)
+    
+    # Special handling for title sequence - don't show map
+    if location_name == 'TITLE_SEQUENCE':
+        context_parts.append("\n=== LOCATION INFO ===")
+        context_parts.append(f"Current Location: {location_name}")
+        context_parts.append("No map available during title sequence")
+        return context_parts
+    
+    context_parts.append("\n=== LOCATION & MAP INFO ===")
+    if location_name:
         context_parts.append(f"Current Location: {location_name}")
     else:
         # Debug: log what we have
@@ -1116,11 +1126,27 @@ def _format_game_state(game_data, state_data=None):
             context_parts.append(f"Text: {dialog_text}")
             # Note: Residual/invisible dialogue text is completely hidden from agent
     
-    if 'game_state' in game_data:
+    # Check if we're in title sequence and override game state
+    player_location = state_data.get('player', {}).get('location', '') if state_data else ''
+    if player_location == 'TITLE_SEQUENCE':
+        context_parts.append(f"Game State: title")
+    elif 'game_state' in game_data:
         context_parts.append(f"Game State: {game_data['game_state']}")
     
-    # Add movement preview for overworld navigation
-    if state_data and not is_in_battle and game_data.get('game_state') == 'overworld':
+    # Get player data from state_data if provided
+    player_data = state_data.get('player', {}) if state_data else {}
+    
+    # Add helpful prompt for title sequence
+    player_location = player_data.get('location', '')
+    if player_location == 'TITLE_SEQUENCE':
+        context_parts.append("")
+        context_parts.append("💡 TIP: Make sure to choose a fun name for your character!")
+        context_parts.append("Be creative and have fun with the naming!")
+    
+    # Add movement preview for overworld navigation (but not during title sequence)
+    if (state_data and not is_in_battle and 
+        game_data.get('game_state') == 'overworld' and 
+        player_location != 'TITLE_SEQUENCE'):
         movement_preview = format_movement_preview_for_llm(state_data)
         if movement_preview:
             context_parts.append("")
@@ -1237,6 +1263,14 @@ def get_movement_preview(state_data):
     center_x = len(raw_tiles[0]) // 2 if raw_tiles and raw_tiles[0] else 7
     center_y = len(raw_tiles) // 2 if raw_tiles else 7
     
+    # Get the tile the player is currently standing on
+    current_tile_symbol = None
+    if (0 <= center_y < len(raw_tiles) and 
+        0 <= center_x < len(raw_tiles[center_y]) and
+        raw_tiles[center_y] and raw_tiles[center_y][center_x]):
+        current_tile = raw_tiles[center_y][center_x]
+        current_tile_symbol = format_tile_to_symbol(current_tile)
+    
     for direction, (dx, dy) in directions.items():
         # Calculate new world coordinates
         new_world_x = current_x + dx
@@ -1267,6 +1301,18 @@ def get_movement_preview(state_data):
                 
                 # Determine if movement is blocked
                 is_blocked = tile_symbol in ['#', 'W']  # Walls and water block movement
+                
+                # SPECIAL CASE: If player is standing on stairs/door, don't block the warp direction
+                # Stairs and doors often require moving in a specific direction to activate
+                if current_tile_symbol in ['S', 'D']:
+                    # When on stairs/doors, typically you need to move forward to activate them
+                    # Don't block any direction when on these tiles to allow proper navigation
+                    # This ensures the agent can properly use warps/doors even if the destination
+                    # tile might normally be considered blocked
+                    if tile_symbol in ['#', 'W']:
+                        # Override the blocking for navigation tiles but KEEP original symbol
+                        is_blocked = False
+                        # DO NOT change tile_symbol - preserve S, D, #, W, etc.
                 
                 # Special handling for jump ledges - they're only walkable in their direction
                 if tile_symbol in ['↓', '↑', '←', '→', '↗', '↖', '↘', '↙']:
@@ -1303,7 +1349,16 @@ def get_movement_preview(state_data):
                         behavior_name = str(behavior)
                     
                     # Create human-readable description
-                    if tile_symbol == '.':
+                    # Check if we're overriding blocking due to being on stairs/door
+                    is_override = current_tile_symbol in ['S', 'D'] and not is_blocked and tile_symbol in ['#', 'W']
+                    
+                    if is_override:
+                        # We're on stairs/door and this normally blocked tile is walkable
+                        if tile_symbol == '#':
+                            tile_description = f"Walkable - Warp/Door exit (normally blocked) (ID: {tile_id})"
+                        elif tile_symbol == 'W':
+                            tile_description = f"Walkable - Warp/Door exit over water (ID: {tile_id})"
+                    elif tile_symbol == '.':
                         tile_description = f"Walkable path (ID: {tile_id})"
                     elif tile_symbol == '#':
                         tile_description = f"BLOCKED - Wall/Obstacle (ID: {tile_id}, {behavior_name})"

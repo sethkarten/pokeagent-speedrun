@@ -1061,10 +1061,15 @@ class PokemonEmeraldReader:
                 party_size = self.read_party_size()
                 if party_size == 0:
                     # But make exception for specific early game sequences
-                    # where party is temporarily 0 (like the moving van)
+                    # where party is temporarily 0 (like the moving van or Littleroot Town)
                     map_id = (map_bank << 8) | map_num
-                    if map_id != 0x1928:  # Not BATTLE_FRONTIER_RANKING_HALL (moving van)
-                        return True
+                    # Allow these maps even with no party:
+                    # 0x1928: BATTLE_FRONTIER_RANKING_HALL (moving van)
+                    # 0x0009: LITTLEROOT_TOWN (post-intro, pre-starter)
+                    # 0x0100-0x0104: Littleroot Town buildings (houses and lab)
+                    if map_id in [0x1928, 0x0009] or (0x0100 <= map_id <= 0x0104):
+                        return False  # Not in title sequence, just early game
+                    return True
             except:
                 pass
                 
