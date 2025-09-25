@@ -35,7 +35,7 @@ def _get_location_connections_from_cache():
                 data = json.load(f)
                 return data.get('location_connections', {})
     except Exception as e:
-        print(f"🗺️ DEBUG: Failed to read location connections from cache: {e}")
+        print(f"Failed to read location connections from cache: {e}")
     return {}
 
 def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
@@ -194,13 +194,6 @@ def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True
     Returns:
         str: Formatted state context for LLM prompts
     """
-    print(f"🗺️ DEBUG: format_state_for_llm received keys: {list(state_data.keys()) if state_data else 'None'}")
-    if state_data and 'location_connections' in state_data:
-        print(f"🗺️ DEBUG: location_connections found in state_data: {state_data['location_connections']}")
-    else:
-        print(f"🗺️ DEBUG: location_connections NOT found in state_data")
-    if state_data and 'portal_connections' in state_data:
-        print(f"🗺️ DEBUG: Portal connections found in format_state_for_llm: {state_data['portal_connections']}")
     return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs)
 
 def format_state_summary(state_data):
@@ -554,11 +547,11 @@ def _get_player_position(player_data):
         return player_data['coordinates']
     elif 'position' in player_data:
         pos = player_data['position']
-        print(f"DEBUG: _get_player_position found position: {pos}, type: {type(pos)}")
+            # print( _get_player_position found position: {pos}, type: {type(pos)}")
         # Check if it's a valid position dict with x,y keys
         if pos and isinstance(pos, dict) and 'x' in pos and 'y' in pos:
             return pos
-        print(f"DEBUG: position invalid - missing x,y or not dict")
+            # print( position invalid - missing x,y or not dict")
     return None
 
 def _get_party_size(party_data):
@@ -631,11 +624,6 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     context_parts.append("\n=== LOCATION & MAP INFO ===")
     if location_name:
         context_parts.append(f"Current Location: {location_name}")
-    else:
-        # Debug: log what we have
-        print(f"DEBUG: No location found. player_data keys: {list(player_data.keys()) if player_data else 'None'}")
-        if player_data:
-            print(f"DEBUG: player_data['location'] = {player_data.get('location', 'KEY_NOT_FOUND')}")
     
     # Also add current map if different
     if 'current_map' in map_info and map_info['current_map'] != location_name:
@@ -675,13 +663,13 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         context_parts.append(map_info['visual_map'])
     elif location_name:
         # Generate map display using MapStitcher
-        print(f"🗺️ DEBUG: Attempting to generate map for location: '{location_name}'")
-        print(f"🗺️ DEBUG: MapStitcher exists: {map_stitcher is not None}")
+            # print( Attempting to generate map for location: '{location_name}'")
+            # print( MapStitcher exists: {map_stitcher is not None}")
         if map_stitcher:
-            print(f"🗺️ DEBUG: MapStitcher has {len(map_stitcher.map_areas)} areas")
+            # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
             for map_id in list(map_stitcher.map_areas.keys())[:3]:
                 area = map_stitcher.map_areas[map_id]
-                print(f"🗺️ DEBUG:   Area {map_id}: '{area.location_name}'")
+                # print(   Area {map_id}: '{area.location_name}'")
         
         map_lines = map_stitcher.generate_location_map_display(
             location_name=location_name,
@@ -691,7 +679,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         )
         
         if map_lines:
-            print(f"🗺️ DEBUG: Generated {len(map_lines)} map lines from MapStitcher")
+            # print( Generated {len(map_lines)} map lines from MapStitcher")
             context_parts.extend(map_lines)
             # Add exploration statistics
             location_grid = map_stitcher.get_location_grid(location_name)
@@ -700,8 +688,9 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
                 context_parts.append("")
                 context_parts.append(f"Total explored: {total_tiles} tiles")
         else:
-            print(f"🗺️ DEBUG: MapStitcher returned empty, falling back to memory tiles")
+            # print( MapStitcher returned empty, falling back to memory tiles")
             # Fallback if MapStitcher doesn't have data for this location - use memory tiles
+            pass
             if 'tiles' in map_info and map_info['tiles']:
                 context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
                 _add_local_map_fallback(context_parts, map_info, include_npcs)
@@ -785,7 +774,7 @@ def clear_persistent_world_map():
         MAP_STITCHER_INSTANCE.map_areas.clear()
         MAP_STITCHER_INSTANCE.warp_connections.clear()
         MAP_STITCHER_INSTANCE.save_to_file()
-        print("🗺️ DEBUG: Cleared map stitcher data")
+            # print( Cleared map stitcher data")
 
 # Helper function removed - now handled by MapStitcher._is_explorable_edge()
 
@@ -837,13 +826,13 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
             # Trigger MapStitcher save if callback is available
             if MAP_STITCHER_SAVE_CALLBACK:
                 try:
-                    print(f"🗺️ DEBUG: Location transition detected, triggering MapStitcher save...")
+                    # print( Location transition detected, triggering MapStitcher save...")
                     MAP_STITCHER_SAVE_CALLBACK()
-                    print(f"🗺️ DEBUG: MapStitcher save completed")
+                    # print( MapStitcher save completed")
                 except Exception as e:
-                    print(f"🗺️ DEBUG: Failed to save via MapStitcher callback: {e}")
+                    print("Failed to save via MapStitcher callback: {e}")
             
-            print(f"🗺️ DEBUG: Location transition: {CURRENT_LOCATION} → {location_name} at position {player_local_pos}")
+            # print( Location transition: {CURRENT_LOCATION} → {location_name} at position {player_local_pos}")
         
         LAST_LOCATION = CURRENT_LOCATION
         CURRENT_LOCATION = location_name
@@ -901,7 +890,7 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
         lines.append("Map data not available")
     
     # Add discovered connection points from our transition tracking
-    print(f"🗺️ DEBUG: Checking portal coordinates for location: {location_name}")
+            # print( Checking portal coordinates for location: {location_name}")
     portal_connections_found = False
     
     # Check location connections from MapStitcher cache first
@@ -915,8 +904,8 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
             lines.append(f"  At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
     
     # Also check MAP_ID_CONNECTIONS if available (from loaded MapStitcher data or HTTP response)
-    print(f"🗺️ DEBUG: About to check MAP_ID_CONNECTIONS...")
-    print(f"🗺️ DEBUG: full_state_data is: {type(full_state_data)} with keys: {list(full_state_data.keys()) if full_state_data else 'None'}")
+            # print( About to check MAP_ID_CONNECTIONS...")
+            # print( full_state_data is: {type(full_state_data)} with keys: {list(full_state_data.keys()) if full_state_data else 'None'}")
     try:
         # Try multiple ways to find MAP_ID_CONNECTIONS
         map_id_connections = None
@@ -925,7 +914,7 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
         # First try location_connections (more accurate), then fall back to portal_connections
         if full_state_data and 'location_connections' in full_state_data:
             location_connections = full_state_data['location_connections']
-            print(f"🗺️ DEBUG: Found location_connections in HTTP response: {location_connections}")
+            # print( Found location_connections in HTTP response: {location_connections}")
             
             # Use the location connections display logic
             if location_name in location_connections:
@@ -935,11 +924,11 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
                     portal_connections_found = True
                 for other_loc, my_coords, their_coords in location_connections[location_name]:
                     lines.append(f"  At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
-                    print(f"🗺️ DEBUG: Added location connection: At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
+            # print( Added location connection: At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
         
         elif full_state_data and 'portal_connections' in full_state_data:
             map_id_connections = full_state_data['portal_connections']
-            print(f"🗺️ DEBUG: Found MAP_ID_CONNECTIONS in HTTP response: {map_id_connections}")
+            # print( Found MAP_ID_CONNECTIONS in HTTP response: {map_id_connections}")
             
             # Get current map ID to find relevant portals
             current_map_id = None
@@ -948,14 +937,14 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
                 if area_id:
                     try:
                         current_map_id = int(area_id, 16) if isinstance(area_id, str) else area_id
-                        print(f"🗺️ DEBUG: Current map ID: {current_map_id}")
+                        # print( Current map ID: {current_map_id}")
                     except ValueError:
-                        print(f"🗺️ DEBUG: Could not parse map ID from: {area_id}")
+                        print("Could not parse map ID from: {area_id}")
             
             # Try to find current map ID by matching current location name
             if not current_map_id:
                 current_location = location_name  # Use the location_name parameter
-                print(f"🗺️ DEBUG: Trying to find map ID for location: {current_location}")
+                # print( Trying to find map ID for location: {current_location}")
                 
                 # Look through server's map data to find current map ID
                 if 'map' in full_state_data:
@@ -963,23 +952,23 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
                     map_location = map_info.get('location_name', '')
                     if map_location:
                         current_location = map_location
-                        print(f"🗺️ DEBUG: Using map location: {current_location}")
+                        # print( Using map location: {current_location}")
                 
                 # Match location with portal connections - try all map IDs
                 for map_id in map_id_connections.keys():
                     # Convert string keys to int if needed
                     try:
                         test_map_id = int(map_id) if isinstance(map_id, str) else map_id
-                        print(f"🗺️ DEBUG: Testing map ID {test_map_id} for location '{current_location}'")
+            # print( Testing map ID {test_map_id} for location '{current_location}'")
                         
                         # For LITTLEROOT TOWN MAYS HOUSE 2F, map_id should be 259
                         if current_location == "LITTLEROOT TOWN MAYS HOUSE 2F" and test_map_id == 259:
                             current_map_id = test_map_id
-                            print(f"🗺️ DEBUG: Found matching map ID: {current_map_id}")
+            # print( Found matching map ID: {current_map_id}")
                             break
                         elif current_location == "LITTLEROOT TOWN MAYS HOUSE 1F" and test_map_id == 258:
                             current_map_id = test_map_id
-                            print(f"🗺️ DEBUG: Found matching map ID: {current_map_id}")
+            # print( Found matching map ID: {current_map_id}")
                             break
                     except (ValueError, TypeError):
                         continue
@@ -996,77 +985,77 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
                     from_pos = conn.get('from_pos', [0, 0])
                     to_pos = conn.get('to_pos', [0, 0])
                     lines.append(f"  At ({from_pos[0]}, {from_pos[1]}) → {to_name} ({to_pos[0]}, {to_pos[1]})")
-                    print(f"🗺️ DEBUG: Added portal: At ({from_pos[0]}, {from_pos[1]}) → {to_name} ({to_pos[0]}, {to_pos[1]})")
+            # print( Added portal: At ({from_pos[0]}, {from_pos[1]}) → {to_name} ({to_pos[0]}, {to_pos[1]})")
                     
         elif stitched_data and 'portal_connections' in stitched_data:
             map_id_connections = stitched_data['portal_connections']
-            print(f"🗺️ DEBUG: Found MAP_ID_CONNECTIONS in stitched_data: {map_id_connections}")
+            # print( Found MAP_ID_CONNECTIONS in stitched_data: {map_id_connections}")
         
         # Method 1: Check current module (fallback)
         if not map_id_connections:
             current_module = sys.modules[__name__]
-            print(f"🗺️ DEBUG: Checking current module for MAP_ID_CONNECTIONS attribute...")
-            print(f"🗺️ DEBUG: hasattr(current_module, 'MAP_ID_CONNECTIONS'): {hasattr(current_module, 'MAP_ID_CONNECTIONS')}")
+            # print( Checking current module for MAP_ID_CONNECTIONS attribute...")
+            # print( hasattr(current_module, 'MAP_ID_CONNECTIONS'): {hasattr(current_module, 'MAP_ID_CONNECTIONS')}")
             if hasattr(current_module, 'MAP_ID_CONNECTIONS') and current_module.MAP_ID_CONNECTIONS:
                 map_id_connections = current_module.MAP_ID_CONNECTIONS
-                print(f"🗺️ DEBUG: Found MAP_ID_CONNECTIONS in current module: {map_id_connections}")
+            # print( Found MAP_ID_CONNECTIONS in current module: {map_id_connections}")
         
         # Method 2: Check global variable (fallback)
         if not map_id_connections:
+            # print( Checking globals for MAP_ID_CONNECTIONS...")
+            # print( 'MAP_ID_CONNECTIONS' in globals(): {'MAP_ID_CONNECTIONS' in globals()}")
             try:
-                print(f"🗺️ DEBUG: Checking globals for MAP_ID_CONNECTIONS...")
-                print(f"🗺️ DEBUG: 'MAP_ID_CONNECTIONS' in globals(): {'MAP_ID_CONNECTIONS' in globals()}")
                 if 'MAP_ID_CONNECTIONS' in globals():
-                    print(f"🗺️ DEBUG: globals()['MAP_ID_CONNECTIONS']: {globals()['MAP_ID_CONNECTIONS']}")
-                if 'MAP_ID_CONNECTIONS' in globals() and globals()['MAP_ID_CONNECTIONS']:
-                    map_id_connections = globals()['MAP_ID_CONNECTIONS']
-                    print(f"🗺️ DEBUG: Found MAP_ID_CONNECTIONS in globals: {map_id_connections}")
+                    # print( globals()['MAP_ID_CONNECTIONS']: {globals()['MAP_ID_CONNECTIONS']}")
+                    if 'MAP_ID_CONNECTIONS' in globals() and globals()['MAP_ID_CONNECTIONS']:
+                        map_id_connections = globals()['MAP_ID_CONNECTIONS']
+                        # print( Found MAP_ID_CONNECTIONS in globals: {map_id_connections}")
             except Exception as e:
-                print(f"🗺️ DEBUG: Error checking globals: {e}")
+                print("Error checking globals: {e}")
         
         # Method 3: Re-import state_formatter and check (fallback)
         if not map_id_connections:
             try:
-                print(f"🗺️ DEBUG: Attempting to re-import state_formatter...")
-                print(f"🗺️ DEBUG: hasattr(sf, 'MAP_ID_CONNECTIONS'): {hasattr(sf, 'MAP_ID_CONNECTIONS')}")
+                # print( Attempting to re-import state_formatter...")
+                # print( hasattr(sf, 'MAP_ID_CONNECTIONS'): {hasattr(sf, 'MAP_ID_CONNECTIONS')}")
                 if hasattr(sf, 'MAP_ID_CONNECTIONS'):
-                    print(f"🗺️ DEBUG: sf.MAP_ID_CONNECTIONS: {sf.MAP_ID_CONNECTIONS}")
-                if hasattr(sf, 'MAP_ID_CONNECTIONS') and sf.MAP_ID_CONNECTIONS:
-                    map_id_connections = sf.MAP_ID_CONNECTIONS
-                    print(f"🗺️ DEBUG: Found MAP_ID_CONNECTIONS in imported module: {map_id_connections}")
+                    # print( sf.MAP_ID_CONNECTIONS: {sf.MAP_ID_CONNECTIONS}")
+                    if hasattr(sf, 'MAP_ID_CONNECTIONS') and sf.MAP_ID_CONNECTIONS:
+                        map_id_connections = sf.MAP_ID_CONNECTIONS
+                        # print( Found MAP_ID_CONNECTIONS in imported module: {map_id_connections}")
             except Exception as e:
-                print(f"🗺️ DEBUG: Error re-importing state_formatter: {e}")
+                print(f" Error re-importing state_formatter: {e}")
         
         if map_id_connections:
-            print(f"🗺️ DEBUG: MAP_ID_CONNECTIONS available with {len(map_id_connections)} maps")
-            print(f"🗺️ DEBUG: Available map IDs: {list(map_id_connections.keys())}")
+            # print( MAP_ID_CONNECTIONS available with {len(map_id_connections)} maps")
+            # print( Available map IDs: {list(map_id_connections.keys())}")
             
             # Get current map ID from stitched data
             current_map_id = None
-            print(f"🗺️ DEBUG: stitched_data structure: {stitched_data}")
+            # print( stitched_data structure: {stitched_data}")
             if stitched_data and stitched_data.get('available'):
                 # Try to get map ID from current area
                 current_area = stitched_data.get('current_area', {})
                 map_id_str = current_area.get('id')
-                print(f"🗺️ DEBUG: Current area ID from stitched_data: {map_id_str}")
-                print(f"🗺️ DEBUG: Full current_area: {current_area}")
+            # print( Current area ID from stitched_data: {map_id_str}")
+            # print( Full current_area: {current_area}")
                 if map_id_str:
                     try:
                         current_map_id = int(map_id_str, 16)  # Convert from hex string
-                        print(f"🗺️ DEBUG: Converted to map ID: {current_map_id}")
+                        print(f" Converted to map ID: {current_map_id}")
                     except ValueError:
-                        print(f"🗺️ DEBUG: Failed to convert map ID: {map_id_str}")
+                        print(f" Failed to convert map ID: {map_id_str}")
                 else:
-                    print(f"🗺️ DEBUG: No map ID found in current_area: {current_area}")
-            else:
-                print(f"🗺️ DEBUG: No stitched_data available or not available")
-                print(f"🗺️ DEBUG: stitched_data type: {type(stitched_data)}")
-                if stitched_data:
-                    print(f"🗺️ DEBUG: stitched_data keys: {list(stitched_data.keys()) if isinstance(stitched_data, dict) else 'not a dict'}")
-                    print(f"🗺️ DEBUG: stitched_data.get('available'): {stitched_data.get('available') if isinstance(stitched_data, dict) else 'N/A'}")
+                    print("No map ID found in current_area: {current_area}")
+            # else:
+            # print( No stitched_data available or not available")
+            # print( stitched_data type: {type(stitched_data)}")
+                # if stitched_data:
+            # print( stitched_data keys: {list(stitched_data.keys()) if isinstance(stitched_data, dict) else 'not a dict'}")
+            # print( stitched_data.get('available'): {stitched_data.get('available') if isinstance(stitched_data, dict) else 'N/A'}")
             
             if current_map_id and current_map_id in map_id_connections:
-                print(f"🗺️ DEBUG: Found connections for map ID {current_map_id}")
+                # print( Found connections for map ID {current_map_id}")
                 if not portal_connections_found:
                     lines.append("")
                     lines.append("Known Portal Coordinates:")
@@ -1077,11 +1066,11 @@ def _build_stitched_world_map(stitched_data, full_state_data=None):
                     to_pos = conn['to_pos']
                     lines.append(f"  At ({from_pos[0]}, {from_pos[1]}) → {to_name} ({to_pos[0]}, {to_pos[1]})")
             else:
-                print(f"🗺️ DEBUG: No connections found for map ID {current_map_id} (available: {list(map_id_connections.keys()) if map_id_connections else 'None'})")
+                print("No connections found for map ID {current_map_id} (available: {list(map_id_connections.keys()) if map_id_connections else 'None'})")
         else:
-            print(f"🗺️ DEBUG: MAP_ID_CONNECTIONS not found in any location")
+            print("MAP_ID_CONNECTIONS not found in any location")
     except Exception as e:
-        print(f"🗺️ DEBUG: Error checking MAP_ID_CONNECTIONS: {e}")
+        print(f" Error checking MAP_ID_CONNECTIONS: {e}")
     
     return lines
 
@@ -1236,7 +1225,7 @@ def get_movement_preview(state_data):
     player_position = _get_player_position(player_data)
     
     if not player_position or 'x' not in player_position or 'y' not in player_position:
-        print(f"DEBUG: Movement preview - No player position. player_position={player_position}")
+        # print( Movement preview - No player position. player_position={player_position}")
         return {}
     
     current_x = int(player_position['x'])
@@ -1247,7 +1236,7 @@ def get_movement_preview(state_data):
     raw_tiles = map_info.get('tiles', [])
     
     if not raw_tiles:
-        print(f"DEBUG: Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
+        # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
     directions = {
@@ -1436,10 +1425,10 @@ def format_movement_preview_for_llm(state_data):
                 # Add brief description for walkable tiles
                 if 'Tall grass' in desc:
                     lines[-1] += " - Tall grass (wild encounters)"
-                elif 'Door' in desc:
-                    lines[-1] += " - Door/Entrance"
                 elif 'Stairs' in desc or 'Warp' in desc:
                     lines[-1] += " - Stairs/Warp"
+                elif 'Door' in desc or 'Entrance' in desc:
+                    lines[-1] += " - Door/Entrance"
                 elif 'Jump ledge' in desc and 'correct direction' in desc:
                     lines[-1] += " - Jump ledge (can jump this way)"
     
