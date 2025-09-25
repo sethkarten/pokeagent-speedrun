@@ -104,8 +104,11 @@ def main():
                        help="VLM backend (openai, gemini, local, openrouter)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
+    parser.add_argument("--scaffold", type=str, default="fourmodule", 
+                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays"],
+                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, or geminiplays")
     parser.add_argument("--simple", action="store_true", 
-                       help="Simple mode: direct frame->action without 4-module architecture")
+                       help="DEPRECATED: Use --scaffold simple instead")
     
     # Operation modes
     parser.add_argument("--headless", action="store_true", 
@@ -150,14 +153,23 @@ def main():
             print("\n⏳ Waiting 3 seconds for manual server startup...")
             time.sleep(3)
         
+        # Handle deprecated --simple flag
+        if args.simple:
+            print("⚠️ --simple is deprecated. Using --scaffold simple")
+            args.scaffold = "simple"
+        
         # Display configuration
         print("\n🤖 Agent Configuration:")
         print(f"   Backend: {args.backend}")
         print(f"   Model: {args.model_name}")
-        if args.simple:
-            print("   Mode: Simple (direct frame->action)")
-        else:
-            print("   Mode: Four-module architecture")
+        scaffold_descriptions = {
+            "fourmodule": "Four-module architecture (Perception→Planning→Memory→Action)",
+            "simple": "Simple mode (direct frame→action)",
+            "react": "ReAct agent (Thought→Action→Observation loop)",
+            "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
+            "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)"
+        }
+        print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
             print("   OCR: Disabled")
         if args.record:
