@@ -20,7 +20,7 @@ from typing import Dict, Any, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from collections import deque
 
-from utils.vlm import VLMClient
+from utils.vlm import VLM
 from utils.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
 from utils.pathfinding import Pathfinder
@@ -86,7 +86,7 @@ class AgentContext:
 class SpecializedAgent:
     """Base class for specialized sub-agents."""
     
-    def __init__(self, name: str, vlm_client: VLMClient):
+    def __init__(self, name: str, vlm_client: VLM):
         self.name = name
         self.vlm_client = vlm_client
         self.logger = logging.getLogger(f"{__name__}.{name}")
@@ -99,7 +99,7 @@ class SpecializedAgent:
 class PathfindingAgent(SpecializedAgent):
     """Specialized agent for navigation and pathfinding."""
     
-    def __init__(self, vlm_client: VLMClient):
+    def __init__(self, vlm_client: VLM):
         super().__init__("pathfinding", vlm_client)
         self.pathfinder = Pathfinder()
     
@@ -115,7 +115,7 @@ And this game state:
 Extract the target location as X,Y coordinates. Reply with just the numbers.
 Format: X,Y"""
         
-        response = self.vlm_client.query(prompt, max_tokens=50, temperature=0.0)
+        response = self.vlm_client.get_text_query(prompt, "pathfinding")
         
         try:
             coords = response.strip().split(',')
@@ -145,6 +145,9 @@ Format: X,Y"""
 class BattleAgent(SpecializedAgent):
     """Specialized agent for battle strategy."""
     
+    def __init__(self, vlm_client: VLM):
+        super().__init__("battle", vlm_client)
+    
     def execute(self, task: str, state: Dict[str, Any], screenshot: Any = None) -> Dict[str, Any]:
         """Execute battle strategy."""
         battle = state.get("in_battle", False)
@@ -165,7 +168,7 @@ Choose the best action:
 
 Reply with just the action and number, e.g., "move 1" or "switch 2"."""
         
-        response = self.vlm_client.query(prompt, max_tokens=50, temperature=0.0)
+        response = self.vlm_client.get_text_query(prompt, "battle")
         
         # Parse response and convert to buttons
         buttons = []
@@ -197,6 +200,9 @@ Reply with just the action and number, e.g., "move 1" or "switch 2"."""
 class PuzzleAgent(SpecializedAgent):
     """Specialized agent for solving puzzles (boulder puzzles, etc.)."""
     
+    def __init__(self, vlm_client: VLM):
+        super().__init__("puzzle", vlm_client)
+    
     def execute(self, task: str, state: Dict[str, Any], screenshot: Any = None) -> Dict[str, Any]:
         """Execute puzzle solving strategy."""
         prompt = f"""You are a puzzle-solving specialist. Analyze this puzzle:
@@ -207,12 +213,10 @@ Current state: {format_state_for_llm(state)[:500]}
 Provide the next 5 moves to progress in solving the puzzle.
 Reply with just the button sequence, e.g., "UP, UP, LEFT, DOWN, A"."""
         
-        response = self.vlm_client.query(
-            prompt, 
-            image=screenshot,
-            max_tokens=100, 
-            temperature=0.1
-        )
+        if screenshot:
+            response = self.vlm_client.get_query(screenshot, prompt, "gemini_plays")
+        else:
+            response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         # Parse button sequence
         buttons = []
@@ -244,7 +248,7 @@ class GeminiPlaysAgent:
     
     def __init__(
         self,
-        vlm_client: Optional[VLMClient] = None,
+        vlm_client: Optional[VLM] = None,
         context_reset_interval: int = 100,
         enable_self_critique: bool = True,
         enable_exploration: bool = True,
@@ -261,7 +265,7 @@ class GeminiPlaysAgent:
             enable_exploration: Enable forced exploration
             verbose: Detailed logging
         """
-        self.vlm_client = vlm_client or VLMClient()
+        self.vlm_client = vlm_client or VLM()
         self.context_reset_interval = context_reset_interval
         self.enable_self_critique = enable_self_critique
         self.enable_exploration = enable_exploration
@@ -401,7 +405,7 @@ The agent appears stuck. Identify:
 
 Be concise and specific."""
         
-        critique = self.vlm_client.query(prompt, max_tokens=200, temperature=0.3)
+        critique = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         if self.verbose:
             print(f"   Self-critique: {critique[:150]}...")
@@ -418,7 +422,7 @@ Provide a sequence of 3-5 button presses to help unstick the agent.
 Reply with just the buttons separated by commas (e.g., "UP, A, LEFT, DOWN, A").
 Valid buttons: A, B, UP, DOWN, LEFT, RIGHT, START, SELECT"""
         
-        response = self.vlm_client.query(prompt, max_tokens=50, temperature=0.3)
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         # Parse button sequence
         buttons_found = False
@@ -439,7 +443,7 @@ Valid buttons: A, B, UP, DOWN, LEFT, RIGHT, START, SELECT"""
         prompt = """The agent needs to explore. Provide a short sequence of 3-4 directional buttons for exploration.
 Reply with just the buttons separated by spaces (e.g., "UP LEFT DOWN RIGHT")."""
         
-        response = self.vlm_client.query(prompt, max_tokens=20, temperature=0.5)
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         for word in response.upper().split():
             if word in ["UP", "DOWN", "LEFT", "RIGHT"]:
@@ -487,7 +491,7 @@ Reply with just the buttons separated by spaces (e.g., "UP LEFT DOWN RIGHT")."""
             self._generate_new_goals(state)
         
         if self.verbose and self.step_count % 20 == 0:
-            print(f"=� Goals:")
+            print(f"=> Goals:")
             print(f"   Primary: {self.primary_goal.description if self.primary_goal else 'None'}")
             print(f"   Secondary: {self.secondary_goal.description if self.secondary_goal else 'None'}")
             print(f"   Tertiary: {self.tertiary_goal.description if self.tertiary_goal else 'None'}")
@@ -526,7 +530,7 @@ Rules:
 - Be specific and measurable
 - Consider what was just completed to avoid repetition"""
 
-        response = self.vlm_client.query(prompt, max_tokens=300, temperature=0.3)
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         # Parse goals from response
         try:
@@ -567,7 +571,7 @@ Rules:
                     )
                     
                 if self.verbose:
-                    print(f"🎯 New goals generated by LLM")
+                    print(f"[GOAL] New goals generated by LLM")
                     
         except (json.JSONDecodeError, KeyError) as e:
             logger.warning(f"Failed to parse goals from LLM response: {e}")
@@ -593,7 +597,7 @@ Current game state:
 
 Has this goal been completed? Reply with just YES or NO."""
 
-        response = self.vlm_client.query(prompt, max_tokens=10, temperature=0.0)
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         return "YES" in response.upper()
     
@@ -647,16 +651,14 @@ Has this goal been completed? Reply with just YES or NO."""
         # Standard decision making
         prompt = self._build_decision_prompt(state)
         
-        response = self.vlm_client.query(
-            prompt=prompt,
-            image=screenshot,
-            max_tokens=150,
-            temperature=0.1
-        )
+        if screenshot:
+            response = self.vlm_client.get_query(screenshot, prompt, "gemini_plays")
+        else:
+            response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         # Log interaction
-        self.llm_logger.log_llm_interaction(
-            module="gemini_plays",
+        self.llm_logger.log_interaction(
+            interaction_type="gemini_plays",
             prompt=prompt,
             response=response
         )
@@ -692,7 +694,10 @@ Do you want to use a meta-tool? Reply with:
 
 Be specific and only use when beneficial."""
 
-        response = self.vlm_client.query(prompt, image=screenshot, max_tokens=200, temperature=0.3)
+        if screenshot:
+            response = self.vlm_client.get_query(screenshot, prompt, "gemini_plays")
+        else:
+            response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         if "DEFINE_AGENT:" in response:
             return self._handle_define_agent(response)
@@ -719,7 +724,7 @@ Created at step {self.step_count}"""
             self.context.custom_agents[agent_name] = agent_def
             
             if self.verbose:
-                print(f"🤖 Created custom agent: {agent_name}")
+                print(f"[BOT] Created custom agent: {agent_name}")
             
             return True
         except:
@@ -746,7 +751,7 @@ Created at step {self.step_count}"""
                 exec(code, safe_globals, exec_result)
                 
                 if self.verbose:
-                    print(f"📜 Executed script (limited scope)")
+                    print(f"[SCRIPT] Executed script (limited scope)")
                 
                 # Convert result to button presses if it's a path
                 if "path" in exec_result and isinstance(exec_result["path"], list):
@@ -769,7 +774,7 @@ Created at step {self.step_count}"""
                 self.context.notepad = self.context.notepad[-20:]
             
             if self.verbose:
-                print(f"📝 Notepad: {text[:50]}...")
+                print(f"[NOTE] Notepad: {text[:50]}...")
             
             return True
         except:
@@ -780,7 +785,7 @@ Created at step {self.step_count}"""
         if self.context.notepad:
             notepad_content = "\n".join(self.context.notepad[-5:])
             if self.verbose:
-                print(f"📖 Reading notepad (last 5 entries)")
+                print(f"[READ] Reading notepad (last 5 entries)")
             # Store in action queue as a special marker
             # The next decision will consider notepad content
             return True
@@ -809,7 +814,10 @@ Available specialized agents:
 Which agent should handle this? Reply with just the number (1, 2, or 3) and a brief task description.
 Format: "NUMBER: task description" """
         
-        response = self.vlm_client.query(prompt, image=screenshot, max_tokens=100, temperature=0.1)
+        if screenshot:
+            response = self.vlm_client.get_query(screenshot, prompt, "gemini_plays")
+        else:
+            response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         # Parse delegation decision
         if "1:" in response or "pathfind" in response.lower():
@@ -857,11 +865,23 @@ Reply with just the button name."""
         """Parse action from response."""
         response = response.upper().strip()
         
-        # Look for valid buttons
+        # Look for valid buttons using word tokenization to avoid substring issues
         valid_buttons = ["A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT", "L", "R"]
         
+        # Tokenize the response (split by spaces, commas, periods, etc.)
+        response_clean = response.replace(',', ' ').replace('.', ' ').replace(';', ' ')
+        tokens = response_clean.split()
+        
+        # Check each token for exact match
+        for token in tokens:
+            if token in valid_buttons:
+                return token
+        
+        # If no exact match found, look for buttons in the text more carefully
+        # This handles cases like "Press START" or "Hit the A button"
         for button in valid_buttons:
-            if button in response:
+            # Check for word boundaries to avoid "A" matching in "START"
+            if f" {button} " in f" {response} " or response.startswith(f"{button} ") or response.endswith(f" {button}"):
                 return button
         
         # Default to exploring if no clear action
@@ -900,7 +920,7 @@ Which direction should you explore? Consider:
 
 Reply with just one button: UP, DOWN, LEFT, or RIGHT"""
         
-        response = self.vlm_client.query(prompt, max_tokens=10, temperature=0.2)
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
         
         # Parse direction
         for direction in ["UP", "DOWN", "LEFT", "RIGHT"]:

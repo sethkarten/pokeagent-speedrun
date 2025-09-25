@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from PIL import Image
 
-from utils.vlm import VLMClient
+from utils.vlm import VLM
 from utils.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
 from utils.pathfinding import Pathfinder
@@ -53,7 +53,7 @@ class ClaudePlaysAgent:
     
     def __init__(
         self,
-        vlm_client: Optional[VLMClient] = None,
+        vlm_client: Optional[VLM] = None,
         max_history: int = 30,
         enable_navigation: bool = False,
         verbose: bool = True
@@ -67,7 +67,7 @@ class ClaudePlaysAgent:
             enable_navigation: Whether to enable navigate_to tool
             verbose: Whether to print detailed action logs
         """
-        self.vlm_client = vlm_client or VLMClient()
+        self.vlm_client = vlm_client or VLM()
         self.max_history = max_history
         self.enable_navigation = enable_navigation
         self.verbose = verbose
@@ -244,16 +244,14 @@ Be strategic in your decisions - consider type advantages in battles, manage you
 Analyze the current game state and decide what action to take next. Use the press_buttons tool to control the game."""
         
         # Query VLM
-        response = self.vlm_client.query(
-            prompt=prompt,
-            image=screenshot,
-            max_tokens=1024,
-            temperature=0.0  # Matching original's deterministic approach
-        )
+        if screenshot:
+            response = self.vlm_client.get_query(screenshot, prompt, "claude_plays")
+        else:
+            response = self.vlm_client.get_text_query(prompt, "claude_plays")
         
         # Log the interaction
-        self.llm_logger.log_llm_interaction(
-            module="claude_plays",
+        self.llm_logger.log_interaction(
+            interaction_type="claude_plays",
             prompt=prompt,
             response=response
         )
@@ -353,7 +351,7 @@ Analyze the current game state and decide what action to take next. Use the pres
             reason = tool_call.parameters.get("reason", "No reason provided")
             
             if self.verbose:
-                print(f"🎮 Tool: press_buttons")
+                print(f"[BUTTON] Tool: press_buttons")
                 print(f"   Buttons: {buttons}")
                 print(f"   Reason: {reason}")
             
@@ -370,7 +368,7 @@ Analyze the current game state and decide what action to take next. Use the pres
             reason = tool_call.parameters.get("reason", "No reason provided")
             
             if self.verbose:
-                print(f"🗺️ Tool: navigate_to")
+                print(f"[MAP] Tool: navigate_to")
                 print(f"   Target: ({target_x}, {target_y})")
                 print(f"   Reason: {reason}")
             
@@ -398,7 +396,7 @@ Analyze the current game state and decide what action to take next. Use the pres
                 self.button_queue.extend(path_buttons)
             else:
                 if self.verbose:
-                    print(f"   ⚠️ No path found to ({target_x}, {target_y})")
+                    print(f"   [WARNING] No path found to ({target_x}, {target_y})")
                     print(f"   Attempting simple movement as fallback")
                 
                 # Fallback to simple movement
@@ -421,7 +419,7 @@ Analyze the current game state and decide what action to take next. Use the pres
     def _summarize_history(self) -> None:
         """Summarize conversation history when it gets too long (matching original)."""
         if self.verbose:
-            print("📚 Summarizing conversation history...")
+            print("[BOOK] Summarizing conversation history...")
         
         # Build summary prompt
         history_text = []
@@ -439,11 +437,7 @@ Analyze the current game state and decide what action to take next. Use the pres
 
 Focus on: current location, recent achievements, current objective, and any problems encountered."""
         
-        summary = self.vlm_client.query(
-            prompt=summary_prompt,
-            max_tokens=200,
-            temperature=0.0
-        )
+        summary = self.vlm_client.get_text_query(summary_prompt, "claude_plays_summary")
         
         self.logger.info(f"History summarized: {summary}")
         

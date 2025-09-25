@@ -15,9 +15,9 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-from utils.vlm import VLMClient
+from utils.vlm import VLM
 from utils.llm_logger import LLMLogger
-from agent.system_prompt import SystemPrompt
+from agent.system_prompt import system_prompt
 
 
 class ActionType(Enum):
@@ -72,7 +72,7 @@ class ReActAgent:
     
     def __init__(
         self,
-        vlm_client: Optional[VLMClient] = None,
+        vlm_client: Optional[VLM] = None,
         max_history_length: int = 20,
         enable_reflection: bool = True,
         verbose: bool = True
@@ -86,7 +86,7 @@ class ReActAgent:
             enable_reflection: Whether to periodically reflect on past actions
             verbose: Whether to print detailed reasoning
         """
-        self.vlm_client = vlm_client or VLMClient()
+        self.vlm_client = vlm_client or VLM()
         self.max_history_length = max_history_length
         self.enable_reflection = enable_reflection
         self.verbose = verbose
@@ -97,7 +97,7 @@ class ReActAgent:
         self.memory: Dict[str, Any] = {}
         
         self.llm_logger = LLMLogger()
-        self.system_prompt = SystemPrompt()
+        self.system_prompt = system_prompt
         
     def think(self, state: Dict[str, Any], screenshot: Any = None) -> Thought:
         """
@@ -112,15 +112,13 @@ class ReActAgent:
         """
         prompt = self._build_thought_prompt(state, screenshot)
         
-        response = self.vlm_client.query(
-            prompt=prompt,
-            image=screenshot,
-            max_tokens=500,
-            temperature=0.7
-        )
+        if screenshot:
+            response = self.vlm_client.get_query(screenshot, prompt, "react")
+        else:
+            response = self.vlm_client.get_text_query(prompt, "react")
         
-        self.llm_logger.log_llm_interaction(
-            module="react_think",
+        self.llm_logger.log_interaction(
+            interaction_type="react_think",
             prompt=prompt,
             response=response
         )
@@ -129,7 +127,7 @@ class ReActAgent:
         thought = self._parse_thought(response)
         
         if self.verbose:
-            print(f"=­ THOUGHT: {thought.content}")
+            print(f"==> THOUGHT: {thought.content}")
             
         return thought
     
@@ -146,14 +144,10 @@ class ReActAgent:
         """
         prompt = self._build_action_prompt(thought, state)
         
-        response = self.vlm_client.query(
-            prompt=prompt,
-            max_tokens=200,
-            temperature=0.3
-        )
+        response = self.vlm_client.get_text_query(prompt, "react")
         
-        self.llm_logger.log_llm_interaction(
-            module="react_act",
+        self.llm_logger.log_interaction(
+            interaction_type="react_act",
             prompt=prompt,
             response=response
         )
@@ -162,7 +156,7 @@ class ReActAgent:
         action = self._parse_action(response)
         
         if self.verbose:
-            print(f"¡ ACTION: {action.type.value} - {action.parameters}")
+            print(f">> ACTION: {action.type.value} - {action.parameters}")
             
         return action
     
@@ -279,7 +273,7 @@ JUSTIFICATION: [Brief explanation of why this action]
 
 Example:
 ACTION_TYPE: press_button
-PARAMETERS: {"button": "A"}
+PARAMETERS: {{"button": "A"}}
 JUSTIFICATION: Interact with the NPC in front of us
 """
         return prompt
@@ -293,6 +287,7 @@ JUSTIFICATION: Interact with the NPC in front of us
         thought_content = response
         
         for line in lines:
+            line = line.strip()  # Strip whitespace from each line
             if line.startswith("REASONING_TYPE:"):
                 reasoning_type = line.split(":", 1)[1].strip()
             elif line.startswith("CONFIDENCE:"):
@@ -318,6 +313,7 @@ JUSTIFICATION: Interact with the NPC in front of us
         justification = ""
         
         for line in lines:
+            line = line.strip()  # Strip whitespace from each line
             if line.startswith("ACTION_TYPE:"):
                 type_str = line.split(":", 1)[1].strip()
                 try:
@@ -439,14 +435,10 @@ Reflect on:
 Provide a brief reflection and any strategy adjustments.
 """
         
-        response = self.vlm_client.query(
-            prompt=reflection_prompt,
-            max_tokens=300,
-            temperature=0.5
-        )
+        response = self.vlm_client.get_text_query(reflection_prompt, "react_reflection")
         
         if self.verbose:
-            print(f"=Ý REFLECTION: {response[:200]}...")
+            print(f"=> REFLECTION: {response[:200]}...")
         
         # Store reflection in memory
         self.memory["last_reflection"] = response

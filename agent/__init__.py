@@ -3,10 +3,10 @@ Agent modules for Pokemon Emerald speedrunning agent
 """
 
 from utils.vlm import VLM
-from .action import action_step
-from .memory import memory_step
-from .perception import perception_step
-from .planning import planning_step
+from .deprecated.action import action_step
+from .deprecated.memory import memory_step
+from .deprecated.perception import perception_step
+from .deprecated.planning import planning_step
 from .simple import SimpleAgent, get_simple_agent, simple_mode_processing_multiprocess, configure_simple_agent_defaults
 from .react import ReActAgent, create_react_agent
 from .claude_plays import ClaudePlaysAgent, create_claude_plays_agent
@@ -50,15 +50,13 @@ class Agent:
             
         elif scaffold == "react":
             # Create ReAct agent
-            from utils.vlm import VLMClient
-            vlm_client = VLMClient(backend=backend, model_name=model_name)
+            vlm_client = VLM(backend=backend, model_name=model_name)
             self.agent_impl = create_react_agent(vlm_client=vlm_client, verbose=True)
             print(f"   Scaffold: ReAct (Thought->Action->Observation)")
             
         elif scaffold == "claudeplays":
             # Create ClaudePlaysPokemon agent
-            from utils.vlm import VLMClient
-            vlm_client = VLMClient(backend=backend, model_name=model_name)
+            vlm_client = VLM(backend=backend, model_name=model_name)
             self.agent_impl = create_claude_plays_agent(
                 vlm_client=vlm_client, 
                 max_history=30,
@@ -69,9 +67,8 @@ class Agent:
             
         elif scaffold == "geminiplays":
             # Create GeminiPlaysPokemon agent
-            from utils.vlm import VLMClient
             from agent.gemini_plays import create_gemini_plays_agent
-            vlm_client = VLMClient(backend=backend, model_name=model_name)
+            vlm_client = VLM(backend=backend, model_name=model_name)
             self.agent_impl = create_gemini_plays_agent(
                 vlm_client=vlm_client,
                 context_reset_interval=100,  # Reset context every 100 turns as per blog
