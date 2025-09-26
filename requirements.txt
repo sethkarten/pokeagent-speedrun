@@ -1,3 +1,7 @@
+# Note: This project uses uv for dependency management.
+# Run `uv sync` to install dependencies instead of pip.
+# This requirements.txt is kept for backwards compatibility.
+
 flask==3.0.2
 flask-socketio==5.3.6
 python-socketio==5.11.1

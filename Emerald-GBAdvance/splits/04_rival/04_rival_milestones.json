@@ -1,0 +1,132 @@
+{
+  "milestones": {
+    "GAME_RUNNING": {
+      "completed": true,
+      "timestamp": 1758408676.0675476,
+      "first_completed": 1758408676.0675476,
+      "split_time": 0.0,
+      "split_formatted": "00:00:00",
+      "total_time": 0.0,
+      "total_formatted": "00:00:00"
+    },
+    "PLAYER_NAME_SET": {
+      "completed": true,
+      "timestamp": 1758408704.600714,
+      "first_completed": 1758408704.600714,
+      "split_time": 28.53316640853882,
+      "split_formatted": "00:00:28",
+      "total_time": 28.53316640853882,
+      "total_formatted": "00:00:28"
+    },
+    "INTRO_CUTSCENE_COMPLETE": {
+      "completed": true,
+      "timestamp": 1758408742.802946,
+      "first_completed": 1758408742.802946,
+      "split_time": 38.202232122421265,
+      "split_formatted": "00:00:38",
+      "total_time": 66.73539853096008,
+      "total_formatted": "00:01:06"
+    },
+    "LITTLEROOT_TOWN": {
+      "completed": true,
+      "timestamp": 1758409258.4749997,
+      "first_completed": 1758409258.4749997,
+      "split_time": 515.6720535755157,
+      "split_formatted": "00:08:35",
+      "total_time": 582.4074521064758,
+      "total_formatted": "00:09:42"
+    },
+    "PLAYER_HOUSE_ENTERED": {
+      "completed": true,
+      "timestamp": 1758409268.3679302,
+      "first_completed": 1758409268.3679302,
+      "split_time": 9.892930507659912,
+      "split_formatted": "00:00:09",
+      "total_time": 592.3003826141357,
+      "total_formatted": "00:09:52"
+    },
+    "PLAYER_BEDROOM": {
+      "completed": true,
+      "timestamp": 1758409278.9026804,
+      "first_completed": 1758409278.9026804,
+      "split_time": 10.53475022315979,
+      "split_formatted": "00:00:10",
+      "total_time": 602.8351328372955,
+      "total_formatted": "00:10:02"
+    },
+    "RIVAL_HOUSE": {
+      "completed": true,
+      "timestamp": 1758409327.9127758,
+      "first_completed": 1758409327.9127758,
+      "split_time": 49.0100953578949,
+      "split_formatted": "00:00:49",
+      "total_time": 651.8452281951904,
+      "total_formatted": "00:10:51"
+    },
+    "RIVAL_BEDROOM": {
+      "completed": true,
+      "timestamp": 1758409343.1683342,
+      "first_completed": 1758409343.1683342,
+      "split_time": 15.255558490753174,
+      "split_formatted": "00:00:15",
+      "total_time": 667.1007866859436,
+      "total_formatted": "00:11:07"
+    },
+    "ROUTE_101": {
+      "completed": true,
+      "timestamp": 1758519448.3237796,
+      "first_completed": 1758519448.3237796,
+      "split_time": 110105.1554453373,
+      "split_formatted": "30:35:05",
+      "total_time": 110772.25623202324,
+      "total_formatted": "30:46:12"
+    },
+    "STARTER_CHOSEN": {
+      "completed": true,
+      "timestamp": 1758519474.3602147,
+      "first_completed": 1758519474.3602147,
+      "split_time": 26.0364351272583,
+      "split_formatted": "00:00:26",
+      "total_time": 110798.2926671505,
+      "total_formatted": "30:46:38"
+    },
+    "BIRCH_LAB_VISITED": {
+      "completed": true,
+      "timestamp": 1758519520.8319733,
+      "first_completed": 1758519520.8319733,
+      "split_time": 46.47175860404968,
+      "split_formatted": "00:00:46",
+      "total_time": 110844.76442575455,
+      "total_formatted": "30:47:24"
+    },
+    "OLDALE_TOWN": {
+      "completed": true,
+      "timestamp": 1758571462.677185,
+      "first_completed": 1758571462.677185,
+      "split_time": 51941.84521174431,
+      "split_formatted": "14:25:41",
+      "total_time": 162786.60963749886,
+      "total_formatted": "45:13:06"
+    },
+    "ROUTE_103": {
+      "completed": true,
+      "timestamp": 1758571504.1474178,
+      "first_completed": 1758571504.1474178,
+      "split_time": 41.47023272514343,
+      "split_formatted": "00:00:41",
+      "total_time": 162828.079870224,
+      "total_formatted": "45:13:48"
+    },
+    "RECEIVED_POKEDEX": {
+      "completed": true,
+      "timestamp": 1758571504.1482193,
+      "first_completed": 1758571504.1482193,
+      "split_time": 0.0008015632629394531,
+      "split_formatted": "00:00:00",
+      "total_time": 162828.08067178726,
+      "total_formatted": "45:13:48"
+    }
+  },
+  "last_updated": 1758571771.2876244,
+  "version": "1.0"
+}
