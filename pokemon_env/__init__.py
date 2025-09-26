@@ -18,7 +18,7 @@ from .enums import (
 )
 from .types import PokemonData
 
-__version__ = "1.0.0"
+__version__ = "3.0.0-preview"
 __author__ = "Seth Karten"
 
 __all__ = [

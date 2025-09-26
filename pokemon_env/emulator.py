@@ -5,6 +5,8 @@ import queue
 import tempfile
 import json
 import os
+import shutil
+import hashlib
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import numpy as np
@@ -16,6 +18,7 @@ import mgba.image
 from mgba._pylib import ffi, lib
 
 from .memory_reader import PokemonEmeraldReader
+from utils.state_formatter import save_persistent_world_map, load_persistent_world_map
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +27,19 @@ logger = logging.getLogger(__name__)
 class MilestoneTracker:
     """Persistent milestone tracking system integrated with emulator"""
     
-    def __init__(self, filename: str = "milestones_progress.json"):
-        self.filename = filename
+    def __init__(self, filename: str = None):
+        # Setup cache directory
+        self.cache_dir = ".pokeagent_cache"
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # Use cache folder for runtime milestone file
+        if filename is None:
+            filename = os.path.join(self.cache_dir, "milestones_progress.json")
+        self.filename = filename  # Runtime cache file (always in cache directory)
+        self.loaded_state_milestones_file = None  # Track if we loaded from a state-specific file
         self.milestones = {}
+        self.latest_milestone = None
+        self.latest_split_time = "00:00:00"
         # Don't automatically load from file - only load when explicitly requested
     
     def load_from_file(self):
@@ -36,6 +49,23 @@ class MilestoneTracker:
                 with open(self.filename, 'r') as f:
                     data = json.load(f)
                     self.milestones = data.get('milestones', {})
+                
+                # Determine the latest completed milestone based on timestamps
+                latest_timestamp = 0
+                latest_milestone_id = None
+                for milestone_id, milestone_data in self.milestones.items():
+                    if milestone_data.get('completed', False):
+                        timestamp = milestone_data.get('timestamp', 0)
+                        if timestamp > latest_timestamp:
+                            latest_timestamp = timestamp
+                            latest_milestone_id = milestone_id
+                
+                # Set the latest milestone if we found one
+                if latest_milestone_id:
+                    self.latest_milestone = latest_milestone_id
+                    self.latest_split_time = self.milestones[latest_milestone_id].get('split_formatted', '00:00:00')
+                    logger.info(f"Latest milestone from file: {latest_milestone_id}")
+                
                 logger.info(f"Loaded {len(self.milestones)} milestone records from {self.filename}")
             else:
                 logger.info(f"No existing milestone file found, starting fresh")
@@ -59,17 +89,29 @@ class MilestoneTracker:
             logger.warning(f"Error saving milestones to file: {e}")
     
     def mark_completed(self, milestone_id: str, timestamp: float = None):
-        """Mark a milestone as completed"""
+        """Mark a milestone as completed and log split time"""
         if timestamp is None:
             timestamp = time.time()
         
         if milestone_id not in self.milestones or not self.milestones[milestone_id].get('completed', False):
+            # Calculate split time from previous milestone or start
+            split_time = self._calculate_split_time(milestone_id, timestamp)
+            
             self.milestones[milestone_id] = {
                 'completed': True,
                 'timestamp': timestamp,
-                'first_completed': timestamp
+                'first_completed': timestamp,
+                'split_time': split_time,
+                'split_formatted': self._format_time(split_time),
+                'total_time': self._calculate_total_time(timestamp),
+                'total_formatted': self._format_time(self._calculate_total_time(timestamp))
             }
-            logger.info(f"Milestone completed: {milestone_id}")
+            
+            # Store the latest completed milestone for easy access
+            self.latest_milestone = milestone_id
+            self.latest_split_time = self._format_time(split_time)
+            
+            logger.info(f"Milestone completed: {milestone_id} (Split: {self._format_time(split_time)})")
             self.save_to_file()
             return True
         return False
@@ -89,6 +131,116 @@ class MilestoneTracker:
             self.save_to_file()
             logger.info(f"Reset milestone: {milestone_id}")
     
+    def _calculate_split_time(self, milestone_id: str, timestamp: float) -> float:
+        """Calculate split time from previous milestone completion or start"""
+        # Define milestone order for split calculation
+        milestone_order = [
+            # Phase 1: Game Initialization
+            "GAME_RUNNING", "PLAYER_NAME_SET", "INTRO_CUTSCENE_COMPLETE",
+            
+            # Phase 2: Tutorial & Starting Town
+            "LITTLEROOT_TOWN", "PLAYER_HOUSE_ENTERED", "PLAYER_BEDROOM", 
+            "RIVAL_HOUSE", "RIVAL_BEDROOM",
+            
+            # Phase 3: Professor Birch & Starter
+            "ROUTE_101", "STARTER_CHOSEN", "BIRCH_LAB_VISITED",
+            
+            # Phase 4: Rival
+            "OLDALE_TOWN", "ROUTE_103", "RECEIVED_POKEDEX",
+            
+            # Phase 5: Route 102 & Petalburg
+            "ROUTE_102", "PETALBURG_CITY", "DAD_FIRST_MEETING", "GYM_EXPLANATION",
+            
+            # Phase 6: Road to Rustboro City
+            "ROUTE_104_SOUTH", "PETALBURG_WOODS", "TEAM_AQUA_GRUNT_DEFEATED",
+            "ROUTE_104_NORTH", "RUSTBORO_CITY",
+            
+            # Phase 7: First Gym Challenge
+            "RUSTBORO_GYM_ENTERED", "ROXANNE_DEFEATED", "FIRST_GYM_COMPLETE",
+            
+            # Badge milestones (tracked separately)
+            "STONE_BADGE"
+        ]
+        
+        try:
+            # Special case for first milestone - split time is 0
+            if milestone_id == "GAME_RUNNING":
+                return 0.0
+            
+            if milestone_id not in milestone_order:
+                # For unlisted milestones, find the most recent completion
+                latest_timestamp = 0
+                for _, data in self.milestones.items():
+                    if data.get('completed', False) and data.get('timestamp', 0) > latest_timestamp:
+                        latest_timestamp = data.get('timestamp', 0)
+                return timestamp - latest_timestamp if latest_timestamp > 0 else 0.0
+            
+            # Find the previous milestone in the order
+            current_index = milestone_order.index(milestone_id)
+            
+            # Look backwards for the most recent completed milestone
+            for i in range(current_index - 1, -1, -1):
+                prev_milestone = milestone_order[i]
+                if self.is_completed(prev_milestone):
+                    prev_timestamp = self.milestones[prev_milestone].get('timestamp', 0)
+                    return timestamp - prev_timestamp
+            
+            # If no previous milestone found, calculate from start if we have GAME_RUNNING
+            if self.is_completed("GAME_RUNNING"):
+                start_timestamp = self.milestones["GAME_RUNNING"].get('timestamp', 0)
+                return timestamp - start_timestamp
+            
+            # Fallback - no split time available
+            return 0.0
+            
+        except Exception as e:
+            logger.warning(f"Error calculating split time for {milestone_id}: {e}")
+            return 0.0
+    
+    def _format_time(self, seconds: float) -> str:
+        """Format time in HH:MM:SS format"""
+        try:
+            hours = int(seconds // 3600)
+            minutes = int((seconds % 3600) // 60)
+            secs = int(seconds % 60)
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        except:
+            return "00:00:00"
+    
+    def _calculate_total_time(self, timestamp: float) -> float:
+        """Calculate total time from game start"""
+        try:
+            if self.is_completed("GAME_RUNNING"):
+                start_timestamp = self.milestones["GAME_RUNNING"].get('timestamp', timestamp)
+                return timestamp - start_timestamp
+            return 0.0
+        except:
+            return 0.0
+    
+    def get_latest_milestone_info(self) -> tuple:
+        """Get the latest milestone information for submission logging
+        Returns: (milestone_name, split_time_formatted, total_time_formatted)
+        """
+        if self.latest_milestone:
+            milestone_data = self.milestones.get(self.latest_milestone, {})
+            split_formatted = milestone_data.get('split_formatted', '00:00:00')
+            total_formatted = milestone_data.get('total_formatted', '00:00:00')
+            return (self.latest_milestone, split_formatted, total_formatted)
+        return ("NONE", "00:00:00", "00:00:00")
+    
+    def get_all_completed_milestones(self) -> list:
+        """Get a list of all completed milestones with their times"""
+        completed = []
+        for milestone_id, data in self.milestones.items():
+            if data.get('completed', False):
+                completed.append({
+                    'id': milestone_id,
+                    'timestamp': data.get('timestamp', 0),
+                    'split_time': data.get('split_formatted', '00:00:00'),
+                    'total_time': data.get('total_formatted', '00:00:00')
+                })
+        return sorted(completed, key=lambda x: x['timestamp'])
+    
     def reset_all(self):
         """Reset all milestones (for testing)"""
         self.milestones = {}
@@ -100,33 +252,38 @@ class MilestoneTracker:
         if state_filename:
             # If a state filename is provided, try to load milestones from a corresponding file
             # Get the directory and base name of the state file
-            import os
             state_dir = os.path.dirname(state_filename)
             base_name = os.path.splitext(os.path.basename(state_filename))[0]
             milestone_filename = os.path.join(state_dir, f"{base_name}_milestones.json")
             
-            # Update the filename to the state-specific file permanently
-            self.filename = milestone_filename
+            # Track that we loaded from a state-specific file
+            self.loaded_state_milestones_file = milestone_filename
             logger.info(f"Loading milestones from state-specific file: {milestone_filename}")
             
             try:
+                # Temporarily change filename to load from state file
+                original_filename = self.filename
+                self.filename = milestone_filename
                 self.load_from_file()
-                logger.info(f"Loaded {len(self.milestones)} milestones for state {state_filename}")
+                # Restore runtime cache filename (always in main directory)
+                self.filename = original_filename
+                logger.info(f"Loaded {len(self.milestones)} milestones from state {state_filename}")
+                logger.info(f"Runtime milestone cache will be saved to: {self.filename}")
             except FileNotFoundError:
                 logger.info(f"Milestone file not found: {milestone_filename}, starting fresh milestones for this state")
-                # Start with empty milestones for this state, don't fall back to default
+                # Start with empty milestones for this state
                 self.milestones = {}
-                # Save the empty milestone file to establish the state-specific milestone file
-                self.save_to_file()
-                logger.info(f"Created new milestone file: {milestone_filename}")
+                # Don't create the state file, just use runtime cache
+                logger.info(f"Runtime milestone cache will be saved to: {self.filename}")
             except Exception as e:
                 logger.error(f"Error loading milestone file {milestone_filename}: {e}")
                 # Fall back to default milestone file
-                self.filename = "milestones_progress.json"
+                logger.info(f"Using runtime milestone cache: {self.filename}")
                 self.load_from_file()
         else:
-            # No state filename provided, use default milestone file
-            self.filename = "milestones_progress.json"
+            # No state filename provided, use default milestone file in cache
+            self.loaded_state_milestones_file = None
+            self.filename = os.path.join(self.cache_dir, "milestones_progress.json")
             logger.info(f"Loading milestones from default file: {self.filename}")
             self.load_from_file()
     
@@ -135,7 +292,6 @@ class MilestoneTracker:
         if state_filename:
             # If a state filename is provided, save milestones to a corresponding file
             # Get the directory and base name of the state file
-            import os
             state_dir = os.path.dirname(state_filename)
             base_name = os.path.splitext(os.path.basename(state_filename))[0]
             milestone_filename = os.path.join(state_dir, f"{base_name}_milestones.json")
@@ -189,8 +345,12 @@ class EmeraldEmulator:
         # Memory cache for efficient reading
         self._mem_cache = {}
         
-        # Milestone tracker for progress tracking
-        self.milestone_tracker = MilestoneTracker()
+        # Setup cache directory
+        self.cache_dir = ".pokeagent_cache"
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+        # Milestone tracker for progress tracking (using cache file)
+        self.milestone_tracker = MilestoneTracker(os.path.join(self.cache_dir, "milestones_progress.json"))
 
         # Dialog state tracking for FPS adjustment
         self._cached_dialog_state = False
@@ -432,6 +592,9 @@ class EmeraldEmulator:
                 # Save corresponding milestones for this state
                 milestone_filename = self.milestone_tracker.save_milestones_for_state(path)
                 logger.info(f"Milestones saved to {milestone_filename}")
+                
+                # Save the persistent location grids (contains all map data)
+                self._save_persistent_grids_for_state(path)
             
             return data
         except Exception as e:
@@ -457,16 +620,23 @@ class EmeraldEmulator:
                 # Reset dialog tracking and invalidate map cache when loading new state
                 if self.memory_reader:
                     self.memory_reader.reset_dialog_tracking()
-                    self.memory_reader.invalidate_map_cache()
+                    # Don't clear buffer address on state load to avoid expensive rescans
+                    self.memory_reader.invalidate_map_cache(clear_buffer_address=False)
+                    
+                    # Persistent location maps will be loaded from the state file later
                     
                     # Run a frame to ensure memory is properly loaded
                     self.core.run_frame()
                     
-                    # Force finding map buffer addresses after state load
-                    if not self.memory_reader._find_map_buffer_addresses():
-                        logger.warning("Could not find map buffer addresses after state load")
+                    # Only find map buffer addresses if we don't have them cached
+                    # This avoids expensive memory scanning on every state load
+                    if not self.memory_reader._map_buffer_addr:
+                        if not self.memory_reader._find_map_buffer_addresses():
+                            logger.warning("Could not find map buffer addresses after state load")
+                        else:
+                            logger.info(f"Map buffer found at 0x{self.memory_reader._map_buffer_addr:08X}")
                     else:
-                        logger.info(f"Map buffer found at 0x{self.memory_reader._map_buffer_addr:08X}")
+                        logger.debug(f"Using cached map buffer at 0x{self.memory_reader._map_buffer_addr:08X}")
                 
                 # Set the current state file for both emulator and memory reader
                 self._current_state_file = path
@@ -475,11 +645,149 @@ class EmeraldEmulator:
                 
                 # Load corresponding milestones for this state
                 if path:
-                    self.milestone_tracker.load_milestones_for_state(path)
-                    logger.info(f"Milestones loaded for state {path}")
+            # print( Loading state from path: {path}")
+                    # Copy state files to cache first
+                    self._copy_state_files_to_cache(path)
+                    # Load milestones from cache file
+                    cache_milestones_file = os.path.join(self.cache_dir, "milestones_progress.json")
+                    if os.path.exists(cache_milestones_file):
+                        # Update filename and then load
+                        self.milestone_tracker.filename = cache_milestones_file
+                        self.milestone_tracker.load_from_file()
+                        logger.info(f"Milestones loaded from cache file: {cache_milestones_file}")
+                    else:
+                        # Fallback to state-specific file
+                        self.milestone_tracker.load_milestones_for_state(path)
+                        logger.info(f"Milestones loaded for state {path}")
+                    
+                    # Load the persistent location grids (contains all map data)
+            # print( About to call _load_persistent_grids_for_state")
+                    self._load_persistent_grids_for_state(path)
+            # print( Completed _load_persistent_grids_for_state")
         except Exception as e:
             logger.error(f"Failed to load state: {e}")
 
+    def _save_persistent_grids_for_state(self, state_filename: str):
+        """Save persistent location grids for a specific state file"""
+        try:
+            # Get the directory and base name of the state file
+            state_dir = os.path.dirname(state_filename)
+            base_name = os.path.splitext(os.path.basename(state_filename))[0]
+            
+            # Only save grids for non-manual saves (splits, checkpoints, etc.)
+            # For manual saves, we only need the map_stitcher.json
+            if not base_name.startswith("manual_save"):
+                grids_filename = os.path.join(state_dir, f"{base_name}_grids.json")
+                # Save the persistent grids
+                save_persistent_world_map(grids_filename)
+                logger.info(f"Persistent grids saved to {grids_filename}")
+            
+            # Always update and save MapStitcher data
+            if hasattr(self, 'memory_reader') and self.memory_reader:
+                # For manual saves, copy the current map_stitcher.json
+                if base_name.startswith("manual_save"):
+                    # Copy the current map_stitcher_data.json from cache to manual_save_map_stitcher.json
+                    cache_dir = ".pokeagent_cache"
+                    current_stitcher_file = os.path.join(cache_dir, "map_stitcher_data.json")
+                    
+                    # Also check for the old location in case it exists
+                    if not os.path.exists(current_stitcher_file) and os.path.exists("map_stitcher_data.json"):
+                        current_stitcher_file = "map_stitcher_data.json"
+                    
+                    target_stitcher_file = os.path.join(state_dir, f"{base_name}_map_stitcher.json")
+                    
+                    if os.path.exists(current_stitcher_file):
+                        shutil.copy2(current_stitcher_file, target_stitcher_file)
+                        logger.info(f"Map stitcher data copied to {target_stitcher_file}")
+                    
+                    # Also save current milestones
+                    if hasattr(self, 'milestone_tracker'):
+                        milestone_filename = self.milestone_tracker.save_milestones_for_state(state_filename)
+                        logger.info(f"Milestones saved to {milestone_filename}")
+                else:
+                    # For regular saves, update the map stitcher save file path
+                    self.memory_reader.update_map_stitcher_save_file(state_filename)
+                    # Force save the map stitcher data
+                    if self.memory_reader._map_stitcher:
+                        self.memory_reader._map_stitcher.save_to_file()
+            
+        except Exception as e:
+            logger.error(f"Error saving persistent grids for state: {e}")
+    
+    def _load_persistent_grids_for_state(self, state_filename: str):
+        """Load persistent location grids for a specific state file"""
+        try:
+            # print( _load_persistent_grids_for_state called with: {state_filename}")
+            # Get the directory and base name of the state file
+            state_dir = os.path.dirname(state_filename)
+            base_name = os.path.splitext(os.path.basename(state_filename))[0]
+            grids_filename = os.path.join(state_dir, f"{base_name}_grids.json")
+            
+            # Load persistent grids if they exist
+            if os.path.exists(grids_filename):
+                # Load the persistent grids
+                load_persistent_world_map(grids_filename)
+                logger.info(f"Persistent grids loaded from {grids_filename}")
+            else:
+                logger.info(f"No persistent grids file found for state: {grids_filename}")
+            
+            # # Initialize MapStitcher with cache file 
+            # if hasattr(self, 'memory_reader') and self.memory_reader:
+            # # print( About to initialize MapStitcher for state: {state_filename}")
+            #     # Use cache file instead of state-specific file
+            #     self.memory_reader.update_map_stitcher_save_file(state_filename, is_cache_file=True)
+            # # print( MapStitcher initialization completed for state: {state_filename}")
+            # else:
+            # # print( No memory_reader available, cannot initialize MapStitcher")
+            
+        except Exception as e:
+            logger.error(f"Error loading persistent grids for state: {e}")
+    
+    def _copy_state_files_to_cache(self, state_filename: str):
+        """Copy state-specific map stitcher and milestones to cache for working storage"""
+        import os
+        import shutil
+        
+        # Ensure cache directory exists
+        cache_dir = ".pokeagent_cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Copy map stitcher file to cache
+        state_dir = os.path.dirname(state_filename)
+        base_name = os.path.splitext(os.path.basename(state_filename))[0]
+        state_map_stitcher_file = os.path.join(state_dir, f"{base_name}_map_stitcher.json")
+        cache_map_stitcher_file = os.path.join(cache_dir, "map_stitcher_data.json")
+        
+        if os.path.exists(state_map_stitcher_file):
+            # Check if the file has content
+            if os.path.getsize(state_map_stitcher_file) > 0:
+                shutil.copy2(state_map_stitcher_file, cache_map_stitcher_file)
+            # print( Copied map stitcher from {state_map_stitcher_file} to {cache_map_stitcher_file}")
+            else:
+                # Create a valid empty JSON structure for fresh start
+                import json
+                empty_data = {"map_areas": {}, "location_connections": {}}
+                with open(cache_map_stitcher_file, 'w') as f:
+                    json.dump(empty_data, f, indent=2)
+            # print( State file empty, created fresh map stitcher cache")
+        else:
+            # Create a valid empty JSON structure for fresh start  
+            import json
+            empty_data = {"map_areas": {}, "location_connections": {}}
+            with open(cache_map_stitcher_file, 'w') as f:
+                json.dump(empty_data, f, indent=2)
+            # print( No state file found, created fresh map stitcher cache")
+        
+        # Copy milestones file to main directory (not cache, as requested)
+        state_milestones_file = os.path.join(state_dir, f"{base_name}_milestones.json")
+        cache_milestones_file = os.path.join(self.cache_dir, "milestones_progress.json")  # Cache directory as requested
+        
+        if os.path.exists(state_milestones_file):
+            shutil.copy2(state_milestones_file, cache_milestones_file)
+        #     # print( Copied milestones from {state_milestones_file} to {cache_milestones_file}")
+        # else:
+        #     # print( No state-specific milestones file found: {state_milestones_file}")
+    
     def start_frame_capture(self, fps: int = 30):
         """Start asynchronous frame capture"""
         self.running = True
@@ -790,21 +1098,40 @@ class EmeraldEmulator:
     def check_and_update_milestones(self, game_state: Dict[str, Any]):
         """Check current game state and update milestones"""
         try:
+            # Debug: Show current state
+            location = game_state.get("player", {}).get("location", "Unknown")
+            # print(f"🔍 Checking milestones for location: {location}")
             # Only check milestones that aren't already completed
             milestones_to_check = [
-                "GAME_RUNNING", "HAS_PARTY", "LITTLEROOT_TOWN", "STARTER_CHOSEN", 
-                "POKEDEX_RECEIVED", "OLDALE_TOWN", "FIRST_WILD_ENCOUNTER", 
-                "FIRST_POKEMON_CAUGHT", "PETALBURG_CITY", "RUSTBORO_CITY", 
-                "STONE_BADGE", "DEWFORD_TOWN", "KNUCKLE_BADGE", "SLATEPORT_CITY",
-                "MAUVILLE_CITY", "DYNAMO_BADGE", "POKEDEX_5_SEEN", "POKEDEX_10_SEEN",
-                "EARNED_1000_POKEDOLLARS", "PARTY_OF_TWO"
+                # Phase 1: Game Initialization  
+                "GAME_RUNNING", "PLAYER_NAME_SET", "INTRO_CUTSCENE_COMPLETE",
+                
+                # Phase 2: Tutorial & Starting Town
+                "LITTLEROOT_TOWN", "PLAYER_HOUSE_ENTERED", "PLAYER_BEDROOM", 
+                "RIVAL_HOUSE", "RIVAL_BEDROOM",
+                
+                # Phase 3: Professor Birch & Starter
+                "ROUTE_101", "STARTER_CHOSEN", "BIRCH_LAB_VISITED",
+                
+                # Phase 4: Rival
+                "OLDALE_TOWN", "ROUTE_103", "RECEIVED_POKEDEX",
+                
+                # Phase 5: Route 102 & Petalburg
+                "ROUTE_102", "PETALBURG_CITY", "DAD_FIRST_MEETING", "GYM_EXPLANATION",
+                
+                # Phase 6: Road to Rustboro City
+                "ROUTE_104_SOUTH", "PETALBURG_WOODS", "TEAM_AQUA_GRUNT_DEFEATED", 
+                "ROUTE_104_NORTH", "RUSTBORO_CITY",
+                
+                # Phase 7: First Gym Challenge
+                "RUSTBORO_GYM_ENTERED", "ROXANNE_DEFEATED", "FIRST_GYM_COMPLETE"
             ]
             
             for milestone_id in milestones_to_check:
                 if not self.milestone_tracker.is_completed(milestone_id):
                     if self._check_milestone_condition(milestone_id, game_state):
+                        print(f"🎯 Milestone detected: {milestone_id}")
                         self.milestone_tracker.mark_completed(milestone_id)
-        
         except Exception as e:
             logger.warning(f"Error checking milestones: {e}")
     
@@ -826,6 +1153,7 @@ class EmeraldEmulator:
                     location = game_state.get("player", {}).get("location", "")
                     return "LITTLEROOT" in str(location).upper()
                 return False
+
             elif milestone_id == "OLDALE_TOWN":
                 if game_state:
                     # Only count Oldale Town if we've already been to Littleroot Town
@@ -833,16 +1161,6 @@ class EmeraldEmulator:
                         return False
                     location = game_state.get("player", {}).get("location", "")
                     return "OLDALE" in str(location).upper()
-                return False
-            elif milestone_id == "PETALBURG_CITY":
-                if game_state:
-                    # Enforce proper game progression through required towns
-                    if not self.milestone_tracker.is_completed("LITTLEROOT_TOWN"):
-                        return False
-                    if not self.milestone_tracker.is_completed("OLDALE_TOWN"):
-                        return False
-                    location = game_state.get("player", {}).get("location", "")
-                    return "PETALBURG" in str(location).upper()
                 return False
             elif milestone_id == "RUSTBORO_CITY":
                 if game_state:
@@ -877,17 +1195,7 @@ class EmeraldEmulator:
                     return "MAUVILLE" in str(location).upper()
                 return False
                 
-            # Pokemon system milestones - check party/pokedex state  
-            elif milestone_id == "STARTER_CHOSEN":
-                if game_state:
-                    party = game_state.get("player", {}).get("party", [])
-                    return len(party) >= 1 and any(p.get("species_name", "").strip() for p in party)
-                return False
-            elif milestone_id == "POKEDEX_RECEIVED":
-                if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 1
-                return False
+
                 
             # Badge milestones - check badge count/list
             elif milestone_id == "STONE_BADGE":
@@ -915,37 +1223,246 @@ class EmeraldEmulator:
                         return badges >= 3
                 return False
                 
-            # Progress-based milestones
-            elif milestone_id == "FIRST_POKEMON_CAUGHT":
+            # Phase 1: Game Initialization milestones
+            elif milestone_id == "INTRO_CUTSCENE_COMPLETE":
                 if game_state:
-                    pokedex_caught = game_state.get("game", {}).get("pokedex_caught", 0)
-                    return (pokedex_caught if isinstance(pokedex_caught, int) else 0) >= 1
+                    location = game_state.get("player", {}).get("location", "")
+                    return "MOVING_VAN" in str(location).upper()
                 return False
-            elif milestone_id == "FIRST_WILD_ENCOUNTER":
+            elif milestone_id == "PLAYER_NAME_SET":
                 if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 2
+                    player_name = game_state.get("player", {}).get("name", "")
+                    # Player name is set if we have a non-empty name that's not the default
+                    return (player_name and 
+                            str(player_name).strip() != "" and 
+                            str(player_name).strip() not in ["", "UNKNOWN", "PLAYER"])
                 return False
-            elif milestone_id == "PARTY_OF_TWO":
+                
+            # Phase 2: Tutorial & Starting Town milestones
+            elif milestone_id == "PLAYER_HOUSE_ENTERED":
+                if game_state:
+                    location = game_state.get("player", {}).get("location", "")
+                    return "LITTLEROOT TOWN BRENDANS HOUSE 1F" in str(location).upper()
+                return False
+            elif milestone_id == "PLAYER_BEDROOM":
+                if game_state:
+                    location = game_state.get("player", {}).get("location", "")
+                    return "LITTLEROOT TOWN BRENDANS HOUSE 2F" in str(location).upper()
+                return False
+            elif milestone_id == "RIVAL_HOUSE":
+                if game_state:
+                    location = game_state.get("player", {}).get("location", "")
+                    return "LITTLEROOT TOWN MAYS HOUSE 1F" in str(location).upper()
+                return False
+            elif milestone_id == "RIVAL_BEDROOM":
+                if game_state:
+                    location = game_state.get("player", {}).get("location", "")
+                    return "LITTLEROOT TOWN MAYS HOUSE 2F" in str(location).upper()
+                return False
+                
+            # Phase 3: Professor Birch & Starter milestones
+            elif milestone_id == "ROUTE_101":
+                if game_state:
+                    location = game_state.get("player", {}).get("location", "")
+                    return "ROUTE_101" in str(location).upper() or "ROUTE 101" in str(location).upper()
+                return False
+            elif milestone_id == "STARTER_CHOSEN":
                 if game_state:
                     party = game_state.get("player", {}).get("party", [])
-                    valid_pokemon = [p for p in party if p.get("species_name", "").strip() and p.get("species_name", "").strip() != "NONE"]
-                    return len(valid_pokemon) >= 2
+                    return len(party) >= 1 and any(p.get("species_name", "").strip() for p in party)
                 return False
-            elif milestone_id == "EARNED_1000_POKEDOLLARS":
+            elif milestone_id == "BIRCH_LAB_VISITED":
                 if game_state:
-                    money = game_state.get("game", {}).get("money", 0)
-                    return (money if isinstance(money, int) else 0) >= 1000
+                    location = game_state.get("player", {}).get("location", "")
+                    return "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" in str(location).upper()
                 return False
-            elif milestone_id == "POKEDEX_5_SEEN":
+                
+            # Phase 4: Early Route Progression milestones
+            elif milestone_id == "ROUTE_103":
                 if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 5
+                    # Only count Route 103 if we've already been to Route 101 and have starter
+                    if not self.milestone_tracker.is_completed("ROUTE_101"):
+                        return False
+                    if not self.milestone_tracker.is_completed("STARTER_CHOSEN"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "ROUTE_103" in str(location).upper() or "ROUTE 103" in str(location).upper()
                 return False
-            elif milestone_id == "POKEDEX_10_SEEN":
+            # elif milestone_id == "RIVAL_BATTLE_1":
+            #     # Check for specific state hash from dialog after the battle (c9086d56)
+            #     if game_state:
+            #         # Create state hash for comparison
+            #         state_str = str(game_state)
+            #         state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+                    
+            #         # Check for battle completion state hash or traditional conditions
+            #         return (state_hash == "c9086d56" or 
+            #                 (self.milestone_tracker.is_completed("ROUTE_103") and
+            #                  self.milestone_tracker.is_completed("STARTER_CHOSEN")))
+            #     return False
+            elif milestone_id == "RECEIVED_POKEDEX":
                 if game_state:
-                    pokedex_seen = game_state.get("game", {}).get("pokedex_seen", 0)
-                    return (pokedex_seen if isinstance(pokedex_seen, int) else 0) >= 10
+                    # Check if we're in Birch's lab AND have completed Route 103
+                    location = game_state.get("player", {}).get("location", "")
+                    return (self.milestone_tracker.is_completed("ROUTE_103") and 
+                            "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" in str(location).upper())
+                return False
+            ## Phase 5: Route 102 & Petalburg
+            elif milestone_id == "ROUTE_102":
+                if game_state:
+                    # Only count Route 102 if we've received Pokedex
+                    if not self.milestone_tracker.is_completed("RECEIVED_POKEDEX"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "ROUTE_102" in str(location).upper() or "ROUTE 102" in str(location).upper()
+                return False
+            elif milestone_id == "PETALBURG_CITY":
+                if game_state:
+                    # Enforce proper game progression through required towns
+                    if not self.milestone_tracker.is_completed("LITTLEROOT_TOWN"):
+                        return False
+                    if not self.milestone_tracker.is_completed("OLDALE_TOWN"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "PETALBURG" in str(location).upper()
+                return False
+            elif milestone_id == "DAD_FIRST_MEETING":
+                # Meeting Dad happens in Petalburg Gym
+                if game_state:
+                    # Must have visited Petalburg City first
+                    if not self.milestone_tracker.is_completed("PETALBURG_CITY"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "PETALBURG CITY GYM" in str(location).upper() or "PETALBURG_CITY_GYM" in str(location).upper()
+                return False
+            elif milestone_id == "GYM_EXPLANATION":
+                # Gym explanation happens after meeting Dad in the gym
+                if game_state:
+                    # Must have met Dad and still be in gym
+                    if not self.milestone_tracker.is_completed("DAD_FIRST_MEETING"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "PETALBURG CITY GYM" in str(location).upper() or "PETALBURG_CITY_GYM" in str(location).upper()
+                return False
+                
+            # Phase 6: Pre-Gym Preparation milestones
+            elif milestone_id == "ROUTE_104_SOUTH":
+                if game_state:
+                    # Only count if we've been to Petalburg
+                    if not self.milestone_tracker.is_completed("PETALBURG_CITY"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "ROUTE_104" in str(location).upper() or "ROUTE 104" in str(location).upper()
+                return False
+            elif milestone_id == "MR_BRINEY_MET":
+                # Assume meeting Mr. Briney happens on Route 104
+                if game_state:
+                    return self.milestone_tracker.is_completed("ROUTE_104_SOUTH")
+                return False
+            elif milestone_id == "PETALBURG_WOODS":
+                if game_state:
+                    # Only count if we've been to Route 104
+                    if not self.milestone_tracker.is_completed("ROUTE_104_SOUTH"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "PETALBURG_WOODS" in str(location).upper() or "PETALBURG WOODS" in str(location).upper()
+                return False
+            elif milestone_id == "TEAM_AQUA_GRUNT_DEFEATED":
+                # Team Aqua grunt defeated at specific location in Petalburg Woods
+                if game_state:
+                    # Must have visited Petalburg Woods
+                    if not self.milestone_tracker.is_completed("PETALBURG_WOODS"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    # Check if in Petalburg Woods and at specific coordinates
+                    if "PETALBURG_WOODS" in str(location).upper() or "PETALBURG WOODS" in str(location).upper():
+                        # Check for Map_18_0B at coords (26,23) or (27,23)
+                        pos = game_state.get("player", {}).get("pos", [])
+                        if len(pos) >= 2:
+                            x, y = pos[0], pos[1]
+                            if y == 23 and x in [26, 27]:
+                                return True
+                    return self.milestone_tracker.is_completed("PETALBURG_WOODS")
+                return False
+            elif milestone_id == "DEVON_GOODS_OBTAINED":
+                # Assume Devon Goods obtained after defeating Team Aqua grunt
+                if game_state:
+                    return self.milestone_tracker.is_completed("TEAM_AQUA_GRUNT_DEFEATED")
+                return False
+                
+            # Phase 8: Rustboro City Approach milestones
+            elif milestone_id == "ROUTE_104_NORTH":
+                if game_state:
+                    # Only count if we've been through Petalburg Woods
+                    if not self.milestone_tracker.is_completed("PETALBURG_WOODS"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return (("ROUTE_104" in str(location).upper() or "ROUTE 104" in str(location).upper()) and 
+                            self.milestone_tracker.is_completed("DEVON_GOODS_OBTAINED"))
+                return False
+            elif milestone_id == "DEVON_CORP_VISITED":
+                if game_state:
+                    location = game_state.get("player", {}).get("location", "")
+                    return ("DEVON" in str(location).upper() and 
+                            self.milestone_tracker.is_completed("RUSTBORO_CITY"))
+                return False
+            elif milestone_id == "DEVON_GOODS_DELIVERED":
+                # Assume goods delivered after visiting Devon Corp
+                if game_state:
+                    return self.milestone_tracker.is_completed("DEVON_CORP_VISITED")
+                return False
+            elif milestone_id == "LETTER_RECEIVED":
+                # Assume letter received after delivering goods
+                if game_state:
+                    return self.milestone_tracker.is_completed("DEVON_GOODS_DELIVERED")
+                return False
+            elif milestone_id == "POKEBALLS_PURCHASED":
+                # Assume Pokeballs purchased in Rustboro City
+                if game_state:
+                    return self.milestone_tracker.is_completed("RUSTBORO_CITY")
+                return False
+                
+            # Phase 9: Gym Preparation milestones
+            elif milestone_id == "RUSTBORO_GYM_ENTERED":
+                if game_state:
+                    # Must have visited Rustboro City first
+                    if not self.milestone_tracker.is_completed("RUSTBORO_CITY"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    return "RUSTBORO_GYM" in str(location).upper() or "RUSTBORO CITY GYM" in str(location).upper()
+                return False
+            elif milestone_id == "GYM_TRAINERS_DEFEATED":
+                # Assume gym trainers defeated after entering gym
+                if game_state:
+                    return self.milestone_tracker.is_completed("RUSTBORO_GYM_ENTERED")
+                return False
+            elif milestone_id == "ROXANNE_BATTLE_STARTED":
+                # Assume Roxanne battle started after defeating gym trainers
+                if game_state:
+                    return self.milestone_tracker.is_completed("GYM_TRAINERS_DEFEATED")
+                return False
+                
+            # Phase 10: First Gym Victory milestones
+            elif milestone_id == "ROXANNE_DEFEATED":
+                # Roxanne defeated when Stone Badge is obtained
+                if game_state:
+                    # Must have Stone Badge
+                    return self.milestone_tracker.is_completed("STONE_BADGE")
+                return False
+            elif milestone_id == "TM_ROCK_TOMB_RECEIVED":
+                # Assume TM received after defeating Roxanne
+                if game_state:
+                    return self.milestone_tracker.is_completed("ROXANNE_DEFEATED")
+                return False
+            elif milestone_id == "FIRST_GYM_COMPLETE":
+                # Complete after getting Stone Badge and exiting gym
+                if game_state:
+                    # Must have Stone Badge and not be in gym
+                    if not self.milestone_tracker.is_completed("STONE_BADGE"):
+                        return False
+                    location = game_state.get("player", {}).get("location", "")
+                    # Not in any gym
+                    return "GYM" not in str(location).upper()
                 return False
                 
             return False

@@ -1,9 +1,8 @@
-import json
 import logging
 from collections import deque
-from utils.vlm import VLM
-from utils.state_formatter import format_state_summary, get_party_health_summary
 from agent.system_prompt import system_prompt
+from utils.state_formatter import format_state_summary, get_party_health_summary
+from utils.vlm import VLM
 
 # Set up module logging
 logger = logging.getLogger(__name__)

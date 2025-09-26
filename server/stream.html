@@ -2,7 +2,6 @@
 <html>
 <head>
     <title>PokeAgent Challenge - Speedrun</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
         
@@ -153,7 +152,6 @@
         .milestone-progress-fill {
             height: 100%;
             background-color: #33ff33;
-            transition: width 0.3s ease;
         }
         
         .milestone-count {
@@ -266,6 +264,47 @@
             float: none;
         }
 
+        /* Streaming-specific styles */
+        .llm-entry.streaming {
+            border-left: 3px solid #ffa500;
+            background-color: rgba(255, 165, 0, 0.1);
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+
+        .llm-entry.complete {
+            border-left: 3px solid #00ff00;
+            background-color: rgba(0, 255, 0, 0.05);
+            padding: 8px;
+            margin-bottom: 8px;
+        }
+
+        .llm-message {
+            color: #ddd;
+            margin: 5px 0;
+        }
+
+        .llm-meta {
+            color: #888;
+            font-size: 12px;
+            font-style: italic;
+            margin-top: 5px;
+        }
+
+        .status-message {
+            color: #ffa500;
+            font-style: italic;
+            text-align: center;
+            padding: 10px;
+        }
+
+        .error-message {
+            color: #ff6b6b;
+            font-style: italic;
+            text-align: center;
+            padding: 10px;
+        }
+
         .llm-message {
             color: #33ff33;
             word-wrap: break-word;
@@ -294,24 +333,11 @@
             font-family: 'VT323', monospace;
             font-size: 12px;
             border-radius: 0;
-            transition: all 0.3s ease;
         }
 
         .action-button.newest {
             border-color: #ff6177;
             box-shadow: 0 0 10px #ff6177;
-            animation: buttonGlow 0.5s ease-out;
-        }
-
-        @keyframes buttonGlow {
-            0% { 
-                box-shadow: 0 0 15px #33ff33;
-                transform: scale(1.1);
-            }
-            100% { 
-                box-shadow: 0 0 5px #33ff33;
-                transform: scale(1);
-            }
         }
         
         .game-state {
@@ -371,7 +397,6 @@
         .hp-fill {
             height: 100%;
             background-color: #33ff33;
-            transition: width 0.3s ease;
         }
 
         .hp-fill.low {
@@ -414,22 +439,7 @@
         }
 
         .crt-flicker {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(18, 16, 16, 0.1);
-            opacity: 0;
-            pointer-events: none;
-            z-index: 11;
-            animation: flicker 0.3s infinite;
-        }
-
-        @keyframes flicker {
-            0% { opacity: 0.1; }
-            50% { opacity: 0; }
-            100% { opacity: 0.1; }
+            display: none; /* Disabled for performance */
         }
     </style>
 </head>
@@ -440,6 +450,12 @@
         <div class="header-logo">PokeAgent Challenge //</div>
         <div class="header-title">PROTOCOL_EMERALD // AGENT = PLAYER</div>
         <div style="flex: 1;"></div>
+        <div id="metrics-display" style="color: #33ff33; margin-right: 20px; font-size: 14px;">
+            <span id="cost-metric">Cost: $0.00</span> | 
+            <span id="tokens-metric">0 tokens</span> | 
+            <span id="actions-metric">Actions: 0</span> | 
+            <span id="time-metric">Time: 00:00:00</span>
+        </div>
         <div style="width: 10px; height: 10px; background-color: #33ff33; border-radius: 50%; box-shadow: 0 0 10px #33ff33;"></div>
     </div>
     
@@ -501,44 +517,263 @@
     </div>
     
     <script>
-        // Initialize Socket.IO connection
-        const socket = io('http://127.0.0.1:8000');
+        let isConnected = false;
+        let frameUpdateInterval;
         
-        // WebSocket event handlers
-        socket.on('frame_update', function(data) {
-            document.getElementById('frame').src = `data:image/png;base64,${data.frame}`;
-        });
+        // Detect server address dynamically
+        const serverUrl = `http://${window.location.hostname}:${window.location.port || '8000'}`;
+        const frameServerUrl = `http://${window.location.hostname}:8001`; // Separate frame server
+        console.log(`Using server URL: ${serverUrl}`);
+        console.log(`Using frame server URL: ${frameServerUrl}`);
         
-        socket.on('text_update', function(data) {
-            // Text updates can be logged to console if needed
-            console.log('Text update:', data.text);
-        });
+        // Poll for frame updates using FastAPI with robust error handling
+        let consecutiveErrors = 0;
+        let pollInterval = 25; // Start with 25ms (40 FPS) - better match for 120 FPS emulator
+        const maxInterval = 200; // Max 200ms for faster recovery
+        const maxConsecutiveErrors = 5;
         
-        socket.on('plan_update', function(data) {
-            // Plan updates can be logged to console if needed
-            console.log('Plan update:', data.plan);
-        });
-        
-        socket.on('memory_update', function(data) {
-            // Memory updates can be logged to console if needed
-            console.log('Memory update: Memory refreshed');
-        });
-        
-        // Connection status indicators
-        socket.on('connect', function() {
-            console.log('WebSocket connected');
-            document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#33ff33';
-        });
-        
-        socket.on('disconnect', function() {
-            console.log('WebSocket disconnected');
-            document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
-        });
-
-        // Function to fetch and update agent thinking
-        async function updateAgentThinking() {
+        async function pollFrameUpdate() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/agent');
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+                
+                const response = await fetch(`${frameServerUrl}/frame`, {
+                    signal: controller.signal,
+                    method: 'GET',
+                    cache: 'no-cache'
+                });
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.frame) {
+                        document.getElementById('frame').src = `data:image/png;base64,${data.frame}`;
+                    }
+                    
+                    // Reset error tracking on success
+                    consecutiveErrors = 0;
+                    pollInterval = 25; // Reset to fast polling (40 FPS)
+                    
+                    if (!isConnected) {
+                        isConnected = true;
+                        console.log('FastAPI connected');
+                        document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#33ff33';
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                consecutiveErrors++;
+                
+                // Exponential backoff for polling interval
+                if (consecutiveErrors > 2) {
+                    pollInterval = Math.min(pollInterval * 1.5, maxInterval);
+                    clearInterval(frameUpdateInterval);
+                    frameUpdateInterval = setInterval(pollFrameUpdate, pollInterval);
+                }
+                
+                if (isConnected || consecutiveErrors === 1) {
+                    isConnected = false;
+                    console.log(`FastAPI disconnected (${consecutiveErrors} errors): ${error.message}`);
+                    document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
+                }
+                
+                // Log only every 5th consecutive error to avoid spam
+                if (consecutiveErrors % 5 === 0) {
+                    console.warn(`${consecutiveErrors} consecutive connection errors, polling every ${pollInterval}ms`);
+                }
+            }
+        }
+        
+        // Function to format time from seconds to HH:MM:SS
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+        
+        // Track session start time for continuous timer
+        let sessionStartTime = null;
+        let savedRunTime = 0;
+        
+        // Function to update metrics display
+        async function updateMetrics() {
+            try {
+                const response = await fetch(`${serverUrl}/metrics`);
+                if (response.ok) {
+                    const metrics = await response.json();
+                    
+                    // Update cost display
+                    const cost = metrics.total_cost || 0;
+                    document.getElementById('cost-metric').textContent = `Cost: $${cost.toFixed(4)}`;
+                    
+                    // Update tokens display
+                    const tokens = metrics.total_tokens || 0;
+                    document.getElementById('tokens-metric').textContent = `${tokens.toLocaleString()} tokens`;
+                    
+                    // Update actions display
+                    const actions = metrics.total_actions || 0;
+                    document.getElementById('actions-metric').textContent = `Actions: ${actions.toLocaleString()}`;
+                    
+                    // Handle start time - detect fresh start if metrics are all zero
+                    const isNewSession = metrics.total_llm_calls === 0 && metrics.total_actions === 0 && metrics.total_cost === 0;
+                    
+                    if (isNewSession) {
+                        // Fresh start - reset timer and force immediate update
+                        sessionStartTime = null;
+                        savedRunTime = 0;
+                        console.log('Detected fresh session - resetting timer');
+                        
+                        // Force an immediate metrics update in case server cache is stale
+                        setTimeout(() => {
+                            updateMetrics();
+                        }, 500);
+                    } else if (metrics.start_time && !sessionStartTime) {
+                        // Restore from checkpoint or first metrics update
+                        sessionStartTime = metrics.start_time * 1000; // Convert to milliseconds
+                        savedRunTime = metrics.total_run_time || 0;
+                        console.log('Initialized timer from metrics:', {
+                            startTime: metrics.start_time,
+                            savedRunTime: savedRunTime
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Error fetching metrics:', error);
+            }
+        }
+        
+        // Function to update time continuously
+        function updateTime() {
+            if (sessionStartTime) {
+                const currentTime = Date.now();
+                const elapsedSeconds = Math.floor((currentTime - sessionStartTime) / 1000) + savedRunTime;
+                document.getElementById('time-metric').textContent = `Time: ${formatTime(elapsedSeconds)}`;
+            } else {
+                // No session started yet - show 00:00:00
+                document.getElementById('time-metric').textContent = `Time: 00:00:00`;
+            }
+        }
+        
+        // Poll for metrics updates - reduced frequency for better performance  
+        setInterval(updateMetrics, 2000);  // Update metrics every 2 seconds (reduced from 1s)
+        setInterval(updateTime, 500);  // Update timer every 500ms (reduced from 100ms) 
+        updateMetrics();  // Initial metrics load
+        
+        // Start polling every 25ms (40 FPS) to better match 120 FPS emulator
+        frameUpdateInterval = setInterval(pollFrameUpdate, 25);
+        
+        // Initial connection attempt
+        pollFrameUpdate();
+
+        // Streaming agent thinking using Server-Sent Events
+        let streamingSource = null;
+        let currentMessage = null;
+        let isMessageComplete = true;
+        
+        function initializeAgentStreaming() {
+            const agentThinkingDiv = document.getElementById('agent-thinking');
+            
+            // Close existing connection if any
+            if (streamingSource) {
+                streamingSource.close();
+            }
+            
+            // Create new EventSource connection
+            streamingSource = new EventSource(`${serverUrl}/agent_stream`);
+            
+            streamingSource.onopen = function(event) {
+                console.log('Agent streaming connected');
+                agentThinkingDiv.innerHTML = '<div class="status-message">Agent streaming connected...</div>';
+            };
+            
+            streamingSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.error) {
+                        console.error('Streaming error:', data.error);
+                        return;
+                    }
+                    
+                    // Ignore heartbeat messages
+                    if (data.heartbeat) {
+                        return;
+                    }
+                    
+                    // Only process new messages
+                    if (!data.is_new) {
+                        return;
+                    }
+                    
+                    console.log('New agent message received:', data.step);
+                    
+                    // Create new message element
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = 'llm-entry streaming';
+                    messageDiv.innerHTML = `
+                        <div class="llm-step">Step ${data.step}:</div>
+                        <div class="llm-message" id="streaming-message-${data.step}-${Date.now()}"></div>
+                        <div class="llm-meta">${data.type} (${data.duration?.toFixed(2)}s)</div>
+                    `;
+                    
+                    // Add to container
+                    agentThinkingDiv.appendChild(messageDiv);
+                    
+                    // Stream the response text word by word
+                    const messageElement = messageDiv.querySelector('.llm-message');
+                    const responseText = data.response || '';
+                    
+                    // Split text into words while preserving whitespace and punctuation
+                    const words = responseText.split(/(\s+)/).filter(w => w.length > 0);
+                    let wordIndex = 0;
+                    
+                    function typeWord() {
+                        if (wordIndex < words.length) {
+                            messageElement.textContent += words[wordIndex];
+                            wordIndex++;
+                            // Auto-scroll as text appears
+                            agentThinkingDiv.scrollTop = agentThinkingDiv.scrollHeight;
+                            
+                            // Faster typing for better performance (reduced delay)
+                            const delay = words[wordIndex - 1].trim() === '' ? 2 : 10; // 2ms for spaces, 10ms for words (faster)
+                            setTimeout(typeWord, delay);
+                        } else {
+                            // Message complete
+                            messageDiv.classList.remove('streaming');
+                            messageDiv.classList.add('complete');
+                            console.log('Message complete for step:', data.step);
+                        }
+                    }
+                    
+                    typeWord();
+                    
+                } catch (error) {
+                    console.error('Error parsing streaming data:', error);
+                }
+            };
+            
+            streamingSource.onerror = function(event) {
+                console.error('Agent streaming error:', event);
+                agentThinkingDiv.innerHTML = '<div class="error-message">Agent streaming disconnected. Retrying...</div>';
+                
+                // Retry connection after delay
+                setTimeout(() => {
+                    initializeAgentStreaming();
+                }, 5000);
+            };
+        }
+        
+        // Fallback function for non-streaming updates
+        async function updateAgentThinking() {
+            // Only use fallback if streaming is not available
+            if (streamingSource && streamingSource.readyState === EventSource.OPEN) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${serverUrl}/agent`);
                 const data = await response.json();
                 
                 const agentThinkingDiv = document.getElementById('agent-thinking');
@@ -549,14 +784,14 @@
                     data.recent_interactions.forEach((interaction, index) => {
                         // Calculate step number based on current step and interaction index
                         const baseStep = data.current_step || 0;
-                        const stepNumber = baseStep; // - (data.recent_interactions.length - 1 - index);
+                        const stepNumber = baseStep;
                         
                         // Trim whitespace from the response
                         const trimmedResponse = interaction.response.trim();
                         
-                        html += `<div class="llm-entry">
-                            <span class="llm-step">Step ${stepNumber}:</span>
-                            <span class="llm-message">${trimmedResponse}</span>
+                        html += `<div class="llm-entry complete">
+                            <div class="llm-step">Step ${stepNumber}:</div>
+                            <div class="llm-message">${trimmedResponse}</div>
                         </div>`;
                     });
                     agentThinkingDiv.innerHTML = html;
@@ -579,7 +814,7 @@
         
         async function updateRecentActions() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/recent_actions');
+                const response = await fetch(`${serverUrl}/recent_actions`);
                 const data = await response.json();
                 
                 const actionQueue = document.getElementById('action-queue');
@@ -637,7 +872,7 @@
         // Function to fetch and update milestones
         async function updateMilestones() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/milestones');
+                const response = await fetch(`${serverUrl}/milestones`);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
@@ -746,7 +981,7 @@
         // Function to fetch and update party status
         async function updatePartyStatus() {
             try {
-                const response = await fetch('http://127.0.0.1:8000/state');
+                const response = await fetch(`${serverUrl}/state`);
                 const data = await response.json();
                 
                 const partyContainer = document.getElementById('party-status');
@@ -844,37 +1079,24 @@
             }
         }
 
-        // Function to fetch and update the game screenshot
-        async function updateScreenshot() {
-            try {
-                const response = await fetch('http://127.0.0.1:8000/screenshot');
-                const data = await response.json();
-                document.getElementById('frame').src = `data:image/png;base64,${data.screenshot_base64}`;
-            } catch (error) {
-                console.error('Error fetching screenshot:', error);
-            }
-        }
+        // Frame updates are already handled by pollFrameUpdate()
+        // No need for updateScreenshot()
 
-        // Set fast updates for frames
-        setInterval(() => {
-            updateScreenshot();
-        }, 100); // Update every 100ms
+        // Initialize streaming for agent thinking
+        initializeAgentStreaming();
 
-        // Set up periodic updates
+        // Set up periodic updates for other components - optimized frequencies
         setInterval(() => {
-            updateAgentThinking();
             updateRecentActions();
             updatePartyStatus();
-        }, 1000); // Update every 1000ms (reduced from 500ms)
+        }, 2000); // Update every 2 seconds (reduced from 1s)
 
-        // Less frequent updates for milestones
+        // Less frequent updates for milestones  
         setInterval(() => {
             updateMilestones();
-        }, 5000); // Update every 5 seconds (reduced from 2 seconds)
+        }, 10000); // Update every 10 seconds (reduced from 5s)
 
-        // Call the update functions initially
-        updateScreenshot();
-        updateAgentThinking();
+        // Call the update functions initially (except agent thinking which streams)
         updateRecentActions();
         updateMilestones();
         updatePartyStatus();

@@ -1,0 +1,33 @@
+{
+  "milestones": {
+    "GAME_RUNNING": {
+      "completed": true,
+      "timestamp": 1758408676.0675476,
+      "first_completed": 1758408676.0675476,
+      "split_time": 0.0,
+      "split_formatted": "00:00:00",
+      "total_time": 0.0,
+      "total_formatted": "00:00:00"
+    },
+    "PLAYER_NAME_SET": {
+      "completed": true,
+      "timestamp": 1758408704.600714,
+      "first_completed": 1758408704.600714,
+      "split_time": 28.53316640853882,
+      "split_formatted": "00:00:28",
+      "total_time": 28.53316640853882,
+      "total_formatted": "00:00:28"
+    },
+    "INTRO_CUTSCENE_COMPLETE": {
+      "completed": true,
+      "timestamp": 1758408742.802946,
+      "first_completed": 1758408742.802946,
+      "split_time": 38.202232122421265,
+      "split_formatted": "00:00:38",
+      "total_time": 66.73539853096008,
+      "total_formatted": "00:01:06"
+    }
+  },
+  "last_updated": 1758408760.8285835,
+  "version": "1.0"
+}
