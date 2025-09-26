@@ -10,9 +10,33 @@ import json
 import logging
 import numpy as np
 from PIL import Image
-from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend
+from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol
+import base64
+import io
+import os, sys
+from pokemon_env.enums import MetatileBehavior
+from utils import state_formatter as sf
 
 logger = logging.getLogger(__name__)
+
+# Global location tracking - MapStitcher handles all persistent storage
+CURRENT_LOCATION = None
+LAST_LOCATION = None
+LAST_TRANSITION = None  # Stores transition coordinates
+MAP_STITCHER_SAVE_CALLBACK = None  # Callback to save map stitcher when location connections change
+MAP_STITCHER_INSTANCE = None  # Reference to the MapStitcher instance
+
+def _get_location_connections_from_cache():
+    """Read location connections from MapStitcher's cache file"""
+    try:
+        cache_file = '.pokeagent_cache/map_stitcher_data.json'
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                data = json.load(f)
+                return data.get('location_connections', {})
+    except Exception as e:
+        print(f"Failed to read location connections from cache: {e}")
+    return {}
 
 def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
     """
@@ -32,8 +56,6 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
     try:
         # Convert base64 to image if needed
         if screenshot_base64 and not frame_array:
-            import base64
-            import io
             image_data = base64.b64decode(screenshot_base64)
             image = Image.open(io.BytesIO(image_data))
             frame_array = np.array(image)
@@ -140,72 +162,6 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
         logger.warning(f"Failed to detect dialogue on frame: {e}")
         return {'has_dialogue': False, 'confidence': 0.0, 'reason': f'error: {e}'}
 
-def _analyze_npc_terrain(npc, raw_tiles, player_coords):
-    """
-    Analyze what terrain is underneath an NPC position.
-    
-    Args:
-        npc: NPC object with current_x, current_y coordinates
-        raw_tiles: 2D array of tile data
-        player_coords: Player coordinates for grid positioning
-        
-    Returns:
-        str: Description of terrain under NPC, or None if no notable terrain
-    """
-    if not raw_tiles or not player_coords:
-        return None
-    
-    try:
-        # Handle both tuple and dict formats for player_coords
-        if isinstance(player_coords, dict):
-            player_abs_x = player_coords.get('x', 0)
-            player_abs_y = player_coords.get('y', 0)
-        else:
-            player_abs_x, player_abs_y = player_coords
-        
-        # Ensure coordinates are integers
-        player_abs_x = int(player_abs_x) if player_abs_x is not None else 0
-        player_abs_y = int(player_abs_y) if player_abs_y is not None else 0
-        
-        # Get NPC absolute coordinates
-        npc_abs_x = int(npc.get('current_x', 0))
-        npc_abs_y = int(npc.get('current_y', 0))
-        
-        # Calculate offset from player position
-        center_y = len(raw_tiles) // 2
-        center_x = len(raw_tiles[0]) // 2
-        
-        # Calculate grid position
-        offset_x = npc_abs_x - player_abs_x
-        offset_y = npc_abs_y - player_abs_y
-        grid_x = center_x + offset_x
-        grid_y = center_y + offset_y
-        
-        # Check if NPC is within grid bounds
-        if 0 <= grid_y < len(raw_tiles) and 0 <= grid_x < len(raw_tiles[grid_y]):
-            tile = raw_tiles[grid_y][grid_x]
-            from utils.map_formatter import format_tile_to_symbol
-            symbol = format_tile_to_symbol(tile)
-            
-            # Check for important terrain types
-            if symbol == "D":
-                return "BLOCKING DOOR"
-            elif symbol == "S":
-                return "blocking stairs/warp"
-            elif symbol == "#":
-                return "on wall/blocked tile"
-            elif symbol in ["P", "T", "B", "C", "=", "t"]:
-                return f"on furniture ({symbol})"
-            elif symbol == "~":
-                return "in tall grass"
-            elif symbol == "W":
-                return "on water"
-            
-    except (ValueError, IndexError, TypeError) as e:
-        logger.debug(f"Failed to analyze NPC terrain: {e}")
-    
-    return None
-
 def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True):
     """
     Format comprehensive state data into readable text.
@@ -261,8 +217,9 @@ def _format_state_summary(state_data):
     
     summary_parts = []
     
-    # Player name
-    if player_data.get('name'):
+    # Player name (don't show during title sequence)
+    player_location = player_data.get('location', '')
+    if player_data.get('name') and player_location != 'TITLE_SEQUENCE':
         summary_parts.append(f"Player: {player_data['name']}")
     
     # Location
@@ -275,10 +232,10 @@ def _format_state_summary(state_data):
     if position and isinstance(position, dict):
         summary_parts.append(f"Pos: ({position.get('x', '?')}, {position.get('y', '?')})")
     
-    # Facing direction
-    facing = player_data.get('facing')
-    if facing:
-        summary_parts.append(f"Facing: {facing}")
+    # Facing direction - removed as it's often unreliable
+    # facing = player_data.get('facing')
+    # if facing:
+    #     summary_parts.append(f"Facing: {facing}")
     
     # Game state
     game_state = game_data.get('game_state')
@@ -504,8 +461,9 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         # NORMAL MODE: Full state information
         context_parts.append("=== PLAYER INFO ===")
         
-        # Player name and basic info
-        if 'name' in player_data and player_data['name']:
+        # Player name and basic info (don't show during title sequence as it hasn't been set yet)
+        player_location = player_data.get('location', '')
+        if 'name' in player_data and player_data['name'] and player_location != 'TITLE_SEQUENCE':
             context_parts.append(f"Player Name: {player_data['name']}")
         
         # Position information
@@ -513,9 +471,9 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         if position:
             context_parts.append(f"Position: X={position.get('x', 'unknown')}, Y={position.get('y', 'unknown')}")
         
-        # Facing direction
-        if 'facing' in player_data and player_data['facing']:
-            context_parts.append(f"Facing: {player_data['facing']}")
+        # Facing direction - removed as it's often unreliable
+        # if 'facing' in player_data and player_data['facing']:
+        #     context_parts.append(f"Facing: {player_data['facing']}")
         
         # Money (check both player and game sections)
         money = player_data.get('money') or game_data.get('money')
@@ -527,11 +485,11 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.extend(party_context)
 
         # Map/Location information with traversability (NOT shown in battle)
-        map_context = _format_map_info(state_data.get('map', {}), include_debug_info, include_npcs)
+        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
         context_parts.extend(map_context)
 
         # Game state information (including dialogue if not in battle)
-        game_context = _format_game_state(game_data)
+        game_context = _format_game_state(game_data, state_data)
         context_parts.extend(game_context)
     
     # Debug information if requested (shown in both modes)
@@ -587,8 +545,13 @@ def _get_player_position(player_data):
     """Extract player position from various possible locations in player data."""
     if 'coordinates' in player_data:
         return player_data['coordinates']
-    elif 'position' in player_data and player_data['position']:
-        return player_data['position']
+    elif 'position' in player_data:
+        pos = player_data['position']
+            # print( _get_player_position found position: {pos}, type: {type(pos)}")
+        # Check if it's a valid position dict with x,y keys
+        if pos and isinstance(pos, dict) and 'x' in pos and 'y' in pos:
+            return pos
+            # print( position invalid - missing x,y or not dict")
     return None
 
 def _get_party_size(party_data):
@@ -635,77 +598,497 @@ def _format_party_info(player_data, game_data):
     
     return context_parts
 
-def _format_map_info(map_info, include_debug_info=False, include_npcs=True):
-    """Format map and traversability information using unified formatter."""
+def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None):
+    """Format map and traversability information using MapStitcher."""
     context_parts = []
     
     if not map_info:
         return context_parts
     
-    context_parts.append("\n=== LOCATION & MAP INFO ===")
+    # Get location name from player data
+    location_name = None
+    if player_data and 'location' in player_data and player_data['location']:
+        location = player_data['location']
+        if isinstance(location, dict):
+            location_name = location.get('map_name', str(location))
+        else:
+            location_name = str(location)
     
-    if 'current_map' in map_info:
+    # Special handling for title sequence - don't show map
+    if location_name == 'TITLE_SEQUENCE':
+        context_parts.append("\n=== LOCATION INFO ===")
+        context_parts.append(f"Current Location: {location_name}")
+        context_parts.append("No map available during title sequence")
+        return context_parts
+    
+    context_parts.append("\n=== LOCATION & MAP INFO ===")
+    if location_name:
+        context_parts.append(f"Current Location: {location_name}")
+    
+    # Also add current map if different
+    if 'current_map' in map_info and map_info['current_map'] != location_name:
         context_parts.append(f"Current Map: {map_info['current_map']}")
     
-    # Use raw tiles if available
+    # Get player coordinates
+    player_coords = None
+    player_coords_dict = map_info.get('player_coords', {})
+    if isinstance(player_coords_dict, dict) and player_coords_dict.get('x') is not None:
+        player_coords = (player_coords_dict.get('x', 0), player_coords_dict.get('y', 0))
+    elif player_coords_dict and not isinstance(player_coords_dict, dict):
+        player_coords = player_coords_dict
+    elif player_data and 'position' in player_data:
+        pos = player_data['position']
+        player_coords = (pos.get('x', 0), pos.get('y', 0))
+    
+    # Get MapStitcher instance - prefer the one from memory_reader if available
+    # This ensures we use the instance that has the actual map data
+    map_stitcher = map_info.get('_map_stitcher_instance') if map_info else None
+    if not map_stitcher:
+        map_stitcher = _get_map_stitcher_instance()
+    
+    # Get NPCs if available
+    npcs = []
+    if include_npcs and 'object_events' in map_info:
+        npcs = map_info.get('object_events', [])
+    
+    # Get connections from current area
+    connections = []
+    if map_info.get('stitched_map_info'):
+        current_area = map_info['stitched_map_info'].get('current_area', {})
+        connections = current_area.get('connections', [])
+    
+    # Check for pre-generated visual map first (from memory_reader)
+    if map_info.get('visual_map'):
+        # Use the pre-generated map visualization
+        context_parts.append(map_info['visual_map'])
+    elif location_name:
+        # Generate map display using MapStitcher
+            # print( Attempting to generate map for location: '{location_name}'")
+            # print( MapStitcher exists: {map_stitcher is not None}")
+        if map_stitcher:
+            # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
+            for map_id in list(map_stitcher.map_areas.keys())[:3]:
+                area = map_stitcher.map_areas[map_id]
+                # print(   Area {map_id}: '{area.location_name}'")
+        
+        map_lines = map_stitcher.generate_location_map_display(
+            location_name=location_name,
+            player_pos=player_coords,
+            npcs=npcs,
+            connections=connections
+        )
+        
+        if map_lines:
+            # print( Generated {len(map_lines)} map lines from MapStitcher")
+            context_parts.extend(map_lines)
+            # Add exploration statistics
+            location_grid = map_stitcher.get_location_grid(location_name)
+            if location_grid:
+                total_tiles = len(location_grid)
+                context_parts.append("")
+                context_parts.append(f"Total explored: {total_tiles} tiles")
+        else:
+            # print( MapStitcher returned empty, falling back to memory tiles")
+            # Fallback if MapStitcher doesn't have data for this location - use memory tiles
+            pass
+            if 'tiles' in map_info and map_info['tiles']:
+                context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
+                _add_local_map_fallback(context_parts, map_info, include_npcs)
+            else:
+                context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
+                context_parts.append("No map data available")
+    else:
+        # No location name - use local map fallback
+        context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
+        if 'tiles' in map_info and map_info['tiles']:
+            _add_local_map_fallback(context_parts, map_info, include_npcs)
+    
+    # NPC information removed - unreliable detection with incorrect positions
+    
+    # Add stitched map information if available
+    stitched_info = _format_stitched_map_info(map_info)
+    if stitched_info:
+        context_parts.extend(stitched_info)
+    
+    return context_parts
+
+def _add_local_map_fallback(context_parts, map_info, include_npcs):
+    """Helper function to add local map display as fallback"""
     if 'tiles' in map_info and map_info['tiles']:
         raw_tiles = map_info['tiles']
-        # Get player facing direction from context
+        # Use default facing direction since memory-based facing is unreliable
         facing = "South"  # default
-        try:
-            # Try to get facing from state data
-            import inspect
-            frame = inspect.currentframe()
-            while frame:
-                if 'state_data' in frame.f_locals:
-                    facing = frame.f_locals['state_data'].get('player', {}).get('facing', 'South')
-                    break
-                frame = frame.f_back
-        except:
-            pass
         
-        # Get NPCs from map info
-        npcs = map_info.get('object_events', []) if include_npcs else []
-        
-        # Get player coordinates for NPC positioning
+        # Get player coordinates
         player_coords = map_info.get('player_coords')
         
-        # Use unified LLM formatter for consistency
+        # Get NPCs if available and include_npcs is True
+        npcs = []
+        if include_npcs and 'object_events' in map_info:
+            npcs = map_info.get('object_events', [])
+        
+        # Use unified LLM formatter for consistency with NPCs if available
         map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords)
-        context_parts.append(f"\n--- FULL TRAVERSABILITY MAP ({len(raw_tiles)}x{len(raw_tiles[0])}) ---")
         context_parts.append(map_display)
         
         # Add dynamic legend based on symbols in the map
         grid = format_map_grid(raw_tiles, facing, npcs, player_coords)
         legend = generate_dynamic_legend(grid)
         context_parts.append(f"\n{legend}")
+
+def _format_world_map_display(stitched_data, full_state_data=None):
+    """Format location-specific map display"""
+    try:
+        # Build separate map for each location
+        return _build_stitched_world_map(stitched_data, full_state_data)
         
-        # Add NPC information if present
-        if include_npcs and npcs:
-            context_parts.append(f"\n--- NPCs/TRAINERS ({len(npcs)} found) ---")
-            context_parts.append("NOTE: These are static NPC spawn positions. NPCs may have moved from these locations during walking animations.")
-            
-            # Analyze terrain under NPCs
-            for npc in npcs:
-                npc_x = npc.get('current_x', 0)
-                npc_y = npc.get('current_y', 0)
-                npc_info = f"NPC {npc['id']}: "
-                
-                if npc.get('trainer_type', 0) > 0:
-                    npc_info += f"Trainer at ({npc_x}, {npc_y})"
-                else:
-                    npc_info += f"NPC at ({npc_x}, {npc_y})"
-                
-                # Analyze terrain under NPC position
-                terrain_note = _analyze_npc_terrain(npc, raw_tiles, player_coords)
-                if terrain_note:
-                    npc_info += f" - {terrain_note}"
-                
-                context_parts.append(npc_info)
+    except Exception as e:
+        logger.warning(f"World map generation failed: {e}")
+        return []
+
+def _get_map_stitcher_instance():
+    """Get the MapStitcher instance - always reload from cache for multiprocess compatibility"""
+    from utils.map_stitcher import MapStitcher
+    # Always create fresh instance to read latest cache
+    # This is needed because server and client run in different processes
+    return MapStitcher()
+
+def save_persistent_world_map(file_path=None):
+    """Deprecated - MapStitcher handles all persistence now"""
+    # MapStitcher auto-saves, nothing to do here
+    pass
+
+def load_persistent_world_map(file_path=None):
+    """Deprecated - MapStitcher handles all persistence now"""
+    # MapStitcher auto-loads, nothing to do here
+    pass
+
+def clear_persistent_world_map():
+    """Clear the MapStitcher's data for testing"""
+    global CURRENT_LOCATION, LAST_LOCATION, LAST_TRANSITION
+    CURRENT_LOCATION = None
+    LAST_LOCATION = None
+    LAST_TRANSITION = None
+    # Clear MapStitcher data if instance exists
+    if MAP_STITCHER_INSTANCE:
+        MAP_STITCHER_INSTANCE.map_areas.clear()
+        MAP_STITCHER_INSTANCE.warp_connections.clear()
+        MAP_STITCHER_INSTANCE.save_to_file()
+            # print( Cleared map stitcher data")
+
+# Helper function removed - now handled by MapStitcher._is_explorable_edge()
+
+
+def _build_stitched_world_map(stitched_data, full_state_data=None):
+    """Build map display using MapStitcher"""
     
+    # Get the current area and location info
+    current_area = stitched_data.get('current_area', {})
+    location_name = current_area.get('name')
+    
+    # Get NPCs if available
+    npcs = stitched_data.get('object_events', [])
+    
+    # Use fallback location name if current_area has 'Unknown' or empty name  
+    fallback_name = stitched_data.get('location_name_fallback')
+    if not location_name or location_name == 'Unknown':
+        if fallback_name and fallback_name != 'Unknown':
+            location_name = fallback_name
+        else:
+            location_name = 'Unknown'
+    elif fallback_name and fallback_name != location_name and fallback_name != 'Unknown':
+        location_name = fallback_name
+    
+    # Track location changes and transition coordinates
+    global CURRENT_LOCATION, LAST_LOCATION, LAST_TRANSITION
+    LAST_TRANSITION = None  # Will store transition info
+    
+    # Get MapStitcher instance - prefer the one from memory_reader if available
+    # This ensures we use the instance that has the actual map data
+    map_stitcher = map_info.get('_map_stitcher_instance') if map_info else None
+    if not map_stitcher:
+        map_stitcher = _get_map_stitcher_instance()
+    
+    # Get player position for transition tracking
+    player_local_pos = stitched_data.get('player_local_pos', (0, 0))
+    
+    # Check if we've changed locations
+    if CURRENT_LOCATION != location_name:
+        # Store transition information
+        if CURRENT_LOCATION is not None and CURRENT_LOCATION != location_name:
+            LAST_TRANSITION = {
+                'from_location': CURRENT_LOCATION,
+                'from_coords': player_local_pos,  # Use current position as it's the exit point
+                'to_location': location_name,
+                'to_coords': player_local_pos
+            }
+            
+            # Trigger MapStitcher save if callback is available
+            if MAP_STITCHER_SAVE_CALLBACK:
+                try:
+                    # print( Location transition detected, triggering MapStitcher save...")
+                    MAP_STITCHER_SAVE_CALLBACK()
+                    # print( MapStitcher save completed")
+                except Exception as e:
+                    print("Failed to save via MapStitcher callback: {e}")
+            
+            # print( Location transition: {CURRENT_LOCATION} → {location_name} at position {player_local_pos}")
+        
+        LAST_LOCATION = CURRENT_LOCATION
+        CURRENT_LOCATION = location_name
+    
+    # Get player position
+    player_local_pos = stitched_data.get('player_local_pos')
+    if not player_local_pos:
+        # Fallback to extracting from current area
+        player_local_pos = current_area.get('player_pos', (5, 5))  # Default to center
+    
+    # Get connection info from current_area
+    connections = current_area.get('connections', [])
+    
+    # Build the display for this location
+    lines = []
+    
+    # Add location transition indicator if we just changed locations
+    if LAST_LOCATION and LAST_LOCATION != location_name:
+        lines.append(f"\n⚡ LOCATION TRANSITION: {LAST_LOCATION} → {location_name}")
+        # Add transition coordinates if available
+        if LAST_TRANSITION and LAST_TRANSITION['to_location'] == location_name:
+            from_coords = LAST_TRANSITION['from_coords']
+            to_coords = LAST_TRANSITION['to_coords']
+            from_location = LAST_TRANSITION['from_location']
+            lines.append(f"📍 Exited {from_location} at ({from_coords[0]}, {from_coords[1]})")
+            lines.append(f"📍 Entered {location_name} at ({to_coords[0]}, {to_coords[1]})")
+        # Clear the LAST_LOCATION after showing transition
+        LAST_LOCATION = None
+        lines.append("")
+    
+    # Use MapStitcher to generate the map display
+    map_stitcher = full_state_data.get('map_stitcher') if full_state_data else None
+    if not map_stitcher and MAP_STITCHER_INSTANCE:
+        map_stitcher = MAP_STITCHER_INSTANCE
+    
+    if map_stitcher:
+        # Generate map display using MapStitcher
+        map_lines = map_stitcher.generate_location_map_display(
+            location_name=location_name,
+            player_pos=player_local_pos,
+            npcs=npcs,
+            connections=connections
+        )
+        lines.extend(map_lines)
+        
+        # Add exploration statistics
+        location_grid = map_stitcher.get_location_grid(location_name)
+        if location_grid:
+            total_tiles = len(location_grid)
+            lines.append("")
+            lines.append(f"Total explored in {location_name}: {total_tiles} tiles")
+    else:
+        # Fallback if no MapStitcher available
+        lines.append(f"\n--- MAP: {location_name.upper()} ---")
+        lines.append("Map data not available")
+    
+    # Add discovered connection points from our transition tracking
+            # print( Checking portal coordinates for location: {location_name}")
+    portal_connections_found = False
+    
+    # Check location connections from MapStitcher cache first
+    location_connections = _get_location_connections_from_cache()
+    if location_connections and location_name in location_connections:
+        if not portal_connections_found:
+            lines.append("")
+            lines.append("Known Portal Coordinates:")
+            portal_connections_found = True
+        for other_loc, my_coords, their_coords in location_connections[location_name]:
+            lines.append(f"  At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
+    
+    # Also check MAP_ID_CONNECTIONS if available (from loaded MapStitcher data or HTTP response)
+            # print( About to check MAP_ID_CONNECTIONS...")
+            # print( full_state_data is: {type(full_state_data)} with keys: {list(full_state_data.keys()) if full_state_data else 'None'}")
+    try:
+        # Try multiple ways to find MAP_ID_CONNECTIONS
+        map_id_connections = None
+        
+        # Method 0: Check if passed via HTTP response (NEW - preferred method)
+        # First try location_connections (more accurate), then fall back to portal_connections
+        if full_state_data and 'location_connections' in full_state_data:
+            location_connections = full_state_data['location_connections']
+            # print( Found location_connections in HTTP response: {location_connections}")
+            
+            # Use the location connections display logic
+            if location_name in location_connections:
+                if not portal_connections_found:
+                    lines.append("")
+                    lines.append("Known Portal Coordinates:")
+                    portal_connections_found = True
+                for other_loc, my_coords, their_coords in location_connections[location_name]:
+                    lines.append(f"  At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
+            # print( Added location connection: At ({my_coords[0]}, {my_coords[1]}) → {other_loc} ({their_coords[0]}, {their_coords[1]})")
+        
+        elif full_state_data and 'portal_connections' in full_state_data:
+            map_id_connections = full_state_data['portal_connections']
+            # print( Found MAP_ID_CONNECTIONS in HTTP response: {map_id_connections}")
+            
+            # Get current map ID to find relevant portals
+            current_map_id = None
+            if stitched_data and 'current_area' in stitched_data:
+                area_id = stitched_data['current_area'].get('id', '')
+                if area_id:
+                    try:
+                        current_map_id = int(area_id, 16) if isinstance(area_id, str) else area_id
+                        # print( Current map ID: {current_map_id}")
+                    except ValueError:
+                        print("Could not parse map ID from: {area_id}")
+            
+            # Try to find current map ID by matching current location name
+            if not current_map_id:
+                current_location = location_name  # Use the location_name parameter
+                # print( Trying to find map ID for location: {current_location}")
+                
+                # Look through server's map data to find current map ID
+                if 'map' in full_state_data:
+                    map_info = full_state_data.get('map', {})
+                    map_location = map_info.get('location_name', '')
+                    if map_location:
+                        current_location = map_location
+                        # print( Using map location: {current_location}")
+                
+                # Match location with portal connections - try all map IDs
+                for map_id in map_id_connections.keys():
+                    # Convert string keys to int if needed
+                    try:
+                        test_map_id = int(map_id) if isinstance(map_id, str) else map_id
+            # print( Testing map ID {test_map_id} for location '{current_location}'")
+                        
+                        # For LITTLEROOT TOWN MAYS HOUSE 2F, map_id should be 259
+                        if current_location == "LITTLEROOT TOWN MAYS HOUSE 2F" and test_map_id == 259:
+                            current_map_id = test_map_id
+            # print( Found matching map ID: {current_map_id}")
+                            break
+                        elif current_location == "LITTLEROOT TOWN MAYS HOUSE 1F" and test_map_id == 258:
+                            current_map_id = test_map_id
+            # print( Found matching map ID: {current_map_id}")
+                            break
+                    except (ValueError, TypeError):
+                        continue
+                
+            # Display portal coordinates if we found them
+            if current_map_id and current_map_id in map_id_connections:
+                if not portal_connections_found:
+                    lines.append("")
+                    lines.append("Known Portal Coordinates:")
+                    portal_connections_found = True
+                    
+                for conn in map_id_connections[current_map_id]:
+                    to_name = conn.get('to_name', 'Unknown Location')
+                    from_pos = conn.get('from_pos', [0, 0])
+                    to_pos = conn.get('to_pos', [0, 0])
+                    lines.append(f"  At ({from_pos[0]}, {from_pos[1]}) → {to_name} ({to_pos[0]}, {to_pos[1]})")
+            # print( Added portal: At ({from_pos[0]}, {from_pos[1]}) → {to_name} ({to_pos[0]}, {to_pos[1]})")
+                    
+        elif stitched_data and 'portal_connections' in stitched_data:
+            map_id_connections = stitched_data['portal_connections']
+            # print( Found MAP_ID_CONNECTIONS in stitched_data: {map_id_connections}")
+        
+        # Method 1: Check current module (fallback)
+        if not map_id_connections:
+            current_module = sys.modules[__name__]
+            # print( Checking current module for MAP_ID_CONNECTIONS attribute...")
+            # print( hasattr(current_module, 'MAP_ID_CONNECTIONS'): {hasattr(current_module, 'MAP_ID_CONNECTIONS')}")
+            if hasattr(current_module, 'MAP_ID_CONNECTIONS') and current_module.MAP_ID_CONNECTIONS:
+                map_id_connections = current_module.MAP_ID_CONNECTIONS
+            # print( Found MAP_ID_CONNECTIONS in current module: {map_id_connections}")
+        
+        # Method 2: Check global variable (fallback)
+        if not map_id_connections:
+            # print( Checking globals for MAP_ID_CONNECTIONS...")
+            # print( 'MAP_ID_CONNECTIONS' in globals(): {'MAP_ID_CONNECTIONS' in globals()}")
+            try:
+                if 'MAP_ID_CONNECTIONS' in globals():
+                    # print( globals()['MAP_ID_CONNECTIONS']: {globals()['MAP_ID_CONNECTIONS']}")
+                    if 'MAP_ID_CONNECTIONS' in globals() and globals()['MAP_ID_CONNECTIONS']:
+                        map_id_connections = globals()['MAP_ID_CONNECTIONS']
+                        # print( Found MAP_ID_CONNECTIONS in globals: {map_id_connections}")
+            except Exception as e:
+                print("Error checking globals: {e}")
+        
+        # Method 3: Re-import state_formatter and check (fallback)
+        if not map_id_connections:
+            try:
+                # print( Attempting to re-import state_formatter...")
+                # print( hasattr(sf, 'MAP_ID_CONNECTIONS'): {hasattr(sf, 'MAP_ID_CONNECTIONS')}")
+                if hasattr(sf, 'MAP_ID_CONNECTIONS'):
+                    # print( sf.MAP_ID_CONNECTIONS: {sf.MAP_ID_CONNECTIONS}")
+                    if hasattr(sf, 'MAP_ID_CONNECTIONS') and sf.MAP_ID_CONNECTIONS:
+                        map_id_connections = sf.MAP_ID_CONNECTIONS
+                        # print( Found MAP_ID_CONNECTIONS in imported module: {map_id_connections}")
+            except Exception as e:
+                print(f" Error re-importing state_formatter: {e}")
+        
+        if map_id_connections:
+            # print( MAP_ID_CONNECTIONS available with {len(map_id_connections)} maps")
+            # print( Available map IDs: {list(map_id_connections.keys())}")
+            
+            # Get current map ID from stitched data
+            current_map_id = None
+            # print( stitched_data structure: {stitched_data}")
+            if stitched_data and stitched_data.get('available'):
+                # Try to get map ID from current area
+                current_area = stitched_data.get('current_area', {})
+                map_id_str = current_area.get('id')
+            # print( Current area ID from stitched_data: {map_id_str}")
+            # print( Full current_area: {current_area}")
+                if map_id_str:
+                    try:
+                        current_map_id = int(map_id_str, 16)  # Convert from hex string
+                        print(f" Converted to map ID: {current_map_id}")
+                    except ValueError:
+                        print(f" Failed to convert map ID: {map_id_str}")
+                else:
+                    print("No map ID found in current_area: {current_area}")
+            # else:
+            # print( No stitched_data available or not available")
+            # print( stitched_data type: {type(stitched_data)}")
+                # if stitched_data:
+            # print( stitched_data keys: {list(stitched_data.keys()) if isinstance(stitched_data, dict) else 'not a dict'}")
+            # print( stitched_data.get('available'): {stitched_data.get('available') if isinstance(stitched_data, dict) else 'N/A'}")
+            
+            if current_map_id and current_map_id in map_id_connections:
+                # print( Found connections for map ID {current_map_id}")
+                if not portal_connections_found:
+                    lines.append("")
+                    lines.append("Known Portal Coordinates:")
+                    portal_connections_found = True
+                for conn in map_id_connections[current_map_id]:
+                    to_name = conn['to_name']
+                    from_pos = conn['from_pos']
+                    to_pos = conn['to_pos']
+                    lines.append(f"  At ({from_pos[0]}, {from_pos[1]}) → {to_name} ({to_pos[0]}, {to_pos[1]})")
+            else:
+                print("No connections found for map ID {current_map_id} (available: {list(map_id_connections.keys()) if map_id_connections else 'None'})")
+        else:
+            print("MAP_ID_CONNECTIONS not found in any location")
+    except Exception as e:
+        print(f" Error checking MAP_ID_CONNECTIONS: {e}")
+    
+    return lines
+
+
+def _format_stitched_map_info(map_info):
+    """Format stitched map information for the agent"""
+    context_parts = []
+    
+    # Check if stitched map info is available
+    stitched_data = map_info.get('stitched_map_info')
+    if not stitched_data or not stitched_data.get('available'):
+        return context_parts
+    
+    # Check if world map display with terrain was already shown
+    # Old world map knowledge system removed - replaced by location-based maps with portal coordinates
     return context_parts
 
-def _format_game_state(game_data):
+def _format_game_state(game_data, state_data=None):
     """Format game state information (for non-battle mode)."""
     context_parts = []
     
@@ -732,8 +1115,31 @@ def _format_game_state(game_data):
             context_parts.append(f"Text: {dialog_text}")
             # Note: Residual/invisible dialogue text is completely hidden from agent
     
-    if 'game_state' in game_data:
+    # Check if we're in title sequence and override game state
+    player_location = state_data.get('player', {}).get('location', '') if state_data else ''
+    if player_location == 'TITLE_SEQUENCE':
+        context_parts.append(f"Game State: title")
+    elif 'game_state' in game_data:
         context_parts.append(f"Game State: {game_data['game_state']}")
+    
+    # Get player data from state_data if provided
+    player_data = state_data.get('player', {}) if state_data else {}
+    
+    # Add helpful prompt for title sequence
+    player_location = player_data.get('location', '')
+    if player_location == 'TITLE_SEQUENCE':
+        context_parts.append("")
+        context_parts.append("💡 TIP: Make sure to choose a fun name for your character!")
+        context_parts.append("Be creative and have fun with the naming!")
+    
+    # Add movement preview for overworld navigation (but not during title sequence)
+    if (state_data and not is_in_battle and 
+        game_data.get('game_state') == 'overworld' and 
+        player_location != 'TITLE_SEQUENCE'):
+        movement_preview = format_movement_preview_for_llm(state_data)
+        if movement_preview:
+            context_parts.append("")
+            context_parts.append(movement_preview)
     
     return context_parts
 
@@ -801,6 +1207,233 @@ def get_movement_options(state_data):
             movement_options[direction] = "Out of bounds"
     
     return movement_options
+
+
+def get_movement_preview(state_data):
+    """
+    Get detailed preview of what happens with each directional movement.
+    Shows new coordinates and tile information for each direction.
+    
+    Args:
+        state_data: Complete game state data
+        
+    Returns:
+        dict: Direction -> preview info mapping
+    """
+    # Get current player position
+    player_data = state_data.get('player', {})
+    player_position = _get_player_position(player_data)
+    
+    if not player_position or 'x' not in player_position or 'y' not in player_position:
+        # print( Movement preview - No player position. player_position={player_position}")
+        return {}
+    
+    current_x = int(player_position['x'])
+    current_y = int(player_position['y'])
+    
+    # Get map and tile data
+    map_info = state_data.get('map', {})
+    raw_tiles = map_info.get('tiles', [])
+    
+    if not raw_tiles:
+        # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
+        return {}
+    
+    directions = {
+        'UP': (0, -1),
+        'DOWN': (0, 1), 
+        'LEFT': (-1, 0),
+        'RIGHT': (1, 0)
+    }
+    
+    movement_preview = {}
+    
+    # Player is at center of the 15x15 grid
+    center_x = len(raw_tiles[0]) // 2 if raw_tiles and raw_tiles[0] else 7
+    center_y = len(raw_tiles) // 2 if raw_tiles else 7
+    
+    # Get the tile the player is currently standing on
+    current_tile_symbol = None
+    if (0 <= center_y < len(raw_tiles) and 
+        0 <= center_x < len(raw_tiles[center_y]) and
+        raw_tiles[center_y] and raw_tiles[center_y][center_x]):
+        current_tile = raw_tiles[center_y][center_x]
+        current_tile_symbol = format_tile_to_symbol(current_tile)
+    
+    for direction, (dx, dy) in directions.items():
+        # Calculate new world coordinates
+        new_world_x = current_x + dx
+        new_world_y = current_y + dy
+        
+        # Calculate grid position in the tile array
+        grid_x = center_x + dx
+        grid_y = center_y + dy
+        
+        preview_info = {
+            'new_coords': (new_world_x, new_world_y),
+            'blocked': True,
+            'tile_symbol': '#',
+            'tile_description': 'BLOCKED - Out of bounds'
+        }
+        
+        # Check if the target position is within the grid bounds
+        if (0 <= grid_y < len(raw_tiles) and 
+            0 <= grid_x < len(raw_tiles[grid_y]) and
+            raw_tiles[grid_y]):
+            
+            try:
+                # Get the tile at the target position
+                target_tile = raw_tiles[grid_y][grid_x]
+                
+                # Get tile symbol and check if walkable
+                tile_symbol = format_tile_to_symbol(target_tile)
+                
+                # Determine if movement is blocked
+                is_blocked = tile_symbol in ['#', 'W']  # Walls and water block movement
+                
+                # SPECIAL CASE: If player is standing on stairs/door, don't block the warp direction
+                # Stairs and doors often require moving in a specific direction to activate
+                if current_tile_symbol in ['S', 'D']:
+                    # When on stairs/doors, typically you need to move forward to activate them
+                    # Don't block any direction when on these tiles to allow proper navigation
+                    # This ensures the agent can properly use warps/doors even if the destination
+                    # tile might normally be considered blocked
+                    if tile_symbol in ['#', 'W']:
+                        # Override the blocking for navigation tiles but KEEP original symbol
+                        is_blocked = False
+                        # DO NOT change tile_symbol - preserve S, D, #, W, etc.
+                
+                # Special handling for jump ledges - they're only walkable in their direction
+                if tile_symbol in ['↓', '↑', '←', '→', '↗', '↖', '↘', '↙']:
+                    # Map directions to tile symbols
+                    ledge_direction_map = {
+                        'UP': '↑',
+                        'DOWN': '↓', 
+                        'LEFT': '←',
+                        'RIGHT': '→'
+                    }
+                    
+                    # Only allow movement if we're going in the direction the ledge points
+                    if direction in ledge_direction_map:
+                        allowed_symbol = ledge_direction_map[direction]
+                        if tile_symbol != allowed_symbol:
+                            is_blocked = True  # Block movement in wrong direction
+                    else:
+                        is_blocked = True  # Block diagonal movements for basic directional ledges
+                
+                # Get tile description
+                if len(target_tile) >= 2:
+                    tile_id, behavior = target_tile[:2]
+                    
+                    # Convert behavior to readable description
+                    if hasattr(behavior, 'name'):
+                        behavior_name = behavior.name
+                    elif isinstance(behavior, int):
+                        try:
+                            behavior_enum = MetatileBehavior(behavior)
+                            behavior_name = behavior_enum.name
+                        except (ValueError, ImportError):
+                            behavior_name = f"BEHAVIOR_{behavior}"
+                    else:
+                        behavior_name = str(behavior)
+                    
+                    # Create human-readable description
+                    # Check if we're overriding blocking due to being on stairs/door
+                    is_override = current_tile_symbol in ['S', 'D'] and not is_blocked and tile_symbol in ['#', 'W']
+                    
+                    if is_override:
+                        # We're on stairs/door and this normally blocked tile is walkable
+                        if tile_symbol == '#':
+                            tile_description = f"Walkable - Warp/Door exit (normally blocked) (ID: {tile_id})"
+                        elif tile_symbol == 'W':
+                            tile_description = f"Walkable - Warp/Door exit over water (ID: {tile_id})"
+                    elif tile_symbol == '.':
+                        tile_description = f"Walkable path (ID: {tile_id})"
+                    elif tile_symbol == '#':
+                        tile_description = f"BLOCKED - Wall/Obstacle (ID: {tile_id}, {behavior_name})"
+                    elif tile_symbol == 'W':
+                        tile_description = f"BLOCKED - Water (need Surf) (ID: {tile_id})"
+                    elif tile_symbol == '~':
+                        tile_description = f"Walkable - Tall grass (wild encounters) (ID: {tile_id})"
+                    elif tile_symbol == 'D':
+                        tile_description = f"Walkable - Door/Entrance (ID: {tile_id})"
+                    elif tile_symbol == 'S':
+                        tile_description = f"Walkable - Stairs/Warp (ID: {tile_id})"
+                    elif tile_symbol in ['↓', '↑', '←', '→', '↗', '↖', '↘', '↙']:
+                        # Ledge description based on whether movement is allowed
+                        if is_blocked:
+                            tile_description = f"BLOCKED - Jump ledge {tile_symbol} (wrong direction) (ID: {tile_id})"
+                        else:
+                            tile_description = f"Walkable - Jump ledge {tile_symbol} (correct direction) (ID: {tile_id})"
+                    else:
+                        tile_description = f"Walkable - {behavior_name} (ID: {tile_id})"
+                else:
+                    tile_description = "Unknown tile"
+                
+                preview_info.update({
+                    'blocked': is_blocked,
+                    'tile_symbol': tile_symbol,
+                    'tile_description': tile_description
+                })
+                
+            except (IndexError, TypeError) as e:
+                logger.warning(f"Error analyzing tile at {grid_x}, {grid_y}: {e}")
+                # Keep default blocked values
+                pass
+        
+        movement_preview[direction] = preview_info
+    
+    return movement_preview
+
+
+def format_movement_preview_for_llm(state_data):
+    """
+    Format movement preview in a concise format suitable for LLM prompts.
+    
+    Args:
+        state_data: Complete game state data
+        
+    Returns:
+        str: Formatted movement preview text
+    """
+    preview = get_movement_preview(state_data)
+    
+    if not preview:
+        return "Movement preview: Not available"
+    
+    lines = ["MOVEMENT PREVIEW:"]
+    
+    for direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+        if direction in preview:
+            info = preview[direction]
+            new_x, new_y = info['new_coords']
+            symbol = info['tile_symbol']
+            status = "BLOCKED" if info['blocked'] else "WALKABLE"
+            
+            lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
+            # Add brief description for tiles
+            desc = info['tile_description']
+            if info['blocked']:
+                # Special messages for blocked tiles
+                if 'Jump ledge' in desc and 'wrong direction' in desc:
+                    lines[-1] += " - Can only jump in arrow direction"
+                elif 'Water' in desc:
+                    lines[-1] += " - Need Surf to cross"
+                elif 'Wall' in desc or 'Obstacle' in desc:
+                    lines[-1] += " - Impassable"
+            else:
+                # Add brief description for walkable tiles
+                if 'Tall grass' in desc:
+                    lines[-1] += " - Tall grass (wild encounters)"
+                elif 'Stairs' in desc or 'Warp' in desc:
+                    lines[-1] += " - Stairs/Warp"
+                elif 'Door' in desc or 'Entrance' in desc:
+                    lines[-1] += " - Door/Entrance"
+                elif 'Jump ledge' in desc and 'correct direction' in desc:
+                    lines[-1] += " - Jump ledge (can jump this way)"
+    
+    return "\n".join(lines)
+
 
 def get_party_health_summary(state_data):
     """

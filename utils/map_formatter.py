@@ -41,8 +41,9 @@ def format_tile_to_symbol(tile):
         behavior_name = "UNKNOWN"
     
     # Map to symbol - SINGLE SOURCE OF TRUTH
-    if tile_id == 1023:  # Unknown/unloaded tile
-        return "#"  # Mark as blocked
+    # tile_id 1023 (0x3FF) is ALWAYS invalid/out-of-bounds
+    if tile_id == 1023:
+        return "#"  # Always show as blocked/wall
     elif behavior_name == "NORMAL":
         return "." if collision == 0 else "#"
     elif "DOOR" in behavior_name:
@@ -69,6 +70,16 @@ def format_tile_to_symbol(tile):
         return "="  # Bed
     elif "TABLE" in behavior_name or "CHAIR" in behavior_name:
         return "t"  # Table/Chair
+    elif "CLOCK" in behavior_name:
+        return "O"  # Clock (O for clock face)
+    elif "PICTURE" in behavior_name or "PAINTING" in behavior_name:
+        return "^"  # Picture/Painting on wall
+    elif "TRASH" in behavior_name or "BIN" in behavior_name:
+        return "U"  # Trash can/bin
+    elif "POT" in behavior_name or "VASE" in behavior_name:
+        return "V"  # Pot/Vase
+    elif "MACHINE" in behavior_name or "DEVICE" in behavior_name:
+        return "M"  # Machine/Device
     elif "JUMP" in behavior_name:
         if "SOUTH" in behavior_name:
             return "↓"
@@ -99,7 +110,7 @@ def format_tile_to_symbol(tile):
         return "#"
 
 
-def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=None):
+def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=None, trim_padding=True):
     """
     Format raw tile data into a traversability grid with NPCs.
     
@@ -107,6 +118,7 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
         raw_tiles: 2D list of tile tuples
         player_facing: Player facing direction for center marker
         npcs: List of NPC/object events with positions
+        trim_padding: If True, remove padding rows/columns that are all walls
         
     Returns:
         list: 2D list of symbol strings
@@ -190,6 +202,49 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
                 grid_row.append(symbol)
         grid.append(grid_row)
     
+    # Trim padding if requested - but keep room boundaries!
+    if trim_padding and len(grid) > 0:
+        # First pass: Remove obvious padding (rows/columns that are ALL walls with no variation)
+        # But we need to be careful to keep actual room walls
+        
+        # Check if we have any content in the middle
+        has_walkable = False
+        for row in grid:
+            if any(cell in ['.', 'P', 'D', 'N', 'T', 'S'] for cell in row):
+                has_walkable = True
+                break
+        
+        if has_walkable:
+            # Only trim extra padding beyond the first wall layer
+            # Count consecutive wall rows from top
+            top_wall_rows = 0
+            for row in grid:
+                if all(cell == '#' for cell in row):
+                    top_wall_rows += 1
+                else:
+                    break
+            
+            # Remove extra top padding but keep one wall row
+            while top_wall_rows > 1 and len(grid) > 1:
+                grid.pop(0)
+                top_wall_rows -= 1
+            
+            # Count consecutive wall rows from bottom
+            bottom_wall_rows = 0
+            for row in reversed(grid):
+                if all(cell == '#' for cell in row):
+                    bottom_wall_rows += 1
+                else:
+                    break
+            
+            # Remove extra bottom padding but keep one wall row
+            while bottom_wall_rows > 1 and len(grid) > 1:
+                grid.pop()
+                bottom_wall_rows -= 1
+            
+            # Similar for left/right but be more conservative
+            # Don't trim sides if we have doors or other features in the walls
+    
     return grid
 
 
@@ -257,12 +312,21 @@ def get_symbol_legend():
         "PC": "PC/Computer",
         "T": "Television",
         "B": "Bookshelf", 
-        "?": "Sign/Information",
+        "?": "Unexplored area",
         "F": "Flowers/Plants",
         "C": "Counter/Desk",
         "=": "Bed",
         "t": "Table/Chair",
+        "O": "Clock",
+        "^": "Picture/Painting",
+        "U": "Trash can",
+        "V": "Pot/Vase",
+        "M": "Machine/Device",
         "J": "Jump ledge",
+        "↓": "Jump South",
+        "↑": "Jump North",
+        "←": "Jump West",
+        "→": "Jump East",
         "↗": "Jump Northeast",
         "↖": "Jump Northwest", 
         "↘": "Jump Southeast",
@@ -298,10 +362,10 @@ def generate_dynamic_legend(grid):
     
     # Group symbols by category for better organization
     player_symbols = ["P"]
-    terrain_symbols = [".", "#", "W", "~"] 
+    terrain_symbols = [".", "#", "W", "~", "?"] 
     structure_symbols = ["D", "S"]
-    jump_symbols = ["J", "↗", "↖", "↘", "↙"]
-    furniture_symbols = ["PC", "T", "B", "?", "F", "C", "=", "t"]
+    jump_symbols = ["J", "↓", "↑", "←", "→", "↗", "↖", "↘", "↙"]
+    furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t", "O", "^", "U", "V", "M"]
     npc_symbols = ["N", "@"]
     
     categories = [
