@@ -39,29 +39,3 @@
   "last_updated": 1757886482.9012523,
   "version": "1.0"
 }
-{
-  "milestones": {
-    "GAME_RUNNING": {
-      "completed": true,
-      "timestamp": 1757793145.4404314,
-      "first_completed": 1757793145.4404314
-    },
-    "HAS_PARTY": {
-      "completed": true,
-      "timestamp": 1757793145.440895,
-      "first_completed": 1757793145.440895
-    },
-    "STARTER_CHOSEN": {
-      "completed": true,
-      "timestamp": 1757793145.441348,
-      "first_completed": 1757793145.441348
-    },
-    "EARNED_1000_POKEDOLLARS": {
-      "completed": true,
-      "timestamp": 1757793145.4458928,
-      "first_completed": 1757793145.4458928
-    }
-  },
-  "last_updated": 1757793145.4459536,
-  "version": "1.0"
-}
