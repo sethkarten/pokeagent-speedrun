@@ -150,7 +150,8 @@ def action_step(memory_context, current_plan, latest_observation, frame, state_d
     # If no valid actions found, make intelligent default based on state
     if not actions:
         if game_data.get('in_battle', False):
-            actions = ['A']  # Attack in battle
+            # Fallback: mash A like SimpleAgent until menus resolve
+            actions = ["A", "A", "A", "A", "A"]
         elif party_health['total_count'] == 0:
             actions = ['A', 'A', 'A']  # Try to progress dialogue/menu
         else:

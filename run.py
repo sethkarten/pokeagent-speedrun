@@ -106,6 +106,8 @@ def main():
                        help="Model name to use")
     parser.add_argument("--simple", action="store_true", 
                        help="Simple mode: direct frame->action without 4-module architecture")
+    parser.add_argument("--my-agent", action="store_true", 
+                       help="Use MyAgent (custom modular agent)")
     
     # Operation modes
     parser.add_argument("--headless", action="store_true", 
@@ -156,6 +158,9 @@ def main():
         print(f"   Model: {args.model_name}")
         if args.simple:
             print("   Mode: Simple (direct frame->action)")
+        elif args.my_agent:
+            print("   Mode: custom agent using 4 model architecture")
+
         else:
             print("   Mode: Four-module architecture")
         if args.no_ocr:

@@ -8,5 +8,4 @@ Some pointers to keep in mind (guard rails) as you problem solve:
 3) Consider the current situation in the game as well as what you've learned over time.
 4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
 Especially If a current approach is leading to consistent failure without providing knowledge on how to improve.
-
 """ 
