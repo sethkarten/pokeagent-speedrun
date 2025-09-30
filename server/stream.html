@@ -521,8 +521,11 @@
         let frameUpdateInterval;
         
         // Detect server address dynamically
-        const serverUrl = `http://${window.location.hostname}:${window.location.port || '8000'}`;
-        const frameServerUrl = `http://${window.location.hostname}:8001`; // Separate frame server
+        const serverPort = window.location.port || '8000';
+        const framePort = (parseInt(window.location.port, 10) || 8000) + 1;
+
+        const serverUrl = `http://${window.location.hostname}:${serverPort}`;
+        const frameServerUrl = `http://${window.location.hostname}:${framePort}`;
         console.log(`Using server URL: ${serverUrl}`);
         console.log(`Using frame server URL: ${frameServerUrl}`);
         

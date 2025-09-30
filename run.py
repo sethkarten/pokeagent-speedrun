@@ -67,10 +67,10 @@ def start_server(args):
         return None
 
 
-def start_frame_server():
+def start_frame_server(port):
     """Start the lightweight frame server for stream.html visualization"""
     try:
-        frame_cmd = ["python", "-m", "server.frame_server"]
+        frame_cmd = ["python", "-m", "server.frame_server", "--port", str(port+1)]
         frame_process = subprocess.Popen(
             frame_cmd,
             stdout=subprocess.PIPE,
@@ -143,7 +143,7 @@ def main():
                 return 1
             
             # Also start frame server for web visualization
-            frame_server_process = start_frame_server()
+            frame_server_process = start_frame_server(args.port)
         else:
             print("\n📋 Manual server mode - start server separately with:")
             print("   python -m server.app --port", args.port)
@@ -168,8 +168,7 @@ def main():
         if args.record:
             print("   Recording: Enabled")
         
-        print(f"\n🌐 Web Interface: http://127.0.0.1:{args.port}")
-        print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream.html")
+        print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream")
         
         print("\n🚀 Starting client...")
         print("-" * 60)

@@ -325,6 +325,7 @@ class LocalHuggingFaceBackend(VLMBackend):
     def _generate_response(self, inputs: Dict[str, Any], text: str, module_name: str) -> str:
         """Generate response using the local model"""
         try:
+            start_time = time.time()
             
             # Log the prompt
             prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
@@ -364,6 +365,17 @@ class LocalHuggingFaceBackend(VLMBackend):
                     result = generated_text.split(text)[-1].strip()
                 else:
                     result = generated_text.strip()
+            
+            # Log the interaction
+            duration = time.time() - start_time
+            log_llm_interaction(
+                interaction_type=f"local_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "local", "has_image": "images" in inputs},
+                model_info={"model": self.model_name, "backend": "local"}
+            )
             
             # Log the response
             result_preview = result[:1000] + "..." if len(result) > 1000 else result
@@ -535,6 +547,7 @@ class VertexBackend(VLMBackend):
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
         """Process an image and text prompt using Gemini API"""
         try:
+            start_time = time.time()
             image = self._prepare_image(img)
             
             # Prepare content for Gemini
@@ -557,15 +570,27 @@ class VertexBackend(VLMBackend):
                     return self.get_text_query(text, module_name)
             
             result = response.text
+            # Log the interaction
+            duration = time.time() - start_time
+            log_llm_interaction(
+                interaction_type=f"local_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "local", "has_image": True},
+                model_info={"model": self.model_name, "backend": "local"}
+            )
             
             # Log the response
             result_preview = result[:1000] + "..." if len(result) > 1000 else result
             logger.info(f"[{module_name}] RESPONSE: {result_preview}")
             logger.info(f"[{module_name}] ---")
+            print(f'RESPONSE: {result}')
             
             return result
             
         except Exception as e:
+            print(f"Error in Gemini image query: {e}")
             logger.error(f"Error in Gemini image query: {e}")
             # Try text-only fallback for any Gemini error
             try:
@@ -595,6 +620,17 @@ class VertexBackend(VLMBackend):
             
             result = response.text
             
+            # Log the interaction
+            duration = time.time() - start_time
+            log_llm_interaction(
+                interaction_type=f"local_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "local", "has_image": False},
+                model_info={"model": self.model_name, "backend": "local"}
+            )
+            
             # Log the response
             result_preview = result[:1000] + "..." if len(result) > 1000 else result
             logger.info(f"[{module_name}] RESPONSE: {result_preview}")
@@ -603,6 +639,7 @@ class VertexBackend(VLMBackend):
             return result
             
         except Exception as e:
+            print(f"Error in Gemini text query: {e}")
             logger.error(f"Error in Gemini text query: {e}")
             # Return a safe default response
             logger.warning(f"[{module_name}] Returning default response due to error: {e}")
