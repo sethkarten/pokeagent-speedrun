@@ -647,9 +647,10 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         map_stitcher = _get_map_stitcher_instance()
     
     # Get NPCs if available
+    # NPCs disabled - unreliable detection with incorrect positions
     npcs = []
-    if include_npcs and 'object_events' in map_info:
-        npcs = map_info.get('object_events', [])
+    # if include_npcs and 'object_events' in map_info:
+    #     npcs = map_info.get('object_events', [])
     
     # Get connections from current area
     connections = []

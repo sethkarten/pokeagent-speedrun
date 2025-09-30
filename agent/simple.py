@@ -161,17 +161,52 @@ class SimpleAgent:
                 "milestone_id": "GAME_RUNNING"
             },
             {
-                "id": "story_littleroot_town",
-                "description": "Arrive in Littleroot Town and explore the area",
-                "objective_type": "location", 
-                "target_value": "Littleroot Town",
-                "milestone_id": "LITTLEROOT_TOWN"
+                "id": "story_intro_complete",
+                "description": "Complete intro cutscene with moving van",
+                "objective_type": "cutscene",
+                "target_value": "Intro Complete",
+                "milestone_id": "INTRO_CUTSCENE_COMPLETE"
+            },
+            {
+                "id": "story_player_house",
+                "description": "Enter player's house for the first time",
+                "objective_type": "location",
+                "target_value": "Player's House",
+                "milestone_id": "PLAYER_HOUSE_ENTERED"
+            },
+            {
+                "id": "story_player_bedroom",
+                "description": "Go upstairs to player's bedroom and set the clock",
+                "objective_type": "location",
+                "target_value": "Player's Bedroom",
+                "milestone_id": "PLAYER_BEDROOM"
+            },
+            {
+                "id": "story_clock_set",
+                "description": "Leave the house after setting the clock and explore Littleroot Town",
+                "objective_type": "location",
+                "target_value": "Clock Set",
+                "milestone_id": "CLOCK_SET"
+            },
+            {
+                "id": "story_rival_house",
+                "description": "Visit May's house next door",
+                "objective_type": "location",
+                "target_value": "Rival's House",
+                "milestone_id": "RIVAL_HOUSE"
+            },
+            {
+                "id": "story_rival_bedroom",
+                "description": "Visit May's bedroom on the second floor",
+                "objective_type": "location",
+                "target_value": "Rival's Bedroom",
+                "milestone_id": "RIVAL_BEDROOM"
             },
             {
                 "id": "story_route_101",
                 "description": "Travel north to Route 101 and encounter Prof. Birch",
                 "objective_type": "location",
-                "target_value": "Route 101", 
+                "target_value": "Route 101",
                 "milestone_id": "ROUTE_101"
             },
             {
@@ -180,6 +215,13 @@ class SimpleAgent:
                 "objective_type": "pokemon",
                 "target_value": "Starter Pokémon",
                 "milestone_id": "STARTER_CHOSEN"
+            },
+            {
+                "id": "story_birch_lab",
+                "description": "Visit Professor Birch's lab in Littleroot Town",
+                "objective_type": "location",
+                "target_value": "Birch's Lab",
+                "milestone_id": "BIRCH_LAB_VISITED"
             },
             {
                 "id": "story_oldale_town",
@@ -196,10 +238,17 @@ class SimpleAgent:
                 "milestone_id": "ROUTE_103"
             },
             {
+                "id": "story_received_pokedex",
+                "description": "Return to Birch's lab and receive the Pokédex",
+                "objective_type": "item",
+                "target_value": "Pokédex",
+                "milestone_id": "RECEIVED_POKEDEX"
+            },
+            {
                 "id": "story_route_102",
                 "description": "Return through Route 102 toward Petalburg City",
                 "objective_type": "location",
-                "target_value": "Route 102", 
+                "target_value": "Route 102",
                 "milestone_id": "ROUTE_102"
             },
             {
@@ -210,11 +259,25 @@ class SimpleAgent:
                 "milestone_id": "PETALBURG_CITY"
             },
             {
-                "id": "story_route_104",
-                "description": "Travel north through Route 104 toward Petalburg Woods",
+                "id": "story_dad_meeting",
+                "description": "Meet Dad at Petalburg City Gym",
+                "objective_type": "dialogue",
+                "target_value": "Dad Meeting",
+                "milestone_id": "DAD_FIRST_MEETING"
+            },
+            {
+                "id": "story_gym_explanation",
+                "description": "Receive explanation about Gym challenges",
+                "objective_type": "dialogue",
+                "target_value": "Gym Tutorial",
+                "milestone_id": "GYM_EXPLANATION"
+            },
+            {
+                "id": "story_route_104_south",
+                "description": "Travel through southern section of Route 104",
                 "objective_type": "location",
-                "target_value": "Route 104",
-                "milestone_id": "ROUTE_104"
+                "target_value": "Route 104 South",
+                "milestone_id": "ROUTE_104_SOUTH"
             },
             {
                 "id": "story_petalburg_woods",
@@ -222,6 +285,20 @@ class SimpleAgent:
                 "objective_type": "location",
                 "target_value": "Petalburg Woods",
                 "milestone_id": "PETALBURG_WOODS"
+            },
+            {
+                "id": "story_aqua_grunt",
+                "description": "Defeat Team Aqua Grunt in Petalburg Woods",
+                "objective_type": "battle",
+                "target_value": "Aqua Grunt Defeated",
+                "milestone_id": "TEAM_AQUA_GRUNT_DEFEATED"
+            },
+            {
+                "id": "story_route_104_north",
+                "description": "Travel through northern section of Route 104 to Rustboro",
+                "objective_type": "location",
+                "target_value": "Route 104 North",
+                "milestone_id": "ROUTE_104_NORTH"
             },
             {
                 "id": "story_rustboro_city",
@@ -232,17 +309,24 @@ class SimpleAgent:
             },
             {
                 "id": "story_rustboro_gym",
-                "description": "Enter the Rustboro Gym and prepare for Roxanne battle",
+                "description": "Enter the Rustboro Gym and challenge Roxanne",
                 "objective_type": "location",
                 "target_value": "Rustboro Gym",
-                "milestone_id": None  # Gym entry doesn't have separate milestone
+                "milestone_id": "RUSTBORO_GYM_ENTERED"
+            },
+            {
+                "id": "story_roxanne_defeated",
+                "description": "Defeat Gym Leader Roxanne",
+                "objective_type": "battle",
+                "target_value": "Roxanne Defeated",
+                "milestone_id": "ROXANNE_DEFEATED"
             },
             {
                 "id": "story_stone_badge",
-                "description": "Defeat Roxanne and earn the Stone Badge",
-                "objective_type": "battle",
+                "description": "Receive the Stone Badge and complete first gym",
+                "objective_type": "badge",
                 "target_value": "Stone Badge",
-                "milestone_id": "STONE_BADGE"
+                "milestone_id": "FIRST_GYM_COMPLETE"
             }
         ]
         
@@ -259,8 +343,8 @@ class SimpleAgent:
                 milestone_id=obj_data["milestone_id"]
             )
             self.state.objectives.append(objective)
-            
-        logger.info(f"Initialized {len(storyline_objectives)} storyline objectives for Emerald progression")
+
+        logger.info(f"Initialized {len(storyline_objectives)} storyline objectives for Emerald progression (up to first gym)")
         
     def get_game_context(self, game_state: Dict[str, Any]) -> str:
         """Determine current game context (overworld, battle, menu, dialogue)"""
@@ -419,19 +503,19 @@ class SimpleAgent:
     def check_storyline_milestones(self, game_state: Dict[str, Any]) -> List[str]:
         """Check emulator milestones and auto-complete corresponding storyline objectives"""
         completed_ids = []
-        
+
         # Get milestones from the game state (if available)
         milestones = game_state.get("milestones", {})
         if not milestones:
             # No milestone data available, skip checking
             return completed_ids
-            
+
         for obj in self.get_active_objectives():
             # Only check storyline objectives with milestone IDs
             if obj.storyline and obj.milestone_id and not obj.completed:
                 # Check if the corresponding emulator milestone is completed
                 milestone_completed = milestones.get(obj.milestone_id, {}).get("completed", False)
-                
+
                 if milestone_completed:
                     # Auto-complete the storyline objective
                     obj.completed = True
@@ -440,7 +524,7 @@ class SimpleAgent:
                     self.state.objectives_updated = True
                     completed_ids.append(obj.id)
                     logger.info(f"Auto-completed storyline objective via milestone {obj.milestone_id}: {obj.description}")
-        
+
         return completed_ids
     
     def detect_stuck_pattern(self, coords: Optional[Tuple[int, int]], context: str, game_state: Dict[str, Any] = None) -> bool:
