@@ -49,12 +49,15 @@ DEFAULT_MAX_HISTORY_ENTRIES = 100  # Previous states/locations with context
 DEFAULT_MAX_RECENT_ACTIONS = 50    # Recent button presses
 DEFAULT_HISTORY_DISPLAY_COUNT = 30 # Number of history entries shown to LLM
 DEFAULT_ACTIONS_DISPLAY_COUNT = 40 # Number of recent actions shown to LLM
+DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL = 30  # Clear movement memory after N actions (0 = never clear)
 
 def configure_simple_agent_defaults(max_history_entries: int = None, max_recent_actions: int = None, 
-                                  history_display_count: int = None, actions_display_count: int = None):
+                                  history_display_count: int = None, actions_display_count: int = None,
+                                  movement_memory_clear_interval: int = None):
     """Configure default parameters for all new SimpleAgent instances"""
     global DEFAULT_MAX_HISTORY_ENTRIES, DEFAULT_MAX_RECENT_ACTIONS
     global DEFAULT_HISTORY_DISPLAY_COUNT, DEFAULT_ACTIONS_DISPLAY_COUNT
+    global DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL
     
     if max_history_entries is not None:
         DEFAULT_MAX_HISTORY_ENTRIES = max_history_entries
@@ -64,9 +67,12 @@ def configure_simple_agent_defaults(max_history_entries: int = None, max_recent_
         DEFAULT_HISTORY_DISPLAY_COUNT = history_display_count
     if actions_display_count is not None:
         DEFAULT_ACTIONS_DISPLAY_COUNT = actions_display_count
+    if movement_memory_clear_interval is not None:
+        DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL = movement_memory_clear_interval
         
     logger.info(f"Updated SimpleAgent defaults: {DEFAULT_MAX_HISTORY_ENTRIES} history, {DEFAULT_MAX_RECENT_ACTIONS} actions, "
-               f"display {DEFAULT_HISTORY_DISPLAY_COUNT}/{DEFAULT_ACTIONS_DISPLAY_COUNT}")
+               f"display {DEFAULT_HISTORY_DISPLAY_COUNT}/{DEFAULT_ACTIONS_DISPLAY_COUNT}, "
+               f"movement memory clear interval: {DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL}")
 
 @dataclass
 class Objective:
@@ -104,6 +110,7 @@ class SimpleAgentState:
     objectives_updated: bool = False
     failed_movements: Dict[str, List[str]] = field(default_factory=dict)  # coord_key -> [failed_directions]
     npc_interactions: Dict[str, str] = field(default_factory=dict)  # coord_key -> interaction_notes
+    movement_memory_action_counter: int = 0  # Counter for tracking actions since last memory clear
     
     def __post_init__(self):
         """Initialize deques with current default values"""
@@ -118,7 +125,8 @@ class SimpleAgent:
     """
     
     def __init__(self, vlm, max_history_entries: int = None, max_recent_actions: int = None, 
-                 history_display_count: int = None, actions_display_count: int = None):
+                 history_display_count: int = None, actions_display_count: int = None,
+                 movement_memory_clear_interval: int = None):
         self.vlm = vlm
         
         # Use current global defaults if not specified
@@ -126,6 +134,7 @@ class SimpleAgent:
         max_recent_actions = max_recent_actions or DEFAULT_MAX_RECENT_ACTIONS
         history_display_count = history_display_count or DEFAULT_HISTORY_DISPLAY_COUNT
         actions_display_count = actions_display_count or DEFAULT_ACTIONS_DISPLAY_COUNT
+        movement_memory_clear_interval = movement_memory_clear_interval if movement_memory_clear_interval is not None else DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL
         
         self.state = SimpleAgentState()
         self.state.history = deque(maxlen=max_history_entries)
@@ -134,6 +143,9 @@ class SimpleAgent:
         # Display parameters for LLM prompts
         self.history_display_count = history_display_count
         self.actions_display_count = actions_display_count
+        
+        # Movement memory clearing interval
+        self.movement_memory_clear_interval = movement_memory_clear_interval
         
         # Initialize storyline objectives for Emerald progression
         self._initialize_storyline_objectives()
@@ -673,6 +685,7 @@ class SimpleAgent:
 - If your target requires multiple steps, plan ONE step at a time
 - Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
 - When stuck, try a different direction rather than repeating the same blocked move
+- After moving in a direction, you will be facing that direction for interactions with NPCs, etc.
 
 EXAMPLE - DON'T DO THIS:
 ❌ "I want to go right 5 tiles" → "RIGHT, RIGHT, RIGHT, RIGHT, RIGHT" (may hit wall on step 2!)
@@ -682,7 +695,8 @@ EXAMPLE - DO THIS INSTEAD:
 ✅ Next turn, check again → "RIGHT shows (X+2,Y) WALKABLE" → "RIGHT" (another safe step)
 
 💡 SMART NAVIGATION:
-- Check the VISUAL FRAME for NPCs (people/trainers) before moving - they're not always on the map!
+- The Player's sprite in the visual frame is located at the coordinates (X,Y) in the game state. Objects in the visual frame should be represented in relation to the Player's sprite.
+- Check the VISUAL FRAME for NPCs (people/trainers) and other objects like clocks before moving - they're not always on the map! NPCs may block movement even when the movement preview shows them as walkable.
 - Review MOVEMENT MEMORY for locations where you've failed to move before
 - Only explore areas marked with ? (these are confirmed explorable edges)
 - Avoid areas surrounded by # (walls) - they're fully blocked
@@ -696,8 +710,10 @@ EXAMPLE - DO THIS INSTEAD:
 """
 
             # Create enhanced prompt with objectives, history context and chain of thought request
-            prompt = f"""You are playing Pokemon Emerald. Progress quickly to the milestones by balancing exploration and exploitation of things you know. 
-            Based on the current game frame and state information, think through your next move and choose the best button action.
+            prompt = f"""You are playing as the Protagonist in Pokemon Emerald. Progress quickly to the milestones by balancing exploration and exploitation of things you know, but have fun for the Twitch stream while you do it. 
+            Based on the current game frame and state information, think through your next move and choose the best button action. 
+            If you notice that you are repeating the same action sequences over and over again, you definitely need to try something different since what you are doing is wrong! Try exploring different new areas or interacting with different NPCs if you are stuck.
+            
 
 RECENT ACTION HISTORY (last {self.actions_display_count} actions):
 {recent_actions_str}
@@ -721,10 +737,10 @@ IMPORTANT: Please think step by step before choosing your action. Structure your
 
 ANALYSIS:
 [Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing? 
-IMPORTANT: Look carefully at the game image for NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue.]
+IMPORTANT: Look carefully at the game image for objects (clocks, pokeballs) and NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue.]
 
 OBJECTIVES:
-[Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
+[Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them.  There may be sub-objectives that you need to complete before the main milestone. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
 - Add sub-objectives: ADD_OBJECTIVE: type:description:target_value (e.g., "ADD_OBJECTIVE: location:Find Pokemon Center in town:(15,20)" or "ADD_OBJECTIVE: item:Buy Pokeballs:5")
 - Complete sub-objectives only: COMPLETE_OBJECTIVE: objective_id:notes (e.g., "COMPLETE_OBJECTIVE: my_sub_obj_123:Successfully bought Pokeballs")
 - NOTE: Do NOT try to complete storyline objectives (story_*) - they auto-complete when milestones are reached]
@@ -804,8 +820,19 @@ Context: {context} | Coords: {coords} """
             # Update recent actions
             if isinstance(actions, list):
                 self.state.recent_actions.extend(actions)
+                # Increment movement memory action counter by number of actions
+                self.state.movement_memory_action_counter += len(actions)
             else:
                 self.state.recent_actions.append(actions)
+                # Increment movement memory action counter
+                self.state.movement_memory_action_counter += 1
+            
+            # Check if we should clear movement memory
+            if (self.movement_memory_clear_interval > 0 and 
+                self.state.movement_memory_action_counter >= self.movement_memory_clear_interval):
+                logger.info(f"🧹 Movement memory clear triggered after {self.state.movement_memory_action_counter} actions")
+                # Use partial clear to keep some recent memory
+                self.clear_movement_memory(partial=True)
             
             # Reset stuck detection for other locations when we move
             if coords:
@@ -1113,7 +1140,8 @@ Context: {context} | Coords: {coords} """
         self.state.objectives_updated = False
     
     def configure_history_limits(self, max_history_entries: int = None, max_recent_actions: int = None, 
-                                history_display_count: int = None, actions_display_count: int = None):
+                                history_display_count: int = None, actions_display_count: int = None,
+                                movement_memory_clear_interval: int = None):
         """Configure history tracking parameters at runtime"""
         if max_history_entries is not None:
             # Create new deque with updated max length, preserving existing data
@@ -1131,9 +1159,13 @@ Context: {context} | Coords: {coords} """
         if actions_display_count is not None:
             self.actions_display_count = actions_display_count
         
+        if movement_memory_clear_interval is not None:
+            self.movement_memory_clear_interval = movement_memory_clear_interval
+        
         logger.info(f"Updated history configuration: {len(self.state.history)}/{self.state.history.maxlen} history, "
                    f"{len(self.state.recent_actions)}/{self.state.recent_actions.maxlen} actions, "
-                   f"display {self.history_display_count}/{self.actions_display_count}")
+                   f"display {self.history_display_count}/{self.actions_display_count}, "
+                   f"movement memory clear interval: {self.movement_memory_clear_interval}")
     
     def load_history_from_llm_checkpoint(self, checkpoint_file: str):
         """Load SimpleAgent history from LLM checkpoint file"""
@@ -1342,6 +1374,37 @@ Context: {context} | Coords: {coords} """
         
         return "\n".join(memory_lines)
     
+    def clear_movement_memory(self, partial: bool = False):
+        """
+        Clear movement memory (failed movements and NPC interactions).
+        
+        Args:
+            partial: If True, only clear old entries (keep recent 5). If False, clear all.
+        """
+        if partial and (self.state.failed_movements or self.state.npc_interactions):
+            # Keep only the 5 most recent entries for each
+            if len(self.state.failed_movements) > 5:
+                # Convert to list of tuples, sort by insertion order (dict maintains order in Python 3.7+)
+                # Keep last 5 entries
+                items = list(self.state.failed_movements.items())
+                self.state.failed_movements = dict(items[-5:])
+                logger.info(f"Partially cleared movement memory, kept {len(self.state.failed_movements)} recent failed movements")
+            
+            if len(self.state.npc_interactions) > 5:
+                items = list(self.state.npc_interactions.items())
+                self.state.npc_interactions = dict(items[-5:])
+                logger.info(f"Partially cleared NPC interactions, kept {len(self.state.npc_interactions)} recent interactions")
+        else:
+            # Clear all movement memory
+            cleared_movements = len(self.state.failed_movements)
+            cleared_npcs = len(self.state.npc_interactions)
+            self.state.failed_movements.clear()
+            self.state.npc_interactions.clear()
+            logger.info(f"Cleared all movement memory: {cleared_movements} failed movements, {cleared_npcs} NPC interactions")
+        
+        # Reset the action counter
+        self.state.movement_memory_action_counter = 0
+    
     def analyze_movement_preview(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze the movement preview data from game state to find valid moves.
@@ -1375,11 +1438,11 @@ Context: {context} | Coords: {coords} """
                         if direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
                             if 'WALKABLE' in rest:
                                 walkable_directions.append(direction)
-                                # Check for special tiles
-                                if 'Door/Entrance' in rest:
-                                    special_tiles[direction] = 'door'
-                                elif 'Stairs/Warp' in rest:
+                                # Check for special tiles (check stairs before doors to avoid mislabeling)
+                                if 'Stairs/Warp' in rest:
                                     special_tiles[direction] = 'stairs'
+                                elif 'Door/Entrance' in rest:
+                                    special_tiles[direction] = 'door'
                                 elif 'Tall grass' in rest:
                                     special_tiles[direction] = 'grass'
                                 elif 'Jump ledge' in rest and 'can jump' in rest:
@@ -1443,7 +1506,9 @@ Context: {context} | Coords: {coords} """
             "objectives_count": len(self.state.objectives),
             "step_counter": self.state.step_counter,
             "failed_movements": len(self.state.failed_movements),
-            "npc_interactions": len(self.state.npc_interactions)
+            "npc_interactions": len(self.state.npc_interactions),
+            "movement_memory_action_counter": self.state.movement_memory_action_counter,
+            "movement_memory_clear_interval": self.movement_memory_clear_interval
         }
 
 # Global simple agent instance for backward compatibility with existing multiprocess code

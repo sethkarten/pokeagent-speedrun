@@ -693,7 +693,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
             pass
             if 'tiles' in map_info and map_info['tiles']:
                 context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
-                _add_local_map_fallback(context_parts, map_info, include_npcs)
+                _add_local_map_fallback(context_parts, map_info, include_npcs, location_name)
             else:
                 context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
                 context_parts.append("No map data available")
@@ -701,7 +701,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         # No location name - use local map fallback
         context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
         if 'tiles' in map_info and map_info['tiles']:
-            _add_local_map_fallback(context_parts, map_info, include_npcs)
+            _add_local_map_fallback(context_parts, map_info, include_npcs, None)
     
     # NPC information removed - unreliable detection with incorrect positions
     
@@ -712,7 +712,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     
     return context_parts
 
-def _add_local_map_fallback(context_parts, map_info, include_npcs):
+def _add_local_map_fallback(context_parts, map_info, include_npcs, location_name=None):
     """Helper function to add local map display as fallback"""
     if 'tiles' in map_info and map_info['tiles']:
         raw_tiles = map_info['tiles']
@@ -728,11 +728,11 @@ def _add_local_map_fallback(context_parts, map_info, include_npcs):
             npcs = map_info.get('object_events', [])
         
         # Use unified LLM formatter for consistency with NPCs if available
-        map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords)
+        map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords, location_name)
         context_parts.append(map_display)
         
         # Add dynamic legend based on symbols in the map
-        grid = format_map_grid(raw_tiles, facing, npcs, player_coords)
+        grid = format_map_grid(raw_tiles, facing, npcs, player_coords, location_name=location_name)
         legend = generate_dynamic_legend(grid)
         context_parts.append(f"\n{legend}")
 

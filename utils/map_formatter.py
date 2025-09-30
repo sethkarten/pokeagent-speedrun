@@ -8,12 +8,17 @@ Single source of truth for all map formatting across the codebase.
 from pokemon_env.enums import MetatileBehavior
 
 
-def format_tile_to_symbol(tile):
+def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=None, stairs_pos=None):
     """
     Convert a single tile to its display symbol.
     
     Args:
         tile: Tuple of (tile_id, behavior, collision, elevation)
+        x: Optional x coordinate for context-specific symbols
+        y: Optional y coordinate for context-specific symbols
+        location_name: Optional location name for context-specific symbols
+        player_pos: Optional player position tuple (px, py) for relative positioning
+        stairs_pos: Optional stairs position tuple (sx, sy) for relative positioning
         
     Returns:
         str: Single character symbol representing the tile
@@ -40,16 +45,33 @@ def format_tile_to_symbol(tile):
     else:
         behavior_name = "UNKNOWN"
     
+    # Special handling for Brendan's House 2F wall clock
+    # The clock is a wall tile with no special behavior, just tile ID 1023
+    # Position it relative to the stairs dynamically
+    if location_name and "BRENDAN" in location_name.upper() and "2F" in location_name.upper():
+        if x is not None and y is not None and stairs_pos:
+            sx, sy = stairs_pos
+            # Clock is 2 tiles west of stairs on the same row
+            if (x, y) == (sx - 2, sy):
+                return "K"  # K for Klock (C is taken by Computer)
+    
     # Map to symbol - SINGLE SOURCE OF TRUTH
-    # tile_id 1023 (0x3FF) is ALWAYS invalid/out-of-bounds
+    # tile_id 1023 (0x3FF) is usually invalid/out-of-bounds
     if tile_id == 1023:
         return "#"  # Always show as blocked/wall
     elif behavior_name == "NORMAL":
         return "." if collision == 0 else "#"
+    # Fix for reversed door/stairs mapping in Brendan's house
+    # NON_ANIMATED_DOOR (96) appears at top and should show as 'S' 
+    # SOUTH_ARROW_WARP (101) appears at bottom and should show as 'D'
+    elif behavior == 96 or "NON_ANIMATED_DOOR" in behavior_name:
+        return "S"  # This is actually stairs going upstairs
+    elif behavior == 101 or "SOUTH_ARROW_WARP" in behavior_name:
+        return "D"  # This is actually the exit door
     elif "DOOR" in behavior_name:
-        return "D"
+        return "D"  # Other doors remain as doors
     elif "STAIRS" in behavior_name or "WARP" in behavior_name:
-        return "S"
+        return "S"  # Other stairs/warps remain as stairs
     elif "WATER" in behavior_name:
         return "W"
     elif "TALL_GRASS" in behavior_name:
@@ -110,7 +132,7 @@ def format_tile_to_symbol(tile):
         return "#"
 
 
-def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=None, trim_padding=True):
+def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=None, trim_padding=True, location_name=None):
     """
     Format raw tile data into a traversability grid with NPCs.
     
@@ -118,13 +140,29 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
         raw_tiles: 2D list of tile tuples
         player_facing: Player facing direction for center marker
         npcs: List of NPC/object events with positions
+        player_coords: Player coordinates for relative positioning
         trim_padding: If True, remove padding rows/columns that are all walls
+        location_name: Optional location name for context-specific symbols
         
     Returns:
         list: 2D list of symbol strings
     """
     if not raw_tiles or len(raw_tiles) == 0:
         return []
+    
+    # First pass: find the stairs position if in Brendan's house 2F
+    stairs_pos = None
+    if location_name and "BRENDAN" in location_name.upper() and "2F" in location_name.upper():
+        for y, row in enumerate(raw_tiles):
+            for x, tile in enumerate(row):
+                if len(tile) >= 2:
+                    _, behavior = tile[:2]
+                    # Stairs have behavior 96 (NON_ANIMATED_DOOR which we mapped to 'S')
+                    if behavior == 96:
+                        stairs_pos = (x, y)
+                        break
+            if stairs_pos:
+                break
     
     grid = []
     center_y = len(raw_tiles) // 2
@@ -197,8 +235,9 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
                 else:
                     grid_row.append("N")  # Regular NPC
             else:
-                # Regular tile
-                symbol = format_tile_to_symbol(tile)
+                # Regular tile - pass coordinates and context for special handling
+                symbol = format_tile_to_symbol(tile, x=x, y=y, location_name=location_name, 
+                                               player_pos=(center_x, center_y), stairs_pos=stairs_pos)
                 grid_row.append(symbol)
         grid.append(grid_row)
     
@@ -317,6 +356,7 @@ def get_symbol_legend():
         "C": "Counter/Desk",
         "=": "Bed",
         "t": "Table/Chair",
+        "K": "Clock (Wall)",
         "O": "Clock",
         "^": "Picture/Painting",
         "U": "Trash can",
@@ -365,7 +405,7 @@ def generate_dynamic_legend(grid):
     terrain_symbols = [".", "#", "W", "~", "?"] 
     structure_symbols = ["D", "S"]
     jump_symbols = ["J", "↓", "↑", "←", "→", "↗", "↖", "↘", "↙"]
-    furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t", "O", "^", "U", "V", "M"]
+    furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t", "K", "O", "^", "U", "V", "M"]
     npc_symbols = ["N", "@"]
     
     categories = [
@@ -389,12 +429,16 @@ def generate_dynamic_legend(grid):
     return "\n".join(legend_lines)
 
 
-def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coords=None):
+def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coords=None, location_name=None):
     """
     Format raw tiles into LLM-friendly grid format (no headers/legends).
     
     Args:
-        raw_tiles: 2D list of tile tuples  
+        raw_tiles: 2D list of tile tuples
+        player_facing: Direction player is facing
+        npcs: List of NPC/object events
+        player_coords: Player position for relative positioning
+        location_name: Location name for context-specific symbols  
         player_facing: Player facing direction
         npcs: List of NPC/object events with positions
         player_coords: Tuple of (player_x, player_y) in absolute world coordinates
@@ -405,7 +449,7 @@ def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coord
     if not raw_tiles:
         return "No map data available"
     
-    grid = format_map_grid(raw_tiles, player_facing, npcs, player_coords)
+    grid = format_map_grid(raw_tiles, player_facing, npcs, player_coords, location_name=location_name)
     
     # Simple grid format for LLM
     lines = []

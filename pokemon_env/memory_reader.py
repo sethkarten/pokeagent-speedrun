@@ -2700,6 +2700,25 @@ class PokemonEmeraldReader:
     def _update_map_stitcher(self, tiles, state):
         """Update the map stitcher with current map data"""
         try:
+            # Check if PLAYER_HOUSE_ENTERED milestone has been reached
+            # We do this by checking if we've been inside a house (Brendan's or May's house)
+            location_name = state.get("player", {}).get("location", "")
+            
+            # Initialize flag to track if we've entered the player's house
+            if not hasattr(self, '_player_house_entered'):
+                self._player_house_entered = False
+            
+            # Check if we're in a player house location
+            if not self._player_house_entered:
+                if any(house in location_name for house in ["Brendans House", "Mays House", "Player House"]):
+                    self._player_house_entered = True
+                    logger.info("🏠 PLAYER_HOUSE_ENTERED milestone detected - enabling map stitcher")
+            
+            # Don't update map stitcher until player has entered their house
+            if not self._player_house_entered:
+                logger.debug("Map stitcher disabled - waiting for PLAYER_HOUSE_ENTERED milestone")
+                return
+            
             # Get the global shared MapStitcher instance
             if self._map_stitcher is None:
                 from utils import map_stitcher_singleton
@@ -2712,7 +2731,7 @@ class PokemonEmeraldReader:
             map_bank = self._read_u8(self.addresses.MAP_BANK)
             map_number = self._read_u8(self.addresses.MAP_NUMBER)
             
-            # Get location name from player location, with fallback to map ID resolution
+            # Location name already retrieved above, but refresh it for accuracy
             location_name = state.get("player", {}).get("location")
             if not location_name or location_name == "Unknown":
                 # Try to resolve from map ID directly
