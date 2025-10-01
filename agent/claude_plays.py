@@ -26,6 +26,9 @@ from utils.vlm import VLM
 from utils.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
 from utils.pathfinding import Pathfinder
+from utils.knowledge_base import get_knowledge_base, KnowledgeBase
+from utils.coordinate_overlay import add_coordinate_overlay
+from utils.agent_helpers import update_server_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -55,51 +58,93 @@ class ClaudePlaysAgent:
         self,
         vlm_client: Optional[VLM] = None,
         max_history: int = 30,
-        enable_navigation: bool = False,
+        enable_navigation: bool = True,
+        enable_knowledge_base: bool = True,
+        enable_coordinate_overlay: bool = True,
         verbose: bool = True
     ):
         """
         Initialize the ClaudePlaysPokemon agent.
-        
+
         Args:
             vlm_client: Vision-language model client for LLM queries
             max_history: Maximum message history before summarization (default 30 from original)
             enable_navigation: Whether to enable navigate_to tool
+            enable_knowledge_base: Whether to enable knowledge base tools
+            enable_coordinate_overlay: Whether to overlay coordinates on screenshots (faithful to original)
             verbose: Whether to print detailed action logs
         """
         self.vlm_client = vlm_client or VLM()
         self.max_history = max_history
         self.enable_navigation = enable_navigation
+        self.enable_knowledge_base = enable_knowledge_base
+        self.enable_coordinate_overlay = enable_coordinate_overlay
         self.verbose = verbose
-        
+
         # Message history in Anthropic format
         self.messages: List[Dict[str, Any]] = []
-        
+
         # Button queue for multi-step sequences
         self.button_queue: List[str] = []
-        
+
         # Step tracking
         self.step_count = 0
         self.running = False
-        
+
         # Logging
         self.logger = logging.getLogger(__name__)
         self.llm_logger = LLMLogger()
-        
+
         # Pathfinding for navigation
         self.pathfinder = Pathfinder()
+
+        # Knowledge base for persistent memory
+        self.knowledge = get_knowledge_base() if enable_knowledge_base else None
     
     def get_system_prompt(self) -> str:
         """Get the system prompt (matching original's structure)."""
-        return """You are playing Pokemon Emerald on a Game Boy Advance emulator.
+        coordinate_info = ""
+        if self.enable_coordinate_overlay:
+            coordinate_info = """
 
-Your goal is to progress through the game, defeat gym leaders, and ultimately become the Pokemon Champion.
+COORDINATE OVERLAY SYSTEM:
+Each tile in the screenshot is labeled with its (X,Y) world coordinates:
+- BLACK background = Walkable tile (you can move here)
+- RED background = Blocked tile (wall, water, obstacle)
+- NO LABEL = Your current position
+- Use the overlay over the image to provide analysis, including locations of items.
 
-You interact with the game by using tools to press buttons on the emulator. Each button press is executed sequentially.
+Use these coordinates with the navigate_to tool to move to specific locations efficiently."""
 
-Sometimes, you may receive a summary of what happened recently instead of a full history.
+        tools_info = """
 
-Be strategic in your decisions - consider type advantages in battles, manage your Pokemon's health, and explore thoroughly to find items and trainers."""
+SCAFFOLDING TOOLS AVAILABLE:
+- press_buttons: Control the game by pressing GBA buttons
+- navigate_to: Automatically pathfind to any coordinate on the map (uses A* with collision detection)
+- add_knowledge: Store important discoveries in your persistent knowledge base
+- search_knowledge: Retrieve stored information about locations, NPCs, items, etc.
+- get_knowledge_summary: Review your most important discoveries
+
+The game state provided to you includes:
+- Screenshot with coordinate overlays showing (X,Y) positions and walkability
+- Player position, party status, items, badges, and money"""
+
+        return f"""You are playing Pokemon Emerald. You can see the game screen and control the game by executing emulator commands.
+
+Your goal is to play through Pokemon Emerald and eventually defeat the Elite Four. Make decisions based on what you see on the screen.
+
+Before each action, explain your reasoning briefly, then use the tools to execute your chosen commands.
+
+The conversation history may occasionally be summarized to save context space. If you see a message labeled "CONVERSATION HISTORY SUMMARY", this contains the key information about your progress so far. Use this information to maintain continuity in your gameplay.
+
+Be strategic in your decisions - consider type advantages in battles, manage your Pokemon's health, and explore thoroughly to find items and trainers.
+{coordinate_info}
+{tools_info if (self.enable_navigation or self.enable_knowledge_base) else ""}
+
+IMPORTANT RULES:
+- Always use your knowledge base to remember important information! Store NPCs, item locations, puzzle solutions, and strategies as you discover them.
+- NEVER save the game using the START menu - this disrupts the game flow and is not allowed.
+- Do not open the START menu unless absolutely necessary for gameplay (like checking Pokemon status)."""
     
     def get_tools(self) -> List[Dict[str, Any]]:
         """Get tool definitions in Anthropic format."""
@@ -114,7 +159,7 @@ Be strategic in your decisions - consider type advantages in battles, manage you
                             "type": "array",
                             "items": {
                                 "type": "string",
-                                "enum": ["A", "B", "UP", "DOWN", "LEFT", "RIGHT", 
+                                "enum": ["A", "B", "UP", "DOWN", "LEFT", "RIGHT",
                                        "START", "SELECT", "L", "R"]
                             },
                             "description": "List of buttons to press in sequence"
@@ -128,7 +173,7 @@ Be strategic in your decisions - consider type advantages in battles, manage you
                 }
             }
         ]
-        
+
         if self.enable_navigation:
             tools.append({
                 "name": "navigate_to",
@@ -152,70 +197,184 @@ Be strategic in your decisions - consider type advantages in battles, manage you
                     "required": ["x", "y"]
                 }
             })
-        
+
+        if self.enable_knowledge_base:
+            tools.extend([
+                {
+                    "name": "add_knowledge",
+                    "description": "Store important information in your persistent knowledge base. Use this to remember locations, NPCs, items, strategies, or any other useful information you discover.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
+                                "description": "Category of knowledge"
+                            },
+                            "title": {
+                                "type": "string",
+                                "description": "Brief title for this knowledge"
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "Detailed description or notes"
+                            },
+                            "location": {
+                                "type": "string",
+                                "description": "Map name where this applies (optional)"
+                            },
+                            "importance": {
+                                "type": "integer",
+                                "description": "Importance level 1-5 (5 = critical, 3 = normal, 1 = minor)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": ["category", "title", "content"]
+                    }
+                },
+                {
+                    "name": "search_knowledge",
+                    "description": "Search your knowledge base for stored information. Use this to recall what you've learned about locations, NPCs, items, or strategies.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "category": {
+                                "type": "string",
+                                "enum": ["location", "npc", "item", "pokemon", "strategy", "custom", "all"],
+                                "description": "Category to search (or 'all' for everything)"
+                            },
+                            "query": {
+                                "type": "string",
+                                "description": "Text to search for in titles and content (optional)"
+                            },
+                            "location": {
+                                "type": "string",
+                                "description": "Filter by map name (optional)"
+                            },
+                            "min_importance": {
+                                "type": "integer",
+                                "description": "Minimum importance level (1-5, default 1)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": []
+                    }
+                },
+                {
+                    "name": "get_knowledge_summary",
+                    "description": "Get a summary of the most important things you've learned. Shows your top discoveries and notes.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "min_importance": {
+                                "type": "integer",
+                                "description": "Minimum importance level to include (1-5, default 3)",
+                                "minimum": 1,
+                                "maximum": 5
+                            }
+                        },
+                        "required": []
+                    }
+                }
+            ])
+
         return tools
     
-    def step(self, state: Dict[str, Any], screenshot: Any = None) -> str:
+    def step(self, state: Dict[str, Any], screenshot: Any = None) -> Dict[str, Any]:
         """
         Execute one step of the agent (compatible with run.py).
-        
+
         Args:
-            state: Current game state from memory reader
-            screenshot: Current game screenshot (PIL Image)
-            
+            state: Current game state from memory reader (should include 'frame' key)
+            screenshot: Optional screenshot (will use state['frame'] if not provided)
+
         Returns:
-            Single button command (e.g., "A", "UP", "NONE")
+            Dictionary with 'action' and optional 'reasoning' keys
         """
         self.step_count += 1
-        
-        # If we have queued buttons from previous tool call, return next one
+
+        # Extract screenshot from state if not provided
+        if screenshot is None:
+            screenshot = state.get('frame')
+
+        # If we have queued buttons from previous tool call, return all of them
         if self.button_queue:
-            button = self.button_queue.pop(0)
+            actions = self.button_queue.copy()
+            self.button_queue.clear()
             if self.verbose:
-                print(f"  Executing queued button: {button}")
-            return button
-        
+                print(f"  Executing queued buttons: {actions}")
+            return {"action": actions, "reasoning": "Executing queued buttons from previous tool call"}
+
         # Check if we need to summarize history (matching original behavior)
         if len(self.messages) > self.max_history:
             self._summarize_history()
-        
+
         # Create user message with screenshot and state
         user_message = self._create_user_message(state, screenshot)
         self.messages.append(user_message)
-        
+
         # Query the VLM for next action
         assistant_response = self._query_vlm(screenshot)
         self.messages.append({"role": "assistant", "content": assistant_response})
-        
+
         # Parse and process tool calls
         tool_calls = self._parse_tool_calls(assistant_response)
-        
+
+        reasoning = assistant_response[:200] if assistant_response else "No response"
+
         if tool_calls:
             for tool_call in tool_calls:
                 self._process_tool_call(tool_call, state)
-        
-        # Return next button or NONE
-        return self.button_queue.pop(0) if self.button_queue else "NONE"
+
+        # Update server with agent step and metrics (for agent thinking display)
+        update_server_metrics()
+
+        # Return all queued buttons as a list (server handles the queue)
+        if self.button_queue:
+            actions = self.button_queue.copy()
+            self.button_queue.clear()
+            return actions
+        else:
+            return "NONE"
     
     def _create_user_message(self, state: Dict[str, Any], screenshot: Any) -> Dict[str, Any]:
         """Create a user message in Anthropic format."""
         content = []
-        
+
         # Add state description
         state_text = format_state_for_llm(state)
         content.append({
             "type": "text",
             "text": f"Current game state:\n{state_text}\n\nWhat should we do next?"
         })
-        
+
         # Add screenshot if available
         if screenshot is not None:
             if isinstance(screenshot, Image.Image):
+                # Apply coordinate overlay if enabled AND in overworld
+                if self.enable_coordinate_overlay:
+                    # Only show overlay in overworld (not in battle, menu, etc.)
+                    game_state = state.get('game', {}).get('game_state', '')
+                    is_overworld = game_state == 'overworld'
+
+                    if is_overworld:
+                        try:
+                            screenshot = add_coordinate_overlay(screenshot, state)
+                            if self.verbose:
+                                logger.debug("Added coordinate overlay to screenshot")
+                        except Exception as e:
+                            logger.warning(f"Failed to add coordinate overlay: {e}")
+                            # Continue with original screenshot
+                    elif self.verbose:
+                        logger.debug(f"Skipping coordinate overlay (game_state={game_state}, not overworld)")
+
                 # Convert PIL Image to base64
                 buffered = BytesIO()
                 screenshot.save(buffered, format="PNG")
                 image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-                
+
                 content.append({
                     "type": "image",
                     "source": {
@@ -224,7 +383,7 @@ Be strategic in your decisions - consider type advantages in battles, manage you
                         "data": image_base64
                     }
                 })
-        
+
         return {"role": "user", "content": content}
     
     def _query_vlm(self, screenshot: Any) -> str:
@@ -250,11 +409,11 @@ Analyze the current game state and decide what action to take next. Use the pres
             response = self.vlm_client.get_text_query(prompt, "claude_plays")
         
         # Log the interaction
-        self.llm_logger.log_interaction(
-            interaction_type="claude_plays",
-            prompt=prompt,
-            response=response
-        )
+        # self.llm_logger.log_interaction(
+        #     interaction_type="claude_plays",
+        #     prompt=prompt,
+        #     response=response
+        # )
         
         return response
     
@@ -349,19 +508,109 @@ Analyze the current game state and decide what action to take next. Use the pres
         if tool_call.name == "press_buttons":
             buttons = tool_call.parameters.get("buttons", [])
             reason = tool_call.parameters.get("reason", "No reason provided")
-            
+
             if self.verbose:
                 print(f"[BUTTON] Tool: press_buttons")
                 print(f"   Buttons: {buttons}")
                 print(f"   Reason: {reason}")
-            
+
             self.logger.info(f"Pressing buttons: {buttons} - {reason}")
-            
+
             # Add buttons to queue
             for button in buttons:
                 if button in ["A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT", "L", "R"]:
                     self.button_queue.append(button)
-            
+
+        elif tool_call.name == "add_knowledge" and self.enable_knowledge_base:
+            category = tool_call.parameters.get("category", "custom")
+            title = tool_call.parameters.get("title", "")
+            content = tool_call.parameters.get("content", "")
+            location = tool_call.parameters.get("location")
+            importance = tool_call.parameters.get("importance", 3)
+
+            if self.verbose:
+                print(f"[KNOWLEDGE] Tool: add_knowledge")
+                print(f"   Category: {category}")
+                print(f"   Title: {title}")
+                print(f"   Location: {location or 'N/A'}")
+                print(f"   Importance: {importance}")
+
+            # Get current coordinates if not specified
+            coords = None
+            if state and 'player' in state and 'position' in state['player']:
+                pos = state['player']['position']
+                coords = (pos.get('x'), pos.get('y'))
+
+            entry_id = self.knowledge.add(
+                category=category,
+                title=title,
+                content=content,
+                location=location,
+                coordinates=coords,
+                importance=importance
+            )
+
+            if self.verbose:
+                print(f"   Stored as: {entry_id}")
+
+        elif tool_call.name == "search_knowledge" and self.enable_knowledge_base:
+            category = tool_call.parameters.get("category", "all")
+            query = tool_call.parameters.get("query")
+            location = tool_call.parameters.get("location")
+            min_importance = tool_call.parameters.get("min_importance", 1)
+
+            if self.verbose:
+                print(f"[KNOWLEDGE] Tool: search_knowledge")
+                print(f"   Category: {category}")
+                print(f"   Query: {query or 'all'}")
+                print(f"   Location: {location or 'all'}")
+
+            # Search knowledge base
+            results = self.knowledge.search(
+                category=None if category == "all" else category,
+                location=location,
+                query=query,
+                min_importance=min_importance
+            )
+
+            # Format results for LLM
+            if results:
+                result_text = f"Found {len(results)} knowledge entries:\n"
+                for entry in results[:10]:  # Limit to 10 results
+                    loc_str = f" @ {entry.location}" if entry.location else ""
+                    coords_str = f" ({entry.coordinates[0]}, {entry.coordinates[1]})" if entry.coordinates else ""
+                    result_text += f"\n[{entry.category}] {entry.title}{loc_str}{coords_str}\n  {entry.content}\n"
+
+                # Add search results to conversation
+                self.messages.append({
+                    "role": "assistant",
+                    "content": result_text
+                })
+
+                if self.verbose:
+                    print(f"   Found {len(results)} entries")
+            else:
+                if self.verbose:
+                    print(f"   No results found")
+
+        elif tool_call.name == "get_knowledge_summary" and self.enable_knowledge_base:
+            min_importance = tool_call.parameters.get("min_importance", 3)
+
+            if self.verbose:
+                print(f"[KNOWLEDGE] Tool: get_knowledge_summary")
+                print(f"   Min importance: {min_importance}")
+
+            summary = self.knowledge.get_summary(min_importance=min_importance)
+
+            # Add summary to conversation
+            self.messages.append({
+                "role": "assistant",
+                "content": summary
+            })
+
+            if self.verbose:
+                print(f"   Generated knowledge summary")
+
         elif tool_call.name == "navigate_to" and self.enable_navigation:
             target_x = tool_call.parameters.get("x", 0)
             target_y = tool_call.parameters.get("y", 0)
@@ -431,11 +680,16 @@ Analyze the current game state and decide what action to take next. Use the pres
             elif msg["role"] == "assistant":
                 history_text.append(f"Assistant: {msg['content'][:300]}")
         
-        summary_prompt = f"""Summarize this Pokemon Emerald gameplay conversation in 2-3 concise sentences:
+        summary_prompt = f"""{chr(10).join(history_text)}\nI need you to create a detailed summary of our conversation history up to this point. This summary will replace the full conversation history to manage the context window.
 
-{chr(10).join(history_text)}
+Please include:
+1. Key game events and milestones you've reached
+2. Important decisions you've made
+3. Current objectives or goals you're working toward
+4. Your current location and Pokémon team status
+5. Any strategies or plans you've mentioned
 
-Focus on: current location, recent achievements, current objective, and any problems encountered."""
+The summary should be comprehensive enough that you can continue gameplay without losing important context about what has happened so far."""
         
         summary = self.vlm_client.get_text_query(summary_prompt, "claude_plays_summary")
         

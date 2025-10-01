@@ -41,6 +41,7 @@ import numpy as np
 from PIL import Image
 
 from utils.state_formatter import format_state_for_llm
+from utils.agent_helpers import update_server_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -927,39 +928,13 @@ Context: {context} | Coords: {coords} """
                         self.state.stuck_detection[key] = max(0, self.state.stuck_detection[key] - 1)
             
             # Update server with agent step and metrics (for agent thinking display)
-            self._update_server_metrics()
+            update_server_metrics()
             
             return actions
             
         except Exception as e:
             logger.error(f"Error in simple agent processing: {e}")
             return ["A"]  # Default safe action as list
-    
-    def _update_server_metrics(self):
-        """Update server with current agent step count and LLM metrics"""
-        try:
-            import requests
-            from utils.llm_logger import get_llm_logger
-            
-            # Get current LLM metrics
-            llm_logger = get_llm_logger()
-            metrics = llm_logger.get_cumulative_metrics()
-            
-            # Send metrics to server
-            try:
-                response = requests.post(
-                    "http://localhost:8000/agent_step",
-                    json={"metrics": metrics},
-                    timeout=1
-                )
-                if response.status_code != 200:
-                    logger.warning(f"Failed to update server metrics: {response.status_code}")
-            except requests.exceptions.RequestException:
-                # Silent fail - server might not be running or in different mode
-                pass
-                
-        except Exception as e:
-            logger.warning(f"Error updating server metrics: {e}")
     
     def _parse_actions(self, response: str, game_state: Dict[str, Any] = None) -> List[str]:
         """Parse action response from LLM into list of valid actions"""

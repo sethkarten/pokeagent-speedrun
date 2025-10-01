@@ -24,6 +24,7 @@ from utils.vlm import VLM
 from utils.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
 from utils.pathfinding import Pathfinder
+from utils.agent_helpers import update_server_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -346,7 +347,10 @@ class GeminiPlaysAgent:
             exploration_action = self._get_exploration_action(state)
             if exploration_action and exploration_action != "NONE":
                 action = exploration_action
-        
+
+        # Update server with agent step and metrics (for agent thinking display)
+        update_server_metrics()
+
         self.recent_actions.append(action)
         return action
     
@@ -858,6 +862,10 @@ Recent actions: {', '.join(list(self.recent_actions)[-5:])}
 
 What single button should you press next? Choose from: A, B, UP, DOWN, LEFT, RIGHT, START, SELECT, L, R
 Consider your goals and avoid repeating failed actions.
+
+IMPORTANT RULES:
+- NEVER save the game using the START menu - this disrupts the game flow and is not allowed.
+- Do not open the START menu unless absolutely necessary for gameplay (like checking Pokemon status).
 
 Reply with just the button name."""
     
