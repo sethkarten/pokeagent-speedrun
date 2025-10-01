@@ -821,7 +821,7 @@ IMPORTANT: Please think step by step before choosing your action. Structure your
 
 ANALYSIS:
 [Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing? 
-IMPORTANT: Look carefully at the game image for objects (clocks, pokeballs) and NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue.]
+IMPORTANT: Look carefully at the game image for objects (clocks, pokeballs, bags) and NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue. When you see them try determine their location (X,Y) on the map relative to the player and any objects.]
 
 OBJECTIVES:
 [Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them.  There may be sub-objectives that you need to complete before the main milestone. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
