@@ -218,14 +218,14 @@ class SimpleAgent:
             },
             {
                 "id": "story_birch_lab",
-                "description": "Visit Professor Birch's lab in Littleroot Town",
+                "description": "Visit Professor Birch's lab in Littleroot Town and receive the Pokedex",
                 "objective_type": "location",
                 "target_value": "Birch's Lab",
                 "milestone_id": "BIRCH_LAB_VISITED"
             },
             {
                 "id": "story_oldale_town",
-                "description": "Continue journey to Oldale Town",
+                "description": "Leave lab and continue journey north to Oldale Town",
                 "objective_type": "location",
                 "target_value": "Oldale Town",
                 "milestone_id": "OLDALE_TOWN"
