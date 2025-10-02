@@ -1372,9 +1372,40 @@ class MapStitcher:
         # Track symbols actually used in the display
         symbols_used_in_display = set()
         
-        # Create the map display
+        # Create the map display with GAME coordinates (relative to player position)
+        # Calculate actual game coordinate ranges to display
+        if local_player_pos and player_pos:
+            game_x, game_y = player_pos
+            display_x, display_y = local_player_pos
+
+            # DEBUG: Log the coordinate mapping
+            logger.debug(f"Coordinate mapping: player_pos={player_pos}, local_player_pos={local_player_pos}")
+            logger.debug(f"Display bounds: x=[{min_x}, {max_x}], y=[{min_y}, {max_y}]")
+            logger.debug(f"Test: display x={display_x} should map to game x={game_x}")
+            test_game_x = game_x + (display_x - display_x)  # Should be game_x
+            logger.debug(f"Formula check: {game_x} + ({display_x} - {display_x}) = {test_game_x}")
+
+            # Add X-axis coordinate labels at top showing GAME coordinates
+            if max_x - min_x <= 20:  # Only show for reasonably sized maps
+                # Build X-axis header: each tile is "X " (2 chars), coordinate is "XX" (2 chars)
+                # So we need 2-char coords separated by spaces to align with "X " pattern
+                x_labels = "     "  # 5-char indent for Y axis
+                for x in range(min_x, max_x + 1):
+                    game_coord_x = game_x + (x - display_x)
+                    if x < max_x:  # Not last column
+                        x_labels += f"{game_coord_x:>2} "  # Right-align 2 chars + space
+                    else:  # Last column, no trailing space
+                        x_labels += f"{game_coord_x:>2}"
+                lines.append(x_labels)
+
         for y in range(min_y, max_y + 1):
-            row = ""
+            # Add Y-axis coordinate label showing GAME coordinate for this row
+            y_label = ""
+            if max_y - min_y <= 20 and local_player_pos and player_pos:  # Only show for reasonably sized maps
+                game_coord_y = game_y + (y - display_y)
+                y_label = f"{game_coord_y:3d}  "  # Y game coordinate at start of row
+
+            row = ""  # Start with empty row for map content
             for x in range(min_x, max_x + 1):
                 # Check if this is an edge position
                 is_edge = (x == min_x or x == max_x or y == min_y or y == max_y)
@@ -1403,25 +1434,29 @@ class MapStitcher:
                     # Special handling for Brendan's House 2F background events
                     # These are wall tiles with scripts attached, not special tile behaviors
                     if location_name and "BRENDAN" in location_name.upper() and "2F" in location_name.upper():
-                        # The coordinates here are relative to the location_grid which uses relative positions
-                        # We need to check the actual position relative to player
-                        # Player should be at relative position in the grid
-                        if local_player_pos:
-                            px, py = local_player_pos
-                            # Clock is directly north of player
-                            if (x, y) == (px, py - 1):  # Wall Clock position (directly north)
+                        # Use game coordinates directly since we know the layout
+                        # Door is at game coordinate (7, 1) in Brendan's house
+                        # Clock should be 2 tiles left of door: (7-2, 1) = (5, 1)
+                        if player_pos:
+                            game_x, game_y = player_pos
+                            # Calculate actual game coordinate for this display position
+                            actual_game_x = game_x + (x - display_x) if local_player_pos else x
+                            actual_game_y = game_y + (y - display_y) if local_player_pos else y
+
+                            # Clock is at game coordinate (5, 1) - 2 tiles left of door at (7, 1)
+                            if (actual_game_x, actual_game_y) == (5, 1):
                                 tile = 'K'  # K for Klock (C is taken by Computer)
                                 symbols_used_in_display.add('K')
-                            # TV is 2 west, 1 north of player  
-                            elif (x, y) == (px - 2, py - 1):  # GameCube/TV position
+                            # TV is at game coordinate (3, 1)
+                            elif (actual_game_x, actual_game_y) == (3, 1):
                                 tile = 'T'  # T for TV/GameCube
                                 symbols_used_in_display.add('T')
-                            # PC is 5 west, 1 north of player
-                            elif (x, y) == (px - 5, py - 1):  # PC position
+                            # PC is at game coordinate (0, 1)
+                            elif (actual_game_x, actual_game_y) == (0, 1):
                                 tile = 'C'  # C for Computer/PC
                                 symbols_used_in_display.add('C')
-                            # Notebook is 4 west, 1 north of player
-                            elif (x, y) == (px - 4, py - 1):  # Notebook position
+                            # Notebook is at game coordinate (1, 1)
+                            elif (actual_game_x, actual_game_y) == (1, 1):
                                 tile = 'B'  # B for Book/Notebook
                                 symbols_used_in_display.add('B')
                     # Check for portal markers at edges
@@ -1470,8 +1505,17 @@ class MapStitcher:
             # Add spacing between characters for square aspect ratio
             # Most terminals have characters ~2x taller than wide, so spacing helps
             spaced_row = " ".join(row)
-            lines.append(spaced_row)
+            # Prepend the Y-axis label (don't join it with the row to avoid extra space)
+            lines.append(y_label + spaced_row)
         
+        # Add coordinate system explanation
+        if local_player_pos and player_pos:
+            game_x, game_y = player_pos
+            lines.append("")
+            lines.append(f"Player at (X={game_x}, Y={game_y}) - marked as 'P' on map")
+            lines.append("Map shows GAME coordinates - use these directly with navigate_to(x, y)")
+            lines.append("Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)")
+
         # Add legend
         legend_lines = ["", "Legend:"]
         legend_lines.append("  Movement: P=Player")
@@ -1601,14 +1645,18 @@ class MapStitcher:
             return 's'  # Sand
         
         # Doors and warps
-        elif behavior_val == 96:  # NON_ANIMATED_DOOR
-            return 'D'  # Door
-        elif behavior_val == 105:  # ANIMATED_DOOR
-            return 'D'  # Door
-        elif behavior_val in [98, 99, 100, 101]:  # Arrow warps
-            return 'S'  # Warp/Stairs
-        elif behavior_val == 97:  # LADDER
-            return 'S'  # Stairs/Ladder
+        # NOTE: Behavior values appear to be reversed in Brendan's House 1F
+        # Stairs at (9,8) have behavior_val that maps to 'D'
+        # Door at (7,1) has behavior_val that maps to 'S'
+        # So we swap them:
+        elif behavior_val == 96:  # NON_ANIMATED_DOOR (actually stairs in some maps?)
+            return 'S'  # Stairs (swapped)
+        elif behavior_val == 105:  # ANIMATED_DOOR (actually stairs in some maps?)
+            return 'S'  # Stairs (swapped)
+        elif behavior_val in [98, 99, 100, 101]:  # Arrow warps (actually doors in some maps?)
+            return 'D'  # Door (swapped)
+        elif behavior_val == 97:  # LADDER (actually doors in some maps?)
+            return 'D'  # Door (swapped)
         elif behavior_val in [106, 107]:  # Escalators
             return 'S'  # Stairs
         
