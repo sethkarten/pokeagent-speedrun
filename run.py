@@ -119,11 +119,19 @@ def main():
                        help="Start in manual mode instead of agent mode")
     
     # Features
-    parser.add_argument("--record", action="store_true", 
+    parser.add_argument("--record", action="store_true",
                        help="Record video of the gameplay")
-    parser.add_argument("--no-ocr", action="store_true", 
+    parser.add_argument("--no-ocr", action="store_true",
                        help="Disable OCR dialogue detection")
-    
+    parser.add_argument("--story-objectives", action="store_true",
+                       help="Include story objectives tracking (CLI agent only)")
+
+    # CLI Agent specific options
+    parser.add_argument("--max-context", type=int, default=800000,
+                       help="Max context chars before compaction (CLI only, default: 800k)")
+    parser.add_argument("--target-context", type=int, default=400000,
+                       help="Target context chars after compaction (CLI only, default: 400k)")
+
     args = parser.parse_args()
     
     print("=" * 60)
@@ -196,9 +204,15 @@ def main():
             agent = CLIAgent(
                 server_url=f"http://localhost:{args.port}",
                 model=args.model_name,
-                max_steps=args.max_steps if hasattr(args, 'max_steps') else None
+                max_steps=args.max_steps if hasattr(args, 'max_steps') else None,
+                include_story_objectives=args.story_objectives,
+                max_context_chars=args.max_context,
+                target_context_chars=args.target_context
             )
             print("✅ Agent created", flush=True)
+            if args.story_objectives:
+                print("📋 Story objectives tracking: Enabled")
+            print(f"📊 Context limits: max {args.max_context:,} chars, compact to {args.target_context:,} chars")
 
             return agent.run()
         else:

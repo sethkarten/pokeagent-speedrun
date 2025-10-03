@@ -1475,17 +1475,6 @@ async def update_agent_step(request: Request = None):
             try:
                 request_data = await request.json()
 
-                # Store agent thinking if provided
-                if "thinking" in request_data:
-                    thinking_text = request_data["thinking"]
-                    step_num = request_data.get("step", agent_step_count)
-                    # Write to a simple text file for the stream to read
-                    try:
-                        with open("agent_thinking.txt", "w") as f:
-                            f.write(f"Step {step_num}:\n{thinking_text}\n")
-                    except Exception as e:
-                        logger.debug(f"Could not write thinking: {e}")
-
                 # Update metrics if provided (with thread safety)
                 if "metrics" in request_data and isinstance(request_data["metrics"], dict):
                     with step_lock:  # Use existing lock for thread safety
@@ -1729,8 +1718,12 @@ async def mcp_get_game_state():
         from utils.state_formatter import format_state_for_llm
         from server.cli import pokemon_mcp_server
 
+        # Create wrapper that uses JSON map format
+        def json_state_formatter(state):
+            return format_state_for_llm(state, use_json_map=True)
+
         # Use helper function from pokemon_mcp_server
-        return pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        return pokemon_mcp_server.get_game_state_direct(env, json_state_formatter)
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
         return {"success": False, "error": str(e)}

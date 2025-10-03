@@ -26,6 +26,84 @@ LAST_TRANSITION = None  # Stores transition coordinates
 MAP_STITCHER_SAVE_CALLBACK = None  # Callback to save map stitcher when location connections change
 MAP_STITCHER_INSTANCE = None  # Reference to the MapStitcher instance
 
+
+def print_map_debug(state_data):
+    """Print debug information about tile locations (stairs, doors, TV, etc).
+
+    This is called when pressing 'M' in manual mode to show tile coordinates.
+
+    Args:
+        state_data: The comprehensive state dict from get_comprehensive_state()
+    """
+    map_info = state_data.get('map', {})
+    player_data = state_data.get('player', {})
+
+    # Get player position
+    player_pos = player_data.get('position', {})
+    if player_pos:
+        player_x = player_pos.get('x')
+        player_y = player_pos.get('y')
+    else:
+        player_x = player_y = None
+
+    # Get location name
+    location_name = player_data.get('location')
+
+    print(f"\n[MAP DEBUG] Location: {location_name if location_name else 'Unknown'}")
+    if player_x is not None and player_y is not None:
+        print(f"[MAP DEBUG] Player at ({player_x}, {player_y})")
+
+    # Analyze memory tiles
+    raw_tiles = map_info.get('tiles')
+    if not raw_tiles or player_x is None or player_y is None:
+        print("[MAP DEBUG] No tile data available")
+        return
+
+    # Track interesting tiles
+    debug_tiles = {'stairs': [], 'door': [], 'tv': [], 'computer': [], 'ledge': []}
+
+    radius = 7  # Memory tiles are 15x15 grid centered on player
+    for y_idx, row in enumerate(raw_tiles):
+        for x_idx, tile_data in enumerate(row):
+            if tile_data and isinstance(tile_data, (list, tuple)) and len(tile_data) > 1:
+                behavior_obj = tile_data[1]
+                behavior = behavior_obj.value if hasattr(behavior_obj, 'value') else behavior_obj
+
+                # Map behavior to type
+                tile_type = None
+                if behavior in [96, 105]:
+                    tile_type = "stairs"
+                elif behavior in [97, 98, 99, 100, 101]:
+                    tile_type = "door"
+                elif behavior == 134:
+                    tile_type = "tv"
+                elif behavior in [131, 197]:
+                    tile_type = "computer"
+                elif behavior in [56, 57, 58, 59, 60, 61, 62, 63]:
+                    tile_type = "ledge"
+
+                if tile_type:
+                    game_x = player_x + (x_idx - radius)
+                    game_y = player_y + (y_idx - radius)
+                    debug_tiles[tile_type].append((game_x, game_y))
+
+    # Add hardcoded special objects for BRENDANS HOUSE 2F
+    if location_name and "BRENDAN" in location_name.upper() and "2F" in location_name.upper():
+        special_objects = {
+            'clock': [(5, 1)],
+            'gamecube': [(3, 1)],
+            'notebook': [(1, 1)],
+        }
+        for obj_type, positions in special_objects.items():
+            if obj_type not in debug_tiles:
+                debug_tiles[obj_type] = []
+            debug_tiles[obj_type].extend(positions)
+
+    # Print results
+    for tile_type, positions in debug_tiles.items():
+        if positions:
+            print(f"[MAP DEBUG] {tile_type.upper()}: {positions}")
+
 def _get_location_connections_from_cache():
     """Read location connections from MapStitcher's cache file"""
     try:
@@ -162,39 +240,41 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
         logger.warning(f"Failed to detect dialogue on frame: {e}")
         return {'has_dialogue': False, 'confidence': 0.0, 'reason': f'error: {e}'}
 
-def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True):
+def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True, use_json_map=False):
     """
     Format comprehensive state data into readable text.
-    
+
     Args:
         state_data (dict): The comprehensive state from /state endpoint
         format_type (str): "summary" for one-line summary, "detailed" for multi-line LLM format
         include_debug_info (bool): Whether to include extra debug information (for detailed format)
         include_npcs (bool): Whether to include NPC information in the state
-    
+        use_json_map (bool): Use JSON-based map format instead of ASCII grid (for detailed format)
+
     Returns:
         str: Formatted state text
     """
     if format_type == "summary":
         return _format_state_summary(state_data)
     elif format_type == "detailed":
-        return _format_state_detailed(state_data, include_debug_info, include_npcs)
+        return _format_state_detailed(state_data, include_debug_info, include_npcs, use_json_map)
     else:
         raise ValueError(f"Unknown format_type: {format_type}. Use 'summary' or 'detailed'")
 
-def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True):
+def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True, use_json_map=False):
     """
     Format comprehensive state data into a readable context for the VLM.
-    
+
     Args:
         state_data (dict): The comprehensive state from /state endpoint
         include_debug_info (bool): Whether to include extra debug information
         include_npcs (bool): Whether to include NPC information in the state
-    
+        use_json_map (bool): Use JSON-based map format instead of ASCII grid
+
     Returns:
         str: Formatted state context for LLM prompts
     """
-    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs)
+    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs, use_json_map=use_json_map)
 
 def format_state_summary(state_data):
     """
@@ -314,9 +394,12 @@ def _format_state_summary(state_data):
     
     return " | ".join(summary_parts) if summary_parts else "No state data"
 
-def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True):
+def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True, use_json_map=False):
     """
     Internal function to create detailed multi-line state format for LLM prompts.
+
+    Args:
+        use_json_map: If True, use JSON-based map format instead of ASCII grid
     """
     context_parts = []
     
@@ -485,7 +568,7 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.extend(party_context)
 
         # Map/Location information with traversability (NOT shown in battle)
-        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
+        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data, use_json_map)
         context_parts.extend(map_context)
 
         # Game state information (including dialogue if not in battle)
@@ -598,7 +681,7 @@ def _format_party_info(player_data, game_data):
     
     return context_parts
 
-def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None):
+def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None, use_json_map=False):
     """Format map and traversability information using MapStitcher."""
     context_parts = []
     
@@ -638,7 +721,10 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         player_coords = player_coords_dict
     elif player_data and 'position' in player_data:
         pos = player_data['position']
-        player_coords = (pos.get('x', 0), pos.get('y', 0))
+        if pos:
+            player_coords = (pos.get('x', 0), pos.get('y', 0))
+        else:
+            player_coords = (0, 0)
     
     # Get MapStitcher instance - prefer the one from memory_reader if available
     # This ensures we use the instance that has the actual map data
@@ -658,47 +744,174 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         current_area = map_info['stitched_map_info'].get('current_area', {})
         connections = current_area.get('connections', [])
     
-    # Check for pre-generated visual map first (from memory_reader)
-    if map_info.get('visual_map'):
-        # Use the pre-generated map visualization
-        context_parts.append(map_info['visual_map'])
-    elif location_name:
-        # Generate map display using MapStitcher
-            # print( Attempting to generate map for location: '{location_name}'")
-            # print( MapStitcher exists: {map_stitcher is not None}")
-        if map_stitcher:
-            # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
-            for map_id in list(map_stitcher.map_areas.keys())[:3]:
-                area = map_stitcher.map_areas[map_id]
-                # print(   Area {map_id}: '{area.location_name}'")
-        
-        map_lines = map_stitcher.generate_location_map_display(
-            location_name=location_name,
-            player_pos=player_coords,
-            npcs=npcs,
-            connections=connections
-        )
-        
-        if map_lines:
-            # print( Generated {len(map_lines)} map lines from MapStitcher")
-            context_parts.extend(map_lines)
-            # Add exploration statistics
-            location_grid = map_stitcher.get_location_grid(location_name)
-            if location_grid:
-                total_tiles = len(location_grid)
-                context_parts.append("")
-                context_parts.append(f"Total explored: {total_tiles} tiles")
-        else:
-            # print( MapStitcher returned empty, falling back to memory tiles")
-            # Fallback if MapStitcher doesn't have data for this location - use memory tiles
-            pass
-            if 'tiles' in map_info and map_info['tiles']:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
-                _add_local_map_fallback(context_parts, map_info, include_npcs, location_name)
-            else:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
-                context_parts.append("No map data available")
+    # When using JSON format, ONLY show JSON data (visual comes from screenshot image)
+    if use_json_map:
+        json_generated = False
+
+        # For JSON format, we have a tradeoff:
+        # - map_stitcher: Has warp overlays (doors/stairs) but may have stale coordinates
+        # - memory tiles: Always current coordinates but missing warp detection (some warps use metatile IDs not behaviors)
+        #
+        # Solution: Try map_stitcher first BUT validate coordinates are reasonable
+        # If validation fails, fall back to memory tiles (which won't show all warps but will have correct coords)
+
+        # DISABLED: map_stitcher accumulates tiles from different times/areas with inconsistent coordinates
+        # Always use memory tiles for JSON to ensure coordinate accuracy
+        # (map_stitcher is still used for ASCII maps where visual layout is more important than exact coords)
+
+        # Fallback: Convert raw memory tiles to JSON (works even without location name)
+        if not json_generated and 'tiles' in map_info and map_info['tiles']:
+            raw_tiles = map_info['tiles']
+            # Convert raw tiles grid to JSON format
+            tiles_list = []
+
+            # Memory tiles are centered on player with radius=7 (15x15 grid)
+            # Array index [7][7] = player position
+            # Convert array indices to game coordinates
+            radius = 7
+            player_x, player_y = player_coords if player_coords else (0, 0)
+
+            # Track interesting tiles for debug logging
+            debug_tiles = {'stairs': [], 'door': [], 'tv': [], 'clock': [], 'computer': [], 'ledge': []}
+
+            for y_idx, row in enumerate(raw_tiles):
+                for x_idx, tile_data in enumerate(row):
+                    if tile_data:
+                        # Tile format: (metatile_id, behavior, collision, ...)
+                        # Extract behavior value from index 1
+                        if isinstance(tile_data, (list, tuple)) and len(tile_data) > 1:
+                            behavior_obj = tile_data[1]
+                            # Get numeric value from behavior enum or int
+                            if hasattr(behavior_obj, 'value'):
+                                behavior = behavior_obj.value
+                            else:
+                                behavior = behavior_obj
+                        else:
+                            behavior = 0
+
+                        # Map behavior to type
+                        if behavior in [96, 105]:  # NON_ANIMATED_DOOR, ANIMATED_DOOR (actually stairs)
+                            tile_type = "stairs"
+                        elif behavior in [97, 98, 99, 100, 101]:  # LADDER, arrow warps (actually doors)
+                            tile_type = "door"
+                        elif behavior == 134:  # TELEVISION
+                            tile_type = "tv"
+                        elif behavior in [131, 197]:  # PC, PLAYER_ROOM_PC_ON
+                            tile_type = "computer"
+                        elif behavior in [56, 57, 58, 59, 60, 61, 62, 63]:  # JUMP_* (ledges)
+                            tile_type = "ledge"
+                        elif behavior == 0:
+                            tile_type = "walkable"
+                        else:
+                            tile_type = "blocked"
+
+                        # Convert array index to game coordinates
+                        game_x = player_x + (x_idx - radius)
+                        game_y = player_y + (y_idx - radius)
+
+                        # Track interesting tiles for debug output
+                        if tile_type in debug_tiles:
+                            debug_tiles[tile_type].append((game_x, game_y))
+
+                        tiles_list.append({
+                            "x": game_x,
+                            "y": game_y,
+                            "type": tile_type,
+                            "walkable": tile_type in ["walkable", "door", "stairs", "tv", "computer", "ledge"]
+                        })
+
+            # Add hardcoded special objects for BRENDANS HOUSE 2F
+            # (These objects don't have behavior values in memory, so we add them manually)
+            if location_name and "BRENDAN" in location_name.upper() and "2F" in location_name.upper():
+                special_objects = [
+                    {'x': 5, 'y': 1, 'type': 'clock', 'walkable': False},
+                    {'x': 3, 'y': 1, 'type': 'gamecube', 'walkable': False},
+                    {'x': 1, 'y': 1, 'type': 'notebook', 'walkable': False},
+                ]
+                for obj in special_objects:
+                    # Check if position already has a tile
+                    existing = [t for t in tiles_list if t['x'] == obj['x'] and t['y'] == obj['y']]
+                    if existing:
+                        # Replace the existing tile with the special object
+                        tiles_list = [t for t in tiles_list if not (t['x'] == obj['x'] and t['y'] == obj['y'])]
+                    tiles_list.append(obj)
+                    # Add to debug tracking
+                    obj_type = obj['type']
+                    if obj_type not in debug_tiles:
+                        debug_tiles[obj_type] = []
+                    debug_tiles[obj_type].append((obj['x'], obj['y']))
+
+            # Build JSON output
+            import json as json_lib
+            json_output = {
+                "location": location_name if location_name else "Unknown",
+                "player_position": {"x": player_coords[0], "y": player_coords[1]} if player_coords else None,
+                "tiles": tiles_list
+            }
+
+            # Console debug: Print interesting tile locations
+            print(f"\n[MAP DEBUG] Location: {location_name if location_name else 'Unknown'}")
+            if player_coords:
+                print(f"[MAP DEBUG] Player at ({player_coords[0]}, {player_coords[1]})")
+            for tile_type, positions in debug_tiles.items():
+                if positions:
+                    print(f"[MAP DEBUG] {tile_type.upper()}: {positions}")
+
+            context_parts.append(f"\n--- MAP DATA (JSON from memory) ---")
+            context_parts.append(json_lib.dumps(json_output, indent=2))
+            json_generated = True
+
+        # Last resort: just show location info
+        if not json_generated and location_name:
+            context_parts.append(f"\n--- MAP INFO ---")
+            context_parts.append(f"Location: {location_name}")
+            if player_coords:
+                context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
+            context_parts.append("Note: See screenshot for visual map. Detailed tile data not available.")
     else:
+        # When NOT using JSON format, show ASCII visual maps
+        # Check for pre-generated visual map first (from memory_reader)
+        if map_info.get('visual_map'):
+            # Show the pre-generated map visualization
+            context_parts.append(map_info['visual_map'])
+        elif location_name:
+            # Generate map display using MapStitcher
+                # print( Attempting to generate map for location: '{location_name}'")
+                # print( MapStitcher exists: {map_stitcher is not None}")
+            if map_stitcher:
+                # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
+                for map_id in list(map_stitcher.map_areas.keys())[:3]:
+                    area = map_stitcher.map_areas[map_id]
+                    # print(   Area {map_id}: '{area.location_name}'")
+
+                # Show ASCII grid format
+                map_lines = map_stitcher.generate_location_map_display(
+                    location_name=location_name,
+                    player_pos=player_coords,
+                    npcs=npcs,
+                    connections=connections
+                )
+
+                if map_lines:
+                    # print( Generated {len(map_lines)} map lines from MapStitcher")
+                    context_parts.extend(map_lines)
+                    # Add exploration statistics
+                    location_grid = map_stitcher.get_location_grid(location_name)
+                    if location_grid:
+                        total_tiles = len(location_grid)
+                        context_parts.append("")
+                        context_parts.append(f"Total explored: {total_tiles} tiles")
+                else:
+                    # print( MapStitcher returned empty, falling back to memory tiles")
+                    # Fallback if MapStitcher doesn't have data for this location - use memory tiles
+                    if 'tiles' in map_info and map_info['tiles']:
+                        context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
+                        _add_local_map_fallback(context_parts, map_info, include_npcs, location_name)
+                    else:
+                        context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
+                        context_parts.append("No map data available")
+
+    if not location_name:
         # No location name - use local map fallback
         context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
         if 'tiles' in map_info and map_info['tiles']:

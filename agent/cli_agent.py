@@ -11,7 +11,11 @@ import sys
 import time
 import json
 import logging
+import re
+import traceback
 import requests
+import io
+import base64
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 
@@ -19,6 +23,8 @@ from typing import Optional, Dict, List, Any
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import google.generativeai as genai
+import google.generativeai.types as genai_types
+import PIL.Image as PILImage
 
 # Local imports
 from utils.agent_helpers import update_server_metrics
@@ -88,7 +94,8 @@ class MCPToolAdapter:
             if tool_name == "get_game_state" and result.get("success") and "state_text" in result:
                 logger.info("   Game State:")
                 print("\n" + "="*70)
-                print(result["state_text"])
+                # print(result["state_text"])
+                # print(self._truncate_json_map_for_console(result["state_text"]))
                 print("="*70 + "\n")
                 if "screenshot_base64" in result:
                     logger.info(f"   Screenshot: <{len(result['screenshot_base64'])} bytes>")
@@ -113,8 +120,9 @@ class CLIAgent:
         model: str = "gemini-2.5-flash",
         max_steps: Optional[int] = None,
         system_instructions_file: str = "POKEAGENT.md",
-        max_context_chars: int = 100000,  # ~25k tokens for gemini-2.5-flash
-        target_context_chars: int = 50000  # Compact down to this when exceeded
+        max_context_chars: int = 800000,  # ~200k tokens for gemini-2.5-flash (1M token limit)
+        target_context_chars: int = 400000,  # Compact down to this when exceeded
+        include_story_objectives: bool = False  # Toggle for storyline objectives
     ):
         print(f"🚀 Initializing CLIAgent with model={model}, server={server_url}")
         self.server_url = server_url
@@ -123,6 +131,7 @@ class CLIAgent:
         self.step_count = 0
         self.max_context_chars = max_context_chars
         self.target_context_chars = target_context_chars
+        self.include_story_objectives = include_story_objectives
 
         # Conversation history for tracking and compaction
         self.conversation_history = []
@@ -156,7 +165,6 @@ class CLIAgent:
         self.chat = self.gemini_model.start_chat(history=[])
 
         # Initialize LLM logger
-        from utils.llm_logger import get_llm_logger
         self.llm_logger = get_llm_logger()
 
     def _load_system_instructions(self, filename: str) -> str:
@@ -176,8 +184,6 @@ class CLIAgent:
         """Create Gemini function declarations for ALL MCP tools (Pokemon + Baseline)."""
 
         # Use Gemini's declaration format with proper types
-        import google.generativeai.types as genai_types
-
         tools = [
             # ============================================================
             # POKEMON MCP TOOLS
@@ -460,6 +466,40 @@ class CLIAgent:
                 arguments[key] = value
         return arguments
 
+    def _truncate_json_map_for_console(self, state_text: str, max_tiles: int = 5) -> str:
+        """Truncate JSON map tiles for console display only.
+
+        This only affects console printing - the LLM still receives the full map.
+        """
+        # Find JSON map sections
+        json_map_pattern = r'(--- MAP DATA \(JSON.*?\) ---\n)(\{[\s\S]*?\n\})'
+
+        def truncate_tiles(match):
+            header = match.group(1)
+            json_str = match.group(2)
+
+            try:
+                map_data = json.loads(json_str)
+                tiles = map_data.get('tiles', [])
+
+                if len(tiles) > max_tiles:
+                    # Keep first max_tiles tiles
+                    truncated_tiles = tiles[:max_tiles]
+                    map_data['tiles'] = truncated_tiles
+
+                    # Add truncation note
+                    truncated_json = json.dumps(map_data, indent=2)
+                    truncated_json = truncated_json.rstrip('\n}') + f',\n  "_truncated": "Showing {max_tiles}/{len(tiles)} tiles (console display only)"\n}}'
+
+                    return header + truncated_json
+                else:
+                    return match.group(0)
+            except:
+                # If parsing fails, return original
+                return match.group(0)
+
+        return re.sub(json_map_pattern, truncate_tiles, state_text)
+
     def _execute_function_call(self, function_call) -> str:
         """Execute a function call and return the result as JSON string."""
         function_name = function_call.name
@@ -504,7 +544,12 @@ class CLIAgent:
         return total_chars
 
     def _compact_history(self):
-        """Compact conversation history by removing oldest entries until under target size."""
+        """Compact conversation history using LLM to create intelligent summaries.
+
+        CRITICAL: This uses the LLM to summarize old conversation turns, then recreates
+        the Gemini chat session with the compacted history. This is similar to how
+        Claude Code handles context window management.
+        """
         current_size = self._calculate_context_size()
 
         if current_size <= self.target_context_chars:
@@ -512,15 +557,102 @@ class CLIAgent:
 
         logger.info(f"📚 Compacting history: {current_size:,} chars → target {self.target_context_chars:,} chars")
 
-        # Remove oldest entries until we're under target
-        removed_count = 0
-        while len(self.conversation_history) > 1 and self._calculate_context_size() > self.target_context_chars:
-            self.conversation_history.pop(0)
-            removed_count += 1
+        # Determine how many old entries to summarize
+        # Keep the most recent entries intact, summarize the older ones
+        total_entries = len(self.conversation_history)
+
+        # Keep at least the last 5 turns intact for immediate context
+        keep_recent = min(5, total_entries)
+
+        # Summarize everything older than the recent entries
+        entries_to_summarize = self.conversation_history[:-keep_recent] if keep_recent < total_entries else []
+        recent_entries = self.conversation_history[-keep_recent:] if keep_recent > 0 else []
+
+        if not entries_to_summarize:
+            logger.info(f"   No old entries to summarize (only {total_entries} turns)")
+            return
+
+        logger.info(f"   Summarizing {len(entries_to_summarize)} old turns, keeping {len(recent_entries)} recent turns intact")
+
+        # Build text to summarize
+        history_text = ""
+        for entry in entries_to_summarize:
+            history_text += f"\n--- Turn {entry['step']} ---\n"
+            history_text += f"User: {entry['prompt'][:500]}...\n"
+            history_text += f"Assistant: {entry['response'][:500]}...\n"
+            if entry.get('tool_calls'):
+                tools = ', '.join(t['name'] for t in entry['tool_calls'])
+                history_text += f"Tools used: {tools}\n"
+
+        # Ask LLM to create a concise summary
+        summary_prompt = f"""Please create a concise summary of this Pokemon Emerald gameplay session history.
+Focus on:
+- Key progress made (locations visited, Pokemon caught, battles won, items obtained)
+- Current objectives and goals
+- Important context needed to continue playing
+
+Keep the summary under 500 words.
+
+History to summarize:
+{history_text}
+"""
+
+        try:
+            logger.info(f"   Asking LLM to summarize {len(entries_to_summarize)} turns...")
+
+            # Create a temporary chat for summarization (don't use main chat)
+            temp_chat = self.gemini_model.start_chat(history=[])
+            summary_response = temp_chat.send_message(summary_prompt)
+            summary = summary_response.text
+
+            logger.info(f"   ✅ Generated summary: {len(summary)} chars")
+            logger.info(f"   Summary preview: {summary[:200]}...")
+
+            # Replace old entries with a single summarized entry
+            self.conversation_history = [{
+                "step": 0,
+                "prompt": "Previous session context",
+                "response": f"**SUMMARY OF PREVIOUS GAMEPLAY:**\n\n{summary}",
+                "tool_calls": [],
+                "timestamp": time.time()
+            }] + recent_entries
+
+        except Exception as e:
+            logger.error(f"   ❌ Failed to generate summary: {e}")
+            logger.info(f"   Falling back to simple truncation")
+
+            # Fallback: Just keep recent entries
+            self.conversation_history = recent_entries
 
         new_size = self._calculate_context_size()
-        logger.info(f"   Removed {removed_count} oldest turns")
-        logger.info(f"   New size: {new_size:,} chars ({len(self.conversation_history)} turns remaining)")
+        logger.info(f"   New history size: {new_size:,} chars ({len(self.conversation_history)} turns)")
+
+        # CRITICAL: Recreate Gemini chat session with compacted history
+        # This is what actually reduces the token count sent to the API
+        logger.info(f"🔄 Recreating Gemini chat session with compacted history...")
+
+        # Build compacted history in Gemini format
+        compacted_gemini_history = []
+        for entry in self.conversation_history:
+            # Add user message
+            compacted_gemini_history.append({
+                "role": "user",
+                "parts": [{"text": entry["prompt"]}]
+            })
+            # Add model response
+            response_text = entry["response"] if entry["response"] else "[Tool execution only]"
+            compacted_gemini_history.append({
+                "role": "model",
+                "parts": [{"text": response_text}]
+            })
+
+        # Create new chat session with compacted history
+        if compacted_gemini_history:
+            self.chat = self.gemini_model.start_chat(history=compacted_gemini_history)
+            logger.info(f"✅ Chat session recreated with {len(compacted_gemini_history)} messages ({len(self.conversation_history)} turns)")
+        else:
+            self.chat = self.gemini_model.start_chat(history=[])
+            logger.info(f"✅ Chat session reset to empty (no history to preserve)")
 
     def _format_history_for_display(self) -> str:
         """Format conversation history for display."""
@@ -568,24 +700,6 @@ class CLIAgent:
         logger.info("✅ All prerequisites met")
         return True
 
-    def _send_thinking_to_server(self, thinking_text: str, step_num: int):
-        """Send agent thinking to server for display in stream."""
-        try:
-            if thinking_text:
-                logger.debug(f"Sending thinking to server ({len(thinking_text)} chars)")
-                response = requests.post(
-                    f"{self.server_url}/agent_step",
-                    json={
-                        "metrics": {},
-                        "thinking": thinking_text,
-                        "step": step_num
-                    },
-                    timeout=1
-                )
-                logger.debug(f"Server response: {response.status_code}")
-        except Exception as e:
-            logger.debug(f"Could not send thinking to server: {e}")
-
     def run_step(self, prompt: str, max_tool_calls: int = 5, screenshot_b64: str = None) -> tuple[bool, str]:
         """Run a single agent step.
 
@@ -598,12 +712,19 @@ class CLIAgent:
             Tuple of (success: bool, response: str)
         """
         try:
+            # Calculate total context being sent
+            total_prompt_chars = len(prompt)
+            approx_prompt_tokens = total_prompt_chars // 4
+
             logger.info(f"📤 Sending prompt to Gemini...")
             logger.info(f"   Model: {self.model}")
-            # Don't log the full prompt - it's too long with game state
-            logger.info(f"   Prompt length: {len(prompt)} chars")
+            logger.info(f"   Prompt: {total_prompt_chars:,} chars (~{approx_prompt_tokens:,} tokens)")
             if screenshot_b64:
-                logger.info(f"   Including screenshot ({len(screenshot_b64)} bytes)")
+                logger.info(f"   Screenshot: {len(screenshot_b64)} bytes")
+
+            # Log context window usage
+            context_usage_pct = (approx_prompt_tokens / 250000) * 100  # 1M token limit for gemini-2.5
+            logger.info(f"   Context usage: ~{context_usage_pct:.1f}% of 1M token limit")
 
             tool_calls_made = []
             reasoning_text = ""  # Capture any text reasoning before tool calls
@@ -616,10 +737,6 @@ class CLIAgent:
             # Build message content with optional image
             if screenshot_b64:
                 # Send message with both text and image
-                import PIL.Image as PILImage
-                import io
-                import base64
-
                 # Decode base64 to image
                 image_data = base64.b64decode(screenshot_b64)
                 image = PILImage.open(io.BytesIO(image_data))
@@ -723,12 +840,8 @@ class CLIAgent:
                         # Add to history
                         self._add_to_history(prompt, full_response, tool_calls_made)
 
-                        # Log to LLM logger
+                        # Log to LLM logger (stream endpoint reads from llm_logs)
                         self._log_thinking(prompt, full_response, duration, tool_calls_made)
-
-                        # Send reasoning to server for display in stream
-                        thinking_to_send = display_text if display_text else full_response
-                        self._send_thinking_to_server(thinking_to_send, self.step_count + 1)
 
                         logger.info(f"✅ Step ended after {function_call.name} - will observe results in next step")
                         return True, full_response
@@ -826,11 +939,8 @@ class CLIAgent:
                     # Add to history
                     self._add_to_history(prompt, text_response, tool_calls_made)
 
-                    # Log to LLM logger with duration and tool calls
+                    # Log to LLM logger (stream endpoint reads from llm_logs)
                     self._log_thinking(prompt, text_response, duration, tool_calls_made)
-
-                    # Send thinking to server for display in stream
-                    self._send_thinking_to_server(text_response, self.step_count + 1)
 
                     return True, text_response
                 else:
@@ -844,14 +954,11 @@ class CLIAgent:
 
         except Exception as e:
             logger.error(f"❌ Error in agent step: {e}")
-            import traceback
             traceback.print_exc()
             return False, str(e)
 
     def _wait_for_actions_complete(self, timeout: int = 30) -> None:
         """Wait for all queued actions to complete before proceeding."""
-        import requests
-
         logger.info("⏳ Waiting for actions to complete...")
         start_time = time.time()
 
@@ -891,6 +998,79 @@ class CLIAgent:
         except Exception as e:
             logger.debug(f"Could not log to LLM logger: {e}")
 
+    def _get_story_objectives(self) -> str:
+        """Fetch and format story objectives from the server (if enabled)."""
+        if not self.include_story_objectives:
+            return ""
+
+        try:
+            # Get milestones from server
+            response = requests.get(f"{self.server_url}/milestones", timeout=5)
+            if response.status_code != 200:
+                return ""
+
+            milestones_data = response.json()
+            milestones = milestones_data.get("milestones", {})
+
+            if not milestones:
+                return ""
+
+            # Format storyline objectives
+            lines = ["\n=== STORY OBJECTIVES ==="]
+            lines.append("Main storyline progression (auto-verified, DO NOT manually complete):")
+            lines.append("")
+
+            # Define storyline objectives matching simple.py
+            storyline_objectives = [
+                {"id": "GAME_RUNNING", "desc": "Start the game"},
+                {"id": "INTRO_CUTSCENE_COMPLETE", "desc": "Complete intro cutscene"},
+                {"id": "PLAYER_HOUSE_ENTERED", "desc": "Enter player's house"},
+                {"id": "PLAYER_BEDROOM", "desc": "Enter player's bedroom"},
+                {"id": "CLOCK_SET", "desc": "Set the clock"},
+                {"id": "RIVAL_HOUSE", "desc": "Visit rival's house"},
+                {"id": "RIVAL_BEDROOM", "desc": "Visit rival's bedroom"},
+                {"id": "ROUTE_101", "desc": "Reach Route 101"},
+                {"id": "STARTER_CHOSEN", "desc": "Choose starter Pokemon"},
+                {"id": "BIRCH_LAB_VISITED", "desc": "Visit Professor Birch's lab"},
+                {"id": "OLDALE_TOWN", "desc": "Reach Oldale Town"},
+                {"id": "ROUTE_103", "desc": "Reach Route 103"},
+                {"id": "RECEIVED_POKEDEX", "desc": "Receive Pokedex"},
+                {"id": "ROUTE_102", "desc": "Reach Route 102"},
+                {"id": "PETALBURG_CITY", "desc": "Reach Petalburg City"},
+                {"id": "DAD_FIRST_MEETING", "desc": "Meet Dad at Petalburg Gym"},
+                {"id": "GYM_EXPLANATION", "desc": "Learn about gyms"},
+                {"id": "ROUTE_104_SOUTH", "desc": "Reach Route 104 (South)"},
+                {"id": "PETALBURG_WOODS", "desc": "Enter Petalburg Woods"},
+                {"id": "TEAM_AQUA_GRUNT_DEFEATED", "desc": "Defeat Team Aqua Grunt"},
+                {"id": "ROUTE_104_NORTH", "desc": "Reach Route 104 (North)"},
+                {"id": "RUSTBORO_CITY", "desc": "Reach Rustboro City"},
+                {"id": "RUSTBORO_GYM_ENTERED", "desc": "Enter Rustboro Gym"},
+                {"id": "ROXANNE_DEFEATED", "desc": "Defeat Roxanne"},
+                {"id": "FIRST_GYM_COMPLETE", "desc": "Complete first gym"},
+            ]
+
+            completed_count = 0
+            for obj in storyline_objectives:
+                milestone = milestones.get(obj["id"], {})
+                is_completed = milestone.get("completed", False)
+
+                if is_completed:
+                    completed_count += 1
+                    status = "✓"
+                else:
+                    status = "○"
+
+                lines.append(f"  {status} story_{obj['id'].lower()}: {obj['desc']}")
+
+            lines.append(f"\nProgress: {completed_count}/{len(storyline_objectives)} milestones completed")
+            lines.append("\nNOTE: Story objectives auto-complete via emulator verification. Focus on game progression!")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.debug(f"Failed to fetch story objectives: {e}")
+            return ""
+
     def run(self) -> int:
         """Run the agent loop."""
         logger.info("=" * 70)
@@ -900,6 +1080,7 @@ class CLIAgent:
         logger.info(f"Server: {self.server_url}")
         logger.info(f"Tools: {len(self.tools)} MCP tools (9 Pokemon + 11 Baseline)")
         logger.info(f"Context: Max {self.max_context_chars:,} chars (compact to {self.target_context_chars:,})")
+        logger.info(f"Story Objectives: {'Enabled' if self.include_story_objectives else 'Disabled'}")
         if self.max_steps:
             logger.info(f"Max Steps: {self.max_steps}")
         logger.info("=" * 70)
@@ -927,25 +1108,93 @@ class CLIAgent:
                 logger.info(f"\n{'='*70}")
                 logger.info(f"🤖 Step {self.step_count + 1}")
                 context_size = self._calculate_context_size()
-                logger.info(f"📚 History: {len(self.conversation_history)} turns ({context_size:,} chars)")
+                # Calculate approximate token count (rough estimate: 1 token ≈ 4 chars)
+                approx_tokens = context_size // 4
+                logger.info(f"📚 History: {len(self.conversation_history)} turns ({context_size:,} chars / ~{approx_tokens:,} tokens)")
                 logger.info(f"{'='*70}")
 
                 # Automatically fetch game state at the beginning of each step
                 game_state_result = self._execute_function_call_by_name("get_game_state", {})
 
-                # Parse game state result to extract screenshot if available
-                import json as json_module
+                # Parse game state result to extract state_text and screenshot
                 try:
-                    game_state_data = json_module.loads(game_state_result)
+                    game_state_data = json.loads(game_state_result)
                     screenshot_b64 = game_state_data.get("screenshot_base64")
+                    state_text = game_state_data.get("state_text", game_state_result)
                 except:
                     screenshot_b64 = None
+                    state_text = game_state_result
+
+                # Get story objectives if enabled
+                story_objectives_text = self._get_story_objectives()
 
                 # Build prompt for this step with game state included
+                # Include a reminder of the decision-making format
+                format_reminder = """
+CRITICAL STUCK DETECTION: Check your recent history! If you pressed the SAME button 3+ times in a row with NO position change or NO new dialogue text, you ARE STUCK!
+
+When STUCK in dialogue or repeating actions:
+✅ Try pressing B to exit dialogue/menus
+✅ Move to a DIFFERENT location (LEFT/RIGHT/UP/DOWN)
+✅ Interact with a DIFFERENT NPC or object
+✅ Check the map for stairs (S), doors (D), or unexplored areas (?)
+✅ Walk to a different part of the town/map
+❌ DO NOT keep pressing A if it's not advancing dialogue
+
+STORY-BLOCKED LOCATIONS:
+⚠️ Some buildings/areas are BLOCKED BY STORY PROGRESSION, not just walls!
+- If you try entering a door 3+ times and it doesn't work → It's story-locked
+- Story-locked locations: Professor's Lab (before getting Pokemon), certain buildings
+- STOP trying story-locked locations - explore OTHER areas instead
+- The game will naturally unlock these as you progress
+
+EXPLORATION IS KEY:
+🔍 Look for UNEXPLORED TILES marked as "?" or "type": "unknown" in the map
+🔍 These are adjacent to known areas but haven't been visited yet
+🔍 Prioritize exploring "?" tiles - they may have NPCs, items, or story triggers
+🔍 If stuck for 3+ steps at same coordinates → Find and navigate to nearest "?" tile
+
+WHEN TRULY STUCK:
+- Look at the ENTIRE map JSON for "type": "unknown" tiles
+- Navigate to unexplored (?) areas
+- Try talking to ALL NPCs in town (not just the same one)
+- Explore EVERY building entrance you haven't tried
+- Check for routes/paths leading OUT of the current town
+- Doors/stairs with "leads_to" show where they go - use this to plan your route!
+
+Please think step by step before choosing your action. Structure your response like this:
+
+ANALYSIS:
+[Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing? What tiles (S, D, etc.) are visible on the map and at what coordinates?
+IMPORTANT: Look carefully at the game image for objects (clocks, pokeballs, bags) and NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue. When you see them try determine their location (X,Y) on the map relative to the player and any objects.
+CRITICAL: Are you seeing the SAME dialogue text as before? If yes, you're stuck in a loop!]
+
+OBJECTIVES:
+[Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them.  There may be sub-objectives that you need to complete before the main milestone. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
+- What is your current objective?
+- Add sub-objectives: ADD_OBJECTIVE: type:description:target_value (e.g., "ADD_OBJECTIVE: location:Find Pokemon Center in town:(15,20)" or "ADD_OBJECTIVE: item:Buy Pokeballs:5")
+- Complete sub-objectives only: COMPLETE_OBJECTIVE: objective_id:notes (e.g., "COMPLETE_OBJECTIVE: my_sub_obj_123:Successfully bought Pokeballs").
+- NOTE: Do NOT try to complete storyline objectives (story_*) - they auto-complete when milestones are reached]
+
+PLAN:
+[Think about your immediate goal - what do you want to accomplish in the next few actions? Consider your current objectives and recent history.
+Check MOVEMENT MEMORY for areas you've had trouble with before and plan your route accordingly.
+IMPORTANT: If you've been doing the same action repeatedly, CHANGE YOUR PLAN! Try something different!]
+
+REASONING:
+[Explain why you're choosing this specific action. Reference the MOVEMENT PREVIEW and MOVEMENT MEMORY sections. Check the visual frame for NPCs before moving. If you see NPCs in the image, avoid walking into them. Consider any failed movements or known obstacles from your memory.
+CRITICAL: If your last 3+ actions were the same (e.g., pressing A repeatedly), explain WHY you're now trying something DIFFERENT.]
+
+ACTION:
+   - REQUIRED: Call either navigate_to(x, y) OR press_buttons([...])
+   - Look at the ENTIRE map for S/D tiles and their (X,Y) coordinates
+   - If stuck: Try B, or move to a different area, or interact with different NPCs
+"""
+
                 if self.step_count == 0:
-                    prompt = f"Here is the current game state:\n\n{game_state_result}\n\nBased on this state, decide on and execute the next action to progress through the game."
+                    prompt = f"Here is the current game state:\n\n{state_text}{story_objectives_text}\n\n{format_reminder}\nBased on this state, analyze, plan, and execute the next action to progress through the game."
                 else:
-                    prompt = f"Here is the current game state:\n\n{game_state_result}\n\nBased on this state and the previous actions, decide on and execute the next action to progress through the game."
+                    prompt = f"Here is the current game state:\n\n{state_text}{story_objectives_text}\n\n{format_reminder}\nBased on this state and previous actions, analyze, plan, and execute the next action to progress through the game."
 
                 # Run step with optional screenshot
                 success, output = self.run_step(prompt, screenshot_b64=screenshot_b64)
@@ -975,7 +1224,6 @@ class CLIAgent:
             return 0
         except Exception as e:
             logger.error(f"\n❌ Fatal error: {e}")
-            import traceback
             traceback.print_exc()
             return 1
 
@@ -983,49 +1231,3 @@ class CLIAgent:
         logger.info(f"📚 Conversation history: {len(self.conversation_history)} turns")
         logger.info(self._format_history_for_display())
         return 0
-
-
-def main():
-    """Main entry point."""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Pokemon Emerald CLI Agent")
-    parser.add_argument(
-        "--server-url",
-        type=str,
-        default="http://localhost:8000",
-        help="Game server URL"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="gemini-2.5-flash",
-        help="Gemini model to use"
-    )
-    parser.add_argument(
-        "--max-steps",
-        type=int,
-        default=None,
-        help="Maximum number of steps to run"
-    )
-    parser.add_argument(
-        "--system-instructions",
-        type=str,
-        default="POKEAGENT.md",
-        help="System instructions file"
-    )
-
-    args = parser.parse_args()
-
-    agent = CLIAgent(
-        server_url=args.server_url,
-        model=args.model,
-        max_steps=args.max_steps,
-        system_instructions_file=args.system_instructions
-    )
-
-    return agent.run()
-
-
-if __name__ == "__main__":
-    sys.exit(main())

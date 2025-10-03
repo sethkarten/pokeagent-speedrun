@@ -256,8 +256,8 @@ def get_game_state() -> dict:
         response.raise_for_status()
         state = response.json()
 
-        # Format state for LLM
-        state_text = format_state_for_llm(state)
+        # Format state for LLM with JSON map format for clearer tile information
+        state_text = format_state_for_llm(state, use_json_map=True)
 
         return {
             "success": True,

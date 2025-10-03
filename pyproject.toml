@@ -41,6 +41,8 @@ dependencies = [
     "cffi>=1.6",
     "pytesseract>=0.3.10",
     "torchvision>=0.23.0",
+    "mcp>=1.0.0",
+    "beautifulsoup4>=4.12.0",
 ]
 
 [project.optional-dependencies]

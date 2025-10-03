@@ -1230,16 +1230,179 @@ class MapStitcher:
         
         return tiles_list, trim_offsets
     
-    def generate_location_map_display(self, location_name: str, player_pos: Tuple[int, int] = None, 
-                                      npcs: List[Dict] = None, connections: List[Dict] = None) -> List[str]:
-        """Generate a detailed map display for a specific location.
-        
+    def generate_location_map_json(self, location_name: str, player_pos: Tuple[int, int] = None,
+                                   npcs: List[Dict] = None, connections: List[Dict] = None) -> Dict:
+        """Generate a JSON map format for LLM consumption.
+
         Args:
             location_name: Name of the location to display
             player_pos: Current player position (x, y)
             npcs: List of NPC positions and data
             connections: List of location connections
-            
+
+        Returns:
+            Dictionary with tile data in format:
+            {
+                "location": str,
+                "player_position": {"x": int, "y": int},
+                "tiles": [
+                    {
+                        "x": int,
+                        "y": int,
+                        "symbol": str,
+                        "type": str,  # "player", "npc", "walkable", "blocked", "door", "stairs", etc.
+                        "walkable": bool,
+                        "description": str  # Human-readable description
+                    },
+                    ...
+                ],
+                "npcs": [...],
+                "connections": [...]
+            }
+        """
+        # Get stored map data for this location
+        location_grid = self.get_location_grid(location_name, simplified=True)
+
+        if not location_grid:
+            return {
+                "location": location_name,
+                "player_position": {"x": player_pos[0], "y": player_pos[1]} if player_pos else None,
+                "tiles": [],
+                "npcs": npcs or [],
+                "connections": connections or []
+            }
+
+        # Build tile list
+        tiles = []
+
+        # Get player position for relative calculations
+        game_x, game_y = player_pos if player_pos else (0, 0)
+
+        # Map symbols to types and descriptions
+        symbol_info = {
+            'P': {'type': 'player', 'walkable': True, 'desc': 'Player'},
+            'N': {'type': 'npc', 'walkable': False, 'desc': 'NPC'},
+            '.': {'type': 'walkable', 'walkable': True, 'desc': 'Walkable path'},
+            '#': {'type': 'blocked', 'walkable': False, 'desc': 'Wall/Blocked'},
+            'D': {'type': 'door', 'walkable': True, 'desc': 'Door (walk into adjacent # to use)'},
+            'S': {'type': 'stairs', 'walkable': True, 'desc': 'Stairs (walk into adjacent # to use)'},
+            'L': {'type': 'ledge', 'walkable': False, 'desc': 'Ledge'},
+            'T': {'type': 'tv', 'walkable': False, 'desc': 'TV'},
+            'G': {'type': 'gamecube', 'walkable': False, 'desc': 'GameCube'},
+            'K': {'type': 'clock', 'walkable': False, 'desc': 'Clock'},
+            'C': {'type': 'computer', 'walkable': False, 'desc': 'Computer/PC'},
+            'B': {'type': 'notebook', 'walkable': False, 'desc': 'Notebook'},
+            '~': {'type': 'water', 'walkable': False, 'desc': 'Water'},
+            '^': {'type': 'grass', 'walkable': True, 'desc': 'Tall grass'},
+            's': {'type': 'sand', 'walkable': True, 'desc': 'Sand'},
+            'I': {'type': 'ice', 'walkable': True, 'desc': 'Ice'},
+            '?': {'type': 'unknown', 'walkable': False, 'desc': 'Unknown/Unexplored'},
+        }
+
+        # Build a map of (x, y) -> destination for stairs/doors from connections
+        warp_destinations = {}
+        if connections:
+            for conn in connections:
+                from_pos = conn.get('from_pos', [])
+                to_location = conn.get('to', 'Unknown')
+                to_pos = conn.get('to_pos', [])
+
+                if from_pos and len(from_pos) >= 2:
+                    from_x, from_y = from_pos[0], from_pos[1]
+                    dest_info = to_location
+                    if to_pos and len(to_pos) >= 2:
+                        dest_info = f"{to_location} ({to_pos[0]},{to_pos[1]})"
+                    warp_destinations[(from_x, from_y)] = dest_info
+
+        # Process each tile in the location grid
+        for (x, y), tile_symbol in location_grid.items():
+            # Get tile info
+            info = symbol_info.get(tile_symbol, {'type': 'unknown', 'walkable': False, 'desc': f'Unknown ({tile_symbol})'})
+
+            tile_data = {
+                "x": x,
+                "y": y,
+                "symbol": tile_symbol,
+                "type": info['type'],
+                "walkable": info['walkable'],
+                "description": info['desc']
+            }
+
+            # Add warp destination for doors/stairs if known
+            if tile_symbol in ['D', 'S'] and (x, y) in warp_destinations:
+                tile_data['leads_to'] = warp_destinations[(x, y)]
+                tile_data['description'] = f"{info['desc']} → {warp_destinations[(x, y)]}"
+
+            # Add NPC info if this position has an NPC
+            if npcs:
+                for npc in npcs:
+                    npc_x = npc.get('current_x', npc.get('x'))
+                    npc_y = npc.get('current_y', npc.get('y'))
+                    if npc_x == x and npc_y == y:
+                        tile_data['npc_data'] = npc
+                        break
+
+            tiles.append(tile_data)
+
+        return {
+            "location": location_name,
+            "player_position": {"x": game_x, "y": game_y} if player_pos else None,
+            "tiles": tiles,
+            "npcs": npcs or [],
+            "connections": connections or []
+        }
+
+    def format_map_json_as_text(self, map_json: Dict) -> str:
+        """Format JSON map data as JSON string for LLM.
+
+        Args:
+            map_json: Output from generate_location_map_json()
+
+        Returns:
+            JSON string with simplified tile data (x, y, type, walkable)
+        """
+        import json
+
+        # Simplify the JSON to only include essential info per tile:
+        # - (X,Y) location
+        # - tile type/name
+        # - is walkable
+        # - warp destination (for doors/stairs)
+        simplified_tiles = []
+        for tile in map_json['tiles']:
+            tile_info = {
+                "x": tile['x'],
+                "y": tile['y'],
+                "type": tile['type'],
+                "walkable": tile['walkable']
+            }
+            # Include warp destination if present
+            if 'leads_to' in tile:
+                tile_info['leads_to'] = tile['leads_to']
+            simplified_tiles.append(tile_info)
+
+        output = {
+            "location": map_json['location'],
+            "player_position": map_json['player_position'],
+            "tiles": simplified_tiles
+        }
+
+        # Add connections if available
+        if map_json.get('connections'):
+            output['connections'] = map_json['connections']
+
+        return json.dumps(output, indent=2)
+
+    def generate_location_map_display(self, location_name: str, player_pos: Tuple[int, int] = None,
+                                      npcs: List[Dict] = None, connections: List[Dict] = None) -> List[str]:
+        """Generate a detailed map display for a specific location.
+
+        Args:
+            location_name: Name of the location to display
+            player_pos: Current player position (x, y)
+            npcs: List of NPC positions and data
+            connections: List of location connections
+
         Returns:
             List of display lines ready for formatting
         """
@@ -1447,10 +1610,14 @@ class MapStitcher:
                             if (actual_game_x, actual_game_y) == (5, 1):
                                 tile = 'K'  # K for Klock (C is taken by Computer)
                                 symbols_used_in_display.add('K')
-                            # TV is at game coordinate (3, 1)
-                            elif (actual_game_x, actual_game_y) == (3, 1):
-                                tile = 'T'  # T for TV/GameCube
+                            # TV is at game coordinate (4, 1) - one tile left of clock at (5, 1)
+                            elif (actual_game_x, actual_game_y) == (4, 1):
+                                tile = 'T'  # T for TV
                                 symbols_used_in_display.add('T')
+                            # GameCube is at game coordinate (3, 1) - one tile left of TV at (4, 1)
+                            elif (actual_game_x, actual_game_y) == (3, 1):
+                                tile = 'G'  # G for GameCube
+                                symbols_used_in_display.add('G')
                             # PC is at game coordinate (0, 1)
                             elif (actual_game_x, actual_game_y) == (0, 1):
                                 tile = 'C'  # C for Computer/PC
@@ -1546,8 +1713,9 @@ class MapStitcher:
             "↘": "↘=Ledge (jump SE)",
             "↙": "↙=Ledge (jump SW)",
             "L": "L=Ledge",
-            "T": "T=TV/GameCube",
-            "K": "K=Clock",  
+            "T": "T=TV",
+            "G": "G=GameCube",
+            "K": "K=Clock",
             "B": "B=Notebook",
             "?": "?=Unknown"
         }

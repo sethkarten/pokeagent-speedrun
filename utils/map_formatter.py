@@ -432,28 +432,60 @@ def generate_dynamic_legend(grid):
 def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coords=None, location_name=None):
     """
     Format raw tiles into LLM-friendly grid format (no headers/legends).
-    
+
     Args:
         raw_tiles: 2D list of tile tuples
         player_facing: Direction player is facing
         npcs: List of NPC/object events
         player_coords: Player position for relative positioning
-        location_name: Location name for context-specific symbols  
+        location_name: Location name for context-specific symbols
         player_facing: Player facing direction
         npcs: List of NPC/object events with positions
         player_coords: Tuple of (player_x, player_y) in absolute world coordinates
-        
+
     Returns:
         str: Grid format suitable for LLM
     """
     if not raw_tiles:
         return "No map data available"
-    
+
     grid = format_map_grid(raw_tiles, player_facing, npcs, player_coords, location_name=location_name)
-    
+
     # Simple grid format for LLM
     lines = []
     for row in grid:
         lines.append(" ".join(row))
-    
+
     return "\n".join(lines)
+
+
+def format_map_for_llm_json(map_stitcher, location_name: str, player_coords=None, npcs=None, connections=None):
+    """
+    Format map as structured JSON data for LLM consumption.
+
+    This provides explicit tile information including coordinates, type, and walkability
+    instead of relying on the LLM to interpret ASCII symbols.
+
+    Args:
+        map_stitcher: MapStitcher instance with map data
+        location_name: Name of the location
+        player_coords: Tuple of (player_x, player_y)
+        npcs: List of NPC/object events
+        connections: List of location connections
+
+    Returns:
+        str: Formatted text representation of map JSON data
+    """
+    if not map_stitcher:
+        return "No map data available"
+
+    # Generate JSON map data
+    map_json = map_stitcher.generate_location_map_json(
+        location_name=location_name,
+        player_pos=player_coords,
+        npcs=npcs,
+        connections=connections
+    )
+
+    # Format as readable text
+    return map_stitcher.format_map_json_as_text(map_json)
