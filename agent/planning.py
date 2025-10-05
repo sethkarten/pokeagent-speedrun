@@ -62,6 +62,8 @@ def planning_step(memory_context, current_plan, slow_thinking_needed, state_data
         Memory Context: {memory_context}
         
         Analyze your situation and create a strategic plan:
+
+  
         
         1. IMMEDIATE GOAL: What should you focus on right now? Consider:
            - If in battle: What's your battle strategy based on pokemon HP/levels?
@@ -75,7 +77,10 @@ def planning_step(memory_context, current_plan, slow_thinking_needed, state_data
            - Account for your current pokemon party health and levels
            - Consider terrain: avoid/seek tall grass, navigate around obstacles
            - Money management for items/healing
-        
+           - format for adding sub-objectives: ADD_OBJECTIVE: type:description:target_value (e.g., "ADD_OBJECTIVE: location:Find Pokemon Center in town:(15,20)" or "ADD_OBJECTIVE: item:Buy Pokeballs:5")
+           - Complete sub-objectives only: COMPLETE_OBJECTIVE: objective_id:notes (e.g., "COMPLETE_OBJECTIVE: my_sub_obj_123:Successfully bought Pokeballs")
+           - NOTE: Do NOT try to complete storyline objectives (story_*) - they auto-complete when milestones are reached]
+
         3. LONG-TERM STRATEGY:
            - How does this fit into beating the game quickly?
            - What gym leader or major milestone to target next?
@@ -86,6 +91,9 @@ def planning_step(memory_context, current_plan, slow_thinking_needed, state_data
            - How to minimize backtracking using map layout
            - Shortcuts or sequence breaks considering terrain
            - Wild encounter management (avoid/seek based on needs)
+           - IMPORTANT NOTE: If you haven't been making progress towards your objective, it is likely that your reasoning is flawed. You should re-analyze your situation and plan again.
+            >>> Example #1: If you've been trying to run from what you think is a wild encounter, but the game is not letting you run, it is likely you are actually battling a trainer and need to fight.
+            >>> Example #2: If you've been trying to move in a particular direction to complete your goal, but your recent history of actions has been failing to move you closer to the target location, it is likely you need to reassess your plan and chart a longer path around the obstacle.
         
         Format as a clear, actionable plan focusing on speed and efficiency.
         """

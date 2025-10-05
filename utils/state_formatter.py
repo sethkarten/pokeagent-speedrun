@@ -1239,6 +1239,9 @@ def get_movement_preview(state_data):
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
+    # Get NPCs from map info
+    npcs = map_info.get('object_events', [])
+    
     directions = {
         'UP': (0, -1),
         'DOWN': (0, 1), 
@@ -1273,8 +1276,19 @@ def get_movement_preview(state_data):
             'new_coords': (new_world_x, new_world_y),
             'blocked': True,
             'tile_symbol': '#',
-            'tile_description': 'BLOCKED - Out of bounds'
+            'tile_description': 'BLOCKED - Out of bounds',
+            'npc_at_position': None,
+            'npc_info': None
         }
+        
+        # Check if there's an NPC at the target position
+        npc_at_position = None
+        for npc in npcs:
+            npc_x = npc.get('current_x', npc.get('x', 0))
+            npc_y = npc.get('current_y', npc.get('y', 0))
+            if npc_x == new_world_x and npc_y == new_world_y:
+                npc_at_position = npc
+                break
         
         # Check if the target position is within the grid bounds
         if (0 <= grid_y < len(raw_tiles) and 
@@ -1288,8 +1302,16 @@ def get_movement_preview(state_data):
                 # Get tile symbol and check if walkable
                 tile_symbol = format_tile_to_symbol(target_tile)
                 
-                # Determine if movement is blocked
-                is_blocked = tile_symbol in ['#', 'W']  # Walls and water block movement
+                # Determine if movement is blocked by terrain
+                is_blocked_by_terrain = tile_symbol in ['#', 'W']  # Walls and water block movement
+                
+                # Check if movement is blocked by NPC
+                is_blocked_by_npc = False
+                if npc_at_position and npc_at_position.get('is_blocking', True):
+                    is_blocked_by_npc = True
+                
+                # Overall blocking status
+                is_blocked = is_blocked_by_terrain or is_blocked_by_npc
                 
                 # SPECIAL CASE: If player is standing on stairs/door, don't block the warp direction
                 # Stairs and doors often require moving in a specific direction to activate
@@ -1300,7 +1322,7 @@ def get_movement_preview(state_data):
                     # tile might normally be considered blocked
                     if tile_symbol in ['#', 'W']:
                         # Override the blocking for navigation tiles but KEEP original symbol
-                        is_blocked = False
+                        is_blocked = is_blocked_by_npc  # Only block if NPC is present
                         # DO NOT change tile_symbol - preserve S, D, #, W, etc.
                 
                 # Special handling for jump ledges - they're only walkable in their direction
@@ -1370,10 +1392,33 @@ def get_movement_preview(state_data):
                 else:
                     tile_description = "Unknown tile"
                 
+                # Add NPC information to description if present
+                npc_info = None
+                if npc_at_position:
+                    npc_name = npc_at_position.get('name', 'Unknown')
+                    npc_type = npc_at_position.get('npc_type', 'npc')
+                    npc_description = npc_at_position.get('description', '')
+                    
+                    # Create NPC info string
+                    npc_info = f"{npc_name} ({npc_type})"
+                    if npc_description:
+                        npc_info += f" - {npc_description}"
+                    
+                    # Update tile description to include NPC info
+                    if is_blocked_by_npc:
+                        if is_blocked_by_terrain:
+                            tile_description += f" + BLOCKED by {npc_info}"
+                        else:
+                            tile_description = f"BLOCKED - {npc_info}"
+                    else:
+                        tile_description += f" + {npc_info} (non-blocking)"
+                
                 preview_info.update({
                     'blocked': is_blocked,
                     'tile_symbol': tile_symbol,
-                    'tile_description': tile_description
+                    'tile_description': tile_description,
+                    'npc_at_position': npc_at_position,
+                    'npc_info': npc_info
                 })
                 
             except (IndexError, TypeError) as e:
@@ -1411,6 +1456,17 @@ def format_movement_preview_for_llm(state_data):
             status = "BLOCKED" if info['blocked'] else "WALKABLE"
             
             lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
+            
+            # Add NPC information if present
+            if info.get('npc_info'):
+                npc_info = info['npc_info']
+                if info['blocked'] and 'BLOCKED by' in info['tile_description']:
+                    lines[-1] += f" - {npc_info}"
+                elif not info['blocked'] and 'non-blocking' in info['tile_description']:
+                    lines[-1] += f" - {npc_info}"
+                else:
+                    lines[-1] += f" - {npc_info}"
+            
             # Add brief description for tiles
             desc = info['tile_description']
             if info['blocked']:
@@ -1421,6 +1477,8 @@ def format_movement_preview_for_llm(state_data):
                     lines[-1] += " - Need Surf to cross"
                 elif 'Wall' in desc or 'Obstacle' in desc:
                     lines[-1] += " - Impassable"
+                elif 'trainer' in desc.lower() or 'npc' in desc.lower():
+                    lines[-1] += " - NPC blocks movement"
             else:
                 # Add brief description for walkable tiles
                 if 'Tall grass' in desc:
@@ -1431,6 +1489,8 @@ def format_movement_preview_for_llm(state_data):
                     lines[-1] += " - Door/Entrance"
                 elif 'Jump ledge' in desc and 'correct direction' in desc:
                     lines[-1] += " - Jump ledge (can jump this way)"
+                elif 'trainer' in desc.lower() or 'npc' in desc.lower():
+                    lines[-1] += " - NPC present (interact with A)"
     
     return "\n".join(lines)
 
