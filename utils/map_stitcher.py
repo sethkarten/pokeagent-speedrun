@@ -1389,6 +1389,7 @@ class MapStitcher:
                 if local_player_pos and (x, y) == local_player_pos:
                     row += "P"
                 elif npc_at_pos:
+                    # Use simple N symbol for all NPCs
                     row += "N"
                 elif (x, y) in location_grid:
                     tile = location_grid[(x, y)]

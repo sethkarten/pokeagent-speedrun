@@ -41,14 +41,15 @@ import numpy as np
 from PIL import Image
 
 from utils.state_formatter import format_state_for_llm
+from agent.agent_utils import VisualMapGenerator
 
 logger = logging.getLogger(__name__)
 
 # Configurable parameters for history tracking
 DEFAULT_MAX_HISTORY_ENTRIES = 100  # Previous states/locations with context
 DEFAULT_MAX_RECENT_ACTIONS = 50    # Recent button presses
-DEFAULT_HISTORY_DISPLAY_COUNT = 30 # Number of history entries shown to LLM
-DEFAULT_ACTIONS_DISPLAY_COUNT = 40 # Number of recent actions shown to LLM
+DEFAULT_HISTORY_DISPLAY_COUNT = 50 # Number of history entries shown to LLM
+DEFAULT_ACTIONS_DISPLAY_COUNT = 20 # Number of recent actions shown to LLM
 
 def configure_simple_agent_defaults(max_history_entries: int = None, max_recent_actions: int = None, 
                                   history_display_count: int = None, actions_display_count: int = None):
@@ -120,6 +121,11 @@ class SimpleAgent:
     def __init__(self, vlm, max_history_entries: int = None, max_recent_actions: int = None, 
                  history_display_count: int = None, actions_display_count: int = None):
         self.vlm = vlm
+        
+        # Initialize visual map generator for NPC detection
+        print(f"🔍 Initializing VisualMapGenerator with VLM: {vlm}")
+        self.visual_map_generator = VisualMapGenerator(vlm)
+        print(f"🔍 VisualMapGenerator initialized successfully")
         
         # Use current global defaults if not specified
         max_history_entries = max_history_entries or DEFAULT_MAX_HISTORY_ENTRIES
@@ -547,7 +553,6 @@ class SimpleAgent:
             game_info = game_state.get("game", {})
             
             summary_parts = []
-            
             # Player location
             coords = self.get_player_coords(game_state)
             if coords:
@@ -633,6 +638,37 @@ class SimpleAgent:
             context = self.get_game_context(game_state)
             map_id = self.get_map_id(game_state)
             
+            # Enhance game state with visual NPC detection
+            try:
+                print(f"🔍 Attempting NPC detection - map in game_state: {'map' in game_state}, coords: {coords}")
+                if 'map' in game_state and coords:
+                    # Add player coordinates to map info for NPC detection
+                    map_info_with_coords = game_state['map'].copy()
+                    map_info_with_coords['player_coords'] = coords
+                    
+                    print(f"🔍 Calling enhance_map_with_visual_npcs with coords: {coords}")
+                    enhanced_map_info = self.visual_map_generator.enhance_map_with_visual_npcs(
+                        map_info_with_coords, frame
+                    )
+                    game_state['map'] = enhanced_map_info
+                    
+                    # Log the detected NPCs for debugging
+                    detected_npcs = enhanced_map_info.get('object_events', [])
+                    print(f"🔍 Enhanced map with {len(detected_npcs)} total NPCs")
+                    for i, npc in enumerate(detected_npcs[:3]):  # Show first 3 NPCs
+                        npc_x = npc.get('current_x', npc.get('x', '?'))
+                        npc_y = npc.get('current_y', npc.get('y', '?'))
+                        npc_name = npc.get('name', 'Unknown')
+                        npc_type = npc.get('npc_type', 'npc')
+                        print(f"🔍   NPC {i+1}: {npc_name} ({npc_type}) at ({npc_x}, {npc_y})")
+                    
+                    logger.info(f"Enhanced map with visual NPC detection - {len(detected_npcs)} NPCs total")
+                else:
+                    print(f"🔍 Skipping NPC detection - map: {'map' in game_state}, coords: {coords}")
+            except Exception as e:
+                print(f"🔍 Error in NPC detection: {e}")
+                logger.warning(f"Failed to enhance map with visual NPCs: {e}")
+            
             # Format the current state for LLM (includes movement preview)
             formatted_state = format_state_for_llm(game_state)
             
@@ -640,6 +676,7 @@ class SimpleAgent:
             movement_memory = ""
             if coords:
                 movement_memory = self.get_area_movement_memory(coords)
+        
             
             # Check for objective completion first
             self.check_objective_completion(game_state)
@@ -661,21 +698,55 @@ class SimpleAgent:
             pathfinding_rules = ""
             if context != "title":
                 pathfinding_rules = """
-🚨 PATHFINDING (Analyze -> Plan -> Act -> Verify)
-    1) GOAL: Pick an immediate goal tile G (door/exit/open corridor) or a step that reduces distance to your target.
-    2) SINGLE SAFE STEP: Prefer ONE movement (UP/DOWN/LEFT/RIGHT). Only chain 2-3 moves if EVERY intermediate tile is WALKABLE in the MOVEMENT PREVIEW.
-    3) VERIFY: If MOVEMENT PREVIEW shows BLOCKED for a step, do not take it. Choose the next best direction.
-    4) REFLECT: If the last move didn't change coordinates, mark that direction as blocked in your MOVEMENT MEMORY and try a different one (don't repeat failures).
-    5) NPC AWARENESS: Scan the frame for NPCs/obstacles in front of you. If an NPC is the blocker and interaction is needed, press A; otherwise detour.
-    6) UNKNOWN TILES: Never step into BLOCKED (#). Only enter unknown tiles if at least one neighbor is confirmed WALKABLE.
+🚨 PATHFINDING RULES:
+1. **SINGLE STEP FIRST**: Always prefer single actions (UP, DOWN, LEFT, RIGHT, A, B) unless you're 100% certain about multi-step paths
+2. **CHECK EVERY STEP**: Prefer ONE movement (UP/DOWN/LEFT/RIGHT). Only chain 2-3 moves if EVERY intermediate tile is WALKABLE in the MOVEMENT PREVIEW.
+3. **BLOCKED = STOP**: If ANY step shows BLOCKED in the movement preview, the entire sequence will fail. 
+4. **NO BLIND CHAINS**: Never chain movements through areas you can't see or verify as walkable
+5. **PERFORM PATHFINDING**: 
+    a. Find a path to a target location (X',Y') from the player position (X,Y) on the map. DO NOT TRAVERSE THROUGH OBSTACLES (#) -- it will not work.
+    b. IMPORTANT NOTE: sometimes the target location is not immediately transverisble (diffrent ledges/obstacles). An easy way to know this is if you
+                     recent history of actions has been failing to move you closer to the target location. In this case, it is essential to perform 
+                     pathfinding/exploration to find a longer path that you can exploit to get to the target location.
 
-    NOTE: The following are supplemental points to keep into consideration while performing the (Sense -> Plan -> Act -> Verify) loop
-    💡 SMART MOVEMENT STRATEGY:
-        - Use MOVEMENT PREVIEW to see exactly what happens with each direction
-        - If your target requires multiple steps, plan ONE step at a time
-        - Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
-        - When stuck, try a different direction rather than repeating the same blocked move
+    c. PATHFINDING EXAMPLE - Navigating Around Obstacles:
+       🎯 GOAL: Reach location (15,10) from current position (10,10)
+       
+       ❌ WRONG APPROACH - Direct path blocked:
+       Current position: (10,10)
+       Target position: (15,10) 
+       Direct path: RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
+       Problem: There's a wall at (12,10) blocking the direct path!
+       
+       ✅ CORRECT APPROACH - Find alternative route:
+       Step 1: Check MOVEMENT PREVIEW
+       - RIGHT: (11,10) WALKABLE ✓
+       - RIGHT: (12,10) BLOCKED ❌ (wall detected)
+       
+       Step 2: Explore alternative paths
+       - Try UP: (10,9) WALKABLE ✓
+       - Try DOWN: (10,11) WALKABLE ✓
+       
+       Step 3: Plan detour route
+       Route A: UP → RIGHT → RIGHT → RIGHT → RIGHT → DOWN
+       (10,10) → (10,9) → (11,9) → (12,9) → (13,9) → (14,9) → (15,9) → (15,10)
+       
+       Route B: DOWN → RIGHT → RIGHT → RIGHT → RIGHT → UP  
+       (10,10) → (10,11) → (11,11) → (12,11) → (13,11) → (14,11) → (15,11) → (15,10)
+       
+       Step 4: Execute one step at a time, checking MOVEMENT PREVIEW each turn
+       Turn 1: UP (verify (10,9) is WALKABLE)
+       Turn 2: RIGHT (verify (11,9) is WALKABLE) 
+       Turn 3: RIGHT (verify (12,9) is WALKABLE)
+       Turn 4: RIGHT (verify (13,9) is WALKABLE)
+       Turn 5: RIGHT (verify (14,9) is WALKABLE)
+       Turn 6: DOWN (verify (15,10) is WALKABLE - GOAL REACHED!)
 
+💡 SMART MOVEMENT STRATEGY:
+    - Use MOVEMENT PREVIEW to see exactly what happens with each direction
+    - If your target requires multiple steps, plan ONE step at a time
+    - Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
+    - When stuck, try a different direction rather than repeating the same blocked move:
         EXAMPLE - DON'T DO THIS:
         ❌ "I want to go right 5 tiles" → "RIGHT, RIGHT, RIGHT, RIGHT, RIGHT" (may hit wall on step 2!)
 
@@ -683,29 +754,39 @@ class SimpleAgent:
         ✅ Check movement preview → "RIGHT shows (X+1,Y) WALKABLE" → "RIGHT" (single safe step)
         ✅ Next turn, check again → "RIGHT shows (X+2,Y) WALKABLE" → "RIGHT" (another safe step)
 
-    💡 SMART NAVIGATION:
-        - Check the VISUAL FRAME for NPCs (people/trainers) before moving - they're not always on the map!
-        - Review MOVEMENT MEMORY for locations where you've failed to move before
-        - Only explore areas marked with ? (these are confirmed explorable edges)
-        - Avoid areas surrounded by # (walls) - they're fully blocked
-        - Use doors (D), stairs (S), or walk around obstacles when pathfinding suggests it
+💡 SMART NAVIGATION:
+    - Check the VISUAL FRAME for NPCs (people/trainers) before moving - they're not always on the map!
+    - Review MOVEMENT MEMORY for locations where you've failed to move before
+    - Only explore areas marked with ? (these are confirmed explorable edges)
+    - Avoid areas surrounded by # (walls) - they're fully blocked
+    - Use doors (D), stairs (S), or walk around obstacles when pathfinding suggests it
 
-    💡 NPC & OBSTACLE HANDLING:
-        - If you see NPCs in the image, avoid walking into them or interact with A/B if needed
-        - If a movement fails (coordinates don't change), that location likely has an NPC or obstacle
-        - Use your MOVEMENT MEMORY to remember problem areas and plan around them
-        - NPCs can trigger battles or dialogue, which may be useful for objectives
+💡 NPC & OBSTACLE HANDLING:
+    - NPCs are now detected visually and shown in MOVEMENT PREVIEW - check for "NPC present" or "BLOCKED by [NPC name]"
+    - If a movement fails (coordinates don't change), that location likely has an NPC or obstacle
+    - Use your MOVEMENT MEMORY to remember problem areas and plan around them
+    - NPCs can trigger battles or dialogue, which may be useful for objectives (interact with them using A/B if needed)
+    - You need to be both directly adjacent to and facing an NPC to interact with them!
+    - Trainers typically block movement and must be battled - check MOVEMENT PREVIEW for trainer names
+    - Regular NPCs may or may not block movement - check the preview for blocking status
+
+🛑 INPUT HANDLING RULES (NO "A" SPAM):
+    - If DIALOGUE TEXT is visible or dialogue is active → press A up to 2 times to advance, then reassess
+    - If NO dialogue text is visible AND your coordinates are NOT changing in OVERWORLD/menu → DO NOT press A again
+    - In that case, try: (1) a WALKABLE movement from MOVEMENT PREVIEW, or (2) press B once to dismiss a menu/close text
+    - Never output more than 2 consecutive 'A' at the same coordinates in OVERWORLD
+    - Never press A more than once when in battle so you can better select different moves
 """
 
             # Create enhanced prompt with objectives, history context and chain of thought request
-            prompt = f"""
-            You are an expert navigator and battle strategist playing Pokémon Emerald on a Game Boy Advance emulator.
-            Some pointers to keep in mind (guard rails) as you problem solve:
-            1) You must think via the (Analyze -> Plan -> Act -> Verify) loop when solving problems and making decisions. 
-            2) Always provide detailed, context-aware button-actions that bias for ground-truth.
-            3) Consider the current situation in the game as well as what you've learned over time.
-            4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
-            Especially If a current approach is leading to consistent failure without providing knowledge on how to improve.
+            prompt = f"""SYSTEM PROMPT: 
+            <<< You are speedrunning Pokemon Emerald and must progress quickly to the milestones.  Based on the current game frame and state information, think through your next move and choose the best button action. 
+                Some pointers to keep in mind (guard rails) as you problem solve:
+                1) You must think step-by-step when solving problems and making decisions. 
+                2) Always provide detailed, context-aware responses that bias for ground-truth.
+                3) Consider the current situation in the game as well as what you've learned over time.
+                4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
+            >>>
 
 RECENT ACTION HISTORY (last {self.actions_display_count} actions):
 {recent_actions_str}
@@ -717,6 +798,8 @@ CURRENT OBJECTIVES:
 {objectives_summary}
 
 CURRENT GAME STATE:
+
+Detailed Map Display:
 {formatted_state}
 
 {movement_memory}
@@ -725,27 +808,37 @@ CURRENT GAME STATE:
 
 Available actions: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT
 
-IMPORTANT: Please think via the (Analyze -> Plan -> Act -> Verify) loop before choosing your action. Structure your response like this:
+IMPORTANT NOTE: Please think via the (analysis, objectives, plan, reasoning) loop before choosing your action. Structure your response like this:
 
-1) ANALYSIS/VERIFICATION:
-    [Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing? Based on your action/context history, current objectives, and game state verify how effective you last action was and if you need to adjust your approach.
-    IMPORTANT: Look carefully at the game image for NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue.]
+ANALYSIS:
+[Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing? 
+IMPORTANT: Look carefully at the game image for NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue.
+The MOVEMENT PREVIEW now shows detected NPCs - check for "NPC present" or "BLOCKED by [NPC name]" in each direction.]
 
-2) PLAN/OBJECTIVES:
-    [Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
-    - Add sub-objectives: ADD_OBJECTIVE: type:description:target_value (e.g., "ADD_OBJECTIVE: location:Find Pokemon Center in town:(15,20)" or "ADD_OBJECTIVE: item:Buy Pokeballs:5")
-    - Complete sub-objectives only: COMPLETE_OBJECTIVE: objective_id:notes (e.g., "COMPLETE_OBJECTIVE: my_sub_obj_123:Successfully bought Pokeballs")
-    - NOTE: Do NOT try to complete storyline objectives (story_*) - they auto-complete when milestones are reached
+OBJECTIVES:
+[Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
+- Add sub-objectives: ADD_OBJECTIVE: type:description:target_value (e.g., "ADD_OBJECTIVE: location:Find Pokemon Center in town:(15,20)" or "ADD_OBJECTIVE: item:Buy Pokeballs:5")
+- Complete sub-objectives only: COMPLETE_OBJECTIVE: objective_id:notes (e.g., "COMPLETE_OBJECTIVE: my_sub_obj_123:Successfully bought Pokeballs")
+- NOTE: Do NOT try to complete storyline objectives (story_*) - they auto-complete when milestones are reached]
 
-    Now given these objectives Think about your immediate goal - what do you want to accomplish in the next few actions? Consider your current objectives, recent history, and the prior ANALYSIS/VERIFICATION step. 
-    Check MOVEMENT MEMORY for areas you've had trouble with before and plan your route accordingly.]
-        
+PLAN:
+[Think about your immediate goal - what do you want to accomplish in the next few actions? Consider your current objectives and recent history. 
+Check MOVEMENT MEMORY for areas you've had trouble with before and plan your route accordingly.]
 
-3) REASONING/ACTION:
-    [Explain why you're choosing this specific action. Reference the MOVEMENT PREVIEW and MOVEMENT MEMORY sections. Check the visual frame for NPCs before moving. If you see NPCs in the image, avoid walking into them. Ensure that your 3) Reasoning/Action aligns with 1) Analysis/Verification -> 2) Plan/Objectinves .]
-    Your final action choice:
-    - PREFER SINGLE ACTIONS like 'RIGHT' or 'A'. 
-    - Only use multiple actions like 'UP, UP, RIGHT' if you've verified each step is WALKABLE in the movement preview and map.]
+REASONING:
+[Explain why you're choosing this specific action. Reference the MOVEMENT PREVIEW and MOVEMENT MEMORY sections. Check the visual frame for NPCs before moving. If you see NPCs in the image, avoid walking into them. Consider any failed movements or known obstacles from your memory.
+IMPORTANT: The MOVEMENT PREVIEW now shows detected NPCs - check each direction for "NPC present" or "BLOCKED by [NPC name]" to understand what's blocking your path.
+IMPORTANT NOTE: If you haven't been making progress towards your objective, it is likely that your reasoning is flawed. You should re-analyze your situation and plan again.
+- Example #1: If you've been trying to run from what you think is a wild encounter, but the game is not letting you run, it is likely you are actually battling a trainer and need to fight.
+- Example #2: If you've been trying to move in a particular direction to complete your goal, but your recent history of actions has been failing to move you closer to the target location, it is likely you need to reassess your plan and chart a longer path around the obstacle.
+- Example #3: If MOVEMENT PREVIEW shows "BLOCKED by [Trainer Name]", you need to approach and battle that trainer before proceeding.]
+
+ACTION:
+[Your final action choice - PREFER SINGLE ACTIONS like 'RIGHT' or 'A'. Only use multiple actions like 'UP, UP, RIGHT' if you've verified each step is WALKABLE in the movement preview and map.
+- If dialogue text is visible, press A up to 2 times.
+- If coordinates don't change and no dialogue text is visible in OVERWORLD/menu, DO NOT press A again; choose a WALKABLE movement or press B once.
+- Never output more than 2 consecutive 'A' at the same coordinates in OVERWORLD.
+- Never press A more than once when in battle so you can better select different moves]
 
 {pathfinding_rules}
 

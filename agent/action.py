@@ -110,11 +110,13 @@ def action_step(memory_context, current_plan, latest_observation, frame, state_d
     
     EFFICIENCY RULES:
     1. Output sequences of actions when you know what's coming (e.g., "RIGHT, RIGHT, RIGHT, A" to enter a door)
-    2. For dialogue: "A, A, A, A, A" to mash through
+    2. If dialogue text is visible, press A up to 5 times to efficiencly progress through dialogue.
     3. For movement: repeat directions based on movement options (e.g., "UP, UP, UP, UP" if UP shows "Normal path")
     4. If uncertain, output single action and reassess
     5. Use traversability data: move toward open paths, avoid obstacles
     6. If movement doesn't change coordinates (e.g., RIGHT but X doesn't increase), check map for walls (#) blocking your path
+    7. If coordinates don't change and no dialogue text is visible in OVERWORLD/menu, DO NOT press A again; choose a WALKABLE movement or press B once.
+
     
     Valid buttons: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT, L, R
     - A: Interact with NPCs/objects, confirm selections, advance dialogue, use moves in battle

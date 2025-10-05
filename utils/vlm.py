@@ -603,6 +603,7 @@ class VertexBackend(VLMBackend):
     def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
         """Process a text-only prompt using Gemini API"""
         try:
+            start_time = time.time()
             # Log the prompt
             prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
             logger.info(f"[{module_name}] GEMINI VLM TEXT QUERY:")

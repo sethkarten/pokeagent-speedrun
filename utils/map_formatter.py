@@ -138,49 +138,7 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
     # Always use P for player instead of direction arrows
     player_symbol = "P"
     
-    # Create NPC position lookup (convert to relative grid coordinates)
-    npc_positions = {}
-    if npcs and player_coords:
-        try:
-            # Handle both tuple and dict formats for player_coords
-            if isinstance(player_coords, dict):
-                player_abs_x = player_coords.get('x', 0)
-                player_abs_y = player_coords.get('y', 0)
-            else:
-                player_abs_x, player_abs_y = player_coords
-            
-            # Ensure coordinates are integers
-            player_abs_x = int(player_abs_x) if player_abs_x is not None else 0
-            player_abs_y = int(player_abs_y) if player_abs_y is not None else 0
-            
-            for npc in npcs:
-                # NPCs have absolute world coordinates, convert to relative grid position
-                npc_abs_x = npc.get('current_x', 0)
-                npc_abs_y = npc.get('current_y', 0)
-                
-                # Ensure NPC coordinates are integers
-                npc_abs_x = int(npc_abs_x) if npc_abs_x is not None else 0
-                npc_abs_y = int(npc_abs_y) if npc_abs_y is not None else 0
-                
-                # Calculate offset from player in absolute coordinates
-                offset_x = npc_abs_x - player_abs_x
-                offset_y = npc_abs_y - player_abs_y
-                
-                # Convert offset to grid position (player is at center)
-                grid_x = center_x + offset_x
-                grid_y = center_y + offset_y
-                
-                # Check if NPC is within our grid view
-                if 0 <= grid_x < len(raw_tiles[0]) and 0 <= grid_y < len(raw_tiles):
-                    npc_positions[(grid_y, grid_x)] = npc
-                    
-        except (ValueError, TypeError) as e:
-            # If coordinate conversion fails, skip NPC positioning
-            print(f"Warning: Failed to convert coordinates for NPC positioning: {e}")
-            print(f"  player_coords: {player_coords}")
-            if npcs:
-                print(f"  npc coords: {[(npc.get('current_x'), npc.get('current_y')) for npc in npcs]}")
-            npc_positions = {}
+    # NPCs are not displayed on the map grid - they appear in movement preview only
     
     for y, row in enumerate(raw_tiles):
         grid_row = []
@@ -188,14 +146,6 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
             if y == center_y and x == center_x:
                 # Player position
                 grid_row.append(player_symbol)
-            elif (y, x) in npc_positions:
-                # NPC position - use NPC symbol
-                npc = npc_positions[(y, x)]
-                # Use different symbols for different NPC types
-                if npc.get('trainer_type', 0) > 0:
-                    grid_row.append("@")  # Trainer
-                else:
-                    grid_row.append("N")  # Regular NPC
             else:
                 # Regular tile
                 symbol = format_tile_to_symbol(tile)
@@ -391,7 +341,7 @@ def generate_dynamic_legend(grid):
 
 def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coords=None):
     """
-    Format raw tiles into LLM-friendly grid format (no headers/legends).
+    Format raw tiles into LLM-friendly grid format with detailed NPC information.
     
     Args:
         raw_tiles: 2D list of tile tuples  
@@ -400,7 +350,7 @@ def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coord
         player_coords: Tuple of (player_x, player_y) in absolute world coordinates
         
     Returns:
-        str: Grid format suitable for LLM
+        str: Grid format suitable for LLM with NPC details
     """
     if not raw_tiles:
         return "No map data available"
@@ -411,5 +361,7 @@ def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coord
     lines = []
     for row in grid:
         lines.append(" ".join(row))
+    
+    # NPCs are shown in movement preview, not on the map
     
     return "\n".join(lines)
