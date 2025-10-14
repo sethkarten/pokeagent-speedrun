@@ -48,8 +48,9 @@ logger = logging.getLogger(__name__)
 # Configurable parameters for history tracking
 DEFAULT_MAX_HISTORY_ENTRIES = 100  # Previous states/locations with context
 DEFAULT_MAX_RECENT_ACTIONS = 50    # Recent button presses
-DEFAULT_HISTORY_DISPLAY_COUNT = 50 # Number of history entries shown to LLM
+DEFAULT_HISTORY_DISPLAY_COUNT = 99 # Number of history entries shown to LLM
 DEFAULT_ACTIONS_DISPLAY_COUNT = 20 # Number of recent actions shown to LLM
+
 
 def configure_simple_agent_defaults(max_history_entries: int = None, max_recent_actions: int = None, 
                                   history_display_count: int = None, actions_display_count: int = None):
@@ -121,6 +122,8 @@ class SimpleAgent:
     def __init__(self, vlm, max_history_entries: int = None, max_recent_actions: int = None, 
                  history_display_count: int = None, actions_display_count: int = None):
         self.vlm = vlm
+        # Toggle for NPC detection - set to False to disable VLM calls for NPC detection
+        self.ENABLE_NPC_DETECTION = True
         
         # Initialize visual map generator for NPC detection
         print(f"🔍 Initializing VisualMapGenerator with VLM: {vlm}")
@@ -638,36 +641,39 @@ class SimpleAgent:
             context = self.get_game_context(game_state)
             map_id = self.get_map_id(game_state)
             
-            # Enhance game state with visual NPC detection
-            try:
-                print(f"🔍 Attempting NPC detection - map in game_state: {'map' in game_state}, coords: {coords}")
-                if 'map' in game_state and coords:
-                    # Add player coordinates to map info for NPC detection
-                    map_info_with_coords = game_state['map'].copy()
-                    map_info_with_coords['player_coords'] = coords
-                    
-                    print(f"🔍 Calling enhance_map_with_visual_npcs with coords: {coords}")
-                    enhanced_map_info = self.visual_map_generator.enhance_map_with_visual_npcs(
-                        map_info_with_coords, frame
-                    )
-                    game_state['map'] = enhanced_map_info
-                    
-                    # Log the detected NPCs for debugging
-                    detected_npcs = enhanced_map_info.get('object_events', [])
-                    print(f"🔍 Enhanced map with {len(detected_npcs)} total NPCs")
-                    for i, npc in enumerate(detected_npcs[:3]):  # Show first 3 NPCs
-                        npc_x = npc.get('current_x', npc.get('x', '?'))
-                        npc_y = npc.get('current_y', npc.get('y', '?'))
-                        npc_name = npc.get('name', 'Unknown')
-                        npc_type = npc.get('npc_type', 'npc')
-                        print(f"🔍   NPC {i+1}: {npc_name} ({npc_type}) at ({npc_x}, {npc_y})")
-                    
-                    logger.info(f"Enhanced map with visual NPC detection - {len(detected_npcs)} NPCs total")
-                else:
-                    print(f"🔍 Skipping NPC detection - map: {'map' in game_state}, coords: {coords}")
-            except Exception as e:
-                print(f"🔍 Error in NPC detection: {e}")
-                logger.warning(f"Failed to enhance map with visual NPCs: {e}")
+            # Enhance game state with visual NPC detection (if enabled)
+            if self.ENABLE_NPC_DETECTION:
+                try:
+                    print(f"🔍 Attempting NPC detection - map in game_state: {'map' in game_state}, coords: {coords}")
+                    if 'map' in game_state and coords:
+                        # Add player coordinates to map info for NPC detection
+                        map_info_with_coords = game_state['map'].copy()
+                        map_info_with_coords['player_coords'] = coords
+                        
+                        print(f"🔍 Calling enhance_map_with_visual_npcs with coords: {coords}")
+                        enhanced_map_info = self.visual_map_generator.enhance_map_with_visual_npcs(
+                            map_info_with_coords, frame
+                        )
+                        game_state['map'] = enhanced_map_info
+                        
+                        # Log the detected NPCs for debugging
+                        detected_npcs = enhanced_map_info.get('object_events', [])
+                        print(f"🔍 Enhanced map with {len(detected_npcs)} total NPCs")
+                        for i, npc in enumerate(detected_npcs[:3]):  # Show first 3 NPCs
+                            npc_x = npc.get('current_x', npc.get('x', '?'))
+                            npc_y = npc.get('current_y', npc.get('y', '?'))
+                            npc_name = npc.get('name', 'Unknown')
+                            npc_type = npc.get('npc_type', 'npc')
+                            print(f"🔍   NPC {i+1}: {npc_name} ({npc_type}) at ({npc_x}, {npc_y})")
+                        
+                        logger.info(f"Enhanced map with visual NPC detection - {len(detected_npcs)} NPCs total")
+                    else:
+                        print(f"🔍 Skipping NPC detection - map: {'map' in game_state}, coords: {coords}")
+                except Exception as e:
+                    print(f"🔍 Error in NPC detection: {e}")
+                    logger.warning(f"Failed to enhance map with visual NPCs: {e}")
+            else:
+                print("🔍 NPC detection disabled - skipping VLM calls")
             
             # Format the current state for LLM (includes movement preview)
             formatted_state = format_state_for_llm(game_state)
@@ -1546,6 +1552,21 @@ Context: {context} | Coords: {coords} """
             "failed_movements": len(self.state.failed_movements),
             "npc_interactions": len(self.state.npc_interactions)
         }
+    
+    def set_npc_detection(self, enabled: bool):
+        """Enable or disable NPC detection to improve performance"""
+        self.ENABLE_NPC_DETECTION = enabled
+        status = "enabled" if enabled else "disabled"
+        print(f"🔍 NPC detection {status}")
+        logger.info(f"NPC detection {status}")
+    
+    def toggle_npc_detection(self):
+        """Toggle NPC detection on/off"""
+        self.ENABLE_NPC_DETECTION = not self.ENABLE_NPC_DETECTION
+        status = "enabled" if self.ENABLE_NPC_DETECTION else "disabled"
+        print(f"🔍 NPC detection toggled to {status}")
+        logger.info(f"NPC detection toggled to {status}")
+        return self.ENABLE_NPC_DETECTION
 
 # Global simple agent instance for backward compatibility with existing multiprocess code
 _global_simple_agent = None

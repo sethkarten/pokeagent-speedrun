@@ -1001,7 +1001,7 @@ async def get_comprehensive_state():
             del state["map"]["_map_stitcher_instance"]
         
         # Convert screenshot to base64 if available
-        if state["visual"]["screenshot"]:
+        if state.get("visual", {}).get("screenshot"):
             buffer = io.BytesIO()
             state["visual"]["screenshot"].save(buffer, format='PNG')
             img_str = base64.b64encode(buffer.getvalue()).decode()
