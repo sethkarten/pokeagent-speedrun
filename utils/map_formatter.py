@@ -105,6 +105,8 @@ def format_tile_to_symbol(tile):
         return "."  # Indoor tiles are walkable
     elif "DECORATION" in behavior_name or "HOLDS" in behavior_name:
         return "."  # Decorations are walkable
+    elif behavior == 999:
+        return "N"  # NPC marker (visually detected)
     else:
         # For unknown behavior, mark as blocked for safety
         return "#"

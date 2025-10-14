@@ -662,41 +662,49 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         # Use the pre-generated map visualization
         context_parts.append(map_info['visual_map'])
     elif location_name:
-        # Generate map display using MapStitcher
+        # If NPC tiles have been overridden, use local map fallback to show the modified tiles
+        npc_override_count = map_info.get('npc_tiles_overridden', 0)
+        print(f"🗺️ Map formatter check: npc_tiles_overridden = {npc_override_count}")
+        if npc_override_count > 0:
+            # Use local map with overridden NPC tiles
+            if 'tiles' in map_info and map_info['tiles']:
+                context_parts.append(f"\n--- MAP: {location_name.upper()} (with detected NPCs) ---")
+                _add_local_map_fallback(context_parts, map_info, include_npcs)
+        elif map_stitcher:
+            # Generate map display using MapStitcher (normal case)
             # print( Attempting to generate map for location: '{location_name}'")
             # print( MapStitcher exists: {map_stitcher is not None}")
-        if map_stitcher:
             # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
             for map_id in list(map_stitcher.map_areas.keys())[:3]:
                 area = map_stitcher.map_areas[map_id]
                 # print(   Area {map_id}: '{area.location_name}'")
         
-        map_lines = map_stitcher.generate_location_map_display(
-            location_name=location_name,
-            player_pos=player_coords,
-            npcs=npcs,
-            connections=connections
-        )
-        
-        if map_lines:
-            # print( Generated {len(map_lines)} map lines from MapStitcher")
-            context_parts.extend(map_lines)
-            # Add exploration statistics
-            location_grid = map_stitcher.get_location_grid(location_name)
-            if location_grid:
-                total_tiles = len(location_grid)
-                context_parts.append("")
-                context_parts.append(f"Total explored: {total_tiles} tiles")
-        else:
-            # print( MapStitcher returned empty, falling back to memory tiles")
-            # Fallback if MapStitcher doesn't have data for this location - use memory tiles
-            pass
-            if 'tiles' in map_info and map_info['tiles']:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
-                _add_local_map_fallback(context_parts, map_info, include_npcs)
+            map_lines = map_stitcher.generate_location_map_display(
+                location_name=location_name,
+                player_pos=player_coords,
+                npcs=npcs,
+                connections=connections
+            )
+            
+            if map_lines:
+                # print( Generated {len(map_lines)} map lines from MapStitcher")
+                context_parts.extend(map_lines)
+                # Add exploration statistics
+                location_grid = map_stitcher.get_location_grid(location_name)
+                if location_grid:
+                    total_tiles = len(location_grid)
+                    context_parts.append("")
+                    context_parts.append(f"Total explored: {total_tiles} tiles")
             else:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
-                context_parts.append("No map data available")
+                # print( MapStitcher returned empty, falling back to memory tiles")
+                # Fallback if MapStitcher doesn't have data for this location - use memory tiles
+                pass
+                if 'tiles' in map_info and map_info['tiles']:
+                    context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
+                    _add_local_map_fallback(context_parts, map_info, include_npcs)
+                else:
+                    context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
+                    context_parts.append("No map data available")
     else:
         # No location name - use local map fallback
         context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
@@ -1303,7 +1311,7 @@ def get_movement_preview(state_data):
                 tile_symbol = format_tile_to_symbol(target_tile)
                 
                 # Determine if movement is blocked by terrain
-                is_blocked_by_terrain = tile_symbol in ['#', 'W']  # Walls and water block movement
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N']  # Walls, water, and NPCs block movement
                 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
