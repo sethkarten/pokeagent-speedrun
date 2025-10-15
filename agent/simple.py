@@ -41,7 +41,7 @@ import numpy as np
 from PIL import Image
 
 from utils.state_formatter import format_state_for_llm
-from agent.agent_utils import VisualMapGenerator
+from agent.agent_utils import VisualMapGenerator, PathfinderUtility
 
 logger = logging.getLogger(__name__)
 
@@ -123,12 +123,16 @@ class SimpleAgent:
                  history_display_count: int = None, actions_display_count: int = None):
         self.vlm = vlm
         # Toggle for NPC detection - set to False to disable VLM calls for NPC detection
-        self.ENABLE_NPC_DETECTION = True
+        self.ENABLE_NPC_DETECTION = True  # Temporarily disabled to reduce inference costs
         
         # Initialize visual map generator for NPC detection
         print(f"🔍 Initializing VisualMapGenerator with VLM: {vlm}")
         self.visual_map_generator = VisualMapGenerator(vlm)
         print(f"🔍 VisualMapGenerator initialized successfully")
+        
+        # Initialize pathfinder utility for A* navigation
+        self.pathfinder = PathfinderUtility(max_path_length=10)
+        print(f"🗺️ PathfinderUtility initialized (max path length: 10)")
         
         # Use current global defaults if not specified
         max_history_entries = max_history_entries or DEFAULT_MAX_HISTORY_ENTRIES
@@ -641,8 +645,9 @@ class SimpleAgent:
             context = self.get_game_context(game_state)
             map_id = self.get_map_id(game_state)
             
-            # Enhance game state with visual NPC detection (if enabled)
-            if self.ENABLE_NPC_DETECTION:
+            # Enhance game state with visual NPC detection (if enabled and not in battle/menu)
+            # Skip NPC detection in battles and menus to reduce inference costs
+            if self.ENABLE_NPC_DETECTION and context not in ["battle", "menu", "dialogue", "title"]:
                 try:
                     print(f"🔍 Attempting NPC detection - map in game_state: {'map' in game_state}, coords: {coords}")
                     if 'map' in game_state and coords:
@@ -673,10 +678,13 @@ class SimpleAgent:
                     print(f"🔍 Error in NPC detection: {e}")
                     logger.warning(f"Failed to enhance map with visual NPCs: {e}")
             else:
-                print("🔍 NPC detection disabled - skipping VLM calls")
+                if context in ["battle", "menu", "dialogue", "title"]:
+                    print(f"🔍 NPC detection skipped - not needed in {context} context (saves inference cost)")
+                else:
+                    print("🔍 NPC detection disabled - skipping VLM calls")
             
-            # Format the current state for LLM (includes movement preview)
-            formatted_state = format_state_for_llm(game_state)
+            # Format the current state for LLM (movement preview disabled - using pathfinding utility instead)
+            formatted_state = format_state_for_llm(game_state, include_movement_preview=False)
             
             # Get movement memory for the current area
             movement_memory = ""
@@ -704,84 +712,40 @@ class SimpleAgent:
             pathfinding_rules = ""
             if context != "title":
                 pathfinding_rules = """
-🚨 PATHFINDING RULES:
-1. **SINGLE STEP FIRST**: Always prefer single actions (UP, DOWN, LEFT, RIGHT, A, B) unless you're 100% certain about multi-step paths
-2. **CHECK EVERY STEP**: Prefer ONE movement (UP/DOWN/LEFT/RIGHT). Only chain 2-3 moves if EVERY intermediate tile is WALKABLE in the MOVEMENT PREVIEW.
-3. **BLOCKED = STOP**: If ANY step shows BLOCKED in the movement preview, the entire sequence will fail. 
-4. **NO BLIND CHAINS**: Never chain movements through areas you can't see or verify as walkable
-5. **PERFORM PATHFINDING**: 
-    a. Find a path to a target location (X',Y') from the player position (X,Y) on the map. DO NOT TRAVERSE THROUGH OBSTACLES (#) -- it will not work.
-    b. IMPORTANT NOTE: sometimes the target location is not immediately transverisble (diffrent ledges/obstacles). An easy way to know this is if you
-                     recent history of actions has been failing to move you closer to the target location. In this case, it is essential to perform 
-                     pathfinding/exploration to find a longer path that you can exploit to get to the target location.
+🗺️ **NAVIGATION: USE A* PATHFINDING UTILITY**:
+   For ALL movement, use the pathfinding utility to navigate efficiently:
+   
+   **HOW TO NAVIGATE**:
+   In your ACTION section, request: REQUEST_PATH: (grid_x, grid_y)
+   - Grid coordinates are 0-14 (you're always at center 7,7)
+   - Look at the map to find where you want to go
+   - The pathfinder will find the best route avoiding walls/NPCs (max 10 moves at a time)
+   
+   ⚡ **GRID COORDINATE GUIDE**:
+   - You are ALWAYS at (7, 7) on the 15x15 grid
+   - To go NORTH: Pick y < 7 (e.g., 7,4 or 7,3 or 7,2)
+   - To go SOUTH: Pick y > 7 (e.g., 7,10 or 7,11 or 7,12)  
+   - To go WEST: Pick x < 7 (e.g., 4,7 or 3,7 or 2,7)
+   - To go EAST: Pick x > 7 (e.g., 10,7 or 11,7 or 12,7)
+   - Look at the map, find a walkable tile (.) in your target direction, note its grid position, REQUEST_PATH to it!
+   
+   ⚡ **EXAMPLES**:
+   - "I need to go south. I see walkable tile at (7,11). REQUEST_PATH: (7, 11)"
+   - "I need to go east. I see walkable tile at (12,7). REQUEST_PATH: (12, 7)"
+   - "I need to reach that door at (9,5). REQUEST_PATH: (9, 5)"
 
-    c. PATHFINDING EXAMPLE - Navigating Around Obstacles:
-       🎯 GOAL: Reach location (15,10) from current position (10,10)
-       
-       ❌ WRONG APPROACH - Direct path blocked:
-       Current position: (10,10)
-       Target position: (15,10) 
-       Direct path: RIGHT, RIGHT, RIGHT, RIGHT, RIGHT
-       Problem: There's a wall at (12,10) blocking the direct path!
-       
-       ✅ CORRECT APPROACH - Find alternative route:
-       Step 1: Check MOVEMENT PREVIEW
-       - RIGHT: (11,10) WALKABLE ✓
-       - RIGHT: (12,10) BLOCKED ❌ (wall detected)
-       
-       Step 2: Explore alternative paths
-       - Try UP: (10,9) WALKABLE ✓
-       - Try DOWN: (10,11) WALKABLE ✓
-       
-       Step 3: Plan detour route
-       Route A: UP → RIGHT → RIGHT → RIGHT → RIGHT → DOWN
-       (10,10) → (10,9) → (11,9) → (12,9) → (13,9) → (14,9) → (15,9) → (15,10)
-       
-       Route B: DOWN → RIGHT → RIGHT → RIGHT → RIGHT → UP  
-       (10,10) → (10,11) → (11,11) → (12,11) → (13,11) → (14,11) → (15,11) → (15,10)
-       
-       Step 4: Execute one step at a time, checking MOVEMENT PREVIEW each turn
-       Turn 1: UP (verify (10,9) is WALKABLE)
-       Turn 2: RIGHT (verify (11,9) is WALKABLE) 
-       Turn 3: RIGHT (verify (12,9) is WALKABLE)
-       Turn 4: RIGHT (verify (13,9) is WALKABLE)
-       Turn 5: RIGHT (verify (14,9) is WALKABLE)
-       Turn 6: DOWN (verify (15,10) is WALKABLE - GOAL REACHED!)
+💡 **NPC & OBSTACLE HANDLING**:
+    - NPCs are detected visually and shown in MOVEMENT PREVIEW - check for "NPC present" or "BLOCKED by [NPC name]"
+    - The pathfinder automatically avoids walls, obstacles, and NPCs
+    - If a movement fails (coordinates don't change), use MOVEMENT MEMORY to remember and try different route
+    - Trainers typically block movement and must be battled - the pathfinder will route around or you can approach them
+    - IMORTANT: You need to be directly adjacent to AND facing an NPC to interact with them before using the use A button
 
-💡 SMART MOVEMENT STRATEGY:
-    - Use MOVEMENT PREVIEW to see exactly what happens with each direction
-    - If your target requires multiple steps, plan ONE step at a time
-    - Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
-    - When stuck, try a different direction rather than repeating the same blocked move:
-        EXAMPLE - DON'T DO THIS:
-        ❌ "I want to go right 5 tiles" → "RIGHT, RIGHT, RIGHT, RIGHT, RIGHT" (may hit wall on step 2!)
-
-        EXAMPLE - DO THIS INSTEAD:
-        ✅ Check movement preview → "RIGHT shows (X+1,Y) WALKABLE" → "RIGHT" (single safe step)
-        ✅ Next turn, check again → "RIGHT shows (X+2,Y) WALKABLE" → "RIGHT" (another safe step)
-
-💡 SMART NAVIGATION:
-    - Check the VISUAL FRAME for NPCs (people/trainers) before moving - they're not always on the map!
-    - Review MOVEMENT MEMORY for locations where you've failed to move before
-    - Only explore areas marked with ? (these are confirmed explorable edges)
-    - Avoid areas surrounded by # (walls) - they're fully blocked
-    - Use doors (D), stairs (S), or walk around obstacles when pathfinding suggests it
-
-💡 NPC & OBSTACLE HANDLING:
-    - NPCs are now detected visually and shown in MOVEMENT PREVIEW - check for "NPC present" or "BLOCKED by [NPC name]"
-    - If a movement fails (coordinates don't change), that location likely has an NPC or obstacle
-    - Use your MOVEMENT MEMORY to remember problem areas and plan around them
-    - NPCs can trigger battles or dialogue, which may be useful for objectives (interact with them using A/B if needed)
-    - You need to be both directly adjacent to and facing an NPC to interact with them!
-    - Trainers typically block movement and must be battled - check MOVEMENT PREVIEW for trainer names
-    - Regular NPCs may or may not block movement - check the preview for blocking status
-
-🛑 INPUT HANDLING RULES (NO "A" SPAM):
-    - If DIALOGUE TEXT is visible or dialogue is active → press A up to 2 times to advance, then reassess
+🛑 **INPUT HANDLING RULES**:
+    - If DIALOGUE TEXT is visible or dialogue is active → press A up to 1 time to advance, then reassess
     - If NO dialogue text is visible AND your coordinates are NOT changing in OVERWORLD/menu → DO NOT press A again
-    - In that case, try: (1) a WALKABLE movement from MOVEMENT PREVIEW, or (2) press B once to dismiss a menu/close text
-    - Never output more than 2 consecutive 'A' at the same coordinates in OVERWORLD
-    - Never press A more than once when in battle so you can better select different moves
+    - Never output more than 1 consecutive 'A' at the same coordinates in OVERWORLD, especially if your action history shows you've consistently pressed A at the same coordinates without changing coordinates
+    - In battle, think carefully about move selection - don't spam A
 """
 
             # Create enhanced prompt with objectives, history context and chain of thought request
@@ -829,22 +793,36 @@ OBJECTIVES:
 
 PLAN:
 [Think about your immediate goal - what do you want to accomplish in the next few actions? Consider your current objectives and recent history. 
-Check MOVEMENT MEMORY for areas you've had trouble with before and plan your route accordingly.]
+
+🗺️ **FOR NAVIGATION**:
+Look at the map and identify where you want to go. You'll request pathfinding in the ACTION section.
+
+You are at grid center (7,7). Pick a walkable tile in your target direction:
+- NORTH: y < 7 (e.g., 7,4)
+- SOUTH: y > 7 (e.g., 7,11)
+- EAST: x > 7 (e.g., 10,7)
+- WEST: x < 7 (e.g., 4,7)
+
+Example plan: "Need to go south to reach Petalburg. I see tile (7,11) is walkable. Will request path to it."]
 
 REASONING:
 [Explain why you're choosing this specific action. Reference the MOVEMENT PREVIEW and MOVEMENT MEMORY sections. Check the visual frame for NPCs before moving. If you see NPCs in the image, avoid walking into them. Consider any failed movements or known obstacles from your memory.
 IMPORTANT: The MOVEMENT PREVIEW now shows detected NPCs - check each direction for "NPC present" or "BLOCKED by [NPC name]" to understand what's blocking your path.
-IMPORTANT NOTE: If you haven't been making progress towards your objective, it is likely that your reasoning is flawed. You should re-analyze your situation and plan again.
-- Example #1: If you've been trying to run from what you think is a wild encounter, but the game is not letting you run, it is likely you are actually battling a trainer and need to fight.
-- Example #2: If you've been trying to move in a particular direction to complete your goal, but your recent history of actions has been failing to move you closer to the target location, it is likely you need to reassess your plan and chart a longer path around the obstacle.
-- Example #3: If MOVEMENT PREVIEW shows "BLOCKED by [Trainer Name]", you need to approach and battle that trainer before proceeding.]
+
+⚔️ **BATTLE STRATEGY**:
+- When your HP is below 75%, prioritize healing moves that also deal damage (e.g., Absorb, Mega Drain, Giga Drain)
+- These moves let you heal while still progressing the battle - very efficient for speedrunning
+- Against trainers, you cannot run - you must fight strategically
+- Example: "My HP is at 63%. I'll use Absorb to heal while damaging the opponent."]
 
 ACTION:
-[Your final action choice - PREFER SINGLE ACTIONS like 'RIGHT' or 'A'. Only use multiple actions like 'UP, UP, RIGHT' if you've verified each step is WALKABLE in the movement preview and map.
-- If dialogue text is visible, press A up to 2 times.
-- If coordinates don't change and no dialogue text is visible in OVERWORLD/menu, DO NOT press A again; choose a WALKABLE movement or press B once.
-- Never output more than 2 consecutive 'A' at the same coordinates in OVERWORLD.
-- Never press A more than once when in battle so you can better select different moves]
+[Your final action choice.
+- For NAVIGATION in overworld: Use REQUEST_PATH: (grid_x, grid_y) - the pathfinder will calculate optimal route
+  Example: REQUEST_PATH: (7, 11)
+- For DIALOGUE: Press A to advance (up to 2 times)
+- For BATTLES: Select appropriate move (e.g., Absorb, Tackle, etc.)
+- For MENUS: Select appropriate option
+- Never output more than 2 consecutive 'A' at the same coordinates in OVERWORLD]
 
 {pathfinding_rules}
 
@@ -962,6 +940,11 @@ Context: {context} | Coords: {coords} """
         response_upper = response.upper().strip()
         valid_actions = ['A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'WAIT']
         
+        # Skip if this is a pathfinding request (should be handled separately)
+        if 'REQUEST_PATH' in response_upper:
+            logger.debug("Skipping action parsing - REQUEST_PATH detected")
+            return []
+        
         # Parse multiple actions (could be comma or space separated)
         actions_found = []
         # Replace commas with spaces for consistent parsing
@@ -1023,6 +1006,8 @@ Context: {context} | Coords: {coords} """
             plan = ""
             reasoning = ""
             actions = []
+            pathfinding_requested = False
+            pathfinding_result = ""
             
             # Split response into lines for processing
             lines = response.split('\n')
@@ -1048,7 +1033,11 @@ Context: {context} | Coords: {coords} """
                     current_section = 'action'
                     # Extract actions from this line
                     action_text = line[7:].strip()  # Remove "ACTION:" prefix
-                    if action_text:  # Only parse if there's content
+                    
+                    # Check for REQUEST_PATH first before parsing as normal action
+                    pathfinding_request = self._extract_pathfinding_request(action_text)
+                    if not pathfinding_request and action_text:
+                        # Only parse if there's content and it's not a pathfinding request
                         actions = self._parse_actions(action_text, game_state)
                 elif line and current_section:
                     # Continue content of current section
@@ -1063,11 +1052,44 @@ Context: {context} | Coords: {coords} """
                     elif current_section == 'action':
                         # Additional action parsing from action section content
                         if line.strip():  # Only process non-empty lines
-                            additional_actions = self._parse_actions(line, game_state)
-                            actions.extend(additional_actions)
-                            if len(actions) >= 10:  # Max 10 actions
-                                actions = actions[:10]
-                                break
+                            # Check for pathfinding request first
+                            pathfinding_check = self._extract_pathfinding_request(line)
+                            if pathfinding_check:
+                                # Found pathfinding request in continuation line
+                                pathfinding_request = pathfinding_check
+                            elif not pathfinding_request:
+                                # Only parse as action if no pathfinding request found yet
+                                additional_actions = self._parse_actions(line, game_state)
+                                actions.extend(additional_actions)
+                                if len(actions) >= 10:  # Max 10 actions
+                                    actions = actions[:10]
+                                    break
+            
+            # pathfinding_request was extracted in the ACTION parsing above
+            # Now check if we found one and use it
+            if pathfinding_request and game_state:
+                target_x, target_y = pathfinding_request
+                logger.info(f"🗺️ Pathfinding requested to grid ({target_x}, {target_y})")
+                
+                # Call pathfinder
+                path_actions = self.pathfinder.find_path(game_state, (target_x, target_y))
+                
+                if path_actions:
+                    logger.info(f"🗺️ Pathfinder found path: {path_actions}")
+                    pathfinding_requested = True
+                    pathfinding_result = f"Path found: {', '.join(path_actions)}"
+                    
+                    # ALWAYS use pathfinder actions when pathfinding was requested
+                    # This overrides any manual actions the agent might have specified
+                    actions = path_actions
+                    logger.info(f"🗺️ Using pathfinder actions (overriding manual actions): {actions}")
+                else:
+                    logger.info(f"🗺️ No path found to ({target_x}, {target_y})")
+                    pathfinding_result = f"No path to ({target_x}, {target_y}) - obstacle blocking or target unreachable"
+                    # Set fallback action when pathfinding fails
+                    if not actions:
+                        actions = ['A']  # Default safe action
+                        logger.info(f"🗺️ Pathfinding failed, using fallback action: {actions}")
             
             # Process objectives if mentioned
             if objectives_section:
@@ -1087,6 +1109,8 @@ Context: {context} | Coords: {coords} """
                 reasoning_parts.append(f"Plan: {plan}")
             if reasoning:
                 reasoning_parts.append(f"Reasoning: {reasoning}")
+            if pathfinding_result:
+                reasoning_parts.append(f"Pathfinding: {pathfinding_result}")
             
             full_reasoning = " | ".join(reasoning_parts) if reasoning_parts else "No reasoning provided"
             
@@ -1096,6 +1120,36 @@ Context: {context} | Coords: {coords} """
             logger.warning(f"Error parsing structured response: {e}")
             # Fall back to basic action parsing
             return self._parse_actions(response, game_state), "Error parsing reasoning"
+    
+    def _extract_pathfinding_request(self, text: str) -> Optional[Tuple[int, int]]:
+        """
+        Extract pathfinding request from text.
+        Looks for patterns like "REQUEST_PATH: (x, y)" or "REQUEST_PATH: x,y"
+        
+        Args:
+            text: Text to search for pathfinding request
+            
+        Returns:
+            Tuple of (x, y) coordinates if found, None otherwise
+        """
+        import re
+        
+        try:
+            # Look for REQUEST_PATH: (x, y) or REQUEST_PATH: x,y
+            # Case insensitive matching
+            pattern = r'REQUEST_PATH\s*:\s*\(?(\d+)\s*,\s*(\d+)\)?'
+            match = re.search(pattern, text, re.IGNORECASE)
+            
+            if match:
+                x = int(match.group(1))
+                y = int(match.group(2))
+                return (x, y)
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Error extracting pathfinding request: {e}")
+            return None
     
     def _process_objectives_from_response(self, objectives_text: str):
         """Process objective management commands from LLM response"""

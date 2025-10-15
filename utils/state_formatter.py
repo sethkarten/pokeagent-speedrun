@@ -162,7 +162,7 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
         logger.warning(f"Failed to detect dialogue on frame: {e}")
         return {'has_dialogue': False, 'confidence': 0.0, 'reason': f'error: {e}'}
 
-def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True):
+def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True, include_movement_preview=True):
     """
     Format comprehensive state data into readable text.
     
@@ -171,6 +171,7 @@ def format_state(state_data, format_type="summary", include_debug_info=False, in
         format_type (str): "summary" for one-line summary, "detailed" for multi-line LLM format
         include_debug_info (bool): Whether to include extra debug information (for detailed format)
         include_npcs (bool): Whether to include NPC information in the state
+        include_movement_preview (bool): Whether to include movement preview (for detailed format)
     
     Returns:
         str: Formatted state text
@@ -178,11 +179,11 @@ def format_state(state_data, format_type="summary", include_debug_info=False, in
     if format_type == "summary":
         return _format_state_summary(state_data)
     elif format_type == "detailed":
-        return _format_state_detailed(state_data, include_debug_info, include_npcs)
+        return _format_state_detailed(state_data, include_debug_info, include_npcs, include_movement_preview)
     else:
         raise ValueError(f"Unknown format_type: {format_type}. Use 'summary' or 'detailed'")
 
-def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True):
+def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True):
     """
     Format comprehensive state data into a readable context for the VLM.
     
@@ -190,11 +191,12 @@ def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True
         state_data (dict): The comprehensive state from /state endpoint
         include_debug_info (bool): Whether to include extra debug information
         include_npcs (bool): Whether to include NPC information in the state
+        include_movement_preview (bool): Whether to include movement preview (deprecated for pathfinding agents)
     
     Returns:
         str: Formatted state context for LLM prompts
     """
-    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs)
+    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs, include_movement_preview=include_movement_preview)
 
 def format_state_summary(state_data):
     """
@@ -314,7 +316,7 @@ def _format_state_summary(state_data):
     
     return " | ".join(summary_parts) if summary_parts else "No state data"
 
-def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True):
+def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True):
     """
     Internal function to create detailed multi-line state format for LLM prompts.
     """
@@ -489,7 +491,7 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.extend(map_context)
 
         # Game state information (including dialogue if not in battle)
-        game_context = _format_game_state(game_data, state_data)
+        game_context = _format_game_state(game_data, state_data, include_movement_preview)
         context_parts.extend(game_context)
     
     # Debug information if requested (shown in both modes)
@@ -1096,7 +1098,7 @@ def _format_stitched_map_info(map_info):
     # Old world map knowledge system removed - replaced by location-based maps with portal coordinates
     return context_parts
 
-def _format_game_state(game_data, state_data=None):
+def _format_game_state(game_data, state_data=None, include_movement_preview=True):
     """Format game state information (for non-battle mode)."""
     context_parts = []
     
@@ -1141,7 +1143,8 @@ def _format_game_state(game_data, state_data=None):
         context_parts.append("Be creative and have fun with the naming!")
     
     # Add movement preview for overworld navigation (but not during title sequence)
-    if (state_data and not is_in_battle and 
+    # Can be disabled for agents using pathfinding utility
+    if (include_movement_preview and state_data and not is_in_battle and 
         game_data.get('game_state') == 'overworld' and 
         player_location != 'TITLE_SEQUENCE'):
         movement_preview = format_movement_preview_for_llm(state_data)
