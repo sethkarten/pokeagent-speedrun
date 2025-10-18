@@ -40,6 +40,7 @@ dependencies = [
     "sentencepiece>=0.1.99",
     "cffi>=1.6",
     "pytesseract>=0.3.10",
+    "torchvision>=0.23.0",
 ]
 
 [project.optional-dependencies]

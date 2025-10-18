@@ -19,12 +19,15 @@ import time
 # Third-party imports
 import cv2
 import numpy as np
+import requests
 import uvicorn
+from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from PIL import Image
 from pydantic import BaseModel
+from urllib.parse import quote_plus
 
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -32,6 +35,26 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Local application imports
 from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
+
+# MCP tool imports - lazy loaded to avoid circular imports
+_pokemon_mcp_tools = None
+_baseline_mcp_tools = None
+
+def _get_pokemon_mcp_tools():
+    """Lazy load Pokemon MCP tools"""
+    global _pokemon_mcp_tools
+    if _pokemon_mcp_tools is None:
+        from server.cli import pokemon_mcp_server
+        _pokemon_mcp_tools = pokemon_mcp_server
+    return _pokemon_mcp_tools
+
+def _get_baseline_mcp_tools():
+    """Lazy load Baseline MCP tools"""
+    global _baseline_mcp_tools
+    if _baseline_mcp_tools is None:
+        from server.cli import baseline_mcp_server
+        _baseline_mcp_tools = baseline_mcp_server
+    return _baseline_mcp_tools
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -1323,7 +1346,8 @@ async def get_agent_thinking():
         if recent_interactions:
             interaction = recent_interactions[-1]  # Get the most recent interaction
             current_thought = f"Current step LLM output:\n"
-            current_thought += f"{interaction['type'].upper()} ({interaction['duration']:.2f}s)\n"
+            duration = interaction.get('duration', 0)
+            current_thought += f"{interaction['type'].upper()} ({duration:.2f}s)\n"
             current_thought += f"Response: {interaction['response']}"
         else:
             current_thought = "No recent LLM interactions. Agent is ready to process game state."
@@ -1444,13 +1468,24 @@ async def reset_metrics():
 async def update_agent_step(request: Request = None):
     """Update the agent step count and metrics (called by agent.py)"""
     global agent_step_count, latest_metrics
-    
+
     try:
         # Check if this is a direct set operation or has metrics
         if request:
             try:
                 request_data = await request.json()
-                
+
+                # Store agent thinking if provided
+                if "thinking" in request_data:
+                    thinking_text = request_data["thinking"]
+                    step_num = request_data.get("step", agent_step_count)
+                    # Write to a simple text file for the stream to read
+                    try:
+                        with open("agent_thinking.txt", "w") as f:
+                            f.write(f"Step {step_num}:\n{thinking_text}\n")
+                    except Exception as e:
+                        logger.debug(f"Could not write thinking: {e}")
+
                 # Update metrics if provided (with thread safety)
                 if "metrics" in request_data and isinstance(request_data["metrics"], dict):
                     with step_lock:  # Use existing lock for thread safety
@@ -1462,7 +1497,7 @@ async def update_agent_step(request: Request = None):
                                     continue
                                 else:
                                     latest_metrics[key] = value
-                    
+
                 # Handle set_step for initialization
                 if "set_step" in request_data:
                     with step_lock:
@@ -1679,6 +1714,522 @@ async def test_milestone_operations():
     except Exception as e:
         logger.error(f"Error testing milestone operations: {e}")
         return {"error": str(e)}
+
+# ============================================================================
+# MCP TOOL ENDPOINTS
+# ============================================================================
+
+@app.post("/mcp/get_game_state")
+async def mcp_get_game_state():
+    """MCP Tool: Get current game state"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        from utils.state_formatter import format_state_for_llm
+        from server.cli import pokemon_mcp_server
+
+        # Use helper function from pokemon_mcp_server
+        return pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+    except Exception as e:
+        logger.error(f"Error in get_game_state: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/press_buttons")
+async def mcp_press_buttons(request: dict):
+    """MCP Tool: Press GBA buttons"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        buttons = request.get("buttons", [])
+        reasoning = request.get("reasoning", "")
+
+        if not buttons:
+            return {"success": False, "error": "No buttons specified"}
+
+        # Valid buttons (including WAIT for no-op)
+        valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
+
+        # Filter out WAIT buttons (they're just for agent decision-making, not actual button presses)
+        actual_buttons = [b for b in buttons if b != "WAIT"]
+
+        # Validate all buttons
+        for button in buttons:
+            if button not in valid_buttons:
+                return {"success": False, "error": f"Invalid button: {button}"}
+
+        # If only WAIT was requested, treat it as a no-op but still complete successfully
+        if not actual_buttons:
+            logger.info(f"🎮 Agent chose to WAIT (no buttons pressed) - {reasoning}")
+            return {
+                "success": True,
+                "buttons_queued": [],
+                "reasoning": reasoning,
+                "action": "WAIT"
+            }
+
+        # Call the existing take_action function to ensure metrics tracking
+        action_request = ActionRequest(buttons=actual_buttons)
+        await take_action(action_request)
+
+        logger.info(f"🎮 Queued buttons via MCP: {actual_buttons} - {reasoning}")
+        return {
+            "success": True,
+            "buttons_queued": actual_buttons,
+            "reasoning": reasoning
+        }
+    except Exception as e:
+        logger.error(f"Error pressing buttons: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/navigate_to")
+async def mcp_navigate_to(request: dict):
+    """MCP Tool: Navigate to coordinates using pathfinding"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        from server.cli import pokemon_mcp_server
+
+        x = request.get("x")
+        y = request.get("y")
+        reason = request.get("reason", "")
+
+        if x is None or y is None:
+            return {"success": False, "error": "x and y coordinates required"}
+
+        # Convert to int in case they come as floats from JSON
+        try:
+            x = int(x)
+            y = int(y)
+        except (ValueError, TypeError):
+            return {"success": False, "error": f"Invalid coordinates: x={x}, y={y}"}
+
+        # Calculate path and get buttons
+        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason)
+
+        if not result.get("success"):
+            return result
+
+        # Queue buttons via take_action to ensure metrics tracking
+        buttons = result.get("buttons", [])
+        if buttons:
+            action_request = ActionRequest(buttons=buttons)
+            await take_action(action_request)
+
+        return {
+            "success": True,
+            "target": result.get("target"),
+            "path_length": result.get("path_length"),
+            "buttons_queued": len(buttons),
+            "reason": reason
+        }
+    except Exception as e:
+        logger.error(f"Error in navigate_to: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/add_knowledge")
+async def mcp_add_knowledge(request: dict):
+    """MCP Tool: Add knowledge to knowledge base"""
+    try:
+        from server.cli import pokemon_mcp_server
+
+        return pokemon_mcp_server.add_knowledge_direct(
+            category=request.get("category"),
+            title=request.get("title"),
+            content=request.get("content"),
+            location=request.get("location"),
+            coordinates=request.get("coordinates"),
+            importance=request.get("importance", 3)
+        )
+    except Exception as e:
+        logger.error(f"Error adding knowledge: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/search_knowledge")
+async def mcp_search_knowledge(request: dict):
+    """MCP Tool: Search knowledge base"""
+    try:
+        from server.cli import pokemon_mcp_server
+
+        return pokemon_mcp_server.search_knowledge_direct(
+            category=request.get("category"),
+            query=request.get("query"),
+            location=request.get("location"),
+            min_importance=request.get("min_importance", 1)
+        )
+    except Exception as e:
+        logger.error(f"Error searching knowledge: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_knowledge_summary")
+async def mcp_search_knowledge_summary(request: dict):
+    """MCP Tool: Get knowledge summary"""
+    try:
+        from server.cli import pokemon_mcp_server
+
+        return pokemon_mcp_server.get_knowledge_summary_direct(
+            min_importance=request.get("min_importance", 3)
+        )
+    except Exception as e:
+        logger.error(f"Error getting knowledge summary: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/lookup_pokemon_info")
+async def mcp_lookup_pokemon_info(request: dict):
+    """MCP Tool: Lookup Pokemon info from wikis"""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        from urllib.parse import quote_plus
+
+        topic = request.get("topic")
+        source = request.get("source", "bulbapedia")
+
+        if not topic:
+            return {"success": False, "error": "topic is required"}
+
+        # Wiki sources configuration
+        POKEMON_WIKI_SOURCES = {
+            "bulbapedia": {
+                "base_url": "https://bulbapedia.bulbagarden.net/wiki/",
+                "search_url": "https://bulbapedia.bulbagarden.net/w/index.php?search=",
+                "description": "Comprehensive Pokemon encyclopedia"
+            },
+            "serebii": {
+                "base_url": "https://www.serebii.net/",
+                "emerald_url": "https://www.serebii.net/emerald/",
+                "description": "Detailed Pokemon Emerald guides and data"
+            },
+            "pokemondb": {
+                "base_url": "https://pokemondb.net/",
+                "description": "Pokemon Database"
+            },
+            "marriland": {
+                "base_url": "https://marriland.com/",
+                "emerald_url": "https://marriland.com/pokemon-emerald/",
+                "description": "Marriland guides"
+            }
+        }
+
+        if source not in POKEMON_WIKI_SOURCES:
+            return {
+                "success": False,
+                "error": f"Unknown source '{source}'. Available: {', '.join(POKEMON_WIKI_SOURCES.keys())}"
+            }
+
+        source_info = POKEMON_WIKI_SOURCES[source]
+
+        # Build URL based on source
+        if source == "bulbapedia":
+            formatted_topic = topic.replace(" ", "_")
+            url = f"{source_info['base_url']}{formatted_topic}"
+        elif source == "serebii":
+            formatted_topic = topic.lower().replace(" ", "")
+            url = f"{source_info['emerald_url']}{formatted_topic}.shtml"
+        elif source == "pokemondb":
+            formatted_topic = topic.lower().replace(" ", "-")
+            url = f"{source_info['base_url']}pokedex/{formatted_topic}"
+        elif source == "marriland":
+            formatted_topic = topic.lower().replace(" ", "-")
+            url = f"{source_info['emerald_url']}{formatted_topic}/"
+        else:
+            url = f"{source_info['base_url']}{topic}"
+
+        logger.info(f"📚 Fetching Pokemon info: {topic} from {source}")
+
+        # Fetch the page
+        response = requests.get(url, timeout=15, headers={
+            'User-Agent': 'Mozilla/5.0 (compatible; PokeAgent/1.0)'
+        })
+
+        # If 404, try search instead
+        if response.status_code == 404 and source == "bulbapedia":
+            search_url = f"{source_info['search_url']}{quote_plus(topic)}"
+            logger.info(f"Page not found, trying search: {search_url}")
+            response = requests.get(search_url, timeout=15, headers={
+                'User-Agent': 'Mozilla/5.0 (compatible; PokeAgent/1.0)'
+            })
+
+        response.raise_for_status()
+
+        # Parse HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Remove unwanted elements
+        for element in soup(['script', 'style', 'nav', 'footer', 'header']):
+            element.decompose()
+
+        # Extract main content based on source
+        content = ""
+        if source == "bulbapedia":
+            main_content = soup.find('div', id='mw-content-text')
+            if main_content:
+                paragraphs = main_content.find_all('p', limit=5)
+                content = '\n\n'.join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
+        else:
+            content = soup.get_text()
+            lines = (line.strip() for line in content.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            content = '\n'.join(chunk for chunk in chunks if chunk)
+
+        # Limit content length
+        max_chars = 5000
+        if len(content) > max_chars:
+            content = content[:max_chars] + f"\n\n[Content truncated - {len(content)} total characters]"
+
+        if not content or len(content) < 50:
+            return {
+                "success": False,
+                "error": f"Could not extract meaningful content from {url}"
+            }
+
+        return {
+            "success": True,
+            "topic": topic,
+            "source": source,
+            "url": url,
+            "content": content,
+            "description": source_info['description']
+        }
+
+    except Exception as e:
+        logger.error(f"Error looking up Pokemon info: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/list_wiki_sources")
+async def mcp_list_wiki_sources():
+    """MCP Tool: List available wiki sources"""
+    POKEMON_WIKI_SOURCES = {
+        "bulbapedia": {
+            "base_url": "https://bulbapedia.bulbagarden.net/wiki/",
+            "description": "Comprehensive Pokemon encyclopedia"
+        },
+        "serebii": {
+            "base_url": "https://www.serebii.net/",
+            "emerald_url": "https://www.serebii.net/emerald/",
+            "description": "Detailed Pokemon Emerald guides and data"
+        },
+        "pokemondb": {
+            "base_url": "https://pokemondb.net/",
+            "description": "Pokemon Database"
+        },
+        "marriland": {
+            "base_url": "https://marriland.com/",
+            "emerald_url": "https://marriland.com/pokemon-emerald/",
+            "description": "Marriland guides"
+        }
+    }
+
+    sources = []
+    for name, info in POKEMON_WIKI_SOURCES.items():
+        sources.append({
+            "name": name,
+            "description": info['description'],
+            "base_url": info.get('base_url', ''),
+            "emerald_url": info.get('emerald_url', '')
+        })
+
+    return {
+        "success": True,
+        "sources": sources,
+        "count": len(sources),
+        "usage": "Use lookup_pokemon_info(topic, source) to fetch information"
+    }
+
+
+@app.post("/mcp/get_walkthrough")
+async def mcp_get_walkthrough(request: dict):
+    """MCP Tool: Get Pokemon Emerald walkthrough part"""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+
+        part = request.get("part")
+
+        if part is None:
+            return {"success": False, "error": "part is required"}
+
+        # Convert to int in case it comes as float from JSON
+        try:
+            part = int(part)
+        except (ValueError, TypeError):
+            return {"success": False, "error": f"Invalid part number: {part}"}
+
+        if not 1 <= part <= 21:
+            return {
+                "success": False,
+                "error": f"Part must be between 1 and 21 (got {part})"
+            }
+
+        # Build Bulbapedia walkthrough URL
+        url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
+
+        logger.info(f"📖 Fetching Emerald walkthrough part {part}")
+
+        # Fetch the page
+        response = requests.get(url, timeout=15, headers={
+            'User-Agent': 'Mozilla/5.0 (compatible; PokeAgent/1.0)'
+        })
+        response.raise_for_status()
+
+        # Parse HTML
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # Remove unwanted elements
+        for element in soup(['script', 'style', 'nav', 'footer', 'header', 'table']):
+            element.decompose()
+
+        # Extract main content
+        main_content = soup.find('div', id='mw-content-text')
+        if not main_content:
+            return {
+                "success": False,
+                "error": f"Could not find main content for Part {part}"
+            }
+
+        # Get all paragraphs and headings for structured walkthrough
+        content_parts = []
+        for element in main_content.find_all(['h2', 'h3', 'h4', 'p', 'ul'], limit=50):
+            if element.name in ['h2', 'h3', 'h4']:
+                heading_text = element.get_text(strip=True)
+                if heading_text and not heading_text.startswith('[edit]'):
+                    level = element.name
+                    if level == 'h2':
+                        content_parts.append(f"\n## {heading_text}")
+                    elif level == 'h3':
+                        content_parts.append(f"\n### {heading_text}")
+                    else:
+                        content_parts.append(f"\n#### {heading_text}")
+            elif element.name == 'p':
+                para_text = element.get_text(strip=True)
+                if para_text and len(para_text) > 20:
+                    content_parts.append(para_text)
+            elif element.name == 'ul':
+                for li in element.find_all('li'):
+                    li_text = li.get_text(strip=True)
+                    if li_text:
+                        content_parts.append(f"  - {li_text}")
+
+        content = '\n\n'.join(content_parts)
+
+        # Limit content length
+        max_chars = 8000
+        if len(content) > max_chars:
+            content = content[:max_chars] + f"\n\n[Content truncated - {len(content)} total characters]"
+
+        if not content or len(content) < 100:
+            return {
+                "success": False,
+                "error": f"Could not extract meaningful content from Part {part}"
+            }
+
+        return {
+            "success": True,
+            "part": part,
+            "url": url,
+            "content": content,
+            "description": f"Pokemon Emerald Walkthrough - Part {part}"
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting walkthrough: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# Baseline MCP Tool Endpoints (File/Shell/Web/Memory)
+
+@app.post("/mcp/read_file")
+async def mcp_read_file(request: dict):
+    """MCP Tool: Read file contents"""
+    tools = _get_baseline_mcp_tools()
+    return tools.read_file(file_path=request.get("file_path"))
+
+@app.post("/mcp/write_file")
+async def mcp_write_file(request: dict):
+    """MCP Tool: Write file (restricted to .pokeagent_cache/cli/)"""
+    tools = _get_baseline_mcp_tools()
+    return tools.write_file(file_path=request.get("file_path"), content=request.get("content"))
+
+@app.post("/mcp/list_directory")
+async def mcp_list_directory(request: dict):
+    """MCP Tool: List directory contents"""
+    tools = _get_baseline_mcp_tools()
+    return tools.list_directory(
+        path=request.get("path"),
+        recursive=request.get("recursive", False),
+        max_depth=request.get("max_depth", 3)
+    )
+
+@app.post("/mcp/glob")
+async def mcp_glob(request: dict):
+    """MCP Tool: Find files matching glob pattern"""
+    tools = _get_baseline_mcp_tools()
+    return tools.glob(pattern=request.get("pattern"), path=request.get("path", "."))
+
+@app.post("/mcp/search_file_content")
+async def mcp_search_file_content(request: dict):
+    """MCP Tool: Search files for regex pattern"""
+    tools = _get_baseline_mcp_tools()
+    return tools.search_file_content(
+        pattern=request.get("pattern"),
+        path=request.get("path"),
+        file_pattern=request.get("file_pattern", "*")
+    )
+
+@app.post("/mcp/replace")
+async def mcp_replace(request: dict):
+    """MCP Tool: Replace text in file"""
+    tools = _get_baseline_mcp_tools()
+    return tools.replace(
+        file_path=request.get("file_path"),
+        old_text=request.get("old_text"),
+        new_text=request.get("new_text"),
+        regex=request.get("regex", False)
+    )
+
+@app.post("/mcp/read_many_files")
+async def mcp_read_many_files(request: dict):
+    """MCP Tool: Read multiple files"""
+    tools = _get_baseline_mcp_tools()
+    return tools.read_many_files(file_paths=request.get("file_paths", []))
+
+@app.post("/mcp/run_shell_command")
+async def mcp_run_shell_command(request: dict):
+    """MCP Tool: Run shell command (allowlist only)"""
+    tools = _get_baseline_mcp_tools()
+    return tools.run_shell_command(command=request.get("command"), description=request.get("description", ""))
+
+@app.post("/mcp/web_fetch")
+async def mcp_web_fetch(request: dict):
+    """MCP Tool: Fetch and parse web pages"""
+    tools = _get_baseline_mcp_tools()
+    return tools.web_fetch(prompt=request.get("prompt"))
+
+@app.post("/mcp/google_web_search")
+async def mcp_google_web_search(request: dict):
+    """MCP Tool: Search web using DuckDuckGo"""
+    tools = _get_baseline_mcp_tools()
+    return tools.google_web_search(query=request.get("query"))
+
+@app.post("/mcp/save_memory")
+async def mcp_save_memory(request: dict):
+    """MCP Tool: Save facts to persistent memory"""
+    tools = _get_baseline_mcp_tools()
+    return tools.save_memory(fact=request.get("fact"))
+
+
+# ============================================================================
+# SERVER CONTROL
+# ============================================================================
 
 @app.post("/stop")
 async def stop_server():

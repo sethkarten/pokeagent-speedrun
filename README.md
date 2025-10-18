@@ -358,8 +358,18 @@ Automatically records gameplay to MP4 files with timestamps.
 python run.py --record --agent-auto
 ```
 
-### ⚡ Simple Mode (`--simple`)
+### 🏗️ Agent Scaffolds (`--scaffold`)
 
+Choose from different agent architectures to suit your needs:
+
+#### Four-Module Architecture (Default)
+The standard architecture with separate Perception → Planning → Memory → Action modules:
+```bash
+python run.py --agent-auto  # Uses fourmodule by default
+python run.py --scaffold fourmodule --agent-auto
+```
+
+#### Simple Mode
 Lightweight processing mode that bypasses the four-module agent architecture.
 
 **Benefits:**
@@ -368,13 +378,39 @@ Lightweight processing mode that bypasses the four-module agent architecture.
 - Ideal for rapid prototyping and resource-constrained environments
 - Maintains action history (last 20 actions)
 
-**Usage:**
 ```bash
-# Simple mode for fast iterations
-python run.py --simple --agent-auto
+python run.py --scaffold simple --agent-auto
 
-# Combined with other features
-python run.py --simple --record --agent-auto
+# Backward compatibility with deprecated --simple flag
+python run.py --simple --agent-auto  # Still works, but shows deprecation warning
+```
+
+#### ReAct Agent
+Implements the ReAct (Reasoning and Acting) pattern with explicit thought-action-observation loops:
+- **Interpretable reasoning** before each action
+- **Structured decision-making** with confidence scores
+- **Periodic reflection** on progress and strategy
+- **History management** for context-aware decisions
+
+```bash
+python run.py --scaffold react --agent-auto
+```
+
+#### ClaudePlaysPokemon Agent
+Based on David Hershey's ClaudePlaysPokemonStarter with enhanced tool-based interaction:
+- **Tool-based control** (press_buttons, navigate_to)
+- **Advanced A* pathfinding** with collision detection and NPC avoidance
+- **Automatic history summarization** when context gets too long
+- **Button sequence queuing** for multi-step actions
+- **Works with any VLM** (not just Claude)
+- **Smart navigation** that finds optimal paths around obstacles
+
+```bash
+python run.py --scaffold claudeplays --agent-auto
+
+# With different models
+python run.py --scaffold claudeplays --backend openai --model-name gpt-4o --agent-auto
+python run.py --scaffold claudeplays --backend gemini --model-name gemini-2.5-flash --agent-auto
 ```
 
 ### 🔇 No OCR Mode (`--no-ocr`)
@@ -481,7 +517,8 @@ Mode Options:
 
 Feature Options:
   --record                Record video of gameplay (saves MP4 with timestamp)
-  --simple                Simple mode: frame + LLM only (skips perception/planning/memory)
+  --scaffold SCAFFOLD     Agent scaffold: fourmodule (default), simple, react, or claudeplays
+  --simple                DEPRECATED: Use --scaffold simple instead
   --no-ocr                Disable OCR dialogue detection (forces overworld state)
 
 VLM Options:
