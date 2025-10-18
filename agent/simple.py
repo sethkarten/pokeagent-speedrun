@@ -41,22 +41,24 @@ import numpy as np
 from PIL import Image
 
 from utils.state_formatter import format_state_for_llm
-from agent.agent_utils import VisualMapGenerator, PathfinderUtility
+from utils.agent_helpers import update_server_metrics
 
 logger = logging.getLogger(__name__)
 
 # Configurable parameters for history tracking
 DEFAULT_MAX_HISTORY_ENTRIES = 100  # Previous states/locations with context
 DEFAULT_MAX_RECENT_ACTIONS = 50    # Recent button presses
-DEFAULT_HISTORY_DISPLAY_COUNT = 99 # Number of history entries shown to LLM
-DEFAULT_ACTIONS_DISPLAY_COUNT = 20 # Number of recent actions shown to LLM
-
+DEFAULT_HISTORY_DISPLAY_COUNT = 30 # Number of history entries shown to LLM
+DEFAULT_ACTIONS_DISPLAY_COUNT = 40 # Number of recent actions shown to LLM
+DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL = 30  # Clear movement memory after N actions (0 = never clear)
 
 def configure_simple_agent_defaults(max_history_entries: int = None, max_recent_actions: int = None, 
-                                  history_display_count: int = None, actions_display_count: int = None):
+                                  history_display_count: int = None, actions_display_count: int = None,
+                                  movement_memory_clear_interval: int = None):
     """Configure default parameters for all new SimpleAgent instances"""
     global DEFAULT_MAX_HISTORY_ENTRIES, DEFAULT_MAX_RECENT_ACTIONS
     global DEFAULT_HISTORY_DISPLAY_COUNT, DEFAULT_ACTIONS_DISPLAY_COUNT
+    global DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL
     
     if max_history_entries is not None:
         DEFAULT_MAX_HISTORY_ENTRIES = max_history_entries
@@ -66,9 +68,12 @@ def configure_simple_agent_defaults(max_history_entries: int = None, max_recent_
         DEFAULT_HISTORY_DISPLAY_COUNT = history_display_count
     if actions_display_count is not None:
         DEFAULT_ACTIONS_DISPLAY_COUNT = actions_display_count
+    if movement_memory_clear_interval is not None:
+        DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL = movement_memory_clear_interval
         
     logger.info(f"Updated SimpleAgent defaults: {DEFAULT_MAX_HISTORY_ENTRIES} history, {DEFAULT_MAX_RECENT_ACTIONS} actions, "
-               f"display {DEFAULT_HISTORY_DISPLAY_COUNT}/{DEFAULT_ACTIONS_DISPLAY_COUNT}")
+               f"display {DEFAULT_HISTORY_DISPLAY_COUNT}/{DEFAULT_ACTIONS_DISPLAY_COUNT}, "
+               f"movement memory clear interval: {DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL}")
 
 @dataclass
 class Objective:
@@ -106,6 +111,7 @@ class SimpleAgentState:
     objectives_updated: bool = False
     failed_movements: Dict[str, List[str]] = field(default_factory=dict)  # coord_key -> [failed_directions]
     npc_interactions: Dict[str, str] = field(default_factory=dict)  # coord_key -> interaction_notes
+    movement_memory_action_counter: int = 0  # Counter for tracking actions since last memory clear
     
     def __post_init__(self):
         """Initialize deques with current default values"""
@@ -120,7 +126,8 @@ class SimpleAgent:
     """
     
     def __init__(self, vlm, max_history_entries: int = None, max_recent_actions: int = None, 
-                 history_display_count: int = None, actions_display_count: int = None):
+                 history_display_count: int = None, actions_display_count: int = None,
+                 movement_memory_clear_interval: int = None):
         self.vlm = vlm
         # Toggle for NPC detection - set to False to disable VLM calls for NPC detection
         self.ENABLE_NPC_DETECTION = True  # Temporarily disabled to reduce inference costs
@@ -139,6 +146,7 @@ class SimpleAgent:
         max_recent_actions = max_recent_actions or DEFAULT_MAX_RECENT_ACTIONS
         history_display_count = history_display_count or DEFAULT_HISTORY_DISPLAY_COUNT
         actions_display_count = actions_display_count or DEFAULT_ACTIONS_DISPLAY_COUNT
+        movement_memory_clear_interval = movement_memory_clear_interval if movement_memory_clear_interval is not None else DEFAULT_MOVEMENT_MEMORY_CLEAR_INTERVAL
         
         self.state = SimpleAgentState()
         self.state.history = deque(maxlen=max_history_entries)
@@ -147,6 +155,9 @@ class SimpleAgent:
         # Display parameters for LLM prompts
         self.history_display_count = history_display_count
         self.actions_display_count = actions_display_count
+        
+        # Movement memory clearing interval
+        self.movement_memory_clear_interval = movement_memory_clear_interval
         
         # Initialize storyline objectives for Emerald progression
         self._initialize_storyline_objectives()
@@ -162,17 +173,52 @@ class SimpleAgent:
                 "milestone_id": "GAME_RUNNING"
             },
             {
-                "id": "story_littleroot_town",
-                "description": "Arrive in Littleroot Town and explore the area",
-                "objective_type": "location", 
-                "target_value": "Littleroot Town",
-                "milestone_id": "LITTLEROOT_TOWN"
+                "id": "story_intro_complete",
+                "description": "Complete intro cutscene with moving van",
+                "objective_type": "cutscene",
+                "target_value": "Intro Complete",
+                "milestone_id": "INTRO_CUTSCENE_COMPLETE"
+            },
+            {
+                "id": "story_player_house",
+                "description": "Enter player's house for the first time",
+                "objective_type": "location",
+                "target_value": "Player's House",
+                "milestone_id": "PLAYER_HOUSE_ENTERED"
+            },
+            {
+                "id": "story_player_bedroom",
+                "description": "Go upstairs to player's bedroom and set the clock",
+                "objective_type": "location",
+                "target_value": "Player's Bedroom",
+                "milestone_id": "PLAYER_BEDROOM"
+            },
+            {
+                "id": "story_clock_set",
+                "description": "Leave the house after setting the clock and explore Littleroot Town",
+                "objective_type": "location",
+                "target_value": "Clock Set",
+                "milestone_id": "CLOCK_SET"
+            },
+            {
+                "id": "story_rival_house",
+                "description": "Visit May's house next door",
+                "objective_type": "location",
+                "target_value": "Rival's House",
+                "milestone_id": "RIVAL_HOUSE"
+            },
+            {
+                "id": "story_rival_bedroom",
+                "description": "Visit May's bedroom on the second floor",
+                "objective_type": "location",
+                "target_value": "Rival's Bedroom",
+                "milestone_id": "RIVAL_BEDROOM"
             },
             {
                 "id": "story_route_101",
                 "description": "Travel north to Route 101 and encounter Prof. Birch",
                 "objective_type": "location",
-                "target_value": "Route 101", 
+                "target_value": "Route 101",
                 "milestone_id": "ROUTE_101"
             },
             {
@@ -183,8 +229,15 @@ class SimpleAgent:
                 "milestone_id": "STARTER_CHOSEN"
             },
             {
+                "id": "story_birch_lab",
+                "description": "Visit Professor Birch's lab in Littleroot Town and receive the Pokedex",
+                "objective_type": "location",
+                "target_value": "Birch's Lab",
+                "milestone_id": "BIRCH_LAB_VISITED"
+            },
+            {
                 "id": "story_oldale_town",
-                "description": "Continue journey to Oldale Town",
+                "description": "Leave lab and continue journey north to Oldale Town",
                 "objective_type": "location",
                 "target_value": "Oldale Town",
                 "milestone_id": "OLDALE_TOWN"
@@ -197,10 +250,17 @@ class SimpleAgent:
                 "milestone_id": "ROUTE_103"
             },
             {
+                "id": "story_received_pokedex",
+                "description": "Return to Birch's lab and receive the Pokédex",
+                "objective_type": "item",
+                "target_value": "Pokédex",
+                "milestone_id": "RECEIVED_POKEDEX"
+            },
+            {
                 "id": "story_route_102",
                 "description": "Return through Route 102 toward Petalburg City",
                 "objective_type": "location",
-                "target_value": "Route 102", 
+                "target_value": "Route 102",
                 "milestone_id": "ROUTE_102"
             },
             {
@@ -211,11 +271,25 @@ class SimpleAgent:
                 "milestone_id": "PETALBURG_CITY"
             },
             {
-                "id": "story_route_104",
-                "description": "Travel north through Route 104 toward Petalburg Woods",
+                "id": "story_dad_meeting",
+                "description": "Meet Dad at Petalburg City Gym",
+                "objective_type": "dialogue",
+                "target_value": "Dad Meeting",
+                "milestone_id": "DAD_FIRST_MEETING"
+            },
+            {
+                "id": "story_gym_explanation",
+                "description": "Receive explanation about Gym challenges",
+                "objective_type": "dialogue",
+                "target_value": "Gym Tutorial",
+                "milestone_id": "GYM_EXPLANATION"
+            },
+            {
+                "id": "story_route_104_south",
+                "description": "Travel through southern section of Route 104",
                 "objective_type": "location",
-                "target_value": "Route 104",
-                "milestone_id": "ROUTE_104"
+                "target_value": "Route 104 South",
+                "milestone_id": "ROUTE_104_SOUTH"
             },
             {
                 "id": "story_petalburg_woods",
@@ -223,6 +297,20 @@ class SimpleAgent:
                 "objective_type": "location",
                 "target_value": "Petalburg Woods",
                 "milestone_id": "PETALBURG_WOODS"
+            },
+            {
+                "id": "story_aqua_grunt",
+                "description": "Defeat Team Aqua Grunt in Petalburg Woods",
+                "objective_type": "battle",
+                "target_value": "Aqua Grunt Defeated",
+                "milestone_id": "TEAM_AQUA_GRUNT_DEFEATED"
+            },
+            {
+                "id": "story_route_104_north",
+                "description": "Travel through northern section of Route 104 to Rustboro",
+                "objective_type": "location",
+                "target_value": "Route 104 North",
+                "milestone_id": "ROUTE_104_NORTH"
             },
             {
                 "id": "story_rustboro_city",
@@ -233,17 +321,24 @@ class SimpleAgent:
             },
             {
                 "id": "story_rustboro_gym",
-                "description": "Enter the Rustboro Gym and prepare for Roxanne battle",
+                "description": "Enter the Rustboro Gym and challenge Roxanne",
                 "objective_type": "location",
                 "target_value": "Rustboro Gym",
-                "milestone_id": None  # Gym entry doesn't have separate milestone
+                "milestone_id": "RUSTBORO_GYM_ENTERED"
+            },
+            {
+                "id": "story_roxanne_defeated",
+                "description": "Defeat Gym Leader Roxanne",
+                "objective_type": "battle",
+                "target_value": "Roxanne Defeated",
+                "milestone_id": "ROXANNE_DEFEATED"
             },
             {
                 "id": "story_stone_badge",
-                "description": "Defeat Roxanne and earn the Stone Badge",
-                "objective_type": "battle",
+                "description": "Receive the Stone Badge and complete first gym",
+                "objective_type": "badge",
                 "target_value": "Stone Badge",
-                "milestone_id": "STONE_BADGE"
+                "milestone_id": "FIRST_GYM_COMPLETE"
             }
         ]
         
@@ -260,8 +355,8 @@ class SimpleAgent:
                 milestone_id=obj_data["milestone_id"]
             )
             self.state.objectives.append(objective)
-            
-        logger.info(f"Initialized {len(storyline_objectives)} storyline objectives for Emerald progression")
+
+        logger.info(f"Initialized {len(storyline_objectives)} storyline objectives for Emerald progression (up to first gym)")
         
     def get_game_context(self, game_state: Dict[str, Any]) -> str:
         """Determine current game context (overworld, battle, menu, dialogue)"""
@@ -420,19 +515,19 @@ class SimpleAgent:
     def check_storyline_milestones(self, game_state: Dict[str, Any]) -> List[str]:
         """Check emulator milestones and auto-complete corresponding storyline objectives"""
         completed_ids = []
-        
+
         # Get milestones from the game state (if available)
         milestones = game_state.get("milestones", {})
         if not milestones:
             # No milestone data available, skip checking
             return completed_ids
-            
+
         for obj in self.get_active_objectives():
             # Only check storyline objectives with milestone IDs
             if obj.storyline and obj.milestone_id and not obj.completed:
                 # Check if the corresponding emulator milestone is completed
                 milestone_completed = milestones.get(obj.milestone_id, {}).get("completed", False)
-                
+
                 if milestone_completed:
                     # Auto-complete the storyline objective
                     obj.completed = True
@@ -441,7 +536,7 @@ class SimpleAgent:
                     self.state.objectives_updated = True
                     completed_ids.append(obj.id)
                     logger.info(f"Auto-completed storyline objective via milestone {obj.milestone_id}: {obj.description}")
-        
+
         return completed_ids
     
     def detect_stuck_pattern(self, coords: Optional[Tuple[int, int]], context: str, game_state: Dict[str, Any] = None) -> bool:
@@ -712,51 +807,47 @@ class SimpleAgent:
             pathfinding_rules = ""
             if context != "title":
                 pathfinding_rules = """
-🗺️ **NAVIGATION: USE A* PATHFINDING UTILITY**:
-   For ALL movement, use the pathfinding utility to navigate efficiently:
-   
-   **HOW TO NAVIGATE**:
-   In your ACTION section, request: REQUEST_PATH: (grid_x, grid_y)
-   - Grid coordinates are 0-14 (you're always at center 7,7)
-   - Look at the map to find where you want to go
-   - The pathfinder will find the best route avoiding walls/NPCs (max 10 moves at a time)
-   
-   ⚡ **GRID COORDINATE GUIDE**:
-   - You are ALWAYS at (7, 7) on the 15x15 grid
-   - To go NORTH: Pick y < 7 (e.g., 7,4 or 7,3 or 7,2)
-   - To go SOUTH: Pick y > 7 (e.g., 7,10 or 7,11 or 7,12)  
-   - To go WEST: Pick x < 7 (e.g., 4,7 or 3,7 or 2,7)
-   - To go EAST: Pick x > 7 (e.g., 10,7 or 11,7 or 12,7)
-   - Look at the map, find a walkable tile (.) in your target direction, note its grid position, REQUEST_PATH to it!
-   
-   ⚡ **EXAMPLES**:
-   - "I need to go south. I see walkable tile at (7,11). REQUEST_PATH: (7, 11)"
-   - "I need to go east. I see walkable tile at (12,7). REQUEST_PATH: (12, 7)"
-   - "I need to reach that door at (9,5). REQUEST_PATH: (9, 5)"
+🚨 PATHFINDING RULES:
+1. **SINGLE STEP FIRST**: Always prefer single actions (UP, DOWN, LEFT, RIGHT, A, B) unless you're 100% certain about multi-step paths
+2. **CHECK EVERY STEP**: Before chaining movements, verify EACH step in your sequence using the MOVEMENT PREVIEW and map
+3. **BLOCKED = STOP**: If ANY step shows BLOCKED in the movement preview, the entire sequence will fail
+4. **NO BLIND CHAINS**: Never chain movements through areas you can't see or verify as walkable
+5. **PERFORM PATHFINDING**: Find a path to a target location (X',Y') from the player position (X,Y) on the map. DO NOT TRAVERSE THROUGH OBSTACLES (#) -- it will not work.
 
-💡 **NPC & OBSTACLE HANDLING**:
-    - NPCs are detected visually and shown in MOVEMENT PREVIEW - check for "NPC present" or "BLOCKED by [NPC name]"
-    - The pathfinder automatically avoids walls, obstacles, and NPCs
-    - If a movement fails (coordinates don't change), use MOVEMENT MEMORY to remember and try different route
-    - Trainers typically block movement and must be battled - the pathfinder will route around or you can approach them
-    - IMORTANT: You need to be directly adjacent to AND facing an NPC to interact with them before using the use A button
+💡 SMART MOVEMENT STRATEGY:
+- Use MOVEMENT PREVIEW to see exactly what happens with each direction
+- If your target requires multiple steps, plan ONE step at a time
+- Only chain 2-3 moves if ALL intermediate tiles are confirmed WALKABLE
+- When stuck, try a different direction rather than repeating the same blocked move
+- After moving in a direction, you will be facing that direction for interactions with NPCs, etc.
 
-🛑 **INPUT HANDLING RULES**:
-    - If DIALOGUE TEXT is visible or dialogue is active → press A up to 1 time to advance, then reassess
-    - If NO dialogue text is visible AND your coordinates are NOT changing in OVERWORLD/menu → DO NOT press A again
-    - Never output more than 1 consecutive 'A' at the same coordinates in OVERWORLD, especially if your action history shows you've consistently pressed A at the same coordinates without changing coordinates
-    - In battle, think carefully about move selection - don't spam A
+EXAMPLE - DON'T DO THIS:
+❌ "I want to go right 5 tiles" → "RIGHT, RIGHT, RIGHT, RIGHT, RIGHT" (may hit wall on step 2!)
+
+EXAMPLE - DO THIS INSTEAD:
+✅ Check movement preview → "RIGHT shows (X+1,Y) WALKABLE" → "RIGHT" (single safe step)
+✅ Next turn, check again → "RIGHT shows (X+2,Y) WALKABLE" → "RIGHT" (another safe step)
+
+💡 SMART NAVIGATION:
+- The Player's sprite in the visual frame is located at the coordinates (X,Y) in the game state. Objects in the visual frame should be represented in relation to the Player's sprite.
+- Check the VISUAL FRAME for NPCs (people/trainers) and other objects like clocks before moving - they're not always on the map! NPCs may block movement even when the movement preview shows them as walkable.
+- Review MOVEMENT MEMORY for locations where you've failed to move before
+- Only explore areas marked with ? (these are confirmed explorable edges)
+- Avoid areas surrounded by # (walls) - they're fully blocked
+- Use doors (D), stairs (S), or walk around obstacles when pathfinding suggests it
+
+💡 NPC & OBSTACLE HANDLING:
+- If you see NPCs in the image, avoid walking into them or interact with A/B if needed
+- If a movement fails (coordinates don't change), that location likely has an NPC or obstacle
+- Use your MOVEMENT MEMORY to remember problem areas and plan around them
+- NPCs can trigger battles or dialogue, which may be useful for objectives
 """
 
             # Create enhanced prompt with objectives, history context and chain of thought request
-            prompt = f"""SYSTEM PROMPT: 
-            <<< You are speedrunning Pokemon Emerald and must progress quickly to the milestones.  Based on the current game frame and state information, think through your next move and choose the best button action. 
-                Some pointers to keep in mind (guard rails) as you problem solve:
-                1) You must think step-by-step when solving problems and making decisions. 
-                2) Always provide detailed, context-aware responses that bias for ground-truth.
-                3) Consider the current situation in the game as well as what you've learned over time.
-                4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
-            >>>
+            prompt = f"""You are playing as the Protagonist in Pokemon Emerald. Progress quickly to the milestones by balancing exploration and exploitation of things you know, but have fun for the Twitch stream while you do it. 
+            Based on the current game frame and state information, think through your next move and choose the best button action. 
+            If you notice that you are repeating the same action sequences over and over again, you definitely need to try something different since what you are doing is wrong! Try exploring different new areas or interacting with different NPCs if you are stuck.
+            
 
 RECENT ACTION HISTORY (last {self.actions_display_count} actions):
 {recent_actions_str}
@@ -782,11 +873,10 @@ IMPORTANT NOTE: Please think via the (analysis, objectives, plan, reasoning) loo
 
 ANALYSIS:
 [Analyze what you see in the frame and current game state - what's happening? where are you? what should you be doing? 
-IMPORTANT: Look carefully at the game image for NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue.
-The MOVEMENT PREVIEW now shows detected NPCs - check for "NPC present" or "BLOCKED by [NPC name]" in each direction.]
+IMPORTANT: Look carefully at the game image for objects (clocks, pokeballs, bags) and NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue. When you see them try determine their location (X,Y) on the map relative to the player and any objects.]
 
 OBJECTIVES:
-[Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
+[Review your current objectives. You have main storyline objectives (story_*) that track overall Emerald progression - these are automatically verified and you CANNOT manually complete them.  There may be sub-objectives that you need to complete before the main milestone. You can create your own sub-objectives to help achieve the main goals. Do any need to be updated, added, or marked as complete?
 - Add sub-objectives: ADD_OBJECTIVE: type:description:target_value (e.g., "ADD_OBJECTIVE: location:Find Pokemon Center in town:(15,20)" or "ADD_OBJECTIVE: item:Buy Pokeballs:5")
 - Complete sub-objectives only: COMPLETE_OBJECTIVE: objective_id:notes (e.g., "COMPLETE_OBJECTIVE: my_sub_obj_123:Successfully bought Pokeballs")
 - NOTE: Do NOT try to complete storyline objectives (story_*) - they auto-complete when milestones are reached]
@@ -889,8 +979,19 @@ Context: {context} | Coords: {coords} """
             # Update recent actions
             if isinstance(actions, list):
                 self.state.recent_actions.extend(actions)
+                # Increment movement memory action counter by number of actions
+                self.state.movement_memory_action_counter += len(actions)
             else:
                 self.state.recent_actions.append(actions)
+                # Increment movement memory action counter
+                self.state.movement_memory_action_counter += 1
+            
+            # Check if we should clear movement memory
+            if (self.movement_memory_clear_interval > 0 and 
+                self.state.movement_memory_action_counter >= self.movement_memory_clear_interval):
+                logger.info(f"🧹 Movement memory clear triggered after {self.state.movement_memory_action_counter} actions")
+                # Use partial clear to keep some recent memory
+                self.clear_movement_memory(partial=True)
             
             # Reset stuck detection for other locations when we move
             if coords:
@@ -901,39 +1002,13 @@ Context: {context} | Coords: {coords} """
                         self.state.stuck_detection[key] = max(0, self.state.stuck_detection[key] - 1)
             
             # Update server with agent step and metrics (for agent thinking display)
-            self._update_server_metrics()
+            update_server_metrics()
             
             return actions
             
         except Exception as e:
             logger.error(f"Error in simple agent processing: {e}")
             return ["A"]  # Default safe action as list
-    
-    def _update_server_metrics(self):
-        """Update server with current agent step count and LLM metrics"""
-        try:
-            import requests
-            from utils.llm_logger import get_llm_logger
-            
-            # Get current LLM metrics
-            llm_logger = get_llm_logger()
-            metrics = llm_logger.get_cumulative_metrics()
-            
-            # Send metrics to server
-            try:
-                response = requests.post(
-                    "http://localhost:8000/agent_step",
-                    json={"metrics": metrics},
-                    timeout=1
-                )
-                if response.status_code != 200:
-                    logger.warning(f"Failed to update server metrics: {response.status_code}")
-            except requests.exceptions.RequestException:
-                # Silent fail - server might not be running or in different mode
-                pass
-                
-        except Exception as e:
-            logger.warning(f"Error updating server metrics: {e}")
     
     def _parse_actions(self, response: str, game_state: Dict[str, Any] = None) -> List[str]:
         """Parse action response from LLM into list of valid actions"""
@@ -1274,7 +1349,8 @@ Context: {context} | Coords: {coords} """
         self.state.objectives_updated = False
     
     def configure_history_limits(self, max_history_entries: int = None, max_recent_actions: int = None, 
-                                history_display_count: int = None, actions_display_count: int = None):
+                                history_display_count: int = None, actions_display_count: int = None,
+                                movement_memory_clear_interval: int = None):
         """Configure history tracking parameters at runtime"""
         if max_history_entries is not None:
             # Create new deque with updated max length, preserving existing data
@@ -1292,9 +1368,13 @@ Context: {context} | Coords: {coords} """
         if actions_display_count is not None:
             self.actions_display_count = actions_display_count
         
+        if movement_memory_clear_interval is not None:
+            self.movement_memory_clear_interval = movement_memory_clear_interval
+        
         logger.info(f"Updated history configuration: {len(self.state.history)}/{self.state.history.maxlen} history, "
                    f"{len(self.state.recent_actions)}/{self.state.recent_actions.maxlen} actions, "
-                   f"display {self.history_display_count}/{self.actions_display_count}")
+                   f"display {self.history_display_count}/{self.actions_display_count}, "
+                   f"movement memory clear interval: {self.movement_memory_clear_interval}")
     
     def load_history_from_llm_checkpoint(self, checkpoint_file: str):
         """Load SimpleAgent history from LLM checkpoint file"""
@@ -1503,6 +1583,37 @@ Context: {context} | Coords: {coords} """
         
         return "\n".join(memory_lines)
     
+    def clear_movement_memory(self, partial: bool = False):
+        """
+        Clear movement memory (failed movements and NPC interactions).
+        
+        Args:
+            partial: If True, only clear old entries (keep recent 5). If False, clear all.
+        """
+        if partial and (self.state.failed_movements or self.state.npc_interactions):
+            # Keep only the 5 most recent entries for each
+            if len(self.state.failed_movements) > 5:
+                # Convert to list of tuples, sort by insertion order (dict maintains order in Python 3.7+)
+                # Keep last 5 entries
+                items = list(self.state.failed_movements.items())
+                self.state.failed_movements = dict(items[-5:])
+                logger.info(f"Partially cleared movement memory, kept {len(self.state.failed_movements)} recent failed movements")
+            
+            if len(self.state.npc_interactions) > 5:
+                items = list(self.state.npc_interactions.items())
+                self.state.npc_interactions = dict(items[-5:])
+                logger.info(f"Partially cleared NPC interactions, kept {len(self.state.npc_interactions)} recent interactions")
+        else:
+            # Clear all movement memory
+            cleared_movements = len(self.state.failed_movements)
+            cleared_npcs = len(self.state.npc_interactions)
+            self.state.failed_movements.clear()
+            self.state.npc_interactions.clear()
+            logger.info(f"Cleared all movement memory: {cleared_movements} failed movements, {cleared_npcs} NPC interactions")
+        
+        # Reset the action counter
+        self.state.movement_memory_action_counter = 0
+    
     def analyze_movement_preview(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze the movement preview data from game state to find valid moves.
@@ -1536,11 +1647,11 @@ Context: {context} | Coords: {coords} """
                         if direction in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
                             if 'WALKABLE' in rest:
                                 walkable_directions.append(direction)
-                                # Check for special tiles
-                                if 'Door/Entrance' in rest:
-                                    special_tiles[direction] = 'door'
-                                elif 'Stairs/Warp' in rest:
+                                # Check for special tiles (check stairs before doors to avoid mislabeling)
+                                if 'Stairs/Warp' in rest:
                                     special_tiles[direction] = 'stairs'
+                                elif 'Door/Entrance' in rest:
+                                    special_tiles[direction] = 'door'
                                 elif 'Tall grass' in rest:
                                     special_tiles[direction] = 'grass'
                                 elif 'Jump ledge' in rest and 'can jump' in rest:
@@ -1604,23 +1715,10 @@ Context: {context} | Coords: {coords} """
             "objectives_count": len(self.state.objectives),
             "step_counter": self.state.step_counter,
             "failed_movements": len(self.state.failed_movements),
-            "npc_interactions": len(self.state.npc_interactions)
+            "npc_interactions": len(self.state.npc_interactions),
+            "movement_memory_action_counter": self.state.movement_memory_action_counter,
+            "movement_memory_clear_interval": self.movement_memory_clear_interval
         }
-    
-    def set_npc_detection(self, enabled: bool):
-        """Enable or disable NPC detection to improve performance"""
-        self.ENABLE_NPC_DETECTION = enabled
-        status = "enabled" if enabled else "disabled"
-        print(f"🔍 NPC detection {status}")
-        logger.info(f"NPC detection {status}")
-    
-    def toggle_npc_detection(self):
-        """Toggle NPC detection on/off"""
-        self.ENABLE_NPC_DETECTION = not self.ENABLE_NPC_DETECTION
-        status = "enabled" if self.ENABLE_NPC_DETECTION else "disabled"
-        print(f"🔍 NPC detection toggled to {status}")
-        logger.info(f"NPC detection toggled to {status}")
-        return self.ENABLE_NPC_DETECTION
 
 # Global simple agent instance for backward compatibility with existing multiprocess code
 _global_simple_agent = None

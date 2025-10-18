@@ -104,10 +104,11 @@ def main():
                        help="VLM backend (openai, gemini, local, openrouter)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
+    parser.add_argument("--scaffold", type=str, default="fourmodule",
+                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli"],
+                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, or cli (server-only for external CLI agents)")
     parser.add_argument("--simple", action="store_true", 
-                       help="Simple mode: direct frame->action without 4-module architecture")
-    parser.add_argument("--my-agent", action="store_true", 
-                       help="Use MyAgent (custom modular agent)")
+                       help="DEPRECATED: Use --scaffold simple instead")
     
     # Operation modes
     parser.add_argument("--headless", action="store_true", 
@@ -134,7 +135,7 @@ def main():
     
     try:
         # Auto-start server if requested
-        if args.agent_auto or args.manual:
+        if args.agent_auto or args.manual or args.scaffold == "cli":
             print("\n📡 Starting server process...")
             server_process = start_server(args)
             
@@ -152,31 +153,62 @@ def main():
             print("\n⏳ Waiting 3 seconds for manual server startup...")
             time.sleep(3)
         
+        # Handle deprecated --simple flag
+        if args.simple:
+            print("⚠️ --simple is deprecated. Using --scaffold simple")
+            args.scaffold = "simple"
+        
         # Display configuration
         print("\n🤖 Agent Configuration:")
         print(f"   Backend: {args.backend}")
         print(f"   Model: {args.model_name}")
-        if args.simple:
-            print("   Mode: Simple (direct frame->action)")
-        elif args.my_agent:
-            print("   Mode: custom agent using 4 model architecture")
-
-        else:
-            print("   Mode: Four-module architecture")
+        scaffold_descriptions = {
+            "fourmodule": "Four-module architecture (Perception→Planning→Memory→Action)",
+            "simple": "Simple mode (direct frame→action)",
+            "react": "ReAct agent (Thought→Action→Observation loop)",
+            "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
+            "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
+            "cli": "Gemini API with MCP tools (native function calling)"
+        }
+        print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
             print("   OCR: Disabled")
         if args.record:
             print("   Recording: Enabled")
         
         print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream")
-        
-        print("\n🚀 Starting client...")
-        print("-" * 60)
-        
-        # Run the client
-        success = run_multiprocess_client(server_port=args.port, args=args)
-        
-        return 0 if success else 1
+
+        # Check if this is CLI scaffold mode
+        if args.scaffold == "cli":
+            print("\n🖥️  CLI Scaffold Mode - Gemini API with MCP Tools")
+            print("=" * 60)
+            print("✅ Server is running")
+            print("🤖 Starting CLI agent...")
+            print("   Using Gemini API directly (no gemini-cli dependency)")
+            print("   MCP tools exposed via HTTP endpoints")
+            print("")
+
+            # Import and run CLI agent (native Gemini API)
+            from agent.cli_agent import CLIAgent
+            print("📦 CLIAgent imported successfully", flush=True)
+
+            print(f"🔧 Creating agent with model={args.model_name}", flush=True)
+            agent = CLIAgent(
+                server_url=f"http://localhost:{args.port}",
+                model=args.model_name,
+                max_steps=args.max_steps if hasattr(args, 'max_steps') else None
+            )
+            print("✅ Agent created", flush=True)
+
+            return agent.run()
+        else:
+            print("\n🚀 Starting client...")
+            print("-" * 60)
+
+            # Run the client
+            success = run_multiprocess_client(server_port=args.port, args=args)
+
+            return 0 if success else 1
         
     except KeyboardInterrupt:
         print("\n\n🛑 Shutdown requested by user")

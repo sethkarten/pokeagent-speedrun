@@ -155,9 +155,11 @@ class LLMLogger:
                 logger.debug(f"Counted {action_count} actions in response: {response[:50]}")
         
         # Also log to console for debugging
-        logger.info(f"LLM {interaction_type.upper()}: {duration:.2f}s")
-        if duration:
+        if duration is not None:
+            logger.info(f"LLM {interaction_type.upper()}: {duration:.2f}s")
             logger.debug(f"Prompt length: {len(prompt)} chars, Response length: {len(response)} chars")
+        else:
+            logger.info(f"LLM {interaction_type.upper()}")
     
     def log_error(self, 
                   interaction_type: str,
