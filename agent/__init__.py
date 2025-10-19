@@ -112,21 +112,21 @@ class Agent:
             elif self.scaffold == "react":
                 # ReAct agent expects state dict and screenshot separately
                 state = game_state.get('game_state', {})
-                screenshot = game_state.get('screenshot', None)
+                screenshot = game_state.get('frame', None)
                 button = self.agent_impl.step(state, screenshot)
                 return {'action': button, 'reasoning': 'ReAct agent decision'}
                 
             elif self.scaffold == "claudeplays":
                 # ClaudePlaysPokemon agent expects state dict and screenshot separately
                 state = game_state.get('game_state', {})
-                screenshot = game_state.get('screenshot', None)
+                screenshot = game_state.get('frame', None)
                 button = self.agent_impl.step(state, screenshot)
                 return {'action': button, 'reasoning': 'ClaudePlaysPokemon agent decision'}
                 
             elif self.scaffold == "geminiplays":
                 # GeminiPlaysPokemon agent expects state dict and screenshot separately
                 state = game_state.get('game_state', {})
-                screenshot = game_state.get('screenshot', None)
+                screenshot = game_state.get('frame', None)
                 button = self.agent_impl.step(state, screenshot)
                 return {'action': button, 'reasoning': 'GeminiPlaysPokemon agent decision'}
                 

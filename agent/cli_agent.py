@@ -161,11 +161,12 @@ class CLIAgent:
         )
         print("✅ Gemini model created successfully")
 
-        # Start chat session
-        self.chat = self.gemini_model.start_chat(history=[])
-
         # Initialize LLM logger
         self.llm_logger = get_llm_logger()
+
+        # Gemini chat history (manually managed for better control)
+        # Each entry: {"role": "user"/"model", "parts": [...]}
+        self.gemini_history = []
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
@@ -533,7 +534,11 @@ class CLIAgent:
             self._compact_history()
 
     def _calculate_context_size(self) -> int:
-        """Calculate total character count of conversation history."""
+        """Calculate total character count of conversation history.
+
+        NOTE: This is an approximation. Actual token count is ~4x characters for Gemini.
+        Gemini 2.5 Flash has a 1,048,576 input token limit (1M tokens).
+        """
         total_chars = 0
         for entry in self.conversation_history:
             total_chars += len(entry.get("prompt", ""))
@@ -627,32 +632,24 @@ History to summarize:
         new_size = self._calculate_context_size()
         logger.info(f"   New history size: {new_size:,} chars ({len(self.conversation_history)} turns)")
 
-        # CRITICAL: Recreate Gemini chat session with compacted history
-        # This is what actually reduces the token count sent to the API
-        logger.info(f"🔄 Recreating Gemini chat session with compacted history...")
+        # Update gemini_history to match compacted conversation_history
+        logger.info(f"🔄 Updating Gemini history with compacted data...")
 
-        # Build compacted history in Gemini format
-        compacted_gemini_history = []
+        self.gemini_history = []
         for entry in self.conversation_history:
             # Add user message
-            compacted_gemini_history.append({
+            self.gemini_history.append({
                 "role": "user",
                 "parts": [{"text": entry["prompt"]}]
             })
             # Add model response
             response_text = entry["response"] if entry["response"] else "[Tool execution only]"
-            compacted_gemini_history.append({
+            self.gemini_history.append({
                 "role": "model",
                 "parts": [{"text": response_text}]
             })
 
-        # Create new chat session with compacted history
-        if compacted_gemini_history:
-            self.chat = self.gemini_model.start_chat(history=compacted_gemini_history)
-            logger.info(f"✅ Chat session recreated with {len(compacted_gemini_history)} messages ({len(self.conversation_history)} turns)")
-        else:
-            self.chat = self.gemini_model.start_chat(history=[])
-            logger.info(f"✅ Chat session reset to empty (no history to preserve)")
+        logger.info(f"✅ Gemini history updated with {len(self.gemini_history)} messages ({len(self.conversation_history)} turns)")
 
     def _format_history_for_display(self) -> str:
         """Format conversation history for display."""
@@ -670,6 +667,149 @@ History to summarize:
 
         lines.append('='*70)
         return '\n'.join(lines)
+
+    def _load_checkpoint(self):
+        """Load conversation history from checkpoint file."""
+        checkpoint_file = ".pokeagent_cache/checkpoint_llm.txt"
+
+        if not os.path.exists(checkpoint_file):
+            logger.warning(f"   ⚠️ No checkpoint file found at {checkpoint_file}")
+            return
+
+        try:
+            with open(checkpoint_file, 'r') as f:
+                checkpoint_data = json.load(f)
+
+            # Restore step counter
+            if 'step_counter' in checkpoint_data:
+                self.step_count = checkpoint_data['step_counter']
+                logger.info(f"   ✅ Restored step counter: {self.step_count}")
+
+            # Restore conversation history
+            if 'history' in checkpoint_data:
+                # Convert checkpoint history to our conversation_history format
+                self.conversation_history = checkpoint_data['history']
+                logger.info(f"   ✅ Restored conversation history: {len(self.conversation_history)} turns")
+
+                # Rebuild Gemini history for API calls
+                self.gemini_history = []
+                for entry in self.conversation_history:
+                    # Add user message
+                    self.gemini_history.append({
+                        "role": "user",
+                        "parts": [{"text": entry["prompt"]}]
+                    })
+                    # Add model response
+                    response_text = entry["response"] if entry["response"] else "[Tool execution only]"
+                    self.gemini_history.append({
+                        "role": "model",
+                        "parts": [{"text": response_text}]
+                    })
+
+                logger.info(f"   ✅ Restored Gemini history with {len(self.gemini_history)} messages")
+
+            logger.info(f"✅ Checkpoint loaded from {checkpoint_file}")
+
+        except Exception as e:
+            logger.error(f"   ❌ Failed to load checkpoint: {e}")
+            traceback.print_exc()
+
+    def _strip_json_and_reminders_from_history_text(self, text: str) -> str:
+        """Strip JSON maps and format_reminders from old history text to save tokens.
+
+        Keeps:
+        - Player info, location, party, items
+        - VLM analysis and reasoning
+        - Tool call results
+
+        Removes:
+        - JSON map data (within {})
+        - format_reminder sections
+        - scene_directions
+        """
+        # Remove everything between CRITICAL STUCK DETECTION and Please think step by step
+        # This removes format_reminder and scene_directions
+        import re
+        text = re.sub(
+            r'CRITICAL STUCK DETECTION:.*?(?=\n\n|$)',
+            '',
+            text,
+            flags=re.DOTALL
+        )
+        text = re.sub(
+            r'Please think step by step before choosing your action\..*?(?=\n\n|$)',
+            '',
+            text,
+            flags=re.DOTALL
+        )
+        text = re.sub(
+            r'ANALYSIS:.*?REASONING:.*?ACTION:',
+            '',
+            text,
+            flags=re.DOTALL
+        )
+
+        # Remove JSON map data
+        text = self._strip_json_from_state(text)
+
+        # Clean up excessive whitespace
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
+
+        return text.strip()
+
+    def _strip_json_from_state(self, state_text: str) -> str:
+        """Strip JSON map data (within {}) from state text for console display.
+
+        The JSON map is useful for LLM but too verbose for console.
+        """
+        # Remove JSON objects (matching balanced braces)
+        # This regex finds {...} blocks with proper nesting
+        result = []
+        brace_depth = 0
+        in_json = False
+
+        for char in state_text:
+            if char == '{':
+                if brace_depth == 0:
+                    in_json = True
+                brace_depth += 1
+            elif char == '}':
+                brace_depth -= 1
+                if brace_depth == 0:
+                    in_json = False
+                continue
+
+            if not in_json and brace_depth == 0:
+                result.append(char)
+
+        # Clean up extra whitespace
+        cleaned = ''.join(result)
+        cleaned = re.sub(r'\n\s*\n\s*\n+', '\n\n', cleaned)  # Remove triple+ newlines
+
+        return cleaned.strip()
+
+    def _save_checkpoint(self):
+        """Save conversation history to checkpoint file."""
+        try:
+            os.makedirs(".pokeagent_cache", exist_ok=True)
+            checkpoint_file = ".pokeagent_cache/checkpoint_llm.txt"
+
+            checkpoint_data = {
+                "step_counter": self.step_count,
+                "history": self.conversation_history,
+                "timestamp": time.time()
+            }
+
+            with open(checkpoint_file, 'w') as f:
+                json.dump(checkpoint_data, f, indent=2)
+
+            logger.info(f"💾 Checkpoint saved to {checkpoint_file}")
+            logger.info(f"   Steps: {self.step_count}")
+            logger.info(f"   History: {len(self.conversation_history)} turns")
+
+        except Exception as e:
+            logger.error(f"❌ Failed to save checkpoint: {e}")
+            traceback.print_exc()
 
     def check_prerequisites(self) -> bool:
         """Check if prerequisites are met."""
@@ -734,18 +874,43 @@ History to summarize:
             # Track duration
             start_time = time.time()
 
+            # Strip JSON maps and reminders from history to save tokens
+            cleaned_history = []
+            for idx, entry in enumerate(self.gemini_history):
+                if entry["role"] == "user":
+                    # For all user messages except the current one, strip JSON/reminders
+                    cleaned_entry = {"role": "user", "parts": []}
+                    for part in entry["parts"]:
+                        if "text" in part:
+                            # Strip JSON and reminders from old prompts
+                            cleaned_text = self._strip_json_and_reminders_from_history_text(part["text"])
+                            if cleaned_text:  # Only add if there's content left
+                                cleaned_entry["parts"].append({"text": cleaned_text})
+                        else:
+                            # Keep images as-is
+                            cleaned_entry["parts"].append(part)
+
+                    if cleaned_entry["parts"]:  # Only add if there are parts
+                        cleaned_history.append(cleaned_entry)
+                else:
+                    # Keep model responses as-is
+                    cleaned_history.append(entry)
+
             # Build message content with optional image
+            user_parts = []
             if screenshot_b64:
-                # Send message with both text and image
                 # Decode base64 to image
                 image_data = base64.b64decode(screenshot_b64)
                 image = PILImage.open(io.BytesIO(image_data))
-
-                # Send message with image and text
-                response = self.chat.send_message([prompt, image])
+                user_parts = [prompt, image]
             else:
-                # Send message with text only
-                response = self.chat.send_message(prompt)
+                user_parts = [prompt]
+
+            # Create chat session with cleaned history
+            chat = self.gemini_model.start_chat(history=cleaned_history)
+
+            # Send current message
+            response = chat.send_message(user_parts)
 
             # Process response - handle function calls
             # Limit the number of tool calls per step to prevent infinite loops
@@ -917,7 +1082,7 @@ History to summarize:
                             enforcement_msg = "EMERGENCY: You are stuck in a loop. Call press_buttons(['WAIT'], 'observing') immediately. This is your final chance."
 
                         try:
-                            response = self.chat.send_message(enforcement_msg)
+                            response = chat.send_message(enforcement_msg)
                             # Loop back to process the action tool call
                             continue
                         except Exception as e:
@@ -936,8 +1101,21 @@ History to summarize:
                     # Calculate duration
                     duration = time.time() - start_time
 
-                    # Add to history
+                    # Add to conversation history (for tracking)
                     self._add_to_history(prompt, text_response, tool_calls_made)
+
+                    # Add to Gemini history (for next API call with cleaned history)
+                    # Store the FULL prompt (with JSON maps) so we can strip it later
+                    user_message = {"role": "user", "parts": []}
+                    if screenshot_b64:
+                        user_message["parts"] = [{"text": prompt}, {"inline_data": {"mime_type": "image/png", "data": screenshot_b64}}]
+                    else:
+                        user_message["parts"] = [{"text": prompt}]
+
+                    model_message = {"role": "model", "parts": [{"text": text_response}]}
+
+                    self.gemini_history.append(user_message)
+                    self.gemini_history.append(model_message)
 
                     # Log to LLM logger (stream endpoint reads from llm_logs)
                     self._log_thinking(prompt, text_response, duration, tool_calls_made)
@@ -951,6 +1129,23 @@ History to summarize:
             # If we get here, no text response was generated
             logger.warning("⚠️ No text response from Gemini")
             return False, "No response"
+
+        except genai_types.StopCandidateException as e:
+            # Handle MALFORMED_FUNCTION_CALL and other stop reasons
+            logger.error(f"❌ Gemini stopped generation: {e}")
+
+            if "MALFORMED_FUNCTION_CALL" in str(e):
+                logger.error("🔧 Gemini tried to call a function but formatted it incorrectly")
+                logger.error("   This usually means the model is confused about tool parameters")
+                logger.error("   Treating as a failed step - will retry next iteration")
+
+                # Return a message asking the agent to try again
+                error_msg = "Error: Function call was malformed. Please try again."
+                return False, error_msg
+            else:
+                logger.error(f"   Stop reason: {e}")
+                traceback.print_exc()
+                return False, f"Generation stopped: {e}"
 
         except Exception as e:
             logger.error(f"❌ Error in agent step: {e}")
@@ -1017,7 +1212,7 @@ History to summarize:
 
             # Format storyline objectives
             lines = ["\n=== STORY OBJECTIVES ==="]
-            lines.append("Main storyline progression (auto-verified, DO NOT manually complete):")
+            lines.append("Main storyline progression (auto-verified after completed; must be completed in-order):")
             lines.append("")
 
             # Define storyline objectives matching simple.py
@@ -1050,19 +1245,47 @@ History to summarize:
             ]
 
             completed_count = 0
-            for obj in storyline_objectives:
+            next_objective_idx = None
+
+            # Find which objectives are completed and which is next
+            for idx, obj in enumerate(storyline_objectives):
                 milestone = milestones.get(obj["id"], {})
                 is_completed = milestone.get("completed", False)
 
                 if is_completed:
                     completed_count += 1
-                    status = "✓"
-                else:
-                    status = "○"
+                elif next_objective_idx is None:
+                    next_objective_idx = idx
 
-                lines.append(f"  {status} story_{obj['id'].lower()}: {obj['desc']}")
+            # Show recently completed (last 3) and upcoming (next 5)
+            lines.append(f"Progress: {completed_count}/{len(storyline_objectives)} milestones completed\n")
 
-            lines.append(f"\nProgress: {completed_count}/{len(storyline_objectives)} milestones completed")
+            # Show recently completed objectives
+            if completed_count > 0:
+                lines.append("Recently Completed:")
+                start_idx = max(0, completed_count - 3)
+                for idx in range(start_idx, completed_count):
+                    obj = storyline_objectives[idx]
+                    milestone = milestones.get(obj["id"], {})
+                    split_time = milestone.get("split_formatted", "??:??:??")
+                    lines.append(f"  ✓ {obj['desc']} ({split_time})")
+                lines.append("")
+
+            # Highlight next objective
+            if next_objective_idx is not None:
+                lines.append("🎯 NEXT OBJECTIVE:")
+                obj = storyline_objectives[next_objective_idx]
+                lines.append(f"  ➡️  {obj['desc']}")
+                lines.append("")
+
+                # Show upcoming objectives (next 4 after the current one)
+                # lines.append("Upcoming Objectives:")
+                # for idx in range(next_objective_idx + 1, min(next_objective_idx + 5, len(storyline_objectives))):
+                #     obj = storyline_objectives[idx]
+                #     lines.append(f"  ○ {obj['desc']}")
+            else:
+                lines.append("🎉 All story objectives completed!")
+
             lines.append("\nNOTE: Story objectives auto-complete via emulator verification. Focus on game progression!")
 
             return "\n".join(lines)
@@ -1090,6 +1313,11 @@ History to summarize:
         if not self.check_prerequisites():
             logger.error("❌ Prerequisites check failed")
             return 1
+
+        # Load checkpoint if LOAD_CHECKPOINT_MODE is set
+        if os.environ.get("LOAD_CHECKPOINT_MODE") == "true":
+            logger.info("\n🔄 Loading checkpoint...")
+            self._load_checkpoint()
 
         logger.info("\n🚀 Starting agent loop...")
         logger.info("📝 Gemini API with native function calling")
@@ -1121,7 +1349,21 @@ History to summarize:
                     game_state_data = json.loads(game_state_result)
                     screenshot_b64 = game_state_data.get("screenshot_base64")
                     state_text = game_state_data.get("state_text", game_state_result)
+                    location = game_state_data.get("location")
+                    debug_text = game_state_data.get("debug")
+
+                    # Print state_text but strip out JSON map data (within {})
+                    print("=" * 80)
+                    print("📊 COMPREHENSIVE STATE (LLM View)")
+                    print("=" * 80)
+
+                    # Strip JSON map sections from state_text for console display
+                    display_text = self._strip_json_from_state(state_text)
+                    print(display_text)
+                    print("=" * 80)
+                    print(flush=True)
                 except:
+                    print("Error: No screenshot\n")
                     screenshot_b64 = None
                     state_text = game_state_result
 
@@ -1130,9 +1372,7 @@ History to summarize:
 
                 # Build prompt for this step with game state included
                 # Include a reminder of the decision-making format
-                format_reminder = """
-CRITICAL STUCK DETECTION: Check your recent history! If you pressed the SAME button 3+ times in a row with NO position change or NO new dialogue text, you ARE STUCK!
-
+                scene_directions = """
 When STUCK in dialogue or repeating actions:
 ✅ Try pressing B to exit dialogue/menus
 ✅ Move to a DIFFERENT location (LEFT/RIGHT/UP/DOWN)
@@ -1161,6 +1401,32 @@ WHEN TRULY STUCK:
 - Explore EVERY building entrance you haven't tried
 - Check for routes/paths leading OUT of the current town
 - Doors/stairs with "leads_to" show where they go - use this to plan your route!
+"""
+                # Check if we're in title sequence
+                if 'TITLE_SEQUENCE' in location:
+                    scene_directions = """
+TITLE SEQUENCE NAVIGATION:
+📺 You are on the title screen or in intro cutscenes
+📺 Press START or A to begin a new game or continue
+📺 If in opening cutscene, press A repeatedly to advance dialogue
+📺 Your goal is to reach the MOVING_VAN (start of actual gameplay)
+📺 Do NOT use exploration commands - just advance through the intro
+
+CHARACTER NAMING SCREEN:
+✏️ You need to name your character
+✏️ Navigate the on-screen keyboard using D-PAD (UP/DOWN/LEFT/RIGHT)
+✏️ Press A to select a letter
+✏️ Press B to remove a letter
+✏️ Press START and A when done naming (usually after 3-7 characters)
+✏️ Be creative with your name!
+✏️ Take your time - use one button press at a time to navigate the keyboard
+✏️ Watch the cursor position to know where you are on the keyboard
+"""
+                
+                format_reminder = f"""
+CRITICAL STUCK DETECTION: Check your recent history! If you pressed the SAME button 3+ times in a row with NO position change or NO new dialogue text, you ARE STUCK!
+
+{scene_directions}
 
 Please think step by step before choosing your action. Structure your response like this:
 
@@ -1189,12 +1455,13 @@ ACTION:
    - REQUIRED: Call either navigate_to(x, y) OR press_buttons([...])
    - Look at the ENTIRE map for S/D tiles and their (X,Y) coordinates
    - If stuck: Try B, or move to a different area, or interact with different NPCs
+   - For hard control sequences (such as naming your character or moving around NPCs), it is best to choose 1 action at a time and view the result before continuing.
 """
 
                 if self.step_count == 0:
-                    prompt = f"Here is the current game state:\n\n{state_text}{story_objectives_text}\n\n{format_reminder}\nBased on this state, analyze, plan, and execute the next action to progress through the game."
+                    prompt = f"Here is the current game state:\n\n{state_text}\n{story_objectives_text}\n\n{format_reminder}\nBased on this state, analyze, plan, and execute the next action to progress through the game."
                 else:
-                    prompt = f"Here is the current game state:\n\n{state_text}{story_objectives_text}\n\n{format_reminder}\nBased on this state and previous actions, analyze, plan, and execute the next action to progress through the game."
+                    prompt = f"Here is the current game state:\n\n{state_text}\n{story_objectives_text}\n\n{format_reminder}\nBased on this state and previous actions, analyze, plan, and execute the next action to progress through the game."
 
                 # Run step with optional screenshot
                 success, output = self.run_step(prompt, screenshot_b64=screenshot_b64)
@@ -1221,13 +1488,16 @@ ACTION:
         except KeyboardInterrupt:
             logger.info("\n\n🛑 Agent stopped by user")
             logger.info(self._format_history_for_display())
+            self._save_checkpoint()
             return 0
         except Exception as e:
             logger.error(f"\n❌ Fatal error: {e}")
             traceback.print_exc()
+            self._save_checkpoint()
             return 1
 
         logger.info(f"\n🎯 Agent completed {self.step_count} steps")
         logger.info(f"📚 Conversation history: {len(self.conversation_history)} turns")
         logger.info(self._format_history_for_display())
+        self._save_checkpoint()
         return 0

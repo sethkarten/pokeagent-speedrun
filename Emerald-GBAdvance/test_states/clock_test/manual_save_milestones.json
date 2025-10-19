@@ -1,0 +1,60 @@
+{
+  "milestones": {
+    "GAME_RUNNING": {
+      "completed": true,
+      "timestamp": 1758408676.0675476,
+      "first_completed": 1758408676.0675476,
+      "split_time": 0.0,
+      "split_formatted": "00:00:00",
+      "total_time": 0.0,
+      "total_formatted": "00:00:00"
+    },
+    "PLAYER_NAME_SET": {
+      "completed": true,
+      "timestamp": 1758408704.600714,
+      "first_completed": 1758408704.600714,
+      "split_time": 28.53316640853882,
+      "split_formatted": "00:00:28",
+      "total_time": 28.53316640853882,
+      "total_formatted": "00:00:28"
+    },
+    "INTRO_CUTSCENE_COMPLETE": {
+      "completed": true,
+      "timestamp": 1758408742.802946,
+      "first_completed": 1758408742.802946,
+      "split_time": 38.202232122421265,
+      "split_formatted": "00:00:38",
+      "total_time": 66.73539853096008,
+      "total_formatted": "00:01:06"
+    },
+    "LITTLEROOT_TOWN": {
+      "completed": true,
+      "timestamp": 1758818570.621124,
+      "first_completed": 1758818570.621124,
+      "split_time": 409827.81817793846,
+      "split_formatted": "113:50:27",
+      "total_time": 409894.5535764694,
+      "total_formatted": "113:51:34"
+    },
+    "PLAYER_HOUSE_ENTERED": {
+      "completed": true,
+      "timestamp": 1758818585.506117,
+      "first_completed": 1758818585.506117,
+      "split_time": 14.884993076324463,
+      "split_formatted": "00:00:14",
+      "total_time": 409909.43856954575,
+      "total_formatted": "113:51:49"
+    },
+    "PLAYER_BEDROOM": {
+      "completed": true,
+      "timestamp": 1758818600.6027114,
+      "first_completed": 1758818600.6027114,
+      "split_time": 15.096594333648682,
+      "split_formatted": "00:00:15",
+      "total_time": 409924.5351638794,
+      "total_formatted": "113:52:04"
+    }
+  },
+  "last_updated": 1758818611.859392,
+  "version": "1.0"
+}

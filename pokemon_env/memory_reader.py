@@ -1032,71 +1032,50 @@ class PokemonEmeraldReader:
             return "Unknown direction"
 
     def is_in_title_sequence(self) -> bool:
-        """Detect if we're in title sequence/intro before overworld"""
+        """Detect if we're in title sequence/intro before overworld
+
+        We remain in title sequence until reaching MOVING_VAN or PLAYER_HOUSE_ENTERED.
+        """
         try:
-            # Check if player name is set - if not, likely in title/intro
-            player_name = self.read_player_name()
-            if not player_name or player_name.strip() == '':
-                return True
-                
-            
-            # Check if we have valid SaveBlock pointers
-            try:
-                saveblock1_ptr = self._read_u32(self.addresses.SAVE_BLOCK1_PTR)
-                saveblock2_ptr = self._read_u32(self.addresses.SAVE_BLOCK2_PTR)
-                
-                # If saveblocks aren't initialized, we're likely in title
-                if saveblock1_ptr == 0 or saveblock2_ptr == 0:
-                    return True
-                    
-            except:
-                return True
-                
-            # Check if we have invalid map coordinates that indicate title sequence
-            # Note: We removed the check for Petalburg City (0,0) as it's a valid location
-            # Instead, check for truly invalid map values
+            # Check map ID to see if we've reached MOVING_VAN or later
             map_bank = self._read_u8(self.addresses.MAP_BANK)
             map_num = self._read_u8(self.addresses.MAP_NUMBER)
-            
-            # Map banks above 0x2A are invalid in Pokemon Emerald
-            if map_bank > 0x2A:
-                return True
-            
-            # Check if game has actually started (moved past title/intro)
-            # Use milestone tracker if available for accurate detection
-            if self.milestone_tracker:
-                # If we've completed intro cutscene, we're definitely in-game
-                if self.milestone_tracker.is_completed("INTRO_CUTSCENE_COMPLETE"):
-                    return False  # Not in title sequence
-                # If we've entered player house, we're in-game
-                if self.milestone_tracker.is_completed("PLAYER_HOUSE_ENTERED"):
-                    return False  # Not in title sequence
-
-            # Fallback: Check map ID to detect early game locations
-            # These maps are only accessible after starting the game
             map_id = (map_bank << 8) | map_num
-            early_game_maps = [
-                0x1928,  # BATTLE_FRONTIER_RANKING_HALL (moving van intro)
-                0x0009,  # LITTLEROOT_TOWN
-                0x0010,  # ROUTE_101 (Birch rescue, before starter)
-            ]
-            # Also allow Littleroot Town buildings
-            if map_id in early_game_maps or (0x0100 <= map_id <= 0x0104):
-                return False  # Not in title sequence, in early game
 
-            # Additional check: if player has a party, definitely not in title
+            # MOVING_VAN (0x1928) is the first location after starting a new game
+            if map_id == 0x1928:  # BATTLE_FRONTIER_RANKING_HALL (moving van intro)
+                return False  # Game has started
+
+            # Post-moving-van locations (Littleroot Town, Route 101, etc.)
+            post_intro_maps = [
+                0x0009,  # LITTLEROOT_TOWN
+                0x0010,  # ROUTE_101
+            ]
+            # Littleroot Town buildings (0x0100-0x0104)
+            if map_id in post_intro_maps or (0x0100 <= map_id <= 0x0104):
+                return False  # Game has started
+
+            # Check milestone tracker if available
+            if self.milestone_tracker:
+                if self.milestone_tracker.is_completed("PLAYER_HOUSE_ENTERED"):
+                    return False  # Game has started
+                if self.milestone_tracker.is_completed("INTRO_CUTSCENE_COMPLETE"):
+                    return False  # Game has started
+
+            # If player has a party, game has definitely started
             try:
                 party_size = self.read_party_size()
                 if party_size > 0:
-                    return False  # Not in title sequence
+                    return False  # Game has started
             except:
                 pass
-                
-            return False
-            
+
+            # Default: still in title sequence
+            return True
+
         except Exception:
             # If we can't read memory properly, assume title sequence
-            return True
+            return False
 
     def read_location(self) -> str:
         """Read current location"""

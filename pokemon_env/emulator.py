@@ -1130,11 +1130,43 @@ class EmeraldEmulator:
             for milestone_id in milestones_to_check:
                 if not self.milestone_tracker.is_completed(milestone_id):
                     if self._check_milestone_condition(milestone_id, game_state):
-                        print(f"🎯 Milestone detected: {milestone_id}")
-                        self.milestone_tracker.mark_completed(milestone_id)
+                        # Check if previous milestone in order is completed before marking this one
+                        if self._can_complete_milestone(milestone_id, milestones_to_check):
+                            print(f"🎯 Milestone detected: {milestone_id}")
+                            self.milestone_tracker.mark_completed(milestone_id)
         except Exception as e:
             logger.warning(f"Error checking milestones: {e}")
-    
+
+    def _can_complete_milestone(self, milestone_id: str, milestone_order: List[str]) -> bool:
+        """Check if previous milestone in order is completed before allowing this one to complete"""
+        try:
+            # Special case: GAME_RUNNING is always allowed (it's the first milestone)
+            if milestone_id == "GAME_RUNNING":
+                return True
+
+            # Find the index of the current milestone
+            if milestone_id not in milestone_order:
+                # If milestone not in order, allow it (for custom milestones)
+                return True
+
+            current_index = milestone_order.index(milestone_id)
+
+            # If this is the first milestone in the order, allow it
+            if current_index == 0:
+                return True
+
+            # Check if the previous milestone is completed
+            prev_milestone = milestone_order[current_index - 1]
+            if self.milestone_tracker.is_completed(prev_milestone):
+                return True
+            else:
+                logger.debug(f"Cannot complete {milestone_id} - previous milestone {prev_milestone} not completed yet")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Error checking milestone order for {milestone_id}: {e}")
+            return True  # On error, allow completion
+
     def _check_milestone_condition(self, milestone_id: str, game_state: Dict[str, Any]) -> bool:
         """Check if a specific milestone condition is met based on current game state"""
         try:

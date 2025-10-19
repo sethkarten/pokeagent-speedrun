@@ -256,14 +256,28 @@ def get_game_state() -> dict:
         response.raise_for_status()
         state = response.json()
 
-        # Format state for LLM with JSON map format for clearer tile information
+        # Print ASCII map to console (same as pressing M)
+        # from utils.state_formatter import print_map_debug
+        # print("=" * 80)
+        # print("📊 COMPREHENSIVE STATE (LLM View)")
+        # print("=" * 80)
+        # # print_map_debug(state)
+
+        # # Print ASCII version for human viewing
+        ascii_state = format_state_for_llm(state, use_json_map=False)
+        # print(ascii_state)
+        # print("=" * 80)
+        # print(flush=True)
+
+        # Return JSON map format for LLM (clearer tile information)
         state_text = format_state_for_llm(state, use_json_map=True)
 
         return {
             "success": True,
             "state_text": state_text,
             "player_position": state.get('player', {}).get('position', {}),
-            "location": state.get('map', {}).get('current_map', 'Unknown')
+            "location": state.get('map', {}).get('current_map', 'Unknown'),
+            "debug": ascii_state
         }
     except Exception as e:
         logger.error(f"Failed to get game state: {e}")

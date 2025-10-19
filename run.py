@@ -104,9 +104,9 @@ def main():
                        help="VLM backend (openai, gemini, local, openrouter)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
-    parser.add_argument("--scaffold", type=str, default="fourmodule",
-                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli"],
-                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, or cli (server-only for external CLI agents)")
+    parser.add_argument("--scaffold", type=str, default="simple",
+                       choices=["simple", "react", "claudeplays", "geminiplays", "cli"],
+                       help="Agent scaffold: fourmodule (deprecated), simple, react, claudeplays, geminiplays, or cli (server-only for external CLI agents)")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
@@ -127,10 +127,10 @@ def main():
                        help="Include story objectives tracking (CLI agent only)")
 
     # CLI Agent specific options
-    parser.add_argument("--max-context", type=int, default=800000,
-                       help="Max context chars before compaction (CLI only, default: 800k)")
-    parser.add_argument("--target-context", type=int, default=400000,
-                       help="Target context chars after compaction (CLI only, default: 400k)")
+    parser.add_argument("--max-context", type=int, default=150000,
+                       help="Max context chars before compaction (CLI only, default: 150k ~= 600K tokens)")
+    parser.add_argument("--target-context", type=int, default=75000,
+                       help="Target context chars after compaction (CLI only, default: 75k ~= 300K tokens)")
 
     args = parser.parse_args()
     
@@ -171,7 +171,6 @@ def main():
         print(f"   Backend: {args.backend}")
         print(f"   Model: {args.model_name}")
         scaffold_descriptions = {
-            "fourmodule": "Four-module architecture (Perception→Planning→Memory→Action)",
             "simple": "Simple mode (direct frame→action)",
             "react": "ReAct agent (Thought→Action→Observation loop)",
             "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
