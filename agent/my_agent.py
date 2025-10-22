@@ -1,9 +1,9 @@
 
 from utils.vlm import VLM
-from agent.perception import perception_step
-from agent.planning import planning_step
-from agent.memory import memory_step
-from agent.action import action_step
+from agent.deprecated.perception import perception_step
+from agent.deprecated.planning import planning_step
+from agent.deprecated.memory import memory_step
+from agent.deprecated.action import action_step
 
 
 class MyAgent:

@@ -23,6 +23,7 @@ import google.generativeai as genai
 # Local imports
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
+from utils.vlm import VLM
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -111,14 +112,16 @@ class MyCLIAgent:
         self,
         server_url: str = "http://localhost:8000",
         model: str = "gemini-2.5-flash",
+        backend: str = "gemini",
         max_steps: Optional[int] = None,
         system_instructions_file: str = "POKEAGENT.md",
         max_context_chars: int = 100000,  # ~25k tokens for gemini-2.5-flash
         target_context_chars: int = 50000  # Compact down to this when exceeded
     ):
-        print(f"🚀 Initializing MyCLIAgent with model={model}, server={server_url}")
+        print(f"🚀 Initializing MyCLIAgent with backend={backend}, model={model}, server={server_url}")
         self.server_url = server_url
         self.model = model
+        self.backend = backend
         self.max_steps = max_steps
         self.step_count = 0
         self.max_context_chars = max_context_chars
@@ -133,27 +136,36 @@ class MyCLIAgent:
         # Initialize MCP tool adapter
         self.mcp_adapter = MCPToolAdapter(server_url)
 
-        # Initialize Gemini
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable not set")
+        # Initialize VLM or Gemini based on backend
+        if self.backend == "gemini":
+            # Use original Gemini API for backward compatibility
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError("GEMINI_API_KEY environment variable not set")
 
-        genai.configure(api_key=api_key)
+            genai.configure(api_key=api_key)
 
-        # Define MCP tools as Gemini function declarations
-        self.tools = self._create_tool_declarations()
+            # Define MCP tools as Gemini function declarations
+            self.tools = self._create_tool_declarations()
 
-        # Create the model with tools
-        print(f"🔧 Creating Gemini model with {len(self.tools)} tools...")
-        self.gemini_model = genai.GenerativeModel(
-            model_name=self.model,
-            tools=self.tools,
-            system_instruction=self.system_instructions
-        )
-        print("✅ Gemini model created successfully")
+            # Create the model with tools
+            print(f"🔧 Creating Gemini model with {len(self.tools)} tools...")
+            self.gemini_model = genai.GenerativeModel(
+                model_name=self.model,
+                tools=self.tools,
+                system_instruction=self.system_instructions
+            )
+            print("✅ Gemini model created successfully")
 
-        # Start chat session
-        self.chat = self.gemini_model.start_chat(history=[])
+            # Start chat session
+            self.chat = self.gemini_model.start_chat(history=[])
+        else:
+            # Use VLM for other backends (like vertex)
+            self.vlm = VLM(backend=self.backend, model_name=self.model)
+            print(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
+            # For VLM backends, we'll use a different approach in run_step
+            # Set tools to empty list for compatibility
+            self.tools = []
 
         # Initialize LLM logger
         from utils.llm_logger import get_llm_logger
@@ -541,8 +553,8 @@ class MyCLIAgent:
 
     def check_prerequisites(self) -> bool:
         """Check if prerequisites are met."""
-        # Check if API key is set
-        if not os.environ.get("GEMINI_API_KEY"):
+        # Check if API key is set (only required for Gemini backend)
+        if self.backend == "gemini" and not os.environ.get("GEMINI_API_KEY"):
             logger.error("GEMINI_API_KEY environment variable not set")
             return False
 
@@ -598,7 +610,7 @@ class MyCLIAgent:
             Tuple of (success: bool, response: str)
         """
         try:
-            logger.info(f"📤 Sending prompt to Gemini...")
+            logger.info(f"📤 Sending prompt to {self.backend}...")
             logger.info(f"   Model: {self.model}")
             # Don't log the full prompt - it's too long with game state
             logger.info(f"   Prompt length: {len(prompt)} chars")
@@ -613,22 +625,45 @@ class MyCLIAgent:
             # Track duration
             start_time = time.time()
 
-            # Build message content with optional image
-            if screenshot_b64:
-                # Send message with both text and image
-                import PIL.Image as PILImage
-                import io
-                import base64
+            # Handle different backends
+            if self.backend == "gemini":
+                # Use original Gemini function calling
+                # Build message content with optional image
+                if screenshot_b64:
+                    # Send message with both text and image
+                    import PIL.Image as PILImage
+                    import io
+                    import base64
 
-                # Decode base64 to image
-                image_data = base64.b64decode(screenshot_b64)
-                image = PILImage.open(io.BytesIO(image_data))
+                    # Decode base64 to image
+                    image_data = base64.b64decode(screenshot_b64)
+                    image = PILImage.open(io.BytesIO(image_data))
 
-                # Send message with image and text
-                response = self.chat.send_message([prompt, image])
+                    # Send message with image and text
+                    response = self.chat.send_message([prompt, image])
+                else:
+                    # Send message with text only
+                    response = self.chat.send_message(prompt)
             else:
-                # Send message with text only
-                response = self.chat.send_message(prompt)
+                # Use VLM for other backends
+                if screenshot_b64:
+                    import PIL.Image as PILImage
+                    import io
+                    import base64
+                    
+                    # Decode base64 to image
+                    image_data = base64.b64decode(screenshot_b64)
+                    image = PILImage.open(io.BytesIO(image_data))
+                    
+                    # Use VLM with image
+                    response_text = self.vlm.get_query(image, prompt, "CLI_Agent")
+                else:
+                    # Use VLM with text only
+                    response_text = self.vlm.get_text_query(prompt, "CLI_Agent")
+                
+                # For VLM backends, we need to parse the response and extract tool calls
+                # This is a simplified approach - in practice you might want more sophisticated parsing
+                response = type('Response', (), {'parts': [type('Part', (), {'text': response_text})]})()
 
             # Process response - handle function calls
             # Limit the number of tool calls per step to prevent infinite loops
@@ -898,7 +933,10 @@ class MyCLIAgent:
         logger.info("=" * 70)
         logger.info(f"Model: {self.model}")
         logger.info(f"Server: {self.server_url}")
-        logger.info(f"Tools: {len(self.tools)} MCP tools (9 Pokemon + 11 Baseline)")
+        if hasattr(self, 'tools') and self.tools:
+            logger.info(f"Tools: {len(self.tools)} MCP tools (9 Pokemon + 11 Baseline)")
+        else:
+            logger.info(f"Tools: MCP tools available via VLM backend ({self.backend})")
         logger.info(f"Context: Max {self.max_context_chars:,} chars (compact to {self.target_context_chars:,})")
         if self.max_steps:
             logger.info(f"Max Steps: {self.max_steps}")
@@ -1014,12 +1052,19 @@ def main():
         default="POKEAGENT.md",
         help="System instructions file"
     )
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="gemini",
+        help="VLM backend (gemini, vertex, openai, etc.)"
+    )
 
     args = parser.parse_args()
 
     agent = MyCLIAgent(
         server_url=args.server_url,
         model=args.model,
+        backend=args.backend,
         max_steps=args.max_steps,
         system_instructions_file=args.system_instructions
     )
