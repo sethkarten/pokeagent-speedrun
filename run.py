@@ -219,6 +219,7 @@ def main():
             agent = MyCLIAgent(
                 server_url=f"http://localhost:{args.port}",
                 model=args.model_name,
+                backend=args.backend,
                 max_steps=args.max_steps if hasattr(args, 'max_steps') else None
             )
             print("✅ Agent created", flush=True)
