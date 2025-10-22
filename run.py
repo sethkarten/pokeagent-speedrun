@@ -105,8 +105,8 @@ def main():
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="fourmodule",
-                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli"],
-                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, or cli (server-only for external CLI agents)")
+                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli", "my_cli_agent"],
+                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), or my_cli_agent (custom CLI agent)")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
@@ -168,7 +168,8 @@ def main():
             "react": "ReAct agent (Thought→Action→Observation loop)",
             "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
             "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
-            "cli": "Gemini API with MCP tools (native function calling)"
+            "cli": "Gemini API with MCP tools (native function calling)",
+            "my_cli_agent": "My Custom CLI Agent (customized Gemini API with MCP tools)"
         }
         print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
@@ -194,6 +195,28 @@ def main():
 
             print(f"🔧 Creating agent with model={args.model_name}", flush=True)
             agent = CLIAgent(
+                server_url=f"http://localhost:{args.port}",
+                model=args.model_name,
+                max_steps=args.max_steps if hasattr(args, 'max_steps') else None
+            )
+            print("✅ Agent created", flush=True)
+
+            return agent.run()
+        elif args.scaffold == "my_cli_agent":
+            print("\n🖥️  My Custom CLI Agent Mode - Customized Gemini API with MCP Tools")
+            print("=" * 60)
+            print("✅ Server is running")
+            print("🤖 Starting My Custom CLI agent...")
+            print("   Using customized Gemini API implementation")
+            print("   MCP tools exposed via HTTP endpoints")
+            print("")
+
+            # Import and run My Custom CLI agent
+            from agent.my_cli_agent import MyCLIAgent
+            print("📦 MyCLIAgent imported successfully", flush=True)
+
+            print(f"🔧 Creating agent with model={args.model_name}", flush=True)
+            agent = MyCLIAgent(
                 server_url=f"http://localhost:{args.port}",
                 model=args.model_name,
                 max_steps=args.max_steps if hasattr(args, 'max_steps') else None
