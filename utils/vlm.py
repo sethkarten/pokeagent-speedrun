@@ -511,7 +511,7 @@ class VertexBackend(VLMBackend):
         try:
             from google import genai
         except ImportError:
-            raise ImportError("Google Generative AI package not found. Install with: pip install google-generativeai")
+            raise ImportError("Package google not found. Install with: pip install google")
         
         self.model_name = model_name
         
