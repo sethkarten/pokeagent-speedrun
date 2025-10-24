@@ -1,0 +1,2299 @@
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 35x34 to 0x0
+pygame 2.6.1 (SDL 2.28.4, Python 3.10.8)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+============================================================
+🎮 Pokemon Emerald AI Agent
+============================================================
+
+📡 Starting server process...
+📋 Server command: /data3/tu8435/miniconda3/envs/pokeagent/bin/python -m server.app --port 8238 --load-state Emerald-GBAdvance/splits/03_birch/03_birch.state --no-ocr
+✅ Server started with PID 3682797
+⏳ Waiting 3 seconds for server to initialize...
+🖼️  Frame server started with PID 3682886
+
+🤖 Agent Configuration:
+   Backend: vertex
+   Model: gemini-2.5-flash
+   Scaffold: My Custom CLI Agent (customized Gemini API with MCP tools)
+   OCR: Disabled
+🎥 Stream View: http://127.0.0.1:8238/stream
+
+🖥️  My Custom CLI Agent Mode - Customized Gemini API with MCP Tools
+============================================================
+✅ Server is running
+🤖 Starting My Custom CLI agent...
+   Using customized Gemini API implementation
+   MCP tools exposed via HTTP endpoints
+
+📦 MyCLIAgent imported successfully
+🔧 Creating agent with model=gemini-2.5-flash
+2025-10-24 02:28:34,051 - agent.my_cli_agent - INFO - ✅ Loaded system instructions from POKEAGENT.md (6465 chars)
+2025-10-24 02:28:34,051 - agent.my_cli_agent - INFO - ✅ Created 18 tool declarations (9 Pokemon + 11 Baseline)
+2025-10-24 02:28:35,173 - utils.vlm - INFO - 🔧 Configured function calling with 18 functions
+2025-10-24 02:28:35,174 - utils.vlm - INFO - Vertex backend initialized with model: gemini-2.5-flash
+2025-10-24 02:28:35,174 - utils.vlm - INFO - Function calling enabled with 18 tools
+2025-10-24 02:28:35,174 - utils.vlm - INFO - VLM initialized with vertex backend using model: gemini-2.5-flash
+2025-10-24 02:28:35,174 - utils.llm_logger - INFO - LLM Logger initialized: llm_logs/llm_log_20251024_022835.jsonl
+🚀 Initializing MyCLIAgent with backend=vertex, model=gemini-2.5-flash, server=http://localhost:8238
+✅ VLM initialized with vertex backend using model: gemini-2.5-flash
+✅ Agent created
+2025-10-24 02:28:35,174 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:28:35,174 - agent.my_cli_agent - INFO - 🎮 Pokemon Emerald My Custom CLI Agent (Gemini API)
+2025-10-24 02:28:35,174 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:28:35,175 - agent.my_cli_agent - INFO - Model: gemini-2.5-flash
+2025-10-24 02:28:35,175 - agent.my_cli_agent - INFO - Server: http://localhost:8238
+2025-10-24 02:28:35,175 - agent.my_cli_agent - INFO - Tools: 18 MCP tools (9 Pokemon + 11 Baseline)
+2025-10-24 02:28:35,175 - agent.my_cli_agent - INFO - Context: Max 100,000 chars (compact to 50,000)
+2025-10-24 02:28:35,175 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:28:35,175 - agent.my_cli_agent - INFO - 
+🔍 Checking prerequisites...
+2025-10-24 02:28:35,175 - agent.my_cli_agent - INFO - Checking if game server is ready at http://localhost:8238...
+2025-10-24 02:28:35,184 - agent.my_cli_agent - INFO - ✅ Game server is ready
+2025-10-24 02:28:35,184 - agent.my_cli_agent - INFO - ✅ All prerequisites met
+2025-10-24 02:28:35,184 - agent.my_cli_agent - INFO - 
+🚀 Starting agent loop...
+2025-10-24 02:28:35,184 - agent.my_cli_agent - INFO - 📝 Gemini API with native function calling
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - 💾 Conversation history with auto-compaction
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - 🔧 20 MCP tools available via HTTP (Pokemon + Baseline)
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - Press Ctrl+C to stop
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - ----------------------------------------------------------------------
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - 🤖 Step 1
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - 📚 History: 0 turns (0 chars)
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:28:35,185 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:28:35,937 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:28:35,937 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:28:35,937 - agent.my_cli_agent - INFO -    Screenshot: <8560 bytes>
+2025-10-24 02:28:35,938 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:28:35,938 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:28:35,938 - agent.my_cli_agent - INFO -    Prompt length: 10320 chars
+2025-10-24 02:28:35,938 - agent.my_cli_agent - INFO -    Including screenshot (8560 bytes)
+2025-10-24 02:28:35,943 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:28:35,943 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=17\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN\n\n--- MAP: LITTLEROOT TOWN ---\n     -1  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15\n  9    ? ? ? ? ? ? ? ? ? ? ? ? ? ? ?  \n 10  ? . . . . . . . . . . . . . . . ?\n 11  ? . . . . . . . . . . . . . . . ?\n 12  ? . . . . . . . . . . . . . . . ?\n 13  ? . . . # # # # # # # . . . . . ?\n 14  ? . . . # # # # # # # . . . . . ?\n 15  ? . . . # # # # # # # . . . . . ?\n 16  ? . . . # # # # S # # . . . . . ?\n 17  ? . . . . . . # P . . . . . . . ?\n 18    # # . . . . . . . . . . . . . ?\n 19    # # . . . . . . . . . . . . . ?\n 20    # # # # # # # # # # # # # # #  \n 21    # # # # # # # # # # # # # # #  \n 22    # # # # # # # # # # # # # # #  \n 23    # # # # # # # # # # # # # # #  \n 24    # # # # # # # # # # # # # # #  \n\nPlayer at (X=7, Y=17) - marked as 'P' on map\nMap shows GAME coordinates - use these directly with navigate_to(x, y)\nMovement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)\n\nLegend:\n  Movement: P=Player\n  Terrain: .=Walkable path, #=Wall/Blocked, S=Stairs/Ladder, ?=Unknown\n\nTotal explored: 258 tiles\n\n=== GAME STATE ===\nGame State: overworld\n\nMOVEMENT PREVIEW:\n  UP   : (  7, 16) [D] WALKABLE - Door/Entrance\n  DOWN : (  7, 18) [.] WALKABLE\n  LEFT : (  6, 17) [#] BLOCKED - Impassable\n  RIGHT: (  8, 17) [.] WALKABLE",
+  "screenshot_base64": "iVBORw0KGgoAAAANSUhEUgAAAPAAAACgCAIAAAC9uXYyAAAY20lEQVR4nO1dIXjiTLd+26di68AtMr9rHThGcl1x1BWZ66gDt5GpC664G8k66qi7kVNHXHHfSNaBa933i5MMQ0gg6RI6tPM+fdhkeHMyZE7OnjlzcnLW52MAAMKlqFctbEFtb1Ss2UqUyg9GU891FsvnMJzdtJzF8pm+qlVvaOM5cNX2SEg4CwJ4riMW77JxNPLkdrPOtk/dYGzGeYMx9ZBWC3nOq1u7eimo/em3CLhovs+rqMxuevQtY8nrwDmPrsbzaInVu2tHcvTQh6L8M6nQqaRGxQIghWbhgPzV+NVznYHj7paQiqIKDeAl5L3eQO7OOP/99GxZlQ+cXSv0+w1S6Jv3BYDJG7duUwZaQky6t5cMwM...
+2025-10-24 02:28:39,849 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 3.91s
+2025-10-24 02:28:39,849 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Move towards the door of the building to enter it and progress the story.
+2025-10-24 02:28:39,849 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:28:39,849 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:28:39,849 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:28:39,849 - agent.my_cli_agent - INFO -    Args: {'buttons': ['UP'], 'reasoning': 'Move towards the door of the building to enter it and progress the story.'}
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 35x34 to 0x0
+2025-10-24 02:29:00,152 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:00,153 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['UP'], 'reasoning': 'Move towards the door of the building to enter it and progress the story.'}
+2025-10-24 02:29:00,153 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['UP'], 'reasoning': 'Move towards the door of the building to enter it and progress the story.'}...
+2025-10-24 02:29:00,153 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:01,366 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:01,367 - agent.my_cli_agent - INFO - ✅ Step completed in 25.43s
+2025-10-24 02:29:01,367 - agent.my_cli_agent - INFO - 📝 Response: Move towards the door of the building to enter it and progress the story.
+2025-10-24 02:29:01,367 - agent.my_cli_agent - INFO - ✅ Step 1 completed
+2025-10-24 02:29:01,369 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:01,870 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:01,870 - agent.my_cli_agent - INFO - 🤖 Step 2
+2025-10-24 02:29:01,870 - agent.my_cli_agent - INFO - 📚 History: 2 turns (289 chars)
+2025-10-24 02:29:01,870 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:01,870 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:01,870 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:01,975 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:01,975 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:01,975 - agent.my_cli_agent - INFO -    Screenshot: <256 bytes>
+2025-10-24 02:29:01,976 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:01,976 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:01,976 - agent.my_cli_agent - INFO -    Prompt length: 2182 chars
+2025-10-24 02:29:01,976 - agent.my_cli_agent - INFO -    Including screenshot (256 bytes)
+2025-10-24 02:29:01,976 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:01,976 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=16\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n     -1  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15\n  8    ? ? ? ? ? ? ? ? ? ? ? ? ? ? ?  \n  9  ? . . . . . . . . . . . . . . . ?\n 10  ? . . . . . . . . . . . . . . . ?\n 11  ? . . . . . . . . . . . . . . . ?\n 12  ? . . . . . . . . . . . . . . . ?\n 13  ? . . . # # # # # # # . . . . . ?\n 14  ? . . . # # # # # # # . . . . . ?\n 15  ? . . . # # # # # # # . . . . . ?\n 16  ? . . . # # # # P # # . . . . . ?\n 17  ? . . . . . . # . . . . . . . . ?\n 18    # # . . . . . . . . . . . . . ?\n 19    # # . . . . . . . . . . . . . ?\n 20    # # # # # # # # # # # # # # #  \n 21    # # # # # # # # # # # # # # #  \n 22    # # # # # # # # # # # # # # #  \n 23    # # # # # # # # # # # # # # #  \n 24    # # # # # # # # # # # # # # #  \n\nPlayer at (X=7, Y=16) - marked as 'P' on map\nMap shows GAME coordinates - use these directly with navigate_to(x, y)\nMovement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)\n\nLegend:\n  Movement: P=Player\n  Terrain: .=Walkable path, #=Wall/Blocked, ?=Unknown\n\nPortal Connections:\n  \u2192 Unknown\n\nTotal explored: 275 tiles\n\n=== GAME STATE ===\nGame State: overworld\n\nMOVEMENT PREVIEW:\n  UP   : (  7, 15) [#] WALKABLE - Stairs/Warp\n  DOWN : (  7, 17) [.] WALKABLE\n  LEFT : (  6, 16) [#] WALKABLE - Stairs/Warp\n  RIGHT: (  8, 16) [#] WALKABLE - Stairs/Warp",
+  "screenshot_base64": "iVBORw0KGgoAAAANSUhEUgAAAPAAAACgCAIAAAC9uXYyAAAAh0lEQVR4nO3BgQAAAADDoPlTH+ECVQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADPAMKvAAGZ4+4fAAAAAElFTkSuQmCC",
+  "player_position": {
+    "x": 7,
+    ...
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 28x27 to 0x0
+2025-10-24 02:29:03,846 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.87s
+2025-10-24 02:29:03,846 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Attempting to exit Professor Birch's Lab or trigger an event by moving up.
+2025-10-24 02:29:03,846 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:03,847 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:03,847 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:03,847 - agent.my_cli_agent - INFO -    Args: {'buttons': ['UP'], 'reasoning': "Attempting to exit Professor Birch's Lab or trigger an event by moving up."}
+2025-10-24 02:29:03,975 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:03,975 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['UP'], 'reasoning': "Attempting to exit Professor Birch's Lab or trigger an event by moving up."}
+2025-10-24 02:29:03,976 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['UP'], 'reasoning': "Attempting to exit Professor Birch's Lab or trigger an event by moving up."}...
+2025-10-24 02:29:03,976 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:04,986 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:04,988 - agent.my_cli_agent - INFO - ✅ Step completed in 3.01s
+2025-10-24 02:29:04,988 - agent.my_cli_agent - INFO - 📝 Response: Attempting to exit Professor Birch's Lab or trigger an event by moving up.
+2025-10-24 02:29:04,988 - agent.my_cli_agent - INFO - ✅ Step 2 completed
+2025-10-24 02:29:04,991 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:05,491 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:05,492 - agent.my_cli_agent - INFO - 🤖 Step 3
+2025-10-24 02:29:05,492 - agent.my_cli_agent - INFO - 📚 History: 4 turns (580 chars)
+2025-10-24 02:29:05,492 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:05,492 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:05,492 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:05,545 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:05,545 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:05,545 - agent.my_cli_agent - INFO -    Screenshot: <6772 bytes>
+2025-10-24 02:29:05,545 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:05,545 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:05,546 - agent.my_cli_agent - INFO -    Prompt length: 9447 chars
+2025-10-24 02:29:05,546 - agent.my_cli_agent - INFO -    Including screenshot (6772 bytes)
+2025-10-24 02:29:05,546 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:05,546 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=6, Y=11\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # # # # # # # #                \n# # # # # # # # . # . . . . . ?              \n# # # # # # # # . . . . . . . ?     ? ?      \n# # # # # # # . . . . . . . . . # # . . #    \n# # # # # # # . . . . . . . . . . . . . #    \n# # # # # # # # # # # . . . . . . # # . #    \n# # # # # # # # # # # . . . . . . # # # #    \n            # . . . . . . . . . . . . . # ?  \n            # . # . . . . . . . . . # # # . ?\n            # # # . . . . . . . . . # . # . ?\n            # # # . . . . P . . . . # # # . ?\n            # . . . # . . D D . . . . . # . ?\n            # # # # # # # # # # # # # # # . ?\n            # # # # # # # # # # # # # # # . ?\n            # # # # # # # # # # # # # # # . ?\n            # # # # # # # # # # # # # # # . ?\n            # # # # # # # # # # # # # # # . ?\n            # # # # # # # # # # # # # # # . ?\n            # # # # # # # # # # # # # # # . ?\n              # # # # # # # # # # # # # # #  \n              # # # # # # # # # # # # # # #  \n              # # # # # # # # # # # # # # #  \n              # # # # # # # # # # # # # # #  \n              # # # # # # # # # # # # # # #  \n\nPlayer at (X=6, Y=11) - marked as 'P' on map\nMap shows GAME coordinates - use these directly with navigate_to(x, y)\nMovement: UP=(x,y-1...
+2025-10-24 02:29:07,451 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.90s
+2025-10-24 02:29:07,451 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [navigate_to] Move towards Professor Birch to trigger the next event.
+2025-10-24 02:29:07,451 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:07,451 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: navigate_to (1/5)
+2025-10-24 02:29:07,452 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: navigate_to
+2025-10-24 02:29:07,452 - agent.my_cli_agent - INFO -    Args: {'y': 2.0, 'reason': 'Move towards Professor Birch to trigger the next event.', 'x': 10.0}
+WARNING:utils.pathfinding:No map data available for pathfinding
+2025-10-24 02:29:07,758 - agent.my_cli_agent - INFO - ✅ Tool navigate_to completed
+2025-10-24 02:29:07,758 - agent.my_cli_agent - INFO -    Result: {'success': True, 'target': '(10, 2)', 'path_length': 13, 'buttons_queued': 13, 'reason': 'Move towards Professor Birch to trigger the next event.'}
+2025-10-24 02:29:07,758 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'target': '(10, 2)', 'path_length': 13, 'buttons_queued': 13, 'reason': 'Move towards Professor Birch to trigger the next event.'}...
+2025-10-24 02:29:07,758 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 28x27 to 0x0
+🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available
+Starting Fixed Simple Pokemon Emerald Server
+Server mode - headless operation, display handled by client
+OCR dialogue detection disabled
+Press Ctrl+C to stop
+AntiCheat tracker initialized for submission logging
+Emulator initialized successfully!
+🚫 All dialogue detection disabled (--no-ocr flag)
+Loaded state from: Emerald-GBAdvance/splits/03_birch/03_birch.state
+📂 Loaded milestones from: Emerald-GBAdvance/splits/03_birch/03_birch_milestones.json
+Map buffer already initialized at 0x02032318
+Initial GAME_RUNNING milestone logged after state load
+Ensuring map stitcher visual data is ready after state load
+🌐 FastAPI server running:
+   Local: http://localhost:8238
+   Network: http://128.112.50.79:8238
+📺 Stream interface: http://128.112.50.79:8238/stream
+Available endpoints:
+  /status - Server status
+  /screenshot - Current screenshot
+  /action - Take action (POST)
+  /state - Comprehensive game state (visual + memory data)
+  /agent - Agent thinking status
+  /milestones - Current milestones achieved
+  /recent_actions - Recently pressed buttons
+  /debug/memory - Debug memory reading (basic)
+  /debug/memory/comprehensive - Comprehensive memory diagnostics
+  /debug/milestones - Debug milestone tracking system
+  /debug/reset_milestones - Reset all milestones (POST)
+  /debug/test_milestone_operations - Test milestone save/load (POST)
+  /stop - Stop server
+Starting headless game loop...
+📍 Position change detected: (7, 17), map: (0, 9)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 50.1 (target: 80), Queue: 0 actions
+🎯 Milestone detected: CLOCK_SET
+🗺️ SERVER: No warp connections found in map data
+📊 Server FPS: 47.5 (target: 80), Queue: 0 actions
+📊 Server FPS: 45.7 (target: 80), Queue: 0 actions
+📊 Server FPS: 42.6 (target: 80), Queue: 0 actions
+📊 Server FPS: 45.7 (target: 80), Queue: 0 actions
+🗺️ SERVER: No warp connections found in map data
+📡 Server received actions: ['UP']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['UP']
+🎮 Server processing action: UP, Queue remaining: 0 actions (~0.0s)
+📍 Position change detected: (7, 17), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+🔄 Creating warp connection: (7, 17) -> (7, 17) (maps 9 -> 260)
+Added warp connection: Littleroot Town -> Littleroot Town Professor Birchs Lab (route_transition, west)
+✅ Map stitcher update completed
+🔄 Creating warp connection: (7, 17) -> (7, 17) (maps 9 -> 260)
+🔄 Creating warp connection: (7, 17) -> (7, 17) (maps 9 -> 260)
+🗺️ SERVER: No warp connections found in map data
+🔄 Creating warp connection: (7, 17) -> (7, 17) (maps 9 -> 260)
+🗺️ SERVER: No warp connections found in map data
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 1
+🔄 Creating warp connection: (7, 17) -> (7, 17) (maps 9 -> 260)
+🗺️ SERVER: No warp connections found in map data
+🔄 Creating warp connection: (7, 17) -> (7, 17) (maps 9 -> 260)
+🗺️ SERVER: No warp connections found in map data
+📍 Position change detected: (7, 16), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+🔄 Creating warp connection: (7, 17) -> (7, 16) (maps 9 -> 260)
+✅ Map stitcher update completed
+🗺️ SERVER: No warp connections found in map data
+🗺️ SERVER: No warp connections found in map data
+🗺️ SERVER: No warp connections found in map data
+🗺️ SERVER: No warp connections found in map data
+🗺️ SERVER: No warp connections found in map data
+🗺️ SERVER: No warp connections found in map data
+📊 Server FPS: 41.6 (target: 80), Queue: 0 actions
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📍 Position change detected: (6, 12), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+📍 Position change detected: (0, 0), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+📍 Position change detected: (6, 12), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+📡 Server received actions: ['UP']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['UP']
+🎮 Server processing action: UP, Queue remaining: 0 actions (~0.0s)
+📍 Position change detected: (6, 11), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 2
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 58.6 (target: 80), Queue: 0 actions
+📡 Server received actions: ['RIGHT', 'RIGHT', 'RIGHT', 'RIGHT', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['RIGHT', 'RIGHT', 'RIGHT', 'RIGHT', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP', 'UP']
+🎮 Server processing action: RIGHT, Queue remaining: 12 actions (~5.4s)
+📍 Position change detected: (7, 11), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 3
+🎮 Server processing action: RIGHT, Queue remaining: 11 actions (~5.0s)
+📍 Position change detected: (8, 11), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 4
+🎮 Server processing action: RIGHT, Queue remaining: 10 actions (~4.5s)
+📍 Position change detected: (9, 11), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 5
+🎮 Server processing action: RIGHT, Queue remaining: 9 actions (~4.0s)
+📍 Position change detected: (10, 11), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 6
+🎮 Server processing action: UP, Queue remaining: 8 actions (~3.6s)
+📍 Position change detected: (10, 10), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 7
+🎮 Server processing action: UP, Queue remaining: 7 actions (~3.1s)
+📍 Position change detected: (10, 9), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 8
+🎮 Server processing action: UP, Queue remaining: 6 actions (~2.7s)
+📍 Position change detected: (10, 8), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+📊 Server FPS: 56.3 (target: 80), Queue: 6 actions
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 9
+🎮 Server processing action: UP, Queue remaining: 5 actions (~2.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 10
+🎮 Server processing action: UP, Queue remaining: 4 actions (~1.8s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 11
+2025-10-24 02:29:15,882 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:15,883 - agent.my_cli_agent - INFO - ✅ Step completed in 10.34s
+2025-10-24 02:29:15,883 - agent.my_cli_agent - INFO - 📝 Response: Move towards Professor Birch to trigger the next event.
+2025-10-24 02:29:15,883 - agent.my_cli_agent - INFO - ✅ Step 3 completed
+2025-10-24 02:29:15,885 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:16,386 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:16,386 - agent.my_cli_agent - INFO - 🤖 Step 4
+2025-10-24 02:29:16,386 - agent.my_cli_agent - INFO - 📚 History: 6 turns (863 chars)
+2025-10-24 02:29:16,386 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:16,386 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:16,386 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:16,487 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:16,487 - agent.my_cli_agent - INFO -    Game State:
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=17
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN
+
+--- MAP: LITTLEROOT TOWN ---
+     -1  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+  9    ? ? ? ? ? ? ? ? ? ? ? ? ? ? ?  
+ 10  ? . . . . . . . . . . . . . . . ?
+ 11  ? . . . . . . . . . . . . . . . ?
+ 12  ? . . . . . . . . . . . . . . . ?
+ 13  ? . . . # # # # # # # . . . . . ?
+ 14  ? . . . # # # # # # # . . . . . ?
+ 15  ? . . . # # # # # # # . . . . . ?
+ 16  ? . . . # # # # S # # . . . . . ?
+ 17  ? . . . . . . # P . . . . . . . ?
+ 18    # # . . . . . . . . . . . . . ?
+ 19    # # . . . . . . . . . . . . . ?
+ 20    # # # # # # # # # # # # # # #  
+ 21    # # # # # # # # # # # # # # #  
+ 22    # # # # # # # # # # # # # # #  
+ 23    # # # # # # # # # # # # # # #  
+ 24    # # # # # # # # # # # # # # #  
+
+Player at (X=7, Y=17) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, S=Stairs/Ladder, ?=Unknown
+
+Total explored: 258 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7, 16) [D] WALKABLE - Door/Entrance
+  DOWN : (  7, 18) [.] WALKABLE
+  LEFT : (  6, 17) [#] BLOCKED - Impassable
+  RIGHT: (  8, 17) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=16
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+     -1  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+  8    ? ? ? ? ? ? ? ? ? ? ? ? ? ? ?  
+  9  ? . . . . . . . . . . . . . . . ?
+ 10  ? . . . . . . . . . . . . . . . ?
+ 11  ? . . . . . . . . . . . . . . . ?
+ 12  ? . . . . . . . . . . . . . . . ?
+ 13  ? . . . # # # # # # # . . . . . ?
+ 14  ? . . . # # # # # # # . . . . . ?
+ 15  ? . . . # # # # # # # . . . . . ?
+ 16  ? . . . # # # # P # # . . . . . ?
+ 17  ? . . . . . . # . . . . . . . . ?
+ 18    # # . . . . . . . . . . . . . ?
+ 19    # # . . . . . . . . . . . . . ?
+ 20    # # # # # # # # # # # # # # #  
+ 21    # # # # # # # # # # # # # # #  
+ 22    # # # # # # # # # # # # # # #  
+ 23    # # # # # # # # # # # # # # #  
+ 24    # # # # # # # # # # # # # # #  
+
+Player at (X=7, Y=16) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 275 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7, 15) [#] WALKABLE - Stairs/Warp
+  DOWN : (  7, 17) [.] WALKABLE
+  LEFT : (  6, 16) [#] WALKABLE - Stairs/Warp
+  RIGHT: (  8, 16) [#] WALKABLE - Stairs/Warp
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=6, Y=11
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # # # # # # # #                
+# # # # # # # # . # . . . . . ?              
+# # # # # # # # . . . . . . . ?     ? ?      
+# # # # # # # . . . . . . . . . # # . . #    
+# # # # # # # . . . . . . . . . . . . . #    
+# # # # # # # # # # # . . . . . . # # . #    
+# # # # # # # # # # # . . . . . . # # # #    
+            # . . . . . . . . . . . . . # ?  
+            # . # . . . . . . . . . # # # . ?
+            # # # . . . . . . . . . # . # . ?
+            # # # . . . . P . . . . # # # . ?
+            # . . . # . . D D . . . . . # . ?
+            # # # # # # # # # # # # # # # . ?
+            # # # # # # # # # # # # # # # . ?
+            # # # # # # # # # # # # # # # . ?
+            # # # # # # # # # # # # # # # . ?
+            # # # # # # # # # # # # # # # . ?
+            # # # # # # # # # # # # # # # . ?
+            # # # # # # # # # # # # # # # . ?
+              # # # # # # # # # # # # # # #  
+              # # # # # # # # # # # # # # #  
+              # # # # # # # # # # # # # # #  
+              # # # # # # # # # # # # # # #  
+              # # # # # # # # # # # # # # #  
+
+Player at (X=6, Y=11) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 531 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  6, 10) [.] WALKABLE
+  DOWN : (  6, 12) [D] WALKABLE - Door/Entrance
+  LEFT : (  5, 11) [.] WALKABLE
+  RIGHT: (  7, 11) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=10, Y=8
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . . . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . P . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=10, Y=8) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 596 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : ( 10,  7) [#] BLOCKED - Impassable
+  DOWN : ( 10,  9) [.] WALKABLE
+  LEFT : (  9,  8) [.] WALKABLE
+  RIGHT: ( 11,  8) [.] WALKABLE2025-10-24 02:29:16,487 - agent.my_cli_agent - INFO -    Screenshot: <7488 bytes>
+2025-10-24 02:29:16,487 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:16,487 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:16,487 - agent.my_cli_agent - INFO -    Prompt length: 10287 chars
+2025-10-24 02:29:16,487 - agent.my_cli_agent - INFO -    Including screenshot (7488 bytes)
+2025-10-24 02:29:16,487 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:16,488 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=10, Y=8\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . . . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . P . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at...
+2025-10-24 02:29:18,384 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.90s
+2025-10-24 02:29:18,384 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to get my first Pokémon.
+2025-10-24 02:29:18,384 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:18,385 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:18,385 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:18,385 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to get my first Pokémon.'}
+2025-10-24 02:29:18,456 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:18,457 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to get my first Pokémon.'}
+2025-10-24 02:29:18,457 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to get my first Pokémon.'}...
+2025-10-24 02:29:18,457 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:19,619 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:19,621 - agent.my_cli_agent - INFO - ✅ Step completed in 3.13s
+2025-10-24 02:29:19,621 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to get my first Pokémon.
+2025-10-24 02:29:19,621 - agent.my_cli_agent - INFO - ✅ Step 4 completed
+2025-10-24 02:29:19,624 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:20,124 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:20,124 - agent.my_cli_agent - INFO - 🤖 Step 5
+2025-10-24 02:29:20,125 - agent.my_cli_agent - INFO - 📚 History: 8 turns (1,112 chars)
+2025-10-24 02:29:20,125 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:20,125 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:20,125 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:20,179 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:20,179 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:20,179 - agent.my_cli_agent - INFO -    Screenshot: <7728 bytes>
+2025-10-24 02:29:20,179 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:20,179 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:20,179 - agent.my_cli_agent - INFO -    Prompt length: 10527 chars
+2025-10-24 02:29:20,180 - agent.my_cli_agent - INFO -    Including screenshot (7728 bytes)
+2025-10-24 02:29:20,180 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:20,180 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=10, Y=8\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . . . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . P . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at...
+2025-10-24 02:29:22,237 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 2.06s
+2025-10-24 02:29:22,237 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Continue the dialogue after interacting with the machine.
+2025-10-24 02:29:22,237 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:22,237 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:22,237 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:22,237 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Continue the dialogue after interacting with the machine.'}
+2025-10-24 02:29:22,282 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:22,282 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Continue the dialogue after interacting with the machine.'}
+2025-10-24 02:29:22,283 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Continue the dialogue after interacting with the machine.'}...
+2025-10-24 02:29:22,283 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:23,288 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:23,289 - agent.my_cli_agent - INFO - ✅ Step completed in 3.11s
+2025-10-24 02:29:23,290 - agent.my_cli_agent - INFO - 📝 Response: Continue the dialogue after interacting with the machine.
+2025-10-24 02:29:23,290 - agent.my_cli_agent - INFO - ✅ Step 5 completed
+2025-10-24 02:29:23,291 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 28x27 to 0x0
+2025-10-24 02:29:23,792 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:23,792 - agent.my_cli_agent - INFO - 🤖 Step 6
+2025-10-24 02:29:23,792 - agent.my_cli_agent - INFO - 📚 History: 10 turns (1,367 chars)
+2025-10-24 02:29:23,792 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:23,792 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:23,792 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:23,883 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:23,883 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:23,883 - agent.my_cli_agent - INFO -    Screenshot: <7424 bytes>
+2025-10-24 02:29:23,884 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:23,884 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:23,884 - agent.my_cli_agent - INFO -    Prompt length: 10223 chars
+2025-10-24 02:29:23,884 - agent.my_cli_agent - INFO -    Including screenshot (7424 bytes)
+2025-10-24 02:29:23,884 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:23,884 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=10, Y=8\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . . . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . P . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at...
+2025-10-24 02:29:25,370 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.49s
+2025-10-24 02:29:25,370 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to progress the story.
+2025-10-24 02:29:25,370 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:25,370 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:25,371 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:25,371 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:25,454 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:25,454 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:25,454 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}...
+2025-10-24 02:29:25,454 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:26,462 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:26,464 - agent.my_cli_agent - INFO - ✅ Step completed in 2.58s
+2025-10-24 02:29:26,464 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to progress the story.
+2025-10-24 02:29:26,464 - agent.my_cli_agent - INFO - ✅ Step 6 completed
+2025-10-24 02:29:26,466 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:26,967 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:26,967 - agent.my_cli_agent - INFO - 🤖 Step 7
+2025-10-24 02:29:26,967 - agent.my_cli_agent - INFO - 📚 History: 12 turns (1,612 chars)
+2025-10-24 02:29:26,967 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:26,967 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:26,967 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:27,175 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:27,175 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:27,175 - agent.my_cli_agent - INFO -    Screenshot: <7740 bytes>
+2025-10-24 02:29:27,176 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:27,176 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:27,176 - agent.my_cli_agent - INFO -    Prompt length: 10539 chars
+2025-10-24 02:29:27,176 - agent.my_cli_agent - INFO -    Including screenshot (7740 bytes)
+2025-10-24 02:29:27,176 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:27,176 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=10, Y=8\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . . . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . P . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at...
+2025-10-24 02:29:29,007 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.83s
+2025-10-24 02:29:29,007 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Continue the interaction with the machine in Professor Birch's Lab.
+2025-10-24 02:29:29,007 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:29,008 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:29,008 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:29,008 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': "Continue the interaction with the machine in Professor Birch's Lab."}
+2025-10-24 02:29:29,059 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:29,059 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': "Continue the interaction with the machine in Professor Birch's Lab."}
+2025-10-24 02:29:29,059 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': "Continue the interaction with the machine in Professor Birch's Lab."}...
+2025-10-24 02:29:29,060 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:30,068 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:30,070 - agent.my_cli_agent - INFO - ✅ Step completed in 2.89s
+2025-10-24 02:29:30,070 - agent.my_cli_agent - INFO - 📝 Response: Continue the interaction with the machine in Professor Birch's Lab.
+2025-10-24 02:29:30,070 - agent.my_cli_agent - INFO - ✅ Step 7 completed
+2025-10-24 02:29:30,071 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:30,572 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:30,572 - agent.my_cli_agent - INFO - 🤖 Step 8
+2025-10-24 02:29:30,572 - agent.my_cli_agent - INFO - 📚 History: 14 turns (1,887 chars)
+2025-10-24 02:29:30,572 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:30,572 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:30,572 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:30,623 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:30,623 - agent.my_cli_agent - INFO -    Game State:
+
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=10, Y=8
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . . . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . P . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=10, Y=8) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 596 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : ( 10,  7) [#] BLOCKED - Impassable
+  DOWN : ( 10,  9) [.] WALKABLE
+  LEFT : (  9,  8) [.] WALKABLE
+  RIGHT: ( 11,  8) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=10, Y=8
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . . . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . P . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=10, Y=8) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 596 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : ( 10,  7) [#] BLOCKED - Impassable
+  DOWN : ( 10,  9) [.] WALKABLE
+  LEFT : (  9,  8) [.] WALKABLE
+  RIGHT: ( 11,  8) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=10, Y=8
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . . . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . P . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=10, Y=8) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 596 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : ( 10,  7) [#] BLOCKED - Impassable
+  DOWN : ( 10,  9) [.] WALKABLE
+  LEFT : (  9,  8) [.] WALKABLE
+  RIGHT: ( 11,  8) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+2025-10-24 02:29:30,623 - agent.my_cli_agent - INFO -    Screenshot: <7432 bytes>
+2025-10-24 02:29:30,623 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:30,623 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:30,623 - agent.my_cli_agent - INFO -    Prompt length: 10231 chars
+2025-10-24 02:29:30,624 - agent.my_cli_agent - INFO -    Including screenshot (7432 bytes)
+2025-10-24 02:29:30,624 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:30,624 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=10, Y=8\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . . . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . P . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at...
+2025-10-24 02:29:32,590 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.97s
+2025-10-24 02:29:32,590 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [navigate_to] Move towards the person in Professor Birch's Lab to interact.
+2025-10-24 02:29:32,590 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:32,591 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: navigate_to (1/5)
+2025-10-24 02:29:32,591 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: navigate_to
+2025-10-24 02:29:32,591 - agent.my_cli_agent - INFO -    Args: {'y': 5.0, 'reason': "Move towards the person in Professor Birch's Lab to interact.", 'x': 8.0}
+WARNING:utils.pathfinding:No map data available for pathfinding
+2025-10-24 02:29:32,689 - agent.my_cli_agent - INFO - ✅ Tool navigate_to completed
+2025-10-24 02:29:32,689 - agent.my_cli_agent - INFO -    Result: {'success': True, 'target': '(8, 5)', 'path_length': 5, 'buttons_queued': 5, 'reason': "Move towards the person in Professor Birch's Lab to interact."}
+2025-10-24 02:29:32,689 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'target': '(8, 5)', 'path_length': 5, 'buttons_queued': 5, 'reason': "Move towards the person in Professor Birch's Lab to interact."}...
+2025-10-24 02:29:32,689 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 28x27 to 0x0
+2025-10-24 02:29:36,220 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:36,221 - agent.my_cli_agent - INFO - ✅ Step completed in 5.60s
+2025-10-24 02:29:36,221 - agent.my_cli_agent - INFO - 📝 Response: Move towards the person in Professor Birch's Lab to interact.
+2025-10-24 02:29:36,221 - agent.my_cli_agent - INFO - ✅ Step 8 completed
+2025-10-24 02:29:36,223 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:36,723 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:36,723 - agent.my_cli_agent - INFO - 🤖 Step 9
+2025-10-24 02:29:36,724 - agent.my_cli_agent - INFO - 📚 History: 16 turns (2,178 chars)
+2025-10-24 02:29:36,724 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:36,724 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:36,724 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:36,860 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:36,861 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:36,861 - agent.my_cli_agent - INFO -    Screenshot: <9468 bytes>
+2025-10-24 02:29:36,861 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:36,861 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:36,861 - agent.my_cli_agent - INFO -    Prompt length: 12252 chars
+2025-10-24 02:29:36,861 - agent.my_cli_agent - INFO -    Including screenshot (9468 bytes)
+2025-10-24 02:29:36,861 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:36,861 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=8, Y=6\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . . . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . P . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:29:38,988 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 2.13s
+2025-10-24 02:29:38,988 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [navigate_to] Move towards Professor Birch to talk to him.
+2025-10-24 02:29:38,988 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:38,989 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: navigate_to (1/5)
+2025-10-24 02:29:38,989 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: navigate_to
+2025-10-24 02:29:38,989 - agent.my_cli_agent - INFO -    Args: {'y': 3.0, 'reason': 'Move towards Professor Birch to talk to him.', 'x': 8.0}
+WARNING:utils.pathfinding:No map data available for pathfinding
+2025-10-24 02:29:39,037 - agent.my_cli_agent - INFO - ✅ Tool navigate_to completed
+2025-10-24 02:29:39,037 - agent.my_cli_agent - INFO -    Result: {'success': True, 'target': '(8, 3)', 'path_length': 3, 'buttons_queued': 3, 'reason': 'Move towards Professor Birch to talk to him.'}
+2025-10-24 02:29:39,038 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'target': '(8, 3)', 'path_length': 3, 'buttons_queued': 3, 'reason': 'Move towards Professor Birch to talk to him.'}...
+2025-10-24 02:29:39,038 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:41,049 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:41,050 - agent.my_cli_agent - INFO - ✅ Step completed in 4.19s
+2025-10-24 02:29:41,050 - agent.my_cli_agent - INFO - 📝 Response: Move towards Professor Birch to talk to him.
+2025-10-24 02:29:41,050 - agent.my_cli_agent - INFO - ✅ Step 9 completed
+2025-10-24 02:29:41,052 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:41,553 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:41,553 - agent.my_cli_agent - INFO - 🤖 Step 10
+2025-10-24 02:29:41,553 - agent.my_cli_agent - INFO - 📚 History: 18 turns (2,435 chars)
+2025-10-24 02:29:41,553 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:41,553 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:41,553 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:41,652 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:41,652 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:41,652 - agent.my_cli_agent - INFO -    Screenshot: <8248 bytes>
+2025-10-24 02:29:41,652 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:41,652 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:41,652 - agent.my_cli_agent - INFO -    Prompt length: 11069 chars
+2025-10-24 02:29:41,652 - agent.my_cli_agent - INFO -    Including screenshot (8248 bytes)
+2025-10-24 02:29:41,652 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:41,652 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=8, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . . P . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:29:43,742 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 2.09s
+2025-10-24 02:29:43,742 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Attempting to talk to Professor Birch.
+2025-10-24 02:29:43,742 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:43,743 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:43,743 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:43,743 - agent.my_cli_agent - INFO -    Args: {'buttons': ['LEFT'], 'reasoning': 'Attempting to talk to Professor Birch.'}
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 28x27 to 0x0
+2025-10-24 02:29:43,865 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:43,865 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['LEFT'], 'reasoning': 'Attempting to talk to Professor Birch.'}
+2025-10-24 02:29:43,865 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['LEFT'], 'reasoning': 'Attempting to talk to Professor Birch.'}...
+2025-10-24 02:29:43,865 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:44,966 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:44,968 - agent.my_cli_agent - INFO - ✅ Step completed in 3.31s
+2025-10-24 02:29:44,968 - agent.my_cli_agent - INFO - 📝 Response: Attempting to talk to Professor Birch.
+2025-10-24 02:29:44,968 - agent.my_cli_agent - INFO - ✅ Step 10 completed
+2025-10-24 02:29:44,973 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:45,474 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:45,474 - agent.my_cli_agent - INFO - 🤖 Step 11
+2025-10-24 02:29:45,474 - agent.my_cli_agent - INFO - 📚 History: 20 turns (2,658 chars)
+2025-10-24 02:29:45,474 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:45,474 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:45,475 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:45,519 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:45,519 - agent.my_cli_agent - INFO -    Game State:
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=10, Y=8
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . . . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . P . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=10, Y=8) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 596 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : ( 10,  7) [#] BLOCKED - Impassable
+  DOWN : ( 10,  9) [.] WALKABLE
+  LEFT : (  9,  8) [.] WALKABLE
+  RIGHT: ( 11,  8) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=8, Y=6
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . . . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . P . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=8, Y=6) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 612 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  8,  5) [.] WALKABLE
+  DOWN : (  8,  7) [.] WALKABLE
+  LEFT : (  7,  6) [.] WALKABLE
+  RIGHT: (  9,  6) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=8, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . . P . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=8, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  8,  2) [.] WALKABLE
+  DOWN : (  8,  4) [.] WALKABLE
+  LEFT : (  7,  3) [.] BLOCKED - Unknown (npc) - NPC blocks movement
+  RIGHT: (  9,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+2025-10-24 02:29:45,519 - agent.my_cli_agent - INFO -    Screenshot: <8436 bytes>
+2025-10-24 02:29:45,519 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:45,519 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:45,519 - agent.my_cli_agent - INFO -    Prompt length: 11220 chars
+2025-10-24 02:29:45,519 - agent.my_cli_agent - INFO -    Including screenshot (8436 bytes)
+2025-10-24 02:29:45,520 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:45,520 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:29:47,045 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.52s
+2025-10-24 02:29:47,045 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to progress the story.
+2025-10-24 02:29:47,045 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:47,045 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:47,045 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:47,045 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:47,103 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:47,103 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:47,103 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}...
+2025-10-24 02:29:47,103 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:48,109 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:48,110 - agent.my_cli_agent - INFO - ✅ Step completed in 2.59s
+2025-10-24 02:29:48,110 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to progress the story.
+2025-10-24 02:29:48,110 - agent.my_cli_agent - INFO - ✅ Step 11 completed
+2025-10-24 02:29:48,112 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:48,612 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:48,613 - agent.my_cli_agent - INFO - 🤖 Step 12
+2025-10-24 02:29:48,613 - agent.my_cli_agent - INFO - 📚 History: 22 turns (2,903 chars)
+2025-10-24 02:29:48,613 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:48,613 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:48,613 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:48,705 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:48,705 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:48,705 - agent.my_cli_agent - INFO -    Screenshot: <8436 bytes>
+2025-10-24 02:29:48,705 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:48,705 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:48,705 - agent.my_cli_agent - INFO -    Prompt length: 11220 chars
+2025-10-24 02:29:48,705 - agent.my_cli_agent - INFO -    Including screenshot (8436 bytes)
+2025-10-24 02:29:48,706 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:48,706 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:29:50,129 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.42s
+2025-10-24 02:29:50,129 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to progress the story.
+2025-10-24 02:29:50,129 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:50,130 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:50,130 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:50,130 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:50,192 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:50,192 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:50,192 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}...
+2025-10-24 02:29:50,192 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:51,200 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:51,201 - agent.my_cli_agent - INFO - ✅ Step completed in 2.50s
+2025-10-24 02:29:51,202 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to progress the story.
+2025-10-24 02:29:51,202 - agent.my_cli_agent - INFO - ✅ Step 12 completed
+2025-10-24 02:29:51,204 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:51,704 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:51,704 - agent.my_cli_agent - INFO - 🤖 Step 13
+2025-10-24 02:29:51,704 - agent.my_cli_agent - INFO - 📚 History: 24 turns (3,148 chars)
+2025-10-24 02:29:51,704 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:51,704 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:51,704 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:51,770 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:51,770 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:51,770 - agent.my_cli_agent - INFO -    Screenshot: <8332 bytes>
+2025-10-24 02:29:51,770 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:51,770 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:51,770 - agent.my_cli_agent - INFO -    Prompt length: 11116 chars
+2025-10-24 02:29:51,770 - agent.my_cli_agent - INFO -    Including screenshot (8332 bytes)
+2025-10-24 02:29:51,771 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:51,771 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:29:53,383 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.61s
+2025-10-24 02:29:53,383 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to progress the story.
+2025-10-24 02:29:53,383 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:53,384 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:53,384 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:53,384 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:53,423 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:53,423 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:53,423 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}...
+2025-10-24 02:29:53,423 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:54,428 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:54,429 - agent.my_cli_agent - INFO - ✅ Step completed in 2.66s
+2025-10-24 02:29:54,429 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to progress the story.
+2025-10-24 02:29:54,429 - agent.my_cli_agent - INFO - ✅ Step 13 completed
+2025-10-24 02:29:54,431 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:54,931 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:54,931 - agent.my_cli_agent - INFO - 🤖 Step 14
+2025-10-24 02:29:54,931 - agent.my_cli_agent - INFO - 📚 History: 26 turns (3,393 chars)
+2025-10-24 02:29:54,931 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:54,931 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:54,931 - agent.my_cli_agent - INFO -    Args: {}
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 28x27 to 0x0
+2025-10-24 02:29:54,985 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:54,985 - agent.my_cli_agent - INFO -    Game State:
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+2025-10-24 02:29:54,985 - agent.my_cli_agent - INFO -    Screenshot: <8504 bytes>
+2025-10-24 02:29:54,986 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:54,986 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:54,986 - agent.my_cli_agent - INFO -    Prompt length: 11288 chars
+2025-10-24 02:29:54,986 - agent.my_cli_agent - INFO -    Including screenshot (8504 bytes)
+2025-10-24 02:29:54,986 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:54,986 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:29:56,604 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.62s
+2025-10-24 02:29:56,605 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to advance the story.
+2025-10-24 02:29:56,605 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:56,605 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:56,605 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:56,605 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to advance the story.'}
+2025-10-24 02:29:56,655 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:56,655 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to advance the story.'}
+2025-10-24 02:29:56,655 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to advance the story.'}...
+2025-10-24 02:29:56,655 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:29:57,662 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:29:57,663 - agent.my_cli_agent - INFO - ✅ Step completed in 2.68s
+2025-10-24 02:29:57,663 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to advance the story.
+2025-10-24 02:29:57,663 - agent.my_cli_agent - INFO - ✅ Step 14 completed
+2025-10-24 02:29:57,665 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:29:58,165 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:29:58,166 - agent.my_cli_agent - INFO - 🤖 Step 15
+2025-10-24 02:29:58,166 - agent.my_cli_agent - INFO - 📚 History: 28 turns (3,636 chars)
+2025-10-24 02:29:58,166 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:29:58,166 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:29:58,166 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:29:58,302 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:29:58,302 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:29:58,302 - agent.my_cli_agent - INFO -    Screenshot: <8016 bytes>
+2025-10-24 02:29:58,303 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:29:58,303 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:29:58,303 - agent.my_cli_agent - INFO -    Prompt length: 10800 chars
+2025-10-24 02:29:58,303 - agent.my_cli_agent - INFO -    Including screenshot (8016 bytes)
+2025-10-24 02:29:58,303 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:29:58,303 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:29:59,917 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.61s
+2025-10-24 02:29:59,917 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to progress the story.
+2025-10-24 02:29:59,918 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:29:59,918 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:29:59,918 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:29:59,918 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:59,998 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:29:59,998 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:29:59,998 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}...
+2025-10-24 02:29:59,998 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:30:01,005 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:30:01,007 - agent.my_cli_agent - INFO - ✅ Step completed in 2.70s
+2025-10-24 02:30:01,007 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to progress the story.
+2025-10-24 02:30:01,007 - agent.my_cli_agent - INFO - ✅ Step 15 completed
+2025-10-24 02:30:01,008 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:30:01,509 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:30:01,509 - agent.my_cli_agent - INFO - 🤖 Step 16
+2025-10-24 02:30:01,509 - agent.my_cli_agent - INFO - 📚 History: 30 turns (3,881 chars)
+2025-10-24 02:30:01,509 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:30:01,509 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:30:01,509 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:30:01,589 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:30:01,589 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:30:01,589 - agent.my_cli_agent - INFO -    Screenshot: <8016 bytes>
+2025-10-24 02:30:01,589 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:30:01,589 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:30:01,589 - agent.my_cli_agent - INFO -    Prompt length: 10800 chars
+2025-10-24 02:30:01,589 - agent.my_cli_agent - INFO -    Including screenshot (8016 bytes)
+2025-10-24 02:30:01,589 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:30:01,589 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:30:03,245 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.65s
+2025-10-24 02:30:03,245 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to progress the story.
+2025-10-24 02:30:03,245 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:30:03,245 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:30:03,245 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:30:03,245 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:30:03,320 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:30:03,320 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:30:03,320 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}...
+2025-10-24 02:30:03,320 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:30:04,347 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:30:04,348 - agent.my_cli_agent - INFO - ✅ Step completed in 2.76s
+2025-10-24 02:30:04,348 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to progress the story.
+2025-10-24 02:30:04,349 - agent.my_cli_agent - INFO - ✅ Step 16 completed
+2025-10-24 02:30:04,350 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:30:04,851 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:30:04,851 - agent.my_cli_agent - INFO - 🤖 Step 17
+2025-10-24 02:30:04,851 - agent.my_cli_agent - INFO - 📚 History: 32 turns (4,126 chars)
+2025-10-24 02:30:04,851 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:30:04,851 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:30:04,851 - agent.my_cli_agent - INFO -    Args: {}
+2025-10-24 02:30:04,897 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:30:04,897 - agent.my_cli_agent - INFO -    Game State:
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+2025-10-24 02:30:04,897 - agent.my_cli_agent - INFO -    Screenshot: <8016 bytes>
+2025-10-24 02:30:04,897 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:30:04,898 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:30:04,898 - agent.my_cli_agent - INFO -    Prompt length: 10800 chars
+2025-10-24 02:30:04,898 - agent.my_cli_agent - INFO -    Including screenshot (8016 bytes)
+2025-10-24 02:30:04,898 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:30:04,898 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+WARNING:pokemon_env.memory_reader:Map buffer corruption detected: dimensions changed from 28x27 to 0x0
+2025-10-24 02:30:06,315 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.42s
+2025-10-24 02:30:06,315 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Interact with Professor Birch to progress the story.
+2025-10-24 02:30:06,315 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:30:06,315 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:30:06,315 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:30:06,316 - agent.my_cli_agent - INFO -    Args: {'buttons': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:30:06,428 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:30:06,428 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}
+2025-10-24 02:30:06,428 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['A'], 'reasoning': 'Interact with Professor Birch to progress the story.'}...
+2025-10-24 02:30:06,428 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:30:06,932 - agent.my_cli_agent - INFO - ✅ All actions completed
+2025-10-24 02:30:06,934 - agent.my_cli_agent - INFO - ✅ Step completed in 2.04s
+2025-10-24 02:30:06,934 - agent.my_cli_agent - INFO - 📝 Response: Interact with Professor Birch to progress the story.
+2025-10-24 02:30:06,934 - agent.my_cli_agent - INFO - ✅ Step 17 completed
+2025-10-24 02:30:06,935 - agent.my_cli_agent - INFO - ⏸️  Waiting 0.5 seconds before next step...
+2025-10-24 02:30:07,435 - agent.my_cli_agent - INFO - 
+======================================================================
+2025-10-24 02:30:07,435 - agent.my_cli_agent - INFO - 🤖 Step 18
+2025-10-24 02:30:07,436 - agent.my_cli_agent - INFO - 📚 History: 34 turns (4,371 chars)
+2025-10-24 02:30:07,436 - agent.my_cli_agent - INFO - ======================================================================
+2025-10-24 02:30:07,436 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: get_game_state
+2025-10-24 02:30:07,436 - agent.my_cli_agent - INFO -    Args: {}
+🎮 Server processing action: UP, Queue remaining: 3 actions (~1.4s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 12
+🎮 Server processing action: UP, Queue remaining: 2 actions (~0.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 13
+🎮 Server processing action: UP, Queue remaining: 1 actions (~0.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 14
+🎮 Server processing action: UP, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 15
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 60.3 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 16
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 57.2 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 17
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 18
+📊 Server FPS: 59.8 (target: 80), Queue: 0 actions
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 19
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 56.0 (target: 80), Queue: 0 actions
+📡 Server received actions: ['LEFT', 'LEFT', 'UP', 'UP', 'UP']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['LEFT', 'LEFT', 'UP', 'UP', 'UP']
+🎮 Server processing action: LEFT, Queue remaining: 4 actions (~1.8s)
+📍 Position change detected: (9, 8), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 20
+🎮 Server processing action: LEFT, Queue remaining: 3 actions (~1.4s)
+📍 Position change detected: (8, 8), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 21
+🎮 Server processing action: UP, Queue remaining: 2 actions (~0.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 22
+🎮 Server processing action: UP, Queue remaining: 1 actions (~0.5s)
+📍 Position change detected: (8, 7), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 23
+🎮 Server processing action: UP, Queue remaining: 0 actions (~0.0s)
+📍 Position change detected: (8, 6), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 24
+📊 Server FPS: 59.4 (target: 80), Queue: 0 actions
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['UP', 'UP', 'UP']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['UP', 'UP', 'UP']
+🎮 Server processing action: UP, Queue remaining: 2 actions (~0.9s)
+📍 Position change detected: (8, 5), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 25
+🎮 Server processing action: UP, Queue remaining: 1 actions (~0.5s)
+📍 Position change detected: (8, 4), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 26
+🎮 Server processing action: UP, Queue remaining: 0 actions (~0.0s)
+📍 Position change detected: (8, 3), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 27
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 56.8 (target: 80), Queue: 0 actions
+📡 Server received actions: ['LEFT']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['LEFT']
+🎮 Server processing action: LEFT, Queue remaining: 0 actions (~0.0s)
+📍 Position change detected: (7, 3), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 28
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 54.7 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 29
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 30
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 58.2 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 31
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+📊 Server FPS: 58.5 (target: 80), Queue: 0 actions
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 32
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 33
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📊 Server FPS: 58.1 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 34
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['A']
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 35
+📊 Server FPS: 57.4 (target: 80), Queue: 0 actions
+2025-10-24 02:30:07,524 - agent.my_cli_agent - INFO - ✅ Tool get_game_state completed
+2025-10-24 02:30:07,524 - agent.my_cli_agent - INFO -    Game State:
+2025-10-24 02:30:07,524 - agent.my_cli_agent - INFO -    Screenshot: <8288 bytes>
+2025-10-24 02:30:07,525 - agent.my_cli_agent - INFO - 📤 Sending prompt to vertex...
+2025-10-24 02:30:07,525 - agent.my_cli_agent - INFO -    Model: gemini-2.5-flash
+2025-10-24 02:30:07,525 - agent.my_cli_agent - INFO -    Prompt length: 11072 chars
+2025-10-24 02:30:07,525 - agent.my_cli_agent - INFO -    Including screenshot (8288 bytes)
+2025-10-24 02:30:07,525 - utils.vlm - INFO - [CLI_Agent] VERTEX VLM IMAGE QUERY:
+2025-10-24 02:30:07,525 - utils.vlm - INFO - [CLI_Agent] PROMPT: Here is the current game state:
+
+{
+  "success": true,
+  "state_text": "=== PLAYER INFO ===\nPlayer Name: CASEY\nPosition: X=7, Y=3\nMoney: $3000\nPokemon Party (1 pokemon):\n  1. TREECKO (Lv.5) HP: 19/19 Status: OK\n\n=== LOCATION & MAP INFO ===\nCurrent Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB\n\n--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---\n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # #                    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # #    \n# # # # # # # # # # # # # # # # # # # # # # # # #\n# # # # # # # # . # . . . . . . . . # # # # # # #\n# # # # # # # # . . . . . . P . . . . # # # # # #\n# # # # # # # . . . . . . . . . # # . . # # # # #\n# # # # # # # . . . . . . . . . . . . . # # # # #\n# # # # # # # # # # # . . . . . . # # . # # # # #\n# # # # # # # # # # # . . . . . . # # # # # # # #\n            # . . . . . . . . . . . . . # # # # #\n            # . # . . . . . . . . . # # # # # # #\n            # # # . . . . . . . . . # . # # # # #\n            # # # . . . . . . . . . # # # # # # #\n            # . . . # . . D D . . . . . # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # # # # #\n            # # # # # # # # # # # # # # # . ?    \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n              # # # # # # # # # # # # # # #      \n\nPlayer at ...
+2025-10-24 02:30:09,432 - utils.llm_logger - INFO - LLM VERTEX_CLI_AGENT: 1.91s
+2025-10-24 02:30:09,432 - utils.vlm - INFO - [CLI_Agent] AGENT THINKING: [press_buttons] Move down to face Professor Birch and then press A to talk to him.
+2025-10-24 02:30:09,432 - utils.vlm - INFO - [CLI_Agent] ---
+2025-10-24 02:30:09,432 - agent.my_cli_agent - INFO - 🔧 VLM wants to call: press_buttons (1/5)
+2025-10-24 02:30:09,432 - agent.my_cli_agent - INFO - 🔧 Calling MCP tool: press_buttons
+2025-10-24 02:30:09,432 - agent.my_cli_agent - INFO -    Args: {'buttons': ['DOWN', 'A'], 'reasoning': 'Move down to face Professor Birch and then press A to talk to him.'}
+2025-10-24 02:30:09,452 - agent.my_cli_agent - INFO - ✅ Tool press_buttons completed
+2025-10-24 02:30:09,452 - agent.my_cli_agent - INFO -    Result: {'success': True, 'buttons_queued': ['DOWN', 'A'], 'reasoning': 'Move down to face Professor Birch and then press A to talk to him.'}
+2025-10-24 02:30:09,452 - agent.my_cli_agent - INFO - 📥 Function result: {'success': True, 'buttons_queued': ['DOWN', 'A'], 'reasoning': 'Move down to face Professor Birch and then press A to talk to him.'}...
+2025-10-24 02:30:09,452 - agent.my_cli_agent - INFO - ⏳ Waiting for actions to complete...
+2025-10-24 02:30:10,628 - agent.my_cli_agent - INFO - 
+
+🛑 Agent stopped by user
+Exception ignored in: <module 'threading' from '/data3/tu8435/miniconda3/envs/pokeagent/lib/python3.10/threading.py'>
+Traceback (most recent call last):
+  File "/data3/tu8435/miniconda3/envs/pokeagent/lib/python3.10/threading.py", line 1518, in _shutdown
+    def _shutdown():
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/server/app.py", line 317, in signal_handler
+    sys.exit(0)
+SystemExit: 0
+🗺️ Map formatter check: npc_tiles_overridden = 0
+📡 Server received actions: ['DOWN', 'A']
+📋 Action queue before extend: []
+📋 Action queue after extend: ['DOWN', 'A']
+🎮 Server processing action: DOWN, Queue remaining: 1 actions (~0.5s)
+📍 Position change detected: (7, 4), map: (1, 4)
+🗺️ Triggering map stitcher update for position change
+🗺️ Got 15 tiles, updating map stitcher
+✅ Map stitcher update completed
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 36
+🎮 Server processing action: A, Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 37
+
+Received signal 2, shutting down gracefully...
+Server stopped
+
+Received signal 15, shutting down gracefully...
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+======================================================================
+=== PLAYER INFO ===
+Player Name: CASEY
+Position: X=7, Y=3
+Money: $3000
+Pokemon Party (1 pokemon):
+  1. TREECKO (Lv.5) HP: 19/19 Status: OK
+
+=== LOCATION & MAP INFO ===
+Current Location: LITTLEROOT TOWN PROFESSOR BIRCHS LAB
+
+--- MAP: LITTLEROOT TOWN PROFESSOR BIRCHS LAB ---
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # #                    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # #    
+# # # # # # # # # # # # # # # # # # # # # # # # #
+# # # # # # # # . # . . . . . . . . # # # # # # #
+# # # # # # # # . . . . . . P . . . . # # # # # #
+# # # # # # # . . . . . . . . . # # . . # # # # #
+# # # # # # # . . . . . . . . . . . . . # # # # #
+# # # # # # # # # # # . . . . . . # # . # # # # #
+# # # # # # # # # # # . . . . . . # # # # # # # #
+            # . . . . . . . . . . . . . # # # # #
+            # . # . . . . . . . . . # # # # # # #
+            # # # . . . . . . . . . # . # # # # #
+            # # # . . . . . . . . . # # # # # # #
+            # . . . # . . D D . . . . . # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # # # # #
+            # # # # # # # # # # # # # # # . ?    
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+              # # # # # # # # # # # # # # #      
+
+Player at (X=7, Y=3) - marked as 'P' on map
+Map shows GAME coordinates - use these directly with navigate_to(x, y)
+Movement: UP=(x,y-1), DOWN=(x,y+1), LEFT=(x-1,y), RIGHT=(x+1,y)
+
+Legend:
+  Movement: P=Player
+  Terrain: .=Walkable path, #=Wall/Blocked, D=Door, ?=Unknown
+
+Portal Connections:
+  → Unknown
+
+Total explored: 636 tiles
+
+=== GAME STATE ===
+Game State: overworld
+
+MOVEMENT PREVIEW:
+  UP   : (  7,  2) [.] WALKABLE
+  DOWN : (  7,  4) [.] WALKABLE
+  LEFT : (  6,  3) [.] WALKABLE
+  RIGHT: (  8,  3) [.] WALKABLE
+======================================================================
+
+
+📡 Stopping server process...
+🖼️  Stopping frame server...
+👋 Goodbye!
+Traceback (most recent call last):
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/agent/my_cli_agent.py", line 1090, in run
+    success, output = self.run_step(prompt, screenshot_b64=screenshot_b64)
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/agent/my_cli_agent.py", line 673, in run_step
+    function_calls_executed = self._handle_vertex_function_calls(
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/agent/my_cli_agent.py", line 1170, in _handle_vertex_function_calls
+    self._wait_for_actions_complete()
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/agent/my_cli_agent.py", line 1005, in _wait_for_actions_complete
+    time.sleep(0.5)  # Poll every 500ms
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/run.py", line 264, in <module>
+    sys.exit(main())
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/run.py", line 227, in main
+    return agent.run()
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/agent/my_cli_agent.py", line 1113, in run
+    logger.info(self._format_history_for_display())
+  File "/data3/tu8435/thesis-remote/pokeagent-speedrun/agent/my_cli_agent.py", line 544, in _format_history_for_display
+    lines.append(f"\nStep {entry['step']}:")
+KeyError: 'step'

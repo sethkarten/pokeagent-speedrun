@@ -42,6 +42,9 @@ dependencies = [
     "pytesseract>=0.3.10",
     "torchvision>=0.23.0",
     "beautifulsoup4>=4.14.2",
+    "google>=3.0.0",
+    "pip>=25.2",
+    "mcp>=1.18.0",
 ]
 
 [project.optional-dependencies]

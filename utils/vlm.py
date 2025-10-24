@@ -505,25 +505,115 @@ class LegacyOllamaBackend(VLMBackend):
         return result
 
 class VertexBackend(VLMBackend):
-    """Google Gemini API with Vertex backend"""
+    """Google Gemini API with Vertex backend using vertexai.generative_models
     
-    def __init__(self, model_name: str, **kwargs):
+    Supports dual mode operation:
+    - Function Calling Mode: When tools are provided, returns GenerationResponse objects
+      containing structured function calls that the agent can execute
+    - Regular Text Mode: When no tools are provided, returns plain text responses
+      like the original implementation
+    
+    This allows the same backend to work with both function-calling agents and
+    traditional text-based agents.
+    """
+    
+    def __init__(self, model_name: str, tools: list = None, **kwargs):
         try:
-            from google import genai
+            import vertexai
+            from vertexai.generative_models import (
+                FunctionDeclaration,
+                GenerationConfig,
+                GenerativeModel,
+                Tool
+            )
         except ImportError:
-            raise ImportError("Package google not found. Install with: pip install google")
+            raise ImportError("Package vertexai not found. Install with: pip install google-cloud-aiplatform")
         
         self.model_name = model_name
+        self.tools = tools or []
         
-        # Initialize the model
-        self.client = genai.Client(
-            vertexai=True,
-            project='pokeagent-011',
-            location='us-central1',
-        )
-        self.genai = genai
+        # Initialize VertexAI
+        vertexai.init(project='pokeagent-011', location='us-central1')
         
-        logger.info(f"Gemini backend initialized with model: {model_name}")
+        # Setup function calling if tools are provided
+        if self.tools:
+            self._setup_function_calling()
+        
+        # Create the model WITHOUT tools (tools are passed during generate_content call)
+        self.model = GenerativeModel(model_name)
+        
+        logger.info(f"Vertex backend initialized with model: {model_name}")
+        if self.tools:
+            logger.info(f"Function calling enabled with {len(self.tools)} tools")
+    
+    def _setup_function_calling(self):
+        """Setup function calling for VertexAI using FunctionDeclaration and Tool objects"""
+        try:
+            from vertexai.generative_models import FunctionDeclaration, Tool
+            
+            # Convert tools to VertexAI FunctionDeclaration objects
+            function_declarations = []
+            for tool in self.tools:
+                # Convert parameters format from Gemini to VertexAI
+                parameters = self._convert_parameters_format(tool['parameters'])
+                
+                # Create FunctionDeclaration object
+                function_declaration = FunctionDeclaration(
+                    name=tool['name'],
+                    description=tool['description'],
+                    parameters=parameters
+                )
+                function_declarations.append(function_declaration)
+            
+            # Create Tool object with function declarations
+            self.tools_for_vertex = [Tool(function_declarations=function_declarations)]
+            
+            logger.info(f"🔧 Configured function calling with {len(function_declarations)} functions")
+            
+        except Exception as e:
+            logger.error(f"Failed to setup function calling: {e}")
+            self.tools_for_vertex = []
+    
+    def _convert_parameters_format(self, gemini_params):
+        """Convert Gemini tool parameters to VertexAI format"""
+        # Convert Gemini's type_ format to standard JSON schema
+        properties = {}
+        required = []
+        
+        for prop_name, prop_def in gemini_params.get("properties", {}).items():
+            # Convert Gemini type_ to standard type
+            prop_type = prop_def.get("type_", "STRING")
+            if prop_type == "ARRAY":
+                prop_type = "array"
+            elif prop_type == "INTEGER":
+                prop_type = "integer"
+            elif prop_type == "BOOLEAN":
+                prop_type = "boolean"
+            else:
+                prop_type = "string"
+            
+            properties[prop_name] = {
+                "type": prop_type,
+                "description": prop_def.get("description", "")
+            }
+            
+            # Handle array items
+            if prop_type == "array" and "items" in prop_def:
+                items_type = prop_def["items"].get("type_", "STRING")
+                if items_type == "STRING":
+                    items_type = "string"
+                elif items_type == "INTEGER":
+                    items_type = "integer"
+                properties[prop_name]["items"] = {"type": items_type}
+        
+        # Get required fields
+        required = gemini_params.get("required", [])
+        
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": required
+        }
     
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
         """Prepare image for Gemini API"""
@@ -535,27 +625,100 @@ class VertexBackend(VLMBackend):
         else:
             raise ValueError(f"Unsupported image type: {type(img)}")
     
+    def _extract_thinking_from_response(self, response):
+        """Extract thinking/reasoning text from response for logging
+        
+        Args:
+            response: GenerationResponse object
+            
+        Returns:
+            String containing extracted reasoning or function call info
+        """
+        thinking_text = ""
+        
+        # Try to extract reasoning from function calls
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                content = candidate.content
+                if hasattr(content, 'parts'):
+                    for part in content.parts:
+                        if hasattr(part, 'function_call') and part.function_call:
+                            function_call = part.function_call
+                            # Extract reasoning from common argument names
+                            if hasattr(function_call, 'args'):
+                                args = dict(function_call.args)
+                                reasoning = args.get('reasoning') or args.get('reason') or ''
+                                if reasoning:
+                                    thinking_text = f"[{function_call.name}] {reasoning}"
+                                else:
+                                    # Show function call with args if no reasoning
+                                    args_str = ', '.join(f'{k}={v}' for k, v in list(args.items())[:3])  # Limit to first 3 args
+                                    if len(args) > 3:
+                                        args_str += ', ...'
+                                    thinking_text = f"Calling {function_call.name}({args_str})"
+                        elif hasattr(part, 'text') and part.text:
+                            # If there's also text content, use that
+                            thinking_text = part.text
+        
+        # If no thinking text found, use a default
+        if not thinking_text:
+            thinking_text = "[Executing function call]"
+        
+        return thinking_text
+    
     @retry_with_exponential_backoff
     def _call_generate_content(self, content_parts):
-        """Calls the generate_content method with exponential backoff."""
-        response = self.client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=content_parts
-        )
+        """Calls the generate_content method using the VertexAI SDK pattern."""
+        from vertexai.generative_models import Content, Part, GenerationConfig
+        import io
+        
+        # Build Part objects following the official VertexAI pattern
+        parts = []
+        for part in content_parts:
+            if isinstance(part, str):
+                parts.append(Part.from_text(part))
+            elif hasattr(part, 'mode'):  # PIL Image
+                # Convert PIL Image to bytes for VertexAI
+                img_byte_arr = io.BytesIO()
+                part.save(img_byte_arr, format='PNG')
+                img_byte_arr.seek(0)
+                parts.append(Part.from_data(img_byte_arr.read(), mime_type="image/png"))
+            else:
+                logger.warning(f"Unknown content part type: {type(part)}")
+        
+        # Create user prompt Content object
+        user_prompt_content = Content(role="user", parts=parts)
+        
+        # Call generate_content with tools parameter
+        if hasattr(self, 'tools_for_vertex') and self.tools_for_vertex:
+            response = self.model.generate_content(
+                user_prompt_content,
+                generation_config=GenerationConfig(temperature=0),
+                tools=self.tools_for_vertex
+            )
+        else:
+            response = self.model.generate_content(user_prompt_content)
+        
         return response
     
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
-        """Process an image and text prompt using Gemini API"""
+        """Process an image and text prompt using VertexAI
+        
+        Returns:
+            - If tools are configured: Returns GenerationResponse object for function calling
+            - If no tools: Returns string text response
+        """
         try:
             start_time = time.time()
             image = self._prepare_image(img)
             
-            # Prepare content for Gemini
+            # Prepare content for VertexAI
             content_parts = [text, image]
             
             # Log the prompt
             prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
-            logger.info(f"[{module_name}] GEMINI VLM IMAGE QUERY:")
+            logger.info(f"[{module_name}] VERTEX VLM IMAGE QUERY:")
             logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
             
             # Generate response
@@ -565,29 +728,64 @@ class VertexBackend(VLMBackend):
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 12:
-                    logger.warning(f"[{module_name}] Gemini safety filter triggered (finish_reason=12). Trying text-only fallback.")
+                    logger.warning(f"[{module_name}] Vertex safety filter triggered (finish_reason=12). Trying text-only fallback.")
                     # Fallback to text-only query
                     return self.get_text_query(text, module_name)
             
-            result = response.text
-            # Log the interaction
             duration = time.time() - start_time
-            log_llm_interaction(
-                interaction_type=f"local_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={"model": self.model_name, "backend": "local", "has_image": True},
-                model_info={"model": self.model_name, "backend": "local"}
-            )
             
-            # Log the response
-            result_preview = result[:1000] + "..." if len(result) > 1000 else result
-            logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-            logger.info(f"[{module_name}] ---")
-            print(f'RESPONSE: {result}')
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage_metadata'):
+                usage = response.usage_metadata
+                token_usage = {
+                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
+                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
+                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                }
             
-            return result
+            # DUAL MODE: Function calling vs Regular text response
+            if self.tools:
+                # Function calling mode: Extract reasoning for logging, return response object
+                thinking_text = self._extract_thinking_from_response(response)
+                
+                # Log the interaction with extracted thinking
+                log_llm_interaction(
+                    interaction_type=f"vertex_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={"model": self.model_name, "backend": "vertex", "has_image": True, "token_usage": token_usage, "has_function_call": True},
+                    model_info={"model": self.model_name, "backend": "vertex"}
+                )
+                
+                # Log the response preview
+                thinking_preview = thinking_text[:200] + "..." if len(thinking_text) > 200 else thinking_text
+                logger.info(f"[{module_name}] AGENT THINKING: {thinking_preview}")
+                logger.info(f"[{module_name}] ---")
+                
+                # Return response object for function calling
+                return response
+            else:
+                # Regular text mode: Extract and return text response
+                result = response.text
+                
+                # Log the interaction
+                log_llm_interaction(
+                    interaction_type=f"vertex_{module_name}",
+                    prompt=text,
+                    response=result,
+                    duration=duration,
+                    metadata={"model": self.model_name, "backend": "vertex", "has_image": True, "token_usage": token_usage},
+                    model_info={"model": self.model_name, "backend": "vertex"}
+                )
+                
+                # Log the response
+                result_preview = result[:1000] + "..." if len(result) > 1000 else result
+                logger.info(f"[{module_name}] RESPONSE: {result_preview}")
+                logger.info(f"[{module_name}] ---")
+                
+                return result
             
         except Exception as e:
             print(f"Error in Gemini image query: {e}")
@@ -601,35 +799,49 @@ class VertexBackend(VLMBackend):
                 raise e
     
     def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
-        """Process a text-only prompt using Gemini API"""
+        """Process a text-only prompt using VertexAI
+        
+        Returns:
+            String text response (function calling not supported in text-only mode)
+        """
         try:
             start_time = time.time()
             # Log the prompt
             prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
-            logger.info(f"[{module_name}] GEMINI VLM TEXT QUERY:")
+            logger.info(f"[{module_name}] VERTEX VLM TEXT QUERY:")
             logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
             
-            # Generate response
+            # Generate response (without tools for text-only)
             response = self._call_generate_content([text])
             
             # Check for safety filter or content policy issues
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 12:
-                    logger.warning(f"[{module_name}] Gemini safety filter triggered (finish_reason=12). Returning default response.")
+                    logger.warning(f"[{module_name}] Vertex safety filter triggered (finish_reason=12). Returning default response.")
                     return "I cannot analyze this content due to safety restrictions. I'll proceed with a basic action: press 'A' to continue."
             
             result = response.text
             
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage_metadata'):
+                usage = response.usage_metadata
+                token_usage = {
+                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
+                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
+                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                }
+            
             # Log the interaction
             duration = time.time() - start_time
             log_llm_interaction(
-                interaction_type=f"local_{module_name}",
+                interaction_type=f"vertex_{module_name}",
                 prompt=text,
                 response=result,
                 duration=duration,
-                metadata={"model": self.model_name, "backend": "local", "has_image": False},
-                model_info={"model": self.model_name, "backend": "local"}
+                metadata={"model": self.model_name, "backend": "vertex", "has_image": False, "token_usage": token_usage},
+                model_info={"model": self.model_name, "backend": "vertex"}
             )
             
             # Log the response
@@ -640,8 +852,8 @@ class VertexBackend(VLMBackend):
             return result
             
         except Exception as e:
-            print(f"Error in Gemini text query: {e}")
-            logger.error(f"Error in Gemini text query: {e}")
+            print(f"Error in Vertex text query: {e}")
+            logger.error(f"Error in Vertex text query: {e}")
             # Return a safe default response
             logger.warning(f"[{module_name}] Returning default response due to error: {e}")
             return "I encountered an error processing the request. I'll proceed with a basic action: press 'A' to continue."
@@ -820,18 +1032,20 @@ class VLM:
         'vertex': VertexBackend,  # Added Vertex backend
     }
     
-    def __init__(self, model_name: str, backend: str = 'openai', port: int = 8010, **kwargs):
+    def __init__(self, model_name: str, backend: str = 'openai', port: int = 8010, tools: list = None, **kwargs):
         """
         Initialize VLM with specified backend
         
         Args:
             model_name: Name of the model to use
-            backend: Backend type ('openai', 'openrouter', 'local', 'gemini', 'ollama')
+            backend: Backend type ('openai', 'openrouter', 'local', 'gemini', 'ollama', 'vertex')
             port: Port for Ollama backend (legacy)
+            tools: List of tool declarations for function calling
             **kwargs: Additional arguments passed to backend
         """
         self.model_name = model_name
         self.backend_type = backend.lower()
+        self.tools = tools or []
         
         # Auto-detect backend based on model name if not explicitly specified
         if backend == 'auto':
@@ -847,7 +1061,11 @@ class VLM:
         if self.backend_type == 'ollama':
             self.backend = backend_class(model_name, port=port, **kwargs)
         else:
-            self.backend = backend_class(model_name, **kwargs)
+            # Pass tools to backends that support function calling
+            if self.backend_type in ['vertex', 'gemini']:
+                self.backend = backend_class(model_name, tools=self.tools, **kwargs)
+            else:
+                self.backend = backend_class(model_name, **kwargs)
         
         logger.info(f"VLM initialized with {self.backend_type} backend using model: {model_name}")
     
