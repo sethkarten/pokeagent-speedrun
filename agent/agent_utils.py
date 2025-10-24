@@ -352,20 +352,237 @@ class VisualMapGenerator:
 
 class PathfinderUtility:
     """
-    A* pathfinding utility for navigating the 15x15 map grid.
-    Helps the agent find optimal paths around obstacles and NPCs.
+    A* pathfinding for Pokémon Emerald navigation using 15x15 grid.
+    
+    The player is always at the center (7,7) of a 15x15 grid (coordinates 0-14).
+    Creates a passability grid from game state and finds shortest path to target.
     """
     
-    def __init__(self, max_path_length: int = 5):
+    def __init__(self, max_path_length: int = 7):
         """
         Initialize the pathfinder.
         
         Args:
-            max_path_length: Maximum number of moves to return (default 5)
+            max_path_length: Maximum number of moves to return
         """
         self.grid_size = 15
         self.player_center = (7, 7)  # Player is always at center of 15x15 grid
         self.max_path_length = max_path_length
+        
+    def find_path(self, game_state: Dict[str, Any], target_coords: Tuple[int, int]) -> Optional[List[str]]:
+        """
+        Find path from player center (7,7) to target using A* search.
+        
+        Args:
+            game_state: Full game state with map tiles
+            target_coords: Target position (x, y) on the 15x15 grid (0-14)
+            
+        Returns:
+            List of movement actions (UP/DOWN/LEFT/RIGHT) or None if no path found
+        """
+        try:
+            # Player is always at center (7,7) of 15x15 grid
+            start_pos = self.player_center
+            target_x, target_y = target_coords
+            
+            logger.info(f"🗺️ Pathfinder: From {start_pos} to {target_coords}")
+            
+            # Validate target coordinates (must be within 15x15 grid)
+            if not (0 <= target_x < self.grid_size and 0 <= target_y < self.grid_size):
+                logger.warning(f"Target {target_coords} out of bounds (15x15 grid)")
+                return None
+            
+            # Build passability grid from game state
+            passability_grid = self._build_passability_grid(game_state)
+            if passability_grid is None:
+                logger.warning("Failed to build passability grid")
+                return None
+            
+            # Check if target is passable
+            if passability_grid[target_y, target_x] == 1:
+                logger.warning(f"Target {target_coords} is blocked")
+                return None
+            
+            # Run A* pathfinding
+            path = self._astar(passability_grid, start_pos, target_coords)
+            
+            if path is None or len(path) <= 1:
+                logger.info(f"No path found from {start_pos} to {target_coords}")
+                return None
+            
+            # Convert path to actions
+            actions = self._path_to_actions(path)
+            
+            # Limit path length
+            if len(actions) > self.max_path_length:
+                logger.info(f"Path length {len(actions)} exceeds max {self.max_path_length}, truncating")
+                actions = actions[:self.max_path_length]
+            
+            logger.info(f"Found path: {actions}")
+            return actions
+            
+        except Exception as e:
+            logger.error(f"Error in pathfinding: {e}")
+            return None
+    
+    
+    def _build_passability_grid(self, game_state: Dict[str, Any]) -> Optional[np.ndarray]:
+        """
+        Build a 15x15 passability grid from game state.
+        
+        Args:
+            game_state: Full game state with map tiles
+            
+        Returns:
+            2D numpy array where 0=passable, 1=blocked, or None if failed
+        """
+        try:
+            map_info = game_state.get('map', {})
+            tiles = map_info.get('tiles', [])
+            
+            if not tiles:
+                logger.warning("No tiles found in game state")
+                return None
+            
+            # Create 15x15 passability grid
+            grid = np.zeros((self.grid_size, self.grid_size), dtype=int)
+            
+            # Process each tile in the 15x15 grid
+            for y in range(self.grid_size):
+                for x in range(self.grid_size):
+                    # Get tile data if available
+                    if y < len(tiles) and x < len(tiles[y]) and tiles[y][x]:
+                        tile = tiles[y][x]
+                        if len(tile) >= 2:
+                            behavior = tile[1]
+                            if self._is_blocked(behavior):
+                                grid[y, x] = 1  # Blocked
+                            else:
+                                grid[y, x] = 0  # Passable
+                        else:
+                            grid[y, x] = 1  # Mark unknown tiles as blocked
+                    else:
+                        grid[y, x] = 1  # Mark missing tiles as blocked
+            
+            logger.info(f"Built 15x15 passability grid")
+            return grid
+            
+        except Exception as e:
+            logger.error(f"Error building passability grid: {e}")
+            return None
+    
+    def _is_blocked(self, behavior: int) -> bool:
+        """
+        Determine if a tile behavior represents a blocked tile.
+        
+        Args:
+            behavior: Tile behavior value
+            
+        Returns:
+            True if blocked, False if passable
+        """
+        # Blocked behaviors (walls, obstacles, etc.)
+        blocked_behaviors = {
+            999,  # NPC/Player marker
+            1, 4, 6, 8, 9, 10, 14, 15, 16, 19, 20, 21, 22, 23, 24, 25, 26, 27, 29, 30, 31, 32, 33, 35, 47, 48, 49, 50, 51, 53, 54, 55, 56, 57, 58, 59, 61, 62, 63, 64, 65, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100
+        }
+        
+        return behavior in blocked_behaviors
+    
+    def _astar(self, grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
+        """
+        A* pathfinding algorithm.
+        
+        Args:
+            grid: Passability grid (0=passable, 1=blocked)
+            start: Starting position (x, y)
+            goal: Goal position (x, y)
+            
+        Returns:
+            List of coordinates representing the path, or None if no path found
+        """
+        try:
+            # Priority queue: (f_cost, g_cost, position, path)
+            open_set = [(0, 0, start, [start])]
+            closed_set = set()
+            
+            # Movement directions: UP, DOWN, LEFT, RIGHT
+            directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            
+            while open_set:
+                f_cost, g_cost, current, path = heapq.heappop(open_set)
+                
+                if current in closed_set:
+                    continue
+                
+                closed_set.add(current)
+                
+                # Check if we reached the goal
+                if current == goal:
+                    return path
+                
+                # Explore neighbors
+                for dx, dy in directions:
+                    next_x, next_y = current[0] + dx, current[1] + dy
+                    next_pos = (next_x, next_y)
+                    
+                    # Check bounds
+                    if (next_x < 0 or next_x >= grid.shape[1] or 
+                        next_y < 0 or next_y >= grid.shape[0]):
+                        continue
+                    
+                    # Check if already visited
+                    if next_pos in closed_set:
+                        continue
+                    
+                    # Check if passable
+                    if grid[next_y, next_x] == 1:
+                        continue
+                    
+                    # Calculate costs
+                    new_g_cost = g_cost + 1
+                    h_cost = abs(next_x - goal[0]) + abs(next_y - goal[1])  # Manhattan distance
+                    f_cost = new_g_cost + h_cost
+                    
+                    # Add to open set
+                    new_path = path + [next_pos]
+                    heapq.heappush(open_set, (f_cost, new_g_cost, next_pos, new_path))
+            
+            return None  # No path found
+            
+        except Exception as e:
+            logger.error(f"Error in A* algorithm: {e}")
+            return None
+    
+    def _path_to_actions(self, path: List[Tuple[int, int]]) -> List[str]:
+        """
+        Convert coordinate path to movement actions.
+        
+        Args:
+            path: List of (x, y) coordinates
+            
+        Returns:
+            List of movement actions (UP/DOWN/LEFT/RIGHT)
+        """
+        actions = []
+        
+        for i in range(1, len(path)):
+            prev_x, prev_y = path[i-1]
+            curr_x, curr_y = path[i]
+            
+            dx = curr_x - prev_x
+            dy = curr_y - prev_y
+            
+            if dx == 1:
+                actions.append("RIGHT")
+            elif dx == -1:
+                actions.append("LEFT")
+            elif dy == 1:
+                actions.append("DOWN")
+            elif dy == -1:
+                actions.append("UP")
+        
+        return actions
         
     def find_path(self, game_state: Dict[str, Any], target_grid_coords: Tuple[int, int]) -> Optional[List[str]]:
         """
@@ -388,10 +605,12 @@ class PathfinderUtility:
                 return None
             
             # Build passability grid from game state
-            passability_grid = self._build_passability_grid(game_state)
-            if passability_grid is None:
+            grid_result = self._build_passability_grid(game_state)
+            if grid_result is None:
                 logger.warning("Failed to build passability grid")
                 return None
+            
+            passability_grid, behavior_grid = grid_result
             
             # Check if target is passable
             if passability_grid[target_y, target_x] == 1:
@@ -417,7 +636,7 @@ class PathfinderUtility:
                 return None
             
             # Run A* from player position to target
-            path = self._astar(passability_grid, self.player_center, target_grid_coords)
+            path = self._astar(passability_grid, behavior_grid, self.player_center, target_grid_coords)
             
             if path is None or len(path) <= 1:
                 logger.info(f"No path found from {self.player_center} to {target_grid_coords}")
@@ -438,15 +657,18 @@ class PathfinderUtility:
             logger.error(f"Error in pathfinding: {e}")
             return None
     
-    def _build_passability_grid(self, game_state: Dict[str, Any]) -> Optional[np.ndarray]:
+    def _build_passability_grid(self, game_state: Dict[str, Any]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """
-        Convert map tiles + NPCs into binary passability grid.
+        Convert map tiles + NPCs into binary passability grid and behavior grid.
         
         Args:
             game_state: Full game state
             
         Returns:
-            numpy array where 0=passable, 1=blocked, or None if failed
+            Tuple of (passability_grid, behavior_grid) where:
+            - passability_grid: 0=passable, 1=blocked
+            - behavior_grid: tile behavior values for directional checking
+            Returns None if failed
         """
         try:
             # Get map tiles from game state
@@ -457,25 +679,33 @@ class PathfinderUtility:
                 logger.warning("No tiles in map info")
                 return None
             
-            # Initialize passability grid (0 = passable, 1 = blocked)
+            # The raw_tiles should already be a 15x15 view centered around the player
+            # This is extracted by read_map_around_player(radius=7) in the memory reader
+            if len(raw_tiles) != self.grid_size or (raw_tiles and len(raw_tiles[0]) != self.grid_size):
+                logger.warning(f"Map size mismatch: got {len(raw_tiles)}x{len(raw_tiles[0]) if raw_tiles else 0}, expected {self.grid_size}x{self.grid_size}")
+                logger.warning("This suggests the map data is not properly extracted as a 15x15 view")
+                return None
+            
+            # Initialize passability grid (0 = passable, 1 = blocked) and behavior grid
             grid = np.zeros((self.grid_size, self.grid_size), dtype=int)
+            behavior_grid = np.zeros((self.grid_size, self.grid_size), dtype=int)
             
             # Debug: Track tile behaviors
             blocked_behaviors = []
             walkable_behaviors = []
             
-            # Process tiles
-            for y in range(len(raw_tiles)):
-                for x in range(len(raw_tiles[y])):
-                    if y >= self.grid_size or x >= self.grid_size:
-                        continue
+            # Process tiles - should be exactly 15x15
+            for y in range(self.grid_size):
+                for x in range(self.grid_size):
                     
                     tile = raw_tiles[y][x]
                     if not tile or len(tile) < 2:
                         grid[y, x] = 1  # Mark unknown tiles as blocked
+                        behavior_grid[y, x] = -1  # Unknown behavior
                         continue
                     
                     behavior = tile[1]
+                    behavior_grid[y, x] = behavior  # Store behavior for directional checking
                     
                     # Mark tile as blocked based on behavior
                     # Using same logic as format_tile_to_symbol from map_formatter
@@ -486,6 +716,7 @@ class PathfinderUtility:
                     elif behavior in [0, 2, 3, 5, 7, 11, 12, 13, 17, 18, 28, 34, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 52, 60, 66, 67, 68]:
                         # Walkable behaviors (including grass types that trigger encounters)
                         # 2=TALL_GRASS, 3=LONG_GRASS, 7=SHORT_GRASS - these are passable but trigger encounters
+                        # Note: Directional behaviors (56-71) are included but need special handling in neighbor checking
                         grid[y, x] = 0
                         walkable_behaviors.append(behavior)
                     else:
@@ -529,18 +760,19 @@ class PathfinderUtility:
                             grid[rel_y, rel_x] = 1
                             logger.info(f"🗺️ Pathfinder: Marked grid ({rel_x}, {rel_y}) as blocked by NPC")
             
-            return grid
+            return grid, behavior_grid
             
         except Exception as e:
             logger.error(f"Error building passability grid: {e}")
             return None
     
-    def _astar(self, grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
+    def _astar(self, grid: np.ndarray, behavior_grid: np.ndarray, start: Tuple[int, int], goal: Tuple[int, int]) -> Optional[List[Tuple[int, int]]]:
         """
-        A* pathfinding algorithm implementation.
+        A* pathfinding algorithm implementation with directional tile support.
         
         Args:
             grid: Binary passability grid (0=passable, 1=blocked)
+            behavior_grid: Tile behavior values for directional checking
             start: Start coordinates (x, y)
             goal: Goal coordinates (x, y)
             
@@ -552,19 +784,31 @@ class PathfinderUtility:
             return abs(a[0] - b[0]) + abs(a[1] - b[1])
         
         def get_neighbors(pos: Tuple[int, int]) -> List[Tuple[int, int]]:
-            """Get valid neighboring positions"""
+            """Get valid neighboring positions with directional tile support"""
             x, y = pos
             neighbors = []
             
-            # Four cardinal directions
-            for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:  # UP, DOWN, LEFT, RIGHT
+            # Get current tile behavior
+            current_behavior = behavior_grid[y, x] if 0 <= y < behavior_grid.shape[0] and 0 <= x < behavior_grid.shape[1] else -1
+            
+            # Four cardinal directions with their corresponding behavior checks
+            directions = [
+                (0, -1, 'UP'),    # UP
+                (0, 1, 'DOWN'),   # DOWN  
+                (-1, 0, 'LEFT'),  # LEFT
+                (1, 0, 'RIGHT')   # RIGHT
+            ]
+            
+            for dx, dy, direction in directions:
                 nx, ny = x + dx, y + dy
                 
                 # Check bounds
                 if 0 <= nx < grid.shape[1] and 0 <= ny < grid.shape[0]:
-                    # Check if passable
+                    # Check if destination is passable
                     if grid[ny, nx] == 0:
-                        neighbors.append((nx, ny))
+                        # Check if movement is valid based on current tile's behavior
+                        if self._is_directional_move_valid(current_behavior, direction):
+                            neighbors.append((nx, ny))
             
             return neighbors
         
@@ -654,3 +898,78 @@ class PathfinderUtility:
                 actions.append('RIGHT')
         
         return actions
+    
+    def _is_directional_move_valid(self, behavior: int, direction: str) -> bool:
+        """
+        Check if movement in a specific direction is valid from a tile with given behavior.
+        
+        Args:
+            behavior: Tile behavior value
+            direction: Movement direction ('UP', 'DOWN', 'LEFT', 'RIGHT')
+            
+        Returns:
+            True if movement is valid, False otherwise
+        """
+        # Handle unknown or invalid behaviors
+        if behavior < 0:
+            return True  # Allow movement from unknown tiles (fallback)
+        
+        # Normal walkable tiles allow movement in all directions
+        if behavior in [0, 2, 3, 5, 7, 11, 12, 13, 17, 18, 28, 34, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 52]:
+            return True
+        
+        # Directional jump behaviors (56-63)
+        if behavior == 56 and direction == 'RIGHT':  # JUMP_EAST
+            return True
+        elif behavior == 57 and direction == 'LEFT':  # JUMP_WEST
+            return True
+        elif behavior == 58 and direction == 'UP':  # JUMP_NORTH
+            return True
+        elif behavior == 59 and direction == 'DOWN':  # JUMP_SOUTH
+            return True
+        elif behavior == 60 and direction == 'RIGHT':  # JUMP_NORTHEAST (can only go RIGHT)
+            return True
+        elif behavior == 61 and direction == 'LEFT':  # JUMP_NORTHWEST (can only go LEFT)
+            return True
+        elif behavior == 62 and direction == 'RIGHT':  # JUMP_SOUTHEAST (can only go RIGHT)
+            return True
+        elif behavior == 63 and direction == 'LEFT':  # JUMP_SOUTHWEST (can only go LEFT)
+            return True
+        
+        # Directional walk behaviors (64-67)
+        elif behavior == 64 and direction == 'RIGHT':  # WALK_EAST
+            return True
+        elif behavior == 65 and direction == 'LEFT':  # WALK_WEST
+            return True
+        elif behavior == 66 and direction == 'UP':  # WALK_NORTH
+            return True
+        elif behavior == 67 and direction == 'DOWN':  # WALK_SOUTH
+            return True
+        
+        # Directional slide behaviors (68-71)
+        elif behavior == 68 and direction == 'RIGHT':  # SLIDE_EAST
+            return True
+        elif behavior == 69 and direction == 'LEFT':  # SLIDE_WEST
+            return True
+        elif behavior == 70 and direction == 'UP':  # SLIDE_NORTH
+            return True
+        elif behavior == 71 and direction == 'DOWN':  # SLIDE_SOUTH
+            return True
+        
+        # For all other behaviors, check if they're in the walkable list
+        # This includes the diagonal jump behaviors that we included in walkable list
+        elif behavior in [60, 61, 62, 63]:  # Diagonal jump behaviors
+            # For these, we need to be more specific about diagonal movement
+            if behavior == 60:  # JUMP_NORTHEAST - can go UP or RIGHT
+                return direction in ['UP', 'RIGHT']
+            elif behavior == 61:  # JUMP_NORTHWEST - can go UP or LEFT  
+                return direction in ['UP', 'LEFT']
+            elif behavior == 62:  # JUMP_SOUTHEAST - can go DOWN or RIGHT
+                return direction in ['DOWN', 'RIGHT']
+            elif behavior == 63:  # JUMP_SOUTHWEST - can go DOWN or LEFT
+                return direction in ['DOWN', 'LEFT']
+            else:
+                return True  # Other behaviors in the walkable list
+        
+        # All other behaviors are blocked
+        return False
