@@ -51,6 +51,7 @@ class MCPToolAdapter:
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
+                "complete_direct_objective": "/mcp/complete_direct_objective",
 
                 # Baseline MCP tools (file/shell/web)
                 "read_file": "/mcp/read_file",
@@ -234,6 +235,17 @@ class MyCLIAgent:
                         "reason": {"type_": "STRING", "description": "Why you are navigating here"}
                     },
                     "required": ["x", "y", "reason"]
+                }
+            },
+            {
+                "name": "complete_direct_objective",
+                "description": "Complete the current direct objective and advance to the next one. Use this when you have successfully completed the current objective's task.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "reasoning": {"type_": "STRING", "description": "Brief explanation of why the current direct objective is complete"}
+                    },
+                    "required": ["reasoning"]
                 }
             },
 
@@ -715,15 +727,35 @@ class MyCLIAgent:
                     logger.info(f"✅ Step completed in {duration:.2f}s")
                     logger.info(f"📝 Response: {display_text}")
                     
-                    # Store in conversation history
+                    # Store in conversation history with action tracking
                     self.conversation_history.append({
+                        "step": self.step_count,
                         "role": "user",
-                        "content": prompt
+                        "content": prompt,
+                        "timestamp": time.time()
                     })
+                    
+                    # Extract action details for better tracking
+                    action_taken = last_tool_call['name']
+                    action_details = ""
+                    if last_tool_call['name'] == "press_buttons" and "buttons" in last_tool_call["args"]:
+                        action_details = f"Pressed {last_tool_call['args']['buttons']}"
+                    elif last_tool_call['name'] == "navigate_to" and "x" in last_tool_call["args"] and "y" in last_tool_call["args"]:
+                        action_details = f"Navigated to ({last_tool_call['args']['x']}, {last_tool_call['args']['y']})"
+                    elif last_tool_call['name'] == "complete_direct_objective":
+                        action_details = "Completed direct objective"
+                    else:
+                        action_details = f"Executed {last_tool_call['name']}"
+                    
                     self.conversation_history.append({
+                        "step": self.step_count,
                         "role": "assistant", 
                         "content": full_response,
-                        "tool_calls": tool_calls_made
+                        "tool_calls": tool_calls_made,
+                        "action": action_taken,
+                        "action_details": action_details,
+                        "reasoning": tool_reasoning,
+                        "timestamp": time.time()
                     })
                     
                     # Compact history if needed
@@ -754,12 +786,16 @@ class MyCLIAgent:
                     
                     # Store in conversation history
                     self.conversation_history.append({
+                        "step": self.step_count,
                         "role": "user",
-                        "content": prompt
+                        "content": prompt,
+                        "timestamp": time.time()
                     })
                     self.conversation_history.append({
+                        "step": self.step_count,
                         "role": "assistant",
-                        "content": text_content
+                        "content": text_content,
+                        "timestamp": time.time()
                     })
                     
                     # Compact history if needed
@@ -1027,6 +1063,148 @@ class MyCLIAgent:
         except Exception as e:
             logger.debug(f"Could not log to LLM logger: {e}")
 
+    def _build_structured_prompt(self, game_state_result: str, step_count: int) -> str:
+        """Build a function-call focused prompt that clearly explains available tools."""
+        
+        # Parse game state to extract relevant information
+        import json as json_module
+        try:
+            game_state_data = json_module.loads(game_state_result)
+        except:
+            game_state_data = {}
+        
+        # Extract key information from game state
+        state_text = game_state_data.get("state_text", "")
+        direct_objective = game_state_data.get("direct_objective", "")
+        direct_objective_status = game_state_data.get("direct_objective_status", "")
+        direct_objective_context = game_state_data.get("direct_objective_context", "")
+        
+        # Build recent actions summary
+        recent_actions = self._format_recent_actions()
+        
+        # Build action history summary for better context
+        action_history = self._format_action_history()
+        
+        # Build function-call focused prompt
+        prompt = f"""You are an expert navigator and battle strategist playing Pokémon Emerald on a Game Boy Advance emulator.
+
+Some pointers to keep in mind (guard rails) as you problem solve:
+1) You must think step-by-step when solving problems and making decisions. 
+2) Always provide detailed, context-aware responses that bias for ground-truth.
+3) Consider the current situation in the game as well as what you've learned over time.
+4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
+5) **CRITICAL**: Always check the game screen for dialogue boxes first - if you see dialogue, advance it with press_buttons(["A"]) before doing anything else.
+Especially If a current approach is leading to consistent failure without providing knowledge on how to improve.
+
+RECENT ACTIONS:
+{recent_actions}
+
+ACTION HISTORY (last 10 steps):
+{action_history}
+
+CURRENT GAME STATE:
+{state_text}
+
+{direct_objective}
+
+{direct_objective_status}
+
+{direct_objective_context}
+
+**DIALOGUE CHECK**: Look at the game screen carefully - if you see a dialogue box with text, you MUST use press_buttons(["A"], reasoning) to advance it before doing anything else!
+
+AVAILABLE TOOLS - Use these function calls to interact with the game:
+
+🎮 **PRIMARY GAME TOOLS** (use these most often):
+- get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
+- press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
+- navigate_to(x, y, reason) - Automatically navigate to coordinates using A* pathfinding
+- complete_direct_objective(reasoning) - Mark current direct objective as complete
+
+📚 **INFORMATION TOOLS** (use when you need info):
+- lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis
+- get_walkthrough(part) - Get official Emerald walkthrough (parts 1-21)
+- search_knowledge(query, category) - Search your stored knowledge
+- add_knowledge(category, title, content, importance) - Store important discoveries
+
+💾 **KNOWLEDGE TOOLS** (use to remember things):
+- get_knowledge_summary(min_importance) - Get summary of important discoveries
+- save_memory(fact) - Save facts to remember across sessions
+
+STRATEGY - PRIORITY ORDER:
+1. **DIALOGUE FIRST**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
+2. **CHECK OBJECTIVE COMPLETION**: After each action, check if your current direct objective is complete and use complete_direct_objective() if so
+3. **BATTLES**: Use press_buttons with battle moves. When HP < 75%, use healing moves like Absorb
+4. **MOVEMENT**: Use navigate_to(x, y, reason) for efficient travel via A* pathfinding
+5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
+6. **OBJECTIVES**: Use complete_direct_objective when you've finished a guided objective and receive the next objective
+
+IMPORTANT: Always check the game screen for dialogue boxes before planning movement!
+**CRITICAL**: After performing any action, proactively check if your current direct objective is complete!
+
+Think step-by-step, then call the appropriate function to execute your action.
+
+Step {step_count}"""
+        
+        return prompt
+
+
+    def _format_action_history(self) -> str:
+        """Format action history for better context awareness"""
+        if not self.conversation_history:
+            return "No previous actions recorded."
+        
+        # Get last 10 conversation entries
+        recent_entries = self.conversation_history[-10:]
+        
+        history_lines = []
+        for i, entry in enumerate(recent_entries, 1):
+            step = entry.get("step", "?")
+            timestamp = entry.get("timestamp", "")
+            action = entry.get("action", "Unknown")
+            action_details = entry.get("action_details", "")
+            reasoning = entry.get("reasoning", "")
+            
+            # Format timestamp nicely
+            if timestamp:
+                try:
+                    from datetime import datetime
+                    if isinstance(timestamp, (int, float)):
+                        dt = datetime.fromtimestamp(timestamp)
+                    else:
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    time_str = dt.strftime("%H:%M:%S")
+                except:
+                    time_str = str(timestamp)[:8] if len(str(timestamp)) > 8 else str(timestamp)
+            else:
+                time_str = "??:??:??"
+            
+            # Format action and reasoning
+            action_display = action_details if action_details else action
+            action_str = f"Step {step} ({time_str}): {action_display}"
+            if reasoning and reasoning != "No reasoning provided":
+                action_str += f" | Reasoning: {reasoning[:100]}{'...' if len(reasoning) > 100 else ''}"
+            
+            history_lines.append(action_str)
+        
+        return "\n".join(history_lines)
+
+    def _format_recent_actions(self) -> str:
+        """Format recent actions for display in structured prompt."""
+        if not self.conversation_history:
+            return "No recent actions."
+        
+        actions = []
+        for entry in self.conversation_history[-10:]:  # Look at more entries to find 5 actions
+            if entry.get("role") == "assistant" and entry.get("action"):
+                action_details = entry.get("action_details", "")
+                action_display = action_details if action_details else entry.get("action", "")
+                actions.append(action_display)
+                if len(actions) >= 5:
+                    break
+        
+        return ", ".join(actions) if actions else "No recent actions."
+
     def run(self) -> int:
         """Run the agent loop."""
         logger.info("=" * 70)
@@ -1080,11 +1258,8 @@ class MyCLIAgent:
                 except:
                     screenshot_b64 = None
 
-                # Build prompt for this step with game state included
-                if self.step_count == 0:
-                    prompt = f"Here is the current game state:\n\n{game_state_result}\n\nBased on this state, decide on and execute the next action to progress through the game."
-                else:
-                    prompt = f"Here is the current game state:\n\n{game_state_result}\n\nBased on this state and the previous actions, decide on and execute the next action to progress through the game."
+                # Build structured prompt for this step
+                prompt = self._build_structured_prompt(game_state_result, self.step_count)
 
                 # Run step with optional screenshot
                 success, output = self.run_step(prompt, screenshot_b64=screenshot_b64)
@@ -1105,8 +1280,8 @@ class MyCLIAgent:
                     logger.debug(f"Failed to update server metrics: {e}")
 
                 # Brief pause between steps
-                logger.info("⏸️  Waiting 0.5 seconds before next step...")
-                time.sleep(0.5)
+                logger.info("⏸️  Waiting 3 seconds before next step...")
+                time.sleep(3)
 
         except KeyboardInterrupt:
             logger.info("\n\n🛑 Agent stopped by user")

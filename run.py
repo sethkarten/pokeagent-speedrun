@@ -46,6 +46,9 @@ def start_server(args):
     if args.no_ocr:
         server_cmd.append("--no-ocr")
     
+    if args.direct_objectives:
+        server_cmd.extend(["--direct-objectives", args.direct_objectives])
+    
     # Server always runs headless - display handled by client
     
     # Start server as subprocess
@@ -123,6 +126,8 @@ def main():
                        help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", 
                        help="Disable OCR dialogue detection")
+    parser.add_argument("--direct-objectives", type=str, 
+                       help="Load a specific direct objective sequence (e.g., 'tutorial_to_starter')")
     
     args = parser.parse_args()
     

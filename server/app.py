@@ -67,6 +67,8 @@ step_counter = 0  # Track steps for submission logging
 last_action_time = None  # Track time of last action for decision time calculation
 running = True
 step_count = 0
+direct_objectives_sequence = None
+direct_objectives_manager = None
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
 fps = 80
@@ -1728,9 +1730,41 @@ async def mcp_get_game_state():
     try:
         from utils.state_formatter import format_state_for_llm
         from server.cli import pokemon_mcp_server
+        from agent.direct_objectives import DirectObjectiveManager
 
         # Use helper function from pokemon_mcp_server
-        return pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        
+        # Add direct objectives information
+        if result.get("success", False):
+            global direct_objectives_manager
+            
+            # Initialize direct objective manager if needed
+            if direct_objectives_manager is None:
+                direct_objectives_manager = DirectObjectiveManager()
+            
+            # Load direct objectives sequence if specified
+            if direct_objectives_sequence:
+                if not direct_objectives_manager.is_sequence_active():
+                    if direct_objectives_sequence == "tutorial_to_starter":
+                        direct_objectives_manager.load_tutorial_to_starter_sequence()
+                    else:
+                        logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+            
+            # Get current objective guidance
+            if direct_objectives_manager.is_sequence_active():
+                game_state = result.get("raw_state", {})
+                current_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+                if current_guidance:
+                    result["direct_objective"] = current_guidance
+                    result["direct_objective_status"] = direct_objectives_manager.get_sequence_status()
+                
+                # Add objective context (previous, current, next)
+                objective_context = direct_objectives_manager.get_objective_context(game_state)
+                if objective_context:
+                    result["direct_objective_context"] = objective_context
+        
+        return result
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
         return {"success": False, "error": str(e)}
@@ -1782,6 +1816,83 @@ async def mcp_press_buttons(request: dict):
         }
     except Exception as e:
         logger.error(f"Error pressing buttons: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/complete_direct_objective")
+async def mcp_complete_direct_objective(request: dict):
+    """MCP Tool: Complete current direct objective"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        from agent.direct_objectives import DirectObjectiveManager
+        
+        # Get current game state to check objective completion
+        from utils.state_formatter import format_state_for_llm
+        from server.cli import pokemon_mcp_server
+        
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        if not game_state_result.get("success", False):
+            return {"success": False, "error": "Failed to get game state"}
+        
+        game_state = game_state_result.get("raw_state", {})
+        
+        # Use global direct objective manager
+        global direct_objectives_manager
+        
+        # Initialize direct objective manager if needed
+        if direct_objectives_manager is None:
+            direct_objectives_manager = DirectObjectiveManager()
+        
+        # Load direct objectives sequence if specified
+        if direct_objectives_sequence:
+            if not direct_objectives_manager.is_sequence_active():
+                if direct_objectives_sequence == "tutorial_to_starter":
+                    direct_objectives_manager.load_tutorial_to_starter_sequence()
+                else:
+                    logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+        
+        # Check if sequence is active
+        if not direct_objectives_manager.is_sequence_active():
+            return {"success": False, "error": "No direct objective sequence active"}
+        
+        # Get current objective
+        current_obj = direct_objectives_manager.get_current_objective()
+        if not current_obj:
+            return {"success": False, "error": "No current objective to complete"}
+        
+        # Mark objective as completed
+        direct_objectives_manager._mark_objective_completed(current_obj)
+        direct_objectives_manager.current_index += 1
+        
+        # Get next objective if available
+        next_obj = direct_objectives_manager.get_current_objective()
+        if next_obj:
+            next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+            return {
+                "success": True,
+                "completed_objective": {
+                    "id": current_obj.id,
+                    "description": current_obj.description
+                },
+                "next_objective": next_guidance,
+                "sequence_status": direct_objectives_manager.get_sequence_status()
+            }
+        else:
+            return {
+                "success": True,
+                "completed_objective": {
+                    "id": current_obj.id,
+                    "description": current_obj.description
+                },
+                "next_objective": None,
+                "sequence_status": direct_objectives_manager.get_sequence_status(),
+                "message": "All objectives completed!"
+            }
+            
+    except Exception as e:
+        logger.error(f"Error completing direct objective: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -2422,9 +2533,16 @@ def main():
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
+    parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence (e.g., 'tutorial_to_starter')")
     # Server always runs headless - display handled by client
     
     args = parser.parse_args()
+    
+    # Set global direct objectives sequence
+    global direct_objectives_sequence
+    if args.direct_objectives:
+        direct_objectives_sequence = args.direct_objectives
+        print(f"🎯 Direct objectives sequence: {direct_objectives_sequence}")
     
     # Check for environment variables from multiprocess mode
     env_load_state = os.environ.get("LOAD_STATE")
