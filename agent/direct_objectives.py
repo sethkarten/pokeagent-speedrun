@@ -237,7 +237,7 @@ class DirectObjectiveManager:
                 description="Once in your rival's room, interact with the pokeball next to her bed. This will trigger a conversation with her, after which she will walk over to her computer. ",
                 action_type="interact",
                 target_location="Rival's Bedroom",
-                navigation_hint="Approach and interact with the pokeball to the south-east of the entrance (next to the bed), once the",
+                navigation_hint="Approach and interact with the pokeball (pressing A once facing the pokeball) to the south-east of the entrance (next to the bed), once the conversation is over, your rival will walk over to her computer.",
                 completion_condition="rival_conversation_complete",
                 priority=1
             ),
@@ -246,7 +246,7 @@ class DirectObjectiveManager:
                 description="Exit the rival's house by walking through the stairs (S) you entered your rival's room through and through the door (D) you entered her house through",
                 action_type="navigate",
                 target_location="Littleroot Town",
-                navigation_hint="The stairs should be a few tiles left and several tiles north. Once you get down the stairs, walk south through the entrance door (D) to exit the house.",
+                navigation_hint="The stairs should be next to the top-left corner of the rival's bedroom. Once you get down the stairs, walk south through the entrance door (D) and through the warp to exit the house.",
                 completion_condition="exited_rival_house",
                 priority=1
             ),
@@ -255,7 +255,7 @@ class DirectObjectiveManager:
                 description="Move north from Littleroot Town to Route 101",
                 action_type="navigate",
                 target_location="Route 101",
-                navigation_hint="Move north from Littleroot Town to reach Route 101. The route is straight north in between your house and the rival's house.",
+                navigation_hint="Move north from Littleroot Town to reach Route 101. The route is straight north in between your house and the rival's house, so you will have to navigate left once you've left the rival's house and then north past both you and your riva's house..",
                 completion_condition="location_contains_route_101",
                 priority=1
             ),
