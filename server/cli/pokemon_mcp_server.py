@@ -341,18 +341,22 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
         return {"success": False, "error": f"Failed to get state for pathfinding: {e}"}
 
     try:
-        # Calculate path
-        path = pathfinder.find_path(state, x, y)
+        # Get player position from state
+        player_pos = state.get('player', {}).get('position', {})
+        start_x = player_pos.get('x', 0)
+        start_y = player_pos.get('y', 0)
+        start = (start_x, start_y)
+        goal = (x, y)
+        
+        # Calculate path using Pathfinder
+        buttons = pathfinder.find_path(start, goal, state)
 
-        if not path:
+        if not buttons:
             return {
                 "success": False,
                 "error": "No path found to target location",
                 "target": f"({x}, {y})"
             }
-
-        # Convert path to button presses
-        buttons = pathfinder.path_to_buttons(path)
 
         # Execute navigation
         nav_reason = f"Navigating to ({x}, {y})"
@@ -364,7 +368,7 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
         return {
             "success": True,
             "target": f"({x}, {y})",
-            "path_length": len(path),
+            "path_length": len(buttons),
             "buttons_executed": len(buttons),
             "reason": reason,
             "navigation_result": result

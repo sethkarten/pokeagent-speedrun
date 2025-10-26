@@ -182,45 +182,37 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_littleroot",
                 priority=1
             ),
+
             DirectObjective(
-                id="tutorial_02_enter_player_house",
-                description="Enter the player's house in Littleroot Town by pressing A to advance through the dialogue with you mother",
-                action_type="interact",
-                target_location="Player's House",
-                navigation_hint="Move to the house with the red roof and enter through the door",
-                completion_condition="player_house_entered",
-                priority=1
-            ),
-            DirectObjective(
-                id="tutorial_03_go_to_bedroom",
-                description="You're mom will immediately greet you and take you to the house. Press A to advance through the dialogue and navigate to the stairs to go upstairs to the player's (your)bedroom",
+                id="tutorial_02_go_to_bedroom",
+                description="Once you exit the truck, you're mom will immediately greet you and take you into your (Brendan) house. Press A to advance through the dialogue (this will take you to 1F of the house) and navigate to the stairs to go upstairs to the player's (your)bedroom",
                 action_type="navigate",
                 target_location="Player's Bedroom",
-                navigation_hint="Walk north towards and through the stairs (S) to go up to the bedroom. Vigoroth will be carrying boxes on your left. Ignore them.",
+                navigation_hint="Walk north towards and through the stairs (S) at (8, 2) to go up to the bedroom. Once you enter the bedroom, your mom will continue to redirect you back to your bedroom until you interact with the clock.",
                 completion_condition="player_bedroom_reached",
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_04_interact_with_tv",
-                description="Interact with the clock on the wall to set the time",
+                id="tutorial_03_interact_with_clock",
+                description="Interact with the clock on the wall to set the time. Interacting with it will trigger a new screen with a clock that you have to navigate through.",
                 action_type="interact",
                 target_location="Player's Bedroom",
-                navigation_hint="Press A on the clock on the wall to set the time. The clock is 2 tiles left of the stairs (D) and on the wall.",
+                navigation_hint="Press A on the clock on the wall to set the time. The clock (K) is 2 tiles left of the stairs (S) and on the wall. The clock is at position (5,1) so you must navigate to position (5,2) once you  and face the clock by pressing UP.",
                 completion_condition="clock_set",
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_05_exit_player_house",
+                id="tutorial_04_exit_player_house",
                 description="Exit the player's house by walking down the stairs (S) and through the door (D)",
                 action_type="navigate",
                 target_location="Littleroot Town",
-                navigation_hint="Go downstairs. This will trigger an event with your mom sending you towards the TV. Once this is over, exit through the door (D) to your south-east.",
+                navigation_hint="Go downstairs. This will trigger an event with your mom sending you towards the TV. Once this is over, exit through the door (D) to your south-east. No need to re-enter the stairs. Remember to to walk through doors, not interact with them by pressing A.",
                 completion_condition="exited_player_house",
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_06_enter_rival_house",
-                description="Enter the rival's house (next door) by immediately navigating to the right and walking through the door (D)",
+                id="tutorial_05_enter_rival_house",
+                description="Enter the rival's house (next door) by immediately navigating to the right and walking through the door (D). Don't overshoot walking to the right, once you observe the DOOR (D), in your movement preview walk through it by walking UP. If you overshoot the door, you have to walk left to re-align yourself with the door.",
                 action_type="interact",
                 target_location="Rival's House",
                 navigation_hint="Your rival's house will be to the right of your house and looks identical.",
@@ -228,7 +220,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_07_go_to_rival_bedroom",
+                id="tutorial_06_go_to_rival_bedroom",
                 description="Go upstairs to the rival's bedroom. Their mother will immediately greet you. After your interaction with her, walk north immediately to go up the stairs.",
                 action_type="navigate",
                 target_location="Rival's Bedroom",
@@ -237,7 +229,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_08_talk_to_rival",
+                id="tutorial_07_talk_to_rival",
                 description="Once in your rival's room, interact with the pokeball next to her bed. This will trigger a conversation with her, after which she will walk over to her computer. ",
                 action_type="interact",
                 target_location="Rival's Bedroom",
@@ -246,7 +238,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_09_exit_rival_house",
+                id="tutorial_08_exit_rival_house",
                 description="Exit the rival's house by walking through the stairs (S) you entered your rival's room through and through the door (D) you entered her house through",
                 action_type="navigate",
                 target_location="Littleroot Town",
@@ -255,7 +247,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_10_north_to_route101",
+                id="tutorial_09_north_to_route101",
                 description="Move north from Littleroot Town to Route 101",
                 action_type="navigate",
                 target_location="Route 101",
@@ -264,7 +256,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_11_find_prof_birch",
+                id="tutorial_10_find_prof_birch",
                 description="Find Professor Birch on Route 101. This should be triggered by walking a few steps into route 101 and triggering an event with a man in a lab coat.",
                 action_type="navigate",
                 target_location="Route 101",
@@ -273,7 +265,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_12_approach_birch",
+                id="tutorial_11_approach_birch",
                 description="Professor Birch will need your help, interact with the bag on the ground by the ledge and pick your starter Pokemon from it. Once you pick your starter, it will trigger a battle with a zigzagoon.",
                 action_type="navigate",
                 target_location="Route 101",
@@ -282,7 +274,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_13_battle_zigzagoon",
+                id="tutorial_12_battle_zigzagoon",
                 description="Battle the zigzagoon",
                 action_type="battle",
                 target_location="Route 101",
@@ -291,7 +283,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_14_interact_with_professor_birch",
+                id="tutorial_13_interact_with_professor_birch",
                 description="After battling the zigzagoon, professor birch will interact with you. Advance through the dialogue by pressing A to continue. After this interaction, he will transport you to the lab",
                 action_type="interact",
                 target_location="Route 101",
@@ -301,7 +293,7 @@ class DirectObjectiveManager:
             ),
 
             DirectObjective(
-                id="tutorial_15_talk_to_professor_birch_in_lab",
+                id="tutorial_14_talk_to_professor_birch_in_lab",
                 description="Talk to professor birch in the lab to receive the pokedex. Advance through the dialogue by pressing A to continue.",
                 action_type="navigate",
                 target_location="Professor Birch's Lab",
@@ -310,7 +302,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_16_exit_professor_birch_lab",
+                id="tutorial_15_exit_professor_birch_lab",
                 description="Once dialogue is complete, exit the lab by walking immediately south through the door (D) to littleroot town",
                 action_type="interact",
                 target_location="Professor Birch's Lab",

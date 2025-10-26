@@ -487,6 +487,15 @@ class MyCLIAgent:
         """Execute a function call and return the result as JSON string."""
         function_name = function_call.name
 
+        # TEMPORARILY DISABLE navigate_to tool due to pathfinding issues
+        if function_name == "navigate_to":
+            logger.warning("🚫 navigate_to() is temporarily disabled. Use press_buttons() for movement instead.")
+            return json.dumps({
+                "success": False, 
+                "error": "navigate_to is temporarily disabled. Use press_buttons(['UP'], reasoning) or press_buttons(['DOWN'], reasoning) etc. for movement.",
+                "suggestion": "Use press_buttons() with directional buttons (UP, DOWN, LEFT, RIGHT) for movement"
+            })
+
         # Parse arguments - convert protobuf types to native Python types
         try:
             arguments = self._convert_protobuf_args(function_call.args)
@@ -947,7 +956,7 @@ class MyCLIAgent:
 
                             # Check if this is a text-only response without action tools
                             has_action_tool = any(
-                                call["name"] in ["navigate_to", "press_buttons"]
+                                call["name"] == "press_buttons"
                                 for call in tool_calls_made
                             )
 
@@ -973,9 +982,9 @@ class MyCLIAgent:
 
                                 # Send a message that DEMANDS a function call with increasingly forceful language
                                 if enforcement_retry_count == 1:
-                                    enforcement_msg = "You MUST call either navigate_to or press_buttons now. No more text analysis. Just call the tool based on your plan. Use press_buttons(['WAIT']) if unsure."
+                                    enforcement_msg = "You MUST call press_buttons now. No more text analysis. Just call the tool based on your plan. Use press_buttons(['WAIT']) if unsure."
                                 elif enforcement_retry_count == 2:
-                                    enforcement_msg = "CRITICAL: Call navigate_to(...) or press_buttons([...]) RIGHT NOW. Do not write any text. Only make the function call."
+                                    enforcement_msg = "CRITICAL: Call press_buttons([...]) RIGHT NOW. Do not write any text. Only make the function call."
                                 else:
                                     enforcement_msg = "EMERGENCY: You are stuck in a loop. Call press_buttons(['WAIT'], 'observing') immediately. This is your final chance."
 
@@ -1079,6 +1088,24 @@ class MyCLIAgent:
         direct_objective_status = game_state_data.get("direct_objective_status", "")
         direct_objective_context = game_state_data.get("direct_objective_context", "")
         
+        # Format direct objective nicely if it's a dict
+        if isinstance(direct_objective, dict):
+            obj_id = direct_objective.get("id", "")
+            desc = direct_objective.get("description", "")
+            hint = direct_objective.get("navigation_hint", "")
+            formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+            if hint:
+                formatted_obj += f"\n  Hint: {hint}"
+            direct_objective = formatted_obj
+        
+        # Format status nicely if it's a dict
+        if isinstance(direct_objective_status, dict):
+            seq = direct_objective_status.get("sequence_name", "")
+            total = direct_objective_status.get("total_objectives", 0)
+            current_idx = direct_objective_status.get("current_index", 0)
+            completed = direct_objective_status.get("completed_count", 0)
+            direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
+        
         # Build recent actions summary
         recent_actions = self._format_recent_actions()
         
@@ -1102,14 +1129,14 @@ RECENT ACTIONS:
 ACTION HISTORY (last 10 steps):
 {action_history}
 
-CURRENT GAME STATE:
-{state_text}
-
 {direct_objective}
 
 {direct_objective_status}
 
 {direct_objective_context}
+
+CURRENT GAME STATE:
+{state_text}
 
 **DIALOGUE CHECK**: Look at the game screen carefully - if you see a dialogue box with text, you MUST use press_buttons(["A"], reasoning) to advance it before doing anything else!
 
@@ -1118,8 +1145,9 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 🎮 **PRIMARY GAME TOOLS** (use these most often):
 - get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
-- navigate_to(x, y, reason) - Automatically navigate to coordinates using A* pathfinding
 - complete_direct_objective(reasoning) - Mark current direct objective as complete
+
+⚠️ **NAVIGATION**: DO NOT use navigate_to() - it is temporarily disabled due to pathfinding issues. Always use press_buttons() with directional buttons (UP, DOWN, LEFT, RIGHT) for movement instead.
 
 📚 **INFORMATION TOOLS** (use when you need info):
 - lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis
@@ -1131,11 +1159,23 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 - get_knowledge_summary(min_importance) - Get summary of important discoveries
 - save_memory(fact) - Save facts to remember across sessions
 
+** COORDINATE & MOVEMENT EXAMPLES **:
+- Pressing LEFT decreases your X coordinate (moves you west)
+- Pressing RIGHT increases your X coordinate (moves you east)  
+- Pressing UP decreases your Y coordinate (moves you north)
+- Pressing DOWN increases your Y coordinate (moves you south)
+
+Example: If you are at position (5, 5) and press RIGHT, you will move to (6, 5)
+Example: If you are at position (3, 8) and press UP, you will move to (3, 7)
+
+** INTERACTION TIPS **:
+- To interact with an object or NPC, you must be both 1) on an adjacent tile to the NPC or object and 2) facing the NPC or object.
+
 STRATEGY - PRIORITY ORDER:
 1. **DIALOGUE FIRST**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
 2. **CHECK OBJECTIVE COMPLETION**: After each action, check if your current direct objective is complete and use complete_direct_objective() if so
 3. **BATTLES**: Use press_buttons with battle moves. When HP < 75%, use healing moves like Absorb
-4. **MOVEMENT**: Use navigate_to(x, y, reason) for efficient travel via A* pathfinding
+4. **MOVEMENT**: Use press_buttons(["UP"], reasoning) or press_buttons(["DOWN"], reasoning) or press_buttons(["LEFT"], reasoning) or press_buttons(["RIGHT"], reasoning) for movement. NEVER use navigate_to() - it is disabled.
 5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
 6. **OBJECTIVES**: Use complete_direct_objective when you've finished a guided objective and receive the next objective
 
@@ -1280,8 +1320,8 @@ Step {step_count}"""
                     logger.debug(f"Failed to update server metrics: {e}")
 
                 # Brief pause between steps
-                logger.info("⏸️  Waiting 3 seconds before next step...")
-                time.sleep(3)
+                logger.info("⏸️  Waiting 1 second before next step...")
+                time.sleep(1)
 
         except KeyboardInterrupt:
             logger.info("\n\n🛑 Agent stopped by user")
@@ -1340,8 +1380,8 @@ Step {step_count}"""
                     "result": function_result
                 })
                 
-                # Wait for action queue to complete if this was a button press or navigation
-                if function_call.name in ["press_buttons", "navigate_to"]:
+                # Wait for action queue to complete if this was a button press
+                if function_call.name == "press_buttons":
                     self._wait_for_actions_complete()
                 
                 function_calls_found = True
