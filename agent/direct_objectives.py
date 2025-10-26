@@ -169,8 +169,12 @@ class DirectObjectiveManager:
         self.current_index = 0
         logger.info(f"Loaded hackathon Route 102 to Petalburg sequence with {len(self.current_sequence)} objectives")
         
-    def load_tutorial_to_starter_sequence(self):
-        """Load the hardcoded sequence for transitioning from tutorial completion to starter selection"""
+    def load_tutorial_to_starter_sequence(self, start_index: int = 0):
+        """Load the hardcoded sequence for transitioning from tutorial completion to starter selection
+        
+        Args:
+            start_index: Index to start the sequence at (for resuming from checkpoints)
+        """
         self.sequence_name = "tutorial_to_starter"
         self.current_sequence = [
             DirectObjective(
@@ -212,10 +216,10 @@ class DirectObjectiveManager:
             ),
             DirectObjective(
                 id="tutorial_05_enter_rival_house",
-                description="Enter the rival's house (next door) by immediately navigating to the right and walking through the door (D). Don't overshoot walking to the right, once you observe the DOOR (D), in your movement preview walk through it by walking UP. If you overshoot the door, you have to walk left to re-align yourself with the door.",
+                description="Enter the rival's house (next door) by immediately navigating to the right and walking through the door (D).",
                 action_type="interact",
                 target_location="Rival's House",
-                navigation_hint="Your rival's house will be to the right of your house and looks identical.",
+                navigation_hint="Your rival's house will be to the right of your house and looks identical. Don't overshoot walking to the right, once you observe the DOOR (D), in your movement preview walk through it by walking UP. If you've overshot the door, you have to walk left to re-align yourself with the door. Once you've identified the door's position on the map, navigate to those coordinates",
                 completion_condition="rival_house_entered",
                 priority=1
             ),
@@ -311,8 +315,12 @@ class DirectObjectiveManager:
                 priority=1
             )
         ]
-        self.current_index = 0
-        logger.info(f"Loaded tutorial_to_starter sequence with {len(self.current_sequence)} objectives")
+        self.current_index = min(start_index, len(self.current_sequence))
+        # Mark all objectives before start_index as completed
+        for i in range(start_index):
+            if i < len(self.current_sequence):
+                self.current_sequence[i].completed = True
+        logger.info(f"Loaded tutorial_to_starter sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index}")
         
     def get_current_objective(self) -> Optional[DirectObjective]:
         """Get the current objective in the sequence"""
@@ -430,20 +438,15 @@ class DirectObjectiveManager:
         # Previous objective
         if self.current_index > 0:
             prev_obj = self.current_sequence[self.current_index - 1]
-            status = "✅ COMPLETED" if prev_obj.completed else "❌ INCOMPLETE"
-            context_parts.append(f"PREVIOUS OBJECTIVE: {prev_obj.description} [{status}]")
+            status = "✅" if prev_obj.completed else "❌"
+            context_parts.append(f"⏮️  PREVIOUS: {prev_obj.description} {status}")
         
-        # Current objective
-        if self.current_index < len(self.current_sequence):
-            current_obj = self.current_sequence[self.current_index]
-            context_parts.append(f"CURRENT OBJECTIVE: {current_obj.description}")
-            if current_obj.navigation_hint:
-                context_parts.append(f"  → Hint: {current_obj.navigation_hint}")
+        # Skip current objective in context - it's displayed separately
         
         # Next objective
         if self.current_index + 1 < len(self.current_sequence):
             next_obj = self.current_sequence[self.current_index + 1]
-            context_parts.append(f"NEXT OBJECTIVE: {next_obj.description}")
+            context_parts.append(f"⏭️  NEXT: {next_obj.description}")
         
         return "\n".join(context_parts)
 

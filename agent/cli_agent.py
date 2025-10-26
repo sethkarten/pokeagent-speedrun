@@ -965,6 +965,29 @@ class CLIAgent:
                 except Exception as e:
                     logger.debug(f"Failed to update server metrics: {e}")
 
+                # Auto-save checkpoint after each step for persistence
+                try:
+                    # Save game state checkpoint
+                    checkpoint_response = requests.post(
+                        f"{self.server_url}/checkpoint",
+                        json={"step_count": self.step_count},
+                        timeout=10
+                    )
+                    
+                    # Save agent history to checkpoint_llm.txt
+                    history_response = requests.post(
+                        f"{self.server_url}/save_agent_history",
+                        timeout=5
+                    )
+                    
+                    if checkpoint_response.status_code == 200 and history_response.status_code == 200:
+                        if self.step_count % 10 == 0:  # Log every 10 steps to avoid spam
+                            logger.info(f"💾 Checkpoint and history saved at step {self.step_count}")
+                    else:
+                        logger.warning(f"⚠️ Save failed - Checkpoint: {checkpoint_response.status_code}, History: {history_response.status_code}")
+                except requests.exceptions.RequestException as e:
+                    logger.debug(f"⚠️ Checkpoint/history save error: {e}")
+
                 # Brief pause
                 logger.info("⏸️  Waiting 3 seconds before next step...")
                 time.sleep(3)

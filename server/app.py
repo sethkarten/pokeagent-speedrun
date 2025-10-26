@@ -68,6 +68,7 @@ last_action_time = None  # Track time of last action for decision time calculati
 running = True
 step_count = 0
 direct_objectives_sequence = None
+direct_objectives_start_index = 0
 direct_objectives_manager = None
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
@@ -1747,7 +1748,7 @@ async def mcp_get_game_state():
             if direct_objectives_sequence:
                 if not direct_objectives_manager.is_sequence_active():
                     if direct_objectives_sequence == "tutorial_to_starter":
-                        direct_objectives_manager.load_tutorial_to_starter_sequence()
+                        direct_objectives_manager.load_tutorial_to_starter_sequence(direct_objectives_start_index)
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
             
@@ -1849,7 +1850,7 @@ async def mcp_complete_direct_objective(request: dict):
         if direct_objectives_sequence:
             if not direct_objectives_manager.is_sequence_active():
                 if direct_objectives_sequence == "tutorial_to_starter":
-                    direct_objectives_manager.load_tutorial_to_starter_sequence()
+                    direct_objectives_manager.load_tutorial_to_starter_sequence(direct_objectives_start_index)
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
         
@@ -2534,15 +2535,17 @@ def main():
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
     parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence (e.g., 'tutorial_to_starter')")
+    parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for direct objectives (for resuming from checkpoints)")
     # Server always runs headless - display handled by client
     
     args = parser.parse_args()
     
     # Set global direct objectives sequence
-    global direct_objectives_sequence
+    global direct_objectives_sequence, direct_objectives_start_index
     if args.direct_objectives:
         direct_objectives_sequence = args.direct_objectives
-        print(f"🎯 Direct objectives sequence: {direct_objectives_sequence}")
+        direct_objectives_start_index = args.direct_objectives_start
+        print(f"🎯 Direct objectives sequence: {direct_objectives_sequence} (starting at index {direct_objectives_start_index})")
     
     # Check for environment variables from multiprocess mode
     env_load_state = os.environ.get("LOAD_STATE")
