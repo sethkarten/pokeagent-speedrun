@@ -1106,8 +1106,11 @@ class MyCLIAgent:
             completed = direct_objective_status.get("completed_count", 0)
             direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
         
-        # Build recent actions summary
-        recent_actions = self._format_recent_actions()
+        # Format objective context to highlight previous, current, and next
+        if direct_objective_context:
+            # The context is already formatted nicely by DirectObjectiveManager
+            # Just make it more prominent
+            pass  # Keep as-is
         
         # Build action history summary for better context
         action_history = self._format_action_history()
@@ -1123,17 +1126,14 @@ Some pointers to keep in mind (guard rails) as you problem solve:
 5) **CRITICAL**: Always check the game screen for dialogue boxes first - if you see dialogue, advance it with press_buttons(["A"]) before doing anything else.
 Especially If a current approach is leading to consistent failure without providing knowledge on how to improve.
 
-RECENT ACTIONS:
-{recent_actions}
-
-ACTION HISTORY (last 10 steps):
+ACTION HISTORY (last 20 steps):
 {action_history}
 
-{direct_objective}
-
-{direct_objective_status}
-
+======================== OBJECTIVE CONTEXT ========================
 {direct_objective_context}
+{direct_objective}
+{direct_objective_status}
+====================================================================
 
 CURRENT GAME STATE:
 {state_text}
@@ -1194,8 +1194,8 @@ Step {step_count}"""
         if not self.conversation_history:
             return "No previous actions recorded."
         
-        # Get last 10 conversation entries
-        recent_entries = self.conversation_history[-10:]
+        # Get last 20 conversation entries
+        recent_entries = self.conversation_history[-20:]
         
         history_lines = []
         for i, entry in enumerate(recent_entries, 1):
@@ -1228,22 +1228,6 @@ Step {step_count}"""
             history_lines.append(action_str)
         
         return "\n".join(history_lines)
-
-    def _format_recent_actions(self) -> str:
-        """Format recent actions for display in structured prompt."""
-        if not self.conversation_history:
-            return "No recent actions."
-        
-        actions = []
-        for entry in self.conversation_history[-10:]:  # Look at more entries to find 5 actions
-            if entry.get("role") == "assistant" and entry.get("action"):
-                action_details = entry.get("action_details", "")
-                action_display = action_details if action_details else entry.get("action", "")
-                actions.append(action_display)
-                if len(actions) >= 5:
-                    break
-        
-        return ", ".join(actions) if actions else "No recent actions."
 
     def run(self) -> int:
         """Run the agent loop."""
@@ -1318,6 +1302,29 @@ Step {step_count}"""
                     update_server_metrics(self.server_url)
                 except Exception as e:
                     logger.debug(f"Failed to update server metrics: {e}")
+
+                # Auto-save checkpoint after each step for persistence
+                try:
+                    # Save game state checkpoint
+                    checkpoint_response = requests.post(
+                        f"{self.server_url}/checkpoint",
+                        json={"step_count": self.step_count},
+                        timeout=10
+                    )
+                    
+                    # Save agent history to checkpoint_llm.txt
+                    history_response = requests.post(
+                        f"{self.server_url}/save_agent_history",
+                        timeout=5
+                    )
+                    
+                    if checkpoint_response.status_code == 200 and history_response.status_code == 200:
+                        if self.step_count % 10 == 0:  # Log every 10 steps to avoid spam
+                            logger.info(f"💾 Checkpoint and history saved at step {self.step_count}")
+                    else:
+                        logger.warning(f"⚠️ Save failed - Checkpoint: {checkpoint_response.status_code}, History: {history_response.status_code}")
+                except requests.exceptions.RequestException as e:
+                    logger.debug(f"⚠️ Checkpoint/history save error: {e}")
 
                 # Brief pause between steps
                 logger.info("⏸️  Waiting 1 second before next step...")

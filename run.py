@@ -48,6 +48,8 @@ def start_server(args):
     
     if args.direct_objectives:
         server_cmd.extend(["--direct-objectives", args.direct_objectives])
+        if args.direct_objectives_start > 0:
+            server_cmd.extend(["--direct-objectives-start", str(args.direct_objectives_start)])
     
     # Server always runs headless - display handled by client
     
@@ -128,6 +130,8 @@ def main():
                        help="Disable OCR dialogue detection")
     parser.add_argument("--direct-objectives", type=str, 
                        help="Load a specific direct objective sequence (e.g., 'tutorial_to_starter')")
+    parser.add_argument("--direct-objectives-start", type=int, default=0,
+                       help="Start index for direct objectives (for resuming from checkpoints)")
     
     args = parser.parse_args()
     
