@@ -9,7 +9,6 @@ from .deprecated.perception import perception_step
 from .deprecated.planning import planning_step
 from .simple import SimpleAgent, get_simple_agent, simple_mode_processing_multiprocess, configure_simple_agent_defaults
 from .react import ReActAgent, create_react_agent
-from .claude_plays import ClaudePlaysAgent, create_claude_plays_agent
 
 
 class Agent:
@@ -53,32 +52,7 @@ class Agent:
             vlm_client = VLM(backend=backend, model_name=model_name)
             self.agent_impl = create_react_agent(vlm_client=vlm_client, verbose=True)
             print(f"   Scaffold: ReAct (Thought->Action->Observation)")
-            
-        elif scaffold == "claudeplays":
-            # Create ClaudePlaysPokemon agent
-            vlm_client = VLM(backend=backend, model_name=model_name)
-            self.agent_impl = create_claude_plays_agent(
-                vlm_client=vlm_client, 
-                max_history=30,
-                enable_navigation=True,  # Enable advanced pathfinding navigation
-                verbose=True
-            )
-            print(f"   Scaffold: ClaudePlaysPokemon (tool-based with pathfinding)")
-            
-        elif scaffold == "geminiplays":
-            # Create GeminiPlaysPokemon agent
-            from agent.gemini_plays import create_gemini_plays_agent
-            vlm_client = VLM(backend=backend, model_name=model_name)
-            self.agent_impl = create_gemini_plays_agent(
-                vlm_client=vlm_client,
-                context_reset_interval=100,  # Reset context every 100 turns as per blog
-                enable_self_critique=True,
-                enable_exploration=True,
-                enable_meta_tools=True,
-                verbose=True
-            )
-            print(f"   Scaffold: GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)")
-            
+
         else:  # fourmodule (default)
             # Four-module agent context
             self.agent_impl = None  # Will use internal four-module processing
@@ -104,31 +78,17 @@ class Agent:
         Returns:
             dict: Contains 'action' and optionally 'reasoning'
         """
-        if self.scaffold in ["simple", "react", "claudeplays", "geminiplays"]:
+        if self.scaffold in ["simple", "react"]:
             # Delegate to specific agent implementation
             if self.scaffold == "simple":
                 return self.agent_impl.step(game_state)
-                
+
             elif self.scaffold == "react":
                 # ReAct agent expects state dict and screenshot separately
                 state = game_state.get('game_state', {})
                 screenshot = game_state.get('frame', None)
                 button = self.agent_impl.step(state, screenshot)
                 return {'action': button, 'reasoning': 'ReAct agent decision'}
-                
-            elif self.scaffold == "claudeplays":
-                # ClaudePlaysPokemon agent expects state dict and screenshot separately
-                state = game_state.get('game_state', {})
-                screenshot = game_state.get('frame', None)
-                button = self.agent_impl.step(state, screenshot)
-                return {'action': button, 'reasoning': 'ClaudePlaysPokemon agent decision'}
-                
-            elif self.scaffold == "geminiplays":
-                # GeminiPlaysPokemon agent expects state dict and screenshot separately
-                state = game_state.get('game_state', {})
-                screenshot = game_state.get('frame', None)
-                button = self.agent_impl.step(state, screenshot)
-                return {'action': button, 'reasoning': 'GeminiPlaysPokemon agent decision'}
                 
         else:
             # Four-module processing (default)
@@ -175,7 +135,7 @@ class Agent:
 __all__ = [
     'Agent',
     'action_step',
-    'memory_step', 
+    'memory_step',
     'perception_step',
     'planning_step',
     'SimpleAgent',
@@ -183,7 +143,5 @@ __all__ = [
     'simple_mode_processing_multiprocess',
     'configure_simple_agent_defaults',
     'ReActAgent',
-    'create_react_agent',
-    'ClaudePlaysAgent',
-    'create_claude_plays_agent'
+    'create_react_agent'
 ]

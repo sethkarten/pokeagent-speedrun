@@ -105,8 +105,8 @@ def main():
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="simple",
-                       choices=["simple", "react", "claudeplays", "geminiplays", "cli"],
-                       help="Agent scaffold: fourmodule (deprecated), simple, react, claudeplays, geminiplays, or cli (server-only for external CLI agents)")
+                       choices=["simple", "react"],
+                       help="Agent scaffold: simple (default) or react")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
@@ -123,14 +123,6 @@ def main():
                        help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true",
                        help="Disable OCR dialogue detection")
-    parser.add_argument("--story-objectives", action="store_true",
-                       help="Include story objectives tracking (CLI agent only)")
-
-    # CLI Agent specific options
-    parser.add_argument("--max-context", type=int, default=150000,
-                       help="Max context chars before compaction (CLI only, default: 150k ~= 600K tokens)")
-    parser.add_argument("--target-context", type=int, default=75000,
-                       help="Target context chars after compaction (CLI only, default: 75k ~= 300K tokens)")
 
     args = parser.parse_args()
     
@@ -143,7 +135,7 @@ def main():
     
     try:
         # Auto-start server if requested
-        if args.agent_auto or args.manual or args.scaffold == "cli":
+        if args.agent_auto or args.manual:
             print("\n📡 Starting server process...")
             server_process = start_server(args)
             
@@ -172,10 +164,7 @@ def main():
         print(f"   Model: {args.model_name}")
         scaffold_descriptions = {
             "simple": "Simple mode (direct frame→action)",
-            "react": "ReAct agent (Thought→Action→Observation loop)",
-            "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
-            "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
-            "cli": "Gemini API with MCP tools (native function calling)"
+            "react": "ReAct agent (Thought→Action→Observation loop)"
         }
         print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
@@ -185,43 +174,13 @@ def main():
         
         print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream")
 
-        # Check if this is CLI scaffold mode
-        if args.scaffold == "cli":
-            print("\n🖥️  CLI Scaffold Mode - Gemini API with MCP Tools")
-            print("=" * 60)
-            print("✅ Server is running")
-            print("🤖 Starting CLI agent...")
-            print("   Using Gemini API directly (no gemini-cli dependency)")
-            print("   MCP tools exposed via HTTP endpoints")
-            print("")
+        print("\n🚀 Starting client...")
+        print("-" * 60)
 
-            # Import and run CLI agent (native Gemini API)
-            from agent.cli_agent import CLIAgent
-            print("📦 CLIAgent imported successfully", flush=True)
+        # Run the client
+        success = run_multiprocess_client(server_port=args.port, args=args)
 
-            print(f"🔧 Creating agent with model={args.model_name}", flush=True)
-            agent = CLIAgent(
-                server_url=f"http://localhost:{args.port}",
-                model=args.model_name,
-                max_steps=args.max_steps if hasattr(args, 'max_steps') else None,
-                include_story_objectives=args.story_objectives,
-                max_context_chars=args.max_context,
-                target_context_chars=args.target_context
-            )
-            print("✅ Agent created", flush=True)
-            if args.story_objectives:
-                print("📋 Story objectives tracking: Enabled")
-            print(f"📊 Context limits: max {args.max_context:,} chars, compact to {args.target_context:,} chars")
-
-            return agent.run()
-        else:
-            print("\n🚀 Starting client...")
-            print("-" * 60)
-
-            # Run the client
-            success = run_multiprocess_client(server_port=args.port, args=args)
-
-            return 0 if success else 1
+        return 0 if success else 1
         
     except KeyboardInterrupt:
         print("\n\n🛑 Shutdown requested by user")
