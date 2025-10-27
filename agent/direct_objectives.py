@@ -243,10 +243,10 @@ class DirectObjectiveManager:
             ),
             DirectObjective(
                 id="tutorial_08_exit_rival_house",
-                description="Exit the rival's house by walking through the stairs (S) you entered your rival's room through and through the door (D) you entered her house through",
+                description="Exit the rival's house by walking through the stairs (S) at (1,1) you entered your rival's room through and through the door (D) you entered her house through",
                 action_type="navigate",
                 target_location="Littleroot Town",
-                navigation_hint="The stairs should be next to the top-left corner of the rival's bedroom. Once you get down the stairs, walk south through the entrance door (D) and through the warp to exit the house.",
+                navigation_hint="The stairs should be next to the top-left corner of the rival's bedroom (1,1). Once you get down the stairs, walk south to the entrance door (D) and then walk through the warp (DOWN) to exit the house.",
                 completion_condition="exited_rival_house",
                 priority=1
             ),
@@ -255,7 +255,7 @@ class DirectObjectiveManager:
                 description="Move north from Littleroot Town to Route 101",
                 action_type="navigate",
                 target_location="Route 101",
-                navigation_hint="Move north from Littleroot Town to reach Route 101. The route is straight north in between your house and the rival's house, so you will have to navigate left once you've left the rival's house and then north past both you and your riva's house..",
+                navigation_hint="Move north from Littleroot Town to reach Route 101. The route is straight north in between your house and the rival's house, so you will have to navigate left once you've left the rival's house and then north past both you and your rival's house. There will be an NPC at position (10, 1) that you will have to move around on the right, before continuing to go north through the passage.",
                 completion_condition="location_contains_route_101",
                 priority=1
             ),
@@ -273,16 +273,16 @@ class DirectObjectiveManager:
                 description="Professor Birch will need your help, interact with the bag on the ground by the ledge and pick your starter Pokemon from it. Once you pick your starter, it will trigger a battle with a zigzagoon.",
                 action_type="navigate",
                 target_location="Route 101",
-                navigation_hint="The bag will be on the ground to your left and in between you and professor birch.",
+                navigation_hint="The bag will be on the ground to your left, in between you and professor birch at position (7, 14). You need to face the bag and then press A to interact with it. Make sure that you are facing the bag in the visual frame before pressing A.",
                 completion_condition="birch_encounter_triggered",
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_12_battle_zigzagoon",
+                id="tutorial_12_select_treeko_and_battle_zigzagoon",
                 description="Battle the zigzagoon",
                 action_type="battle",
                 target_location="Route 101",
-                navigation_hint="Battle the zigzagoon by selecting a damaging move and pressing A to attack",
+                navigation_hint="Navigate the pokemon selection screen using left/right and select treeko as your starter.Battle the zigzagoon by selecting a damaging move and pressing A to attack",
                 completion_condition="zigzagoon_battle_complete",
                 priority=1
             ),

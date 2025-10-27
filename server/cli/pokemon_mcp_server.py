@@ -54,13 +54,14 @@ knowledge_base = get_knowledge_base()
 # HELPER FUNCTIONS FOR SERVER ENDPOINTS (NO HTTP CALLS)
 # ============================================================================
 
-def get_game_state_direct(env, state_formatter) -> dict:
+def get_game_state_direct(env, state_formatter, action_history=None) -> dict:
     """
     Get game state without HTTP calls - for use by server endpoints.
 
     Args:
         env: EmeraldEmulator instance
         state_formatter: format_state_for_llm function
+        action_history: Optional list of recent actions with start/end positions
 
     Returns:
         Dictionary with success status and state data including screenshot
@@ -71,7 +72,8 @@ def get_game_state_direct(env, state_formatter) -> dict:
         from PIL import Image
 
         state = env.get_comprehensive_state()
-        state_text = state_formatter(state)
+        # Pass action history to state formatter
+        state_text = state_formatter(state, action_history=action_history)
 
         # Get screenshot as base64 for vision models
         screenshot_b64 = None

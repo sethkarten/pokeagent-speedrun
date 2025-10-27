@@ -162,7 +162,7 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
         logger.warning(f"Failed to detect dialogue on frame: {e}")
         return {'has_dialogue': False, 'confidence': 0.0, 'reason': f'error: {e}'}
 
-def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True, include_movement_preview=True):
+def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Format comprehensive state data into readable text.
     
@@ -172,6 +172,7 @@ def format_state(state_data, format_type="summary", include_debug_info=False, in
         include_debug_info (bool): Whether to include extra debug information (for detailed format)
         include_npcs (bool): Whether to include NPC information in the state
         include_movement_preview (bool): Whether to include movement preview (for detailed format)
+        action_history (list): Optional list of recent actions with start/end positions
     
     Returns:
         str: Formatted state text
@@ -179,11 +180,11 @@ def format_state(state_data, format_type="summary", include_debug_info=False, in
     if format_type == "summary":
         return _format_state_summary(state_data)
     elif format_type == "detailed":
-        return _format_state_detailed(state_data, include_debug_info, include_npcs, include_movement_preview)
+        return _format_state_detailed(state_data, include_debug_info, include_npcs, include_movement_preview, action_history)
     else:
         raise ValueError(f"Unknown format_type: {format_type}. Use 'summary' or 'detailed'")
 
-def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True):
+def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Format comprehensive state data into a readable context for the VLM.
     
@@ -192,11 +193,12 @@ def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True
         include_debug_info (bool): Whether to include extra debug information
         include_npcs (bool): Whether to include NPC information in the state
         include_movement_preview (bool): Whether to include movement preview (deprecated for pathfinding agents)
+        action_history (list): Optional list of recent actions with start/end positions
     
     Returns:
         str: Formatted state context for LLM prompts
     """
-    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs, include_movement_preview=include_movement_preview)
+    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs, include_movement_preview=include_movement_preview, action_history=action_history)
 
 def format_state_summary(state_data):
     """
@@ -316,11 +318,17 @@ def _format_state_summary(state_data):
     
     return " | ".join(summary_parts) if summary_parts else "No state data"
 
-def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True):
+def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Internal function to create detailed multi-line state format for LLM prompts.
     """
     context_parts = []
+    
+    # Add action history at the beginning if available
+    if action_history:
+        action_history_text = format_action_history(action_history)
+        context_parts.append(action_history_text)
+        context_parts.append("")  # Add blank line for spacing
     
     # Check both player and game sections for data
     player_data = state_data.get('player', {})
@@ -1467,6 +1475,11 @@ def format_movement_preview_for_llm(state_data):
             symbol = info['tile_symbol']
             status = "BLOCKED" if info['blocked'] else "WALKABLE"
             
+            # Special override: if description contains "Stairs" or "Warp", show 'W' instead of any other symbol
+            desc = info.get('tile_description', '')
+            if not info['blocked'] and ('Stairs' in desc or 'Warp' in desc):
+                symbol = 'W'
+            
             lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
             
             # Add NPC information if present
@@ -1503,6 +1516,65 @@ def format_movement_preview_for_llm(state_data):
                     lines[-1] += " - Jump ledge (can jump this way)"
                 elif 'trainer' in desc.lower() or 'npc' in desc.lower():
                     lines[-1] += " - NPC present (interact with A)"
+    
+    return "\n".join(lines)
+
+
+def format_action_history(action_history, max_actions=10):
+    """
+    Format action history with starting and ending positions.
+    
+    Args:
+        action_history: List of action dicts with button, start_pos, end_pos
+        max_actions: Maximum number of recent actions to show
+    
+    Returns:
+        str: Formatted action history text
+    """
+    if not action_history:
+        return "No recent actions"
+    
+    lines = []
+    
+    # Get the most recent completed actions
+    completed_actions = [a for a in action_history if a.get('completed', False)]
+    recent_actions = completed_actions[-max_actions:]
+    
+    if not recent_actions:
+        return "No completed actions yet"
+    
+    lines.append("RECENT ACTION HISTORY:")
+    lines.append("(Shows last {} actions with start → end positions)".format(len(recent_actions)))
+    
+    for i, action in enumerate(recent_actions, 1):
+        button = action.get('button', 'UNKNOWN')
+        start_pos = action.get('start_pos', (None, None, 'Unknown'))
+        end_pos = action.get('end_pos', (None, None, 'Unknown'))
+        
+        start_x, start_y, start_loc = start_pos
+        end_x, end_y, end_loc = end_pos
+        
+        # Check if movement actually occurred
+        if button in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+            if start_x is not None and end_x is not None:
+                if start_x == end_x and start_y == end_y and start_loc == end_loc:
+                    # Movement blocked
+                    lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → BLOCKED (stayed at same position)")
+                else:
+                    # Movement succeeded
+                    if start_loc == end_loc:
+                        lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → ({end_x:3},{end_y:3})")
+                    else:
+                        # Changed location (went through door/warp)
+                        lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) [{start_loc}] → ({end_x:3},{end_y:3}) [{end_loc}]")
+            else:
+                lines.append(f"  {i}. {button:5} (position unavailable)")
+        else:
+            # Non-movement action (A, B, START, SELECT)
+            if start_x is not None:
+                lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3})")
+            else:
+                lines.append(f"  {i}. {button:5}")
     
     return "\n".join(lines)
 
