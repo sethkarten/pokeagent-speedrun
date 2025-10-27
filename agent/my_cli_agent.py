@@ -1174,15 +1174,73 @@ Example: If you are at position (3, 8) and press UP, you will move to (3, 7)
 STRATEGY - PRIORITY ORDER:
 1. **DIALOGUE FIRST**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
 2. **CHECK OBJECTIVE COMPLETION**: After each action, check if your current direct objective is complete and use complete_direct_objective() if so
-3. **BATTLES**: Use press_buttons with battle moves. When HP < 75%, use healing moves like Absorb
-4. **MOVEMENT**: Use press_buttons(["UP"], reasoning) or press_buttons(["DOWN"], reasoning) or press_buttons(["LEFT"], reasoning) or press_buttons(["RIGHT"], reasoning) for movement. NEVER use navigate_to() - it is disabled.
+3. **MOVEMENT**: Use press_buttons(["UP"], reasoning) or press_buttons(["DOWN"], reasoning) or press_buttons(["LEFT"], reasoning) or press_buttons(["RIGHT"], reasoning) for movement. NEVER use navigate_to() - it is disabled.
+4. **BATTLES**: Use press_buttons with battle moves. When HP < 75%, use healing moves like Absorb
 5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
 6. **OBJECTIVES**: Use complete_direct_objective when you've finished a guided objective and receive the next objective
+7. **STUCK DETECTION**: If you've been attempting the same move (UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
 
 IMPORTANT: Always check the game screen for dialogue boxes before planning movement!
 **CRITICAL**: After performing any action, proactively check if your current direct objective is complete!
 
-Think step-by-step, then call the appropriate function to execute your action.
+═══════════════════════════════════════════════════════════════════════
+🧠 HOW TO STRUCTURE YOUR REASONING 
+═══════════════════════════════════════════════════════════════════════
+
+You MUST follow this decision-making process for EVERY action:
+
+**STEP 1 - ANALYZE**: Examine the current situation
+   - What do I see on the game screen?
+   - Where am I located? (coordinates and map name)
+   - What is my current objective?
+   - What obstacles or opportunities are present?
+   - Is there dialogue I need to advance?
+
+**STEP 2 - PLAN**: Decide what to do next
+   - What action will help achieve my objective?
+   - Why is this action the best choice right now?
+   - What do I expect to happen after this action?
+   - Are there any risks or alternative approaches?
+
+**STEP 3 - EXECUTE**: Call the function with DETAILED reasoning
+
+🎯 **CRITICAL REQUIREMENT**: 
+Your `reasoning` parameter MUST contain your FULL analysis and plan!
+Format it with clear sections so your thinking is visible and traceable.
+
+**GOOD EXAMPLE** (detailed reasoning):
+press_buttons(
+    buttons=["UP"],
+    reasoning='''ANALYSIS: I'm at position (10, 2) in Littleroot Town. The movement preview shows UP leads to (10, 1) which is walkable terrain. My current objective is to explore the town and find the Pokemon Lab. Looking at the map, there are buildings to the north.
+
+PLAN: I'll move UP one tile to get closer to the northern buildings. This is safe according to the movement preview - no obstacles or NPCs blocking the path AND I don't see any NPCs in my way in the visual frame. After moving, I'll reassess and continue exploring north.
+
+ACTION: Pressing UP to move north toward potential buildings/NPCs.'''
+)
+
+**BAD EXAMPLE** (too brief):
+press_buttons(
+    buttons=["UP"],
+    reasoning="Moving north"
+)
+
+**ANOTHER GOOD EXAMPLE** (dialogue):
+press_buttons(
+    buttons=["A"],
+    reasoning='''ANALYSIS: I can see a dialogue box on screen with text from Professor Birch. He's explaining something about Pokemon. The dialogue box is visible in the bottom portion of the screen.
+
+PLAN: I need to advance this dialogue by pressing A to read what he says and continue the conversation. This is standard Pokemon game interaction.
+
+ACTION: Pressing A to advance the dialogue and hear what Professor Birch has to say.'''
+)
+
+**WHY THIS MATTERS**: 
+- Detailed reasoning helps track your decision-making process
+- It makes debugging easier when things go wrong
+- It provides context for future decisions
+- It demonstrates goal-oriented thinking
+
+Think step-by-step through ANALYZE → PLAN → EXECUTE, then call the appropriate function with your detailed reasoning.
 
 Step {step_count}"""
         

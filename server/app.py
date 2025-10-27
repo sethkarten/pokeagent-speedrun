@@ -535,6 +535,22 @@ def game_loop(manual_mode=False):
                 action_frames_remaining -= 1
                 if action_frames_remaining == 0:
                     # Action finished, start release delay
+                    # Record ending position for this action
+                    global recent_button_presses
+                    current_state = env.get_comprehensive_state()
+                    player_data = current_state.get('player', {})
+                    position = player_data.get('position', {})
+                    location = player_data.get('location', 'Unknown')
+                    end_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
+                    
+                    # Find and update the most recent incomplete action matching current_action
+                    for i in range(len(recent_button_presses) - 1, -1, -1):
+                        if (recent_button_presses[i]["button"] == current_action and 
+                            not recent_button_presses[i]["completed"]):
+                            recent_button_presses[i]["end_pos"] = end_pos
+                            recent_button_presses[i]["completed"] = True
+                            break
+                    
                     current_action = None
                     release_frames_remaining = ACTION_RELEASE_DELAY
                     action_completed = True  # Mark action as completed
@@ -730,13 +746,24 @@ async def take_action(request: ActionRequest):
             action_queue.extend(request.buttons)
             print(f"📋 Action queue after extend: {action_queue}")
             
-            # Track button presses for recent actions display
+            # Track button presses for recent actions display with position tracking
             current_time = time.time()
+            
+            # Get current player position
+            current_state = env.get_comprehensive_state()
+            player_data = current_state.get('player', {})
+            position = player_data.get('position', {})
+            location = player_data.get('location', 'Unknown')
+            start_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
+            
             for button in request.buttons:
-                # Add all buttons to recent actions (removed duplicate filtering for debugging)
+                # Add all buttons to recent actions with starting position
                 recent_button_presses.append({
                     "button": button,
-                    "timestamp": current_time
+                    "timestamp": current_time,
+                    "start_pos": start_pos,
+                    "end_pos": None,  # Will be filled when action completes
+                    "completed": False
                 })
             
             # Update total actions count in metrics
@@ -1733,8 +1760,11 @@ async def mcp_get_game_state():
         from server.cli import pokemon_mcp_server
         from agent.direct_objectives import DirectObjectiveManager
 
-        # Use helper function from pokemon_mcp_server
-        result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        # Get recent button presses with position history
+        global recent_button_presses
+        
+        # Use helper function from pokemon_mcp_server with action history
+        result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm, action_history=recent_button_presses)
         
         # Add direct objectives information
         if result.get("success", False):
