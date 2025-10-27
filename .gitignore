@@ -6,6 +6,9 @@
 *.gba
 llm_log_*
 CLAUDE.md
+AGENTS.md
+docs
+examples
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

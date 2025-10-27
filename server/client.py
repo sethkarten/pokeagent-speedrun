@@ -101,7 +101,7 @@ def run_multiprocess_client(server_port=8000, args=None):
         font = pygame.font.Font(None, 24)
         clock = pygame.time.Clock()
         print("✅ Display initialized")
-        print("Controls: Tab=Cycle Mode (MANUAL/AGENT/AUTO), Space=Agent Step, M=Show State, Arrows/WASD=Move, Z=A, X=B")
+        print("Controls: Tab=Cycle Mode (MANUAL/AGENT/AUTO), Space=Agent Step, M=Show State+Tiles, Arrows/WASD=Move, Z=A, X=B")
     elif not headless and not PYGAME_AVAILABLE:
         print("⚠️ Pygame not available, running in headless mode")
         headless = True
@@ -125,7 +125,11 @@ def run_multiprocess_client(server_port=8000, args=None):
                         print("=" * 80)
                         print("📊 COMPREHENSIVE STATE (LLM View)")
                         print("=" * 80)
-                        from utils.state_formatter import format_state_for_llm
+
+                        # Show map debug info (tile coordinates)
+                        from utils.state_formatter import print_map_debug, format_state_for_llm
+                        print_map_debug(state_data)
+
                         formatted_state = format_state_for_llm(state_data)
                         print(formatted_state)
                         print("=" * 80)
@@ -264,11 +268,15 @@ def run_multiprocess_client(server_port=8000, args=None):
                                         print("=" * 80)
                                         print("📊 COMPREHENSIVE STATE (LLM View)")
                                         print("=" * 80)
-                                        
+
+                                        # First show map debug info (tile coordinates)
+                                        from utils.state_formatter import print_map_debug
+                                        print_map_debug(state_data)
+
                                         # Format and display state in a readable way (exactly what LLM sees)
                                         formatted_state = format_state_for_llm(state_data)
                                         print(formatted_state)
-                                        
+
                                         print("=" * 80)
                                     else:
                                         print(f"❌ Failed to get state: {response.status_code}")

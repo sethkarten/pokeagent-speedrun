@@ -67,10 +67,10 @@ def start_server(args):
         return None
 
 
-def start_frame_server():
+def start_frame_server(port):
     """Start the lightweight frame server for stream.html visualization"""
     try:
-        frame_cmd = ["python", "-m", "server.frame_server"]
+        frame_cmd = ["python", "-m", "server.frame_server", "--port", str(port+1)]
         frame_process = subprocess.Popen(
             frame_cmd,
             stdout=subprocess.PIPE,
@@ -104,8 +104,11 @@ def main():
                        help="VLM backend (openai, gemini, local, openrouter)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
+    parser.add_argument("--scaffold", type=str, default="simple",
+                       choices=["simple", "react"],
+                       help="Agent scaffold: simple (default) or react")
     parser.add_argument("--simple", action="store_true", 
-                       help="Simple mode: direct frame->action without 4-module architecture")
+                       help="DEPRECATED: Use --scaffold simple instead")
     
     # Operation modes
     parser.add_argument("--headless", action="store_true", 
@@ -116,11 +119,11 @@ def main():
                        help="Start in manual mode instead of agent mode")
     
     # Features
-    parser.add_argument("--record", action="store_true", 
+    parser.add_argument("--record", action="store_true",
                        help="Record video of the gameplay")
-    parser.add_argument("--no-ocr", action="store_true", 
+    parser.add_argument("--no-ocr", action="store_true",
                        help="Disable OCR dialogue detection")
-    
+
     args = parser.parse_args()
     
     print("=" * 60)
@@ -141,7 +144,7 @@ def main():
                 return 1
             
             # Also start frame server for web visualization
-            frame_server_process = start_frame_server()
+            frame_server_process = start_frame_server(args.port)
         else:
             print("\n📋 Manual server mode - start server separately with:")
             print("   python -m server.app --port", args.port)
@@ -150,28 +153,33 @@ def main():
             print("\n⏳ Waiting 3 seconds for manual server startup...")
             time.sleep(3)
         
+        # Handle deprecated --simple flag
+        if args.simple:
+            print("⚠️ --simple is deprecated. Using --scaffold simple")
+            args.scaffold = "simple"
+        
         # Display configuration
         print("\n🤖 Agent Configuration:")
         print(f"   Backend: {args.backend}")
         print(f"   Model: {args.model_name}")
-        if args.simple:
-            print("   Mode: Simple (direct frame->action)")
-        else:
-            print("   Mode: Four-module architecture")
+        scaffold_descriptions = {
+            "simple": "Simple mode (direct frame→action)",
+            "react": "ReAct agent (Thought→Action→Observation loop)"
+        }
+        print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
             print("   OCR: Disabled")
         if args.record:
             print("   Recording: Enabled")
         
-        print(f"\n🌐 Web Interface: http://127.0.0.1:{args.port}")
-        print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream.html")
-        
+        print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream")
+
         print("\n🚀 Starting client...")
         print("-" * 60)
-        
+
         # Run the client
         success = run_multiprocess_client(server_port=args.port, args=args)
-        
+
         return 0 if success else 1
         
     except KeyboardInterrupt:

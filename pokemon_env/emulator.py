@@ -403,10 +403,10 @@ class EmeraldEmulator:
             self.video_buffer = mgba.image.Image(self.width, self.height)
             self.core.set_video_buffer(self.video_buffer)
             self.core.reset()  # Reset after setting video buffer
-            
-            # Initialize memory reader
-            self.memory_reader = PokemonEmeraldReader(self.core)
-            
+
+            # Initialize memory reader with milestone tracker for progress-based features
+            self.memory_reader = PokemonEmeraldReader(self.core, milestone_tracker=self.milestone_tracker)
+
             # Set up callback for memory reader to invalidate emulator cache on area transitions
             def invalidate_emulator_cache():
                 if hasattr(self, '_cached_state'):
@@ -1103,26 +1103,26 @@ class EmeraldEmulator:
             # print(f"🔍 Checking milestones for location: {location}")
             # Only check milestones that aren't already completed
             milestones_to_check = [
-                # Phase 1: Game Initialization  
+                # Phase 1: Game Initialization
                 "GAME_RUNNING", "PLAYER_NAME_SET", "INTRO_CUTSCENE_COMPLETE",
-                
+
                 # Phase 2: Tutorial & Starting Town
-                "LITTLEROOT_TOWN", "PLAYER_HOUSE_ENTERED", "PLAYER_BEDROOM", 
-                "RIVAL_HOUSE", "RIVAL_BEDROOM",
-                
+                "LITTLEROOT_TOWN", "PLAYER_HOUSE_ENTERED", "PLAYER_BEDROOM",
+                "CLOCK_SET", "RIVAL_HOUSE", "RIVAL_BEDROOM",
+
                 # Phase 3: Professor Birch & Starter
                 "ROUTE_101", "STARTER_CHOSEN", "BIRCH_LAB_VISITED",
-                
+
                 # Phase 4: Rival
                 "OLDALE_TOWN", "ROUTE_103", "RECEIVED_POKEDEX",
-                
+
                 # Phase 5: Route 102 & Petalburg
                 "ROUTE_102", "PETALBURG_CITY", "DAD_FIRST_MEETING", "GYM_EXPLANATION",
-                
+
                 # Phase 6: Road to Rustboro City
-                "ROUTE_104_SOUTH", "PETALBURG_WOODS", "TEAM_AQUA_GRUNT_DEFEATED", 
+                "ROUTE_104_SOUTH", "PETALBURG_WOODS", "TEAM_AQUA_GRUNT_DEFEATED",
                 "ROUTE_104_NORTH", "RUSTBORO_CITY",
-                
+
                 # Phase 7: First Gym Challenge
                 "RUSTBORO_GYM_ENTERED", "ROXANNE_DEFEATED", "FIRST_GYM_COMPLETE"
             ]
@@ -1130,11 +1130,43 @@ class EmeraldEmulator:
             for milestone_id in milestones_to_check:
                 if not self.milestone_tracker.is_completed(milestone_id):
                     if self._check_milestone_condition(milestone_id, game_state):
-                        print(f"🎯 Milestone detected: {milestone_id}")
-                        self.milestone_tracker.mark_completed(milestone_id)
+                        # Check if previous milestone in order is completed before marking this one
+                        if self._can_complete_milestone(milestone_id, milestones_to_check):
+                            print(f"🎯 Milestone detected: {milestone_id}")
+                            self.milestone_tracker.mark_completed(milestone_id)
         except Exception as e:
             logger.warning(f"Error checking milestones: {e}")
-    
+
+    def _can_complete_milestone(self, milestone_id: str, milestone_order: List[str]) -> bool:
+        """Check if previous milestone in order is completed before allowing this one to complete"""
+        try:
+            # Special case: GAME_RUNNING is always allowed (it's the first milestone)
+            if milestone_id == "GAME_RUNNING":
+                return True
+
+            # Find the index of the current milestone
+            if milestone_id not in milestone_order:
+                # If milestone not in order, allow it (for custom milestones)
+                return True
+
+            current_index = milestone_order.index(milestone_id)
+
+            # If this is the first milestone in the order, allow it
+            if current_index == 0:
+                return True
+
+            # Check if the previous milestone is completed
+            prev_milestone = milestone_order[current_index - 1]
+            if self.milestone_tracker.is_completed(prev_milestone):
+                return True
+            else:
+                logger.debug(f"Cannot complete {milestone_id} - previous milestone {prev_milestone} not completed yet")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Error checking milestone order for {milestone_id}: {e}")
+            return True  # On error, allow completion
+
     def _check_milestone_condition(self, milestone_id: str, game_state: Dict[str, Any]) -> bool:
         """Check if a specific milestone condition is met based on current game state"""
         try:
@@ -1248,6 +1280,20 @@ class EmeraldEmulator:
                 if game_state:
                     location = game_state.get("player", {}).get("location", "")
                     return "LITTLEROOT TOWN BRENDANS HOUSE 2F" in str(location).upper()
+                return False
+            elif milestone_id == "CLOCK_SET":
+                # Clock is set when player is back in Littleroot Town AFTER visiting the bedroom
+                if game_state:
+                    # Must have completed PLAYER_BEDROOM first
+                    if not self.milestone_tracker.is_completed("PLAYER_BEDROOM"):
+                        return False
+                    # Must be in Littleroot Town (outside, not in house)
+                    location = game_state.get("player", {}).get("location", "")
+                    location_upper = str(location).upper()
+                    # In Littleroot but NOT in either house
+                    return ("LITTLEROOT" in location_upper and
+                            "HOUSE" not in location_upper and
+                            "LAB" not in location_upper)
                 return False
             elif milestone_id == "RIVAL_HOUSE":
                 if game_state:
