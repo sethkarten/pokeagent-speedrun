@@ -177,14 +177,14 @@ class SimpleAgent:
             },
             {
                 "id": "story_player_bedroom",
-                "description": "Go upstairs to player's bedroom and set the clock",
+                "description": "Go upstairs to player's bedroom",
                 "objective_type": "location",
                 "target_value": "Player's Bedroom",
                 "milestone_id": "PLAYER_BEDROOM"
             },
             {
                 "id": "story_clock_set",
-                "description": "Leave the house after setting the clock and explore Littleroot Town",
+                "description": "Set the clock on the wall in the player's bedroom. Interact with the clock (5,1) by pressing A while facing it. Then, leave the house.",
                 "objective_type": "location",
                 "target_value": "Clock Set",
                 "milestone_id": "CLOCK_SET"

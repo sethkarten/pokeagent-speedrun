@@ -1510,9 +1510,9 @@ class PokemonEmeraldReader:
                     opponent_data = self._check_known_opponent_addresses()
                 
                 # Method 4: Dynamic memory scanning as last resort
-                if not opponent_data:
-                    logger.debug("All methods failed, trying memory scan")
-                    opponent_data = self._scan_for_opponent_pokemon()
+                # if not opponent_data:
+                #     logger.debug("All methods failed, trying memory scan")
+                #     opponent_data = self._scan_for_opponent_pokemon()
                 
                 # Opponent detection disabled - feature not working correctly
                 enhanced_battle["opponent_pokemon"] = None
