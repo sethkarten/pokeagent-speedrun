@@ -41,7 +41,6 @@ import numpy as np
 from PIL import Image
 
 from utils.state_formatter import format_state_for_llm
-from utils.agent_helpers import update_server_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -926,10 +925,7 @@ Context: {context} | Coords: {coords} """
                 for key in keys_to_reset:
                     if self.state.stuck_detection[key] > 0:
                         self.state.stuck_detection[key] = max(0, self.state.stuck_detection[key] - 1)
-            
-            # Update server with agent step and metrics (for agent thinking display)
-            update_server_metrics()
-            
+
             return actions
             
         except Exception as e:
