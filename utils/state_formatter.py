@@ -14,6 +14,8 @@ from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dy
 import base64
 import io
 import os, sys
+from pathlib import Path
+from typing import Optional, List
 from pokemon_env.enums import MetatileBehavior
 from utils import state_formatter as sf
 
@@ -635,99 +637,21 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     if location_name:
         context_parts.append(f"Current Location: {location_name}")
     
-    # Also add current map if different
-    if 'current_map' in map_info and map_info['current_map'] != location_name:
-        context_parts.append(f"Current Map: {map_info['current_map']}")
-    
-    # Get player coordinates
+    # Get player coordinates from ROM (read via memory_reader.read_coordinates())
+    # This is the actual player position from the game, not from MapStitcher
     player_coords = None
-    player_coords_dict = map_info.get('player_coords', {})
-    if isinstance(player_coords_dict, dict) and player_coords_dict.get('x') is not None:
-        player_coords = (player_coords_dict.get('x', 0), player_coords_dict.get('y', 0))
-    elif player_coords_dict and not isinstance(player_coords_dict, dict):
-        player_coords = player_coords_dict
-    elif player_data and 'position' in player_data:
+    if player_data and 'position' in player_data:
         pos = player_data['position']
-        player_coords = (pos.get('x', 0), pos.get('y', 0))
+        if pos:
+            player_coords = (pos.get('x', 0), pos.get('y', 0))
+            context_parts.append(f"Player Position (ROM): ({player_coords[0]}, {player_coords[1]})")
     
-    # Get MapStitcher instance - prefer the one from memory_reader if available
-    # This ensures we use the instance that has the actual map data
-    map_stitcher = map_info.get('_map_stitcher_instance') if map_info else None
-    if not map_stitcher:
-        map_stitcher = _get_map_stitcher_instance()
+    # MapStitcher map display removed - using porymap ground truth instead
     
-    # Get NPCs if available
-    # NPCs disabled - unreliable detection with incorrect positions
-    npcs = []
-    # if include_npcs and 'object_events' in map_info:
-    #     npcs = map_info.get('object_events', [])
-    
-    # Get connections from current area
-    connections = []
-    if map_info.get('stitched_map_info'):
-        current_area = map_info['stitched_map_info'].get('current_area', {})
-        connections = current_area.get('connections', [])
-    
-    # Check for pre-generated visual map first (from memory_reader)
-    if map_info.get('visual_map'):
-        # Use the pre-generated map visualization
-        context_parts.append(map_info['visual_map'])
-    elif location_name:
-        # If NPC tiles have been overridden, use local map fallback to show the modified tiles
-        npc_override_count = map_info.get('npc_tiles_overridden', 0)
-        print(f"🗺️ Map formatter check: npc_tiles_overridden = {npc_override_count}")
-        if npc_override_count > 0:
-            # Use local map with overridden NPC tiles
-            if 'tiles' in map_info and map_info['tiles']:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} (with detected NPCs) ---")
-                _add_local_map_fallback(context_parts, map_info, include_npcs)
-        elif map_stitcher:
-            # Generate map display using MapStitcher (normal case)
-            # print( Attempting to generate map for location: '{location_name}'")
-            # print( MapStitcher exists: {map_stitcher is not None}")
-            # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
-            for map_id in list(map_stitcher.map_areas.keys())[:3]:
-                area = map_stitcher.map_areas[map_id]
-                # print(   Area {map_id}: '{area.location_name}'")
-        
-        map_lines = map_stitcher.generate_location_map_display(
-            location_name=location_name,
-            player_pos=player_coords,
-            npcs=npcs,
-            connections=connections
-        )
-        
-        if map_lines:
-            # print( Generated {len(map_lines)} map lines from MapStitcher")
-            context_parts.extend(map_lines)
-            # Add exploration statistics
-            location_grid = map_stitcher.get_location_grid(location_name)
-            if location_grid:
-                total_tiles = len(location_grid)
-                context_parts.append("")
-                context_parts.append(f"Total explored: {total_tiles} tiles")
-        else:
-            # print( MapStitcher returned empty, falling back to memory tiles")
-            # Fallback if MapStitcher doesn't have data for this location - use memory tiles
-            pass
-            if 'tiles' in map_info and map_info['tiles']:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
-                _add_local_map_fallback(context_parts, map_info, include_npcs, location_name)
-            else:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
-                context_parts.append("No map data available")
-    else:
-        # No location name - use local map fallback
-        context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
-        if 'tiles' in map_info and map_info['tiles']:
-            _add_local_map_fallback(context_parts, map_info, include_npcs, None)
-    
-    # NPC information removed - unreliable detection with incorrect positions
-    
-    # Add stitched map information if available
-    stitched_info = _format_stitched_map_info(map_info)
-    if stitched_info:
-        context_parts.extend(stitched_info)
+    # Add porymap ground truth data (JSON and ASCII map)
+    porymap_info = _format_porymap_info(location_name)
+    if porymap_info:
+        context_parts.extend(porymap_info)
     
     return context_parts
 
@@ -1105,6 +1029,234 @@ def _format_stitched_map_info(map_info):
     
     # Check if world map display with terrain was already shown
     # Old world map knowledge system removed - replaced by location-based maps with portal coordinates
+    return context_parts
+
+def _get_pokeemerald_root() -> Optional[Path]:
+    """Get the pokeemerald root directory path."""
+    # Try environment variable first
+    root = os.environ.get('POKEEMERALD_ROOT')
+    if root:
+        root_path = Path(root).resolve()
+        if (root_path / "data" / "maps").exists():
+            logger.info(f"Found pokeemerald root from env var: {root_path}")
+            return root_path
+    
+    # Try porymap_data directory first (under pokeagent-speedrun)
+    current_dir = Path(__file__).parent.parent
+    porymap_path = current_dir / "porymap_data"
+    if (porymap_path / "data" / "maps").exists():
+        logger.info(f"Found pokeemerald root: {porymap_path}")
+        return porymap_path.resolve()
+    
+    # Try common relative paths
+    possible_paths = [
+        current_dir / "pokeemerald",
+        current_dir / "../pokeemerald",
+        current_dir / "../../pokeemerald",
+    ]
+    
+    for path in possible_paths:
+        resolved = path.resolve()
+        if (resolved / "data" / "maps").exists():
+            logger.info(f"Found pokeemerald root: {resolved}")
+            return resolved
+    
+    logger.warning("Could not find pokeemerald root directory. Checked:")
+    logger.warning(f"  - POKEEMERALD_ROOT env var: {os.environ.get('POKEEMERALD_ROOT', 'not set')}")
+    logger.warning(f"  - porymap_data: {porymap_path}")
+    logger.warning(f"  - Common paths: {possible_paths}")
+    return None
+
+# ROM location name to Porymap map name mapping
+ROM_TO_PORYMAP_MAP = {
+    # Towns
+    "LITTLEROOT TOWN": "LittlerootTown",
+    "OLDALE TOWN": "OldaleTown",
+    "DEWFORD TOWN": "DewfordTown",
+    "LAVARIDGE TOWN": "LavaridgeTown",
+    "FALLARBOR TOWN": "FallarborTown",
+    "VERDANTURF TOWN": "VerdanturfTown",
+    "PACIFIDLOG TOWN": "PacifidlogTown",
+    
+    # Cities
+    "PETALBURG CITY": "PetalburgCity",
+    "SLATEPORT CITY": "SlateportCity",
+    "MAUVILLE CITY": "MauvilleCity",
+    "RUSTBORO CITY": "RustboroCity",
+    "FORTREE CITY": "FortreeCity",
+    "LILYCOVE CITY": "LilycoveCity",
+    "MOSSDEEP CITY": "MossdeepCity",
+    "SOOTOPOLIS CITY": "SootopolisCity",
+    "EVER GRANDE CITY": "EverGrandeCity",
+    
+    # Routes
+    "ROUTE 101": "Route101",
+    "ROUTE 102": "Route102",
+    "ROUTE 103": "Route103",
+    "ROUTE 104": "Route104",
+    "ROUTE 105": "Route105",
+    "ROUTE 106": "Route106",
+    "ROUTE 107": "Route107",
+    "ROUTE 108": "Route108",
+    "ROUTE 109": "Route109",
+    "ROUTE 110": "Route110",
+    "ROUTE 111": "Route111",
+    "ROUTE 112": "Route112",
+    "ROUTE 113": "Route113",
+    "ROUTE 114": "Route114",
+    "ROUTE 115": "Route115",
+    "ROUTE 116": "Route116",
+    "ROUTE 117": "Route117",
+    "ROUTE 118": "Route118",
+    "ROUTE 119": "Route119",
+    "ROUTE 120": "Route120",
+    "ROUTE 121": "Route121",
+    "ROUTE 122": "Route122",
+    "ROUTE 123": "Route123",
+    "ROUTE 124": "Route124",
+    "ROUTE 125": "Route125",
+    "ROUTE 126": "Route126",
+    "ROUTE 127": "Route127",
+    "ROUTE 128": "Route128",
+    "ROUTE 129": "Route129",
+    "ROUTE 130": "Route130",
+    "ROUTE 131": "Route131",
+    "ROUTE 132": "Route132",
+    "ROUTE 133": "Route133",
+    "ROUTE 134": "Route134",
+    
+    # Buildings (common patterns)
+    "PETALBURG WOODS": "PetalburgWoods",
+}
+
+def _format_porymap_info(location_name: Optional[str]) -> List[str]:
+    """
+    Format porymap ground truth data (JSON and ASCII map) for the agent.
+    
+    Returns list of formatted strings to add to context.
+    """
+    context_parts = []
+    
+    if not location_name or location_name == 'TITLE_SEQUENCE' or location_name == 'Unknown':
+        return context_parts
+    
+    try:
+        # Import here to avoid circular dependencies and allow graceful failure
+        from utils.porymap_json_builder import build_json_map_for_llm
+        from utils.pokeemerald_parser import PokeemeraldMapLoader
+        
+        # Get pokeemerald root
+        pokeemerald_root = _get_pokeemerald_root()
+        if not pokeemerald_root:
+            logger.warning(f"Porymap: Could not find pokeemerald root for location '{location_name}'")
+            return context_parts
+        
+        # Convert ROM location name to porymap map name using mapping
+        porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
+        
+        # If not in direct mapping, try fuzzy matching
+        if not porymap_map_name:
+            map_loader = PokeemeraldMapLoader(pokeemerald_root)
+            
+            def normalize_for_matching(name: str) -> str:
+                """Normalize location name for fuzzy matching."""
+                return str(name).lower().replace(" ", "").replace("_", "").replace("town", "").replace("city", "").replace("route", "")
+            
+            rom_normalized = normalize_for_matching(location_name)
+            maps_dir = pokeemerald_root / "data" / "maps"
+            
+            if maps_dir.exists():
+                # Try direct directory name match
+                for map_dir in maps_dir.iterdir():
+                    if not map_dir.is_dir() or map_dir.name == "map_groups.json":
+                        continue
+                    
+                    map_name = map_dir.name
+                    map_normalized = normalize_for_matching(map_name)
+                    
+                    if rom_normalized == map_normalized:
+                        porymap_map_name = map_name
+                        logger.info(f"Porymap: Matched '{location_name}' to '{porymap_map_name}' via fuzzy match")
+                        break
+        
+        if not porymap_map_name:
+            logger.warning(f"Porymap: Could not map ROM location '{location_name}' to porymap map name")
+            return context_parts
+        
+        logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}')")
+        
+        # Build JSON map
+        json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+        
+        if not json_map:
+            logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
+            return context_parts
+        
+        # Format for LLM
+        context_parts.append("\n=== PORYMAP GROUND TRUTH MAP ===")
+        context_parts.append(f"Location: {json_map.get('name', porymap_map_name)}")
+        context_parts.append(f"Dimensions: {json_map['dimensions']['width']}x{json_map['dimensions']['height']}")
+        
+        # Add ASCII map
+        if json_map.get('ascii'):
+            context_parts.append("\nASCII Map:")
+            context_parts.append(json_map['ascii'])
+            context_parts.append("(Legend: '.' = walkable, '#' = blocked, 'X' = out of bounds)")
+        
+        # Add warps
+        warps = json_map.get('warps', [])
+        if warps:
+            context_parts.append(f"\nWarps ({len(warps)}):")
+            for warp in warps[:10]:  # Limit to first 10
+                dest = warp.get('dest_map', '?')
+                context_parts.append(f"  At ({warp.get('x', 0)}, {warp.get('y', 0)}) → {dest}")
+            if len(warps) > 10:
+                context_parts.append(f"  ... and {len(warps) - 10} more warps")
+        
+        # Add objects (NPCs, items, etc.)
+        objects = json_map.get('objects', [])
+        if objects:
+            context_parts.append(f"\nObjects/NPCs ({len(objects)}):")
+            for obj in objects[:10]:  # Limit to first 10
+                gfx_id = obj.get('graphics_id', '?')
+                context_parts.append(f"  {gfx_id} at ({obj.get('x', 0)}, {obj.get('y', 0)})")
+            if len(objects) > 10:
+                context_parts.append(f"  ... and {len(objects) - 10} more objects")
+        
+        # Add connections
+        connections = json_map.get('connections', [])
+        if connections:
+            context_parts.append(f"\nMap Connections ({len(connections)}):")
+            for conn in connections[:5]:  # Limit to first 5
+                direction = conn.get('direction', '?')
+                target = conn.get('map', '?')
+                context_parts.append(f"  {direction} → {target}")
+            if len(connections) > 5:
+                context_parts.append(f"  ... and {len(connections) - 5} more connections")
+        
+        # Add compact JSON map data (without grid to save tokens - ASCII map is sufficient)
+        context_parts.append("\nMap Data (JSON):")
+        # Exclude grid and ASCII to save tokens - ASCII is already shown above
+        compact_json_map = {
+            "name": json_map.get('name'),
+            "id": json_map.get('id'),
+            "dimensions": json_map.get('dimensions'),
+            "warps": json_map.get('warps'),
+            "objects": json_map.get('objects'),
+            "connections": json_map.get('connections'),
+            "metadata": json_map.get('metadata')
+        }
+        context_parts.append(json.dumps(compact_json_map, indent=2))
+        
+        logger.info(f"Porymap: Successfully added map data for '{porymap_map_name}' ({json_map['dimensions']['width']}x{json_map['dimensions']['height']})")
+        
+    except ImportError as e:
+        # Log import errors as warnings
+        logger.warning(f"Porymap modules not available: {e}")
+    except Exception as e:
+        # Log errors but don't break state formatting
+        logger.warning(f"Error adding porymap info for location '{location_name}': {e}", exc_info=True)
+    
     return context_parts
 
 def _format_game_state(game_data, state_data=None, include_movement_preview=True):

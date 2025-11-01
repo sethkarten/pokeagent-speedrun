@@ -1,0 +1,43 @@
+LittlerootTown Map (20x20 metatiles) (20x20):
+
+##########..########
+##########..########
+##................##
+##................##
+....................
+..#####......#####..
+..#####......#####..
+..#####......#####..
+..######....######..
+....................
+....................
+....................
+....................
+...#######.....#....
+...#######..........
+...#######..........
+...#######........##
+......#...........##
+##..............####
+##..............####
+
+================================================================================
+Map Metadata:
+  Map ID: MAP_LITTLEROOT_TOWN
+  Layout: LAYOUT_LITTLEROOT_TOWN
+  Music: MUS_LITTLEROOT
+  Map Type: MAP_TYPE_TOWN
+  Dimensions: 20x20 metatiles
+  Connections: 1
+    - up to MAP_ROUTE101
+  Warps: 3
+    - (14, 8) -> MAP_LITTLEROOT_TOWN_MAYS_HOUSE_1F
+    - (5, 8) -> MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F
+    - (7, 16) -> MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB
+  Object Events: 8
+    - OBJ_EVENT_GFX_TWIN at (16, 10)
+    - OBJ_EVENT_GFX_FAT_MAN at (12, 13)
+    - OBJ_EVENT_GFX_BOY_2 at (14, 17)
+    - OBJ_EVENT_GFX_MOM at (5, 8)
+    - OBJ_EVENT_GFX_TRUCK at (2, 10)
+    ... and 3 more
