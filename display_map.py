@@ -76,22 +76,60 @@ def get_map_data(map_name: str, pokeemerald_root: Path) -> tuple:
         print(f"Error: Map '{map_name}' not found in {pokeemerald_root / 'data' / 'maps'}")
         return None
     
-    # Get layout name from map
+    # Get layout ID from map
     layout_id = map_data.get("layout")
     if not layout_id:
         print(f"Error: Map '{map_name}' has no layout specified")
         return None
     
-    # Convert layout ID to name for parser
-    layout_name = layout_id.replace("LAYOUT_", "").lower().replace("_", " ").title().replace(" ", "")
+    # Try to find layout info using the layout_id directly first
+    layout_info = layout_parser.get_layout_info(layout_id)
     
-    # Parse layout binary data
-    metatiles = layout_parser.get_metatiles_with_behavior(layout_name)
-    if metatiles is None:
-        print(f"Error: Could not parse layout '{layout_name}' for map '{map_name}'")
+    # If direct lookup failed, try converting layout ID to name format
+    if not layout_info:
+        layout_name = layout_id.replace("LAYOUT_", "").lower().replace("_", " ").title().replace(" ", "")
+        layout_info = layout_parser.get_layout_info(layout_name)
+    
+    # If still not found, try alternative name formats
+    if not layout_info:
+        # Try with underscores preserved differently
+        alt_name = layout_id.replace("LAYOUT_", "").replace("_", "")
+        layout_info = layout_parser.get_layout_info(alt_name)
+    
+    if not layout_info:
+        print(f"Error: Could not find layout '{layout_id}' for map '{map_name}'")
+        print(f"  Tried: '{layout_id}', converted name variants")
         return None
     
-    layout_info = layout_parser.get_layout_info(layout_name)
+    # Use the actual layout name/ID from the layout_info to ensure we load the correct file
+    actual_layout_id = layout_info.get("id", layout_id)
+    layout_name_for_parsing = layout_info.get("name", "").replace("_Layout", "")
+    if not layout_name_for_parsing:
+        # Fallback to converted name
+        layout_name_for_parsing = layout_id.replace("LAYOUT_", "").lower().replace("_", " ").title().replace(" ", "")
+    
+    # Parse layout binary data using the correct layout identifier
+    # Try both the layout ID and name to ensure we get the right file
+    blockdata_path = layout_info.get('blockdata_filepath', 'N/A')
+    print(f"Loading layout for map '{map_name}':")
+    print(f"  Layout ID: {layout_id}")
+    print(f"  Actual layout ID from info: {actual_layout_id}")
+    print(f"  Blockdata file: {blockdata_path}")
+    
+    metatiles = layout_parser.get_metatiles_with_behavior(actual_layout_id)
+    if metatiles is None:
+        metatiles = layout_parser.get_metatiles_with_behavior(layout_name_for_parsing)
+    
+    if metatiles is None:
+        print(f"Error: Could not parse layout binary for '{layout_id}' (tried ID: '{actual_layout_id}', name: '{layout_name_for_parsing}')")
+        print(f"  Map: '{map_name}'")
+        print(f"  Layout info found: {layout_info is not None}")
+        if layout_info:
+            print(f"  Layout info keys: {list(layout_info.keys())}")
+            print(f"  Blockdata filepath: {blockdata_path}")
+        return None
+    
+    print(f"  ✓ Successfully loaded {len(metatiles)}x{len(metatiles[0]) if metatiles else 0} metatiles")
     
     return (map_data, metatiles, layout_info)
 

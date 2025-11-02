@@ -487,14 +487,7 @@ class MyCLIAgent:
         """Execute a function call and return the result as JSON string."""
         function_name = function_call.name
 
-        # TEMPORARILY DISABLE navigate_to tool due to pathfinding issues
-        if function_name == "navigate_to":
-            logger.warning("🚫 navigate_to() is temporarily disabled. Use press_buttons() for movement instead.")
-            return json.dumps({
-                "success": False, 
-                "error": "navigate_to is temporarily disabled. Use press_buttons(['UP'], reasoning) or press_buttons(['DOWN'], reasoning) etc. for movement.",
-                "suggestion": "Use press_buttons() with directional buttons (UP, DOWN, LEFT, RIGHT) for movement"
-            })
+        # navigate_to is now enabled with porymap ground truth pathfinding
 
         # Parse arguments - convert protobuf types to native Python types
         try:
@@ -509,15 +502,34 @@ class MyCLIAgent:
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None):
+    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None):
         """Add interaction to conversation history."""
-        self.conversation_history.append({
+        entry = {
             "step": self.step_count,
             "prompt": prompt,
             "response": response,
             "tool_calls": tool_calls or [],
             "timestamp": time.time()
-        })
+        }
+        
+        # Extract action and action_details from tool_calls if available
+        if tool_calls:
+            last_call = tool_calls[-1]
+            entry["action"] = last_call.get("name", "unknown")
+            if action_details:
+                entry["action_details"] = action_details
+            elif last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get("args", {}):
+                # Check if we have pending action details from navigation
+                if hasattr(self, '_pending_action_details') and 'navigate_to' in self._pending_action_details:
+                    entry["action_details"] = self._pending_action_details['navigate_to']
+                else:
+                    entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']})"
+            elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
+                entry["action_details"] = f"Pressed {last_call['args']['buttons']}"
+            else:
+                entry["action_details"] = f"Executed {last_call.get('name', 'unknown')}"
+        
+        self.conversation_history.append(entry)
 
         # Check if we need to compact history based on context length
         current_context_size = self._calculate_context_size()
@@ -750,7 +762,27 @@ class MyCLIAgent:
                     if last_tool_call['name'] == "press_buttons" and "buttons" in last_tool_call["args"]:
                         action_details = f"Pressed {last_tool_call['args']['buttons']}"
                     elif last_tool_call['name'] == "navigate_to" and "x" in last_tool_call["args"] and "y" in last_tool_call["args"]:
-                        action_details = f"Navigated to ({last_tool_call['args']['x']}, {last_tool_call['args']['y']})"
+                        target_x = last_tool_call["args"]["x"]
+                        target_y = last_tool_call["args"]["y"]
+                        # Wait for actions to complete first, then get final position
+                        self._wait_for_actions_complete()
+                        final_pos = None
+                        try:
+                            # Get state to find final position after navigation completes
+                            final_state_result = self._execute_function_call_by_name("get_game_state", {})
+                            import json as json_module
+                            final_state_data = json_module.loads(final_state_result)
+                            if final_state_data.get("success"):
+                                player_pos = final_state_data.get("player_position", {})
+                                if player_pos:
+                                    final_pos = (player_pos.get("x"), player_pos.get("y"))
+                        except:
+                            pass
+                        
+                        if final_pos:
+                            action_details = f"navigate_to({target_x}, {target_y}) → Ended at ({final_pos[0]}, {final_pos[1]})"
+                        else:
+                            action_details = f"navigate_to({target_x}, {target_y})"
                     elif last_tool_call['name'] == "complete_direct_objective":
                         action_details = "Completed direct objective"
                     else:
@@ -862,12 +894,24 @@ class MyCLIAgent:
 
                         # Extract reasoning from function arguments
                         tool_reasoning = ""
+                        final_position = None
                         try:
                             # Get args from the tool call that was made
                             if tool_calls_made:
                                 last_call = tool_calls_made[-1]
                                 if function_call.name == "navigate_to" and "reason" in last_call["args"]:
                                     tool_reasoning = last_call["args"]["reason"]
+                                    # Get final position after navigation
+                                    try:
+                                        final_state = self._execute_function_call_by_name("get_game_state", {})
+                                        import json as json_module
+                                        final_state_data = json_module.loads(final_state)
+                                        if final_state_data.get("success"):
+                                            player_pos = final_state_data.get("player_position", {})
+                                            if player_pos:
+                                                final_position = (player_pos.get("x"), player_pos.get("y"))
+                                    except Exception as e:
+                                        logger.debug(f"Could not get final position after navigate_to: {e}")
                                 elif function_call.name == "press_buttons" and "reasoning" in last_call["args"]:
                                     tool_reasoning = last_call["args"]["reasoning"]
                         except Exception as e:
@@ -900,8 +944,21 @@ class MyCLIAgent:
                             print(display_text)
                             print("="*70 + "\n")
 
-                        # Add to history
-                        self._add_to_history(prompt, full_response, tool_calls_made)
+                        # Build action_details for navigate_to showing final position
+                        action_details_str = None
+                        if function_call.name == "navigate_to" and tool_calls_made:
+                            last_call = tool_calls_made[-1]
+                            if "x" in last_call["args"] and "y" in last_call["args"]:
+                                target_x = last_call["args"]["x"]
+                                target_y = last_call["args"]["y"]
+                                if final_position:
+                                    final_x, final_y = final_position
+                                    action_details_str = f"navigate_to({target_x}, {target_y}) → Ended at ({final_x}, {final_y})"
+                                else:
+                                    action_details_str = f"navigate_to({target_x}, {target_y})"
+                        
+                        # Add to history with action details
+                        self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str)
 
                         # Log to LLM logger
                         self._log_thinking(prompt, full_response, duration, tool_calls_made)
@@ -1129,11 +1186,20 @@ Especially If a current approach is leading to consistent failure without provid
 ACTION HISTORY (last 20 steps):
 {action_history}
 
-======================== OBJECTIVE CONTEXT ========================
+================================================================================
+🎯🎯🎯 CURRENT DIRECT OBJECTIVE - READ THIS CAREFULLY 🎯🎯🎯
+================================================================================
+
 {direct_objective_context}
+
 {direct_objective}
+
 {direct_objective_status}
-====================================================================
+
+================================================================================
+⚠️ CRITICAL: When you have completed the objective above, you MUST call:
+   complete_direct_objective(reasoning="<explain why it's complete>")
+================================================================================
 
 CURRENT GAME STATE:
 {state_text}
@@ -1145,9 +1211,10 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 🎮 **PRIMARY GAME TOOLS** (use these most often):
 - get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
+- navigate_to(x, y, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data
 - complete_direct_objective(reasoning) - Mark current direct objective as complete
 
-⚠️ **NAVIGATION**: DO NOT use navigate_to() - it is temporarily disabled due to pathfinding issues. Always use press_buttons() with directional buttons (UP, DOWN, LEFT, RIGHT) for movement instead.
+🗺️ **NAVIGATION**: Use navigate_to(x, y, reason) to automatically pathfind to a coordinate. It uses A* pathfinding on the porymap ground truth map. You can also use press_buttons() for manual movement if navigate_to isn't working.
 
 📚 **INFORMATION TOOLS** (use when you need info):
 - lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis
@@ -1172,13 +1239,14 @@ Example: If you are at position (3, 8) and press UP, you will move to (3, 7)
 - To interact with an object or NPC, you must be both 1) on an adjacent tile to the NPC or object and 2) facing the NPC or object.
 
 STRATEGY - PRIORITY ORDER:
-1. **DIALOGUE FIRST**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
-2. **CHECK OBJECTIVE COMPLETION**: After each action, check if your current direct objective is complete and use complete_direct_objective() if so
-3. **MOVEMENT**: Use press_buttons(["UP"], reasoning) or press_buttons(["DOWN"], reasoning) or press_buttons(["LEFT"], reasoning) or press_buttons(["RIGHT"], reasoning) for movement. NEVER use navigate_to() - it is disabled.
-4. **BATTLES**: Use press_buttons with battle moves. When HP < 75%, use healing moves like Absorb
+1. **CHECK OBJECTIVE COMPLETION FIRST**: Before doing ANYTHING, check if your current direct objective is complete. If you've accomplished what the objective asks for, IMMEDIATELY call complete_direct_objective(reasoning="...") 
+2. **DIALOGUE SECOND**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
+3. **MOVEMENT**: Preferentially use navigate_to(x, y, reason) to automatically pathfind to a coordinate. Use press_buttons(["UP"], reasoning) etc. for manual movement only if navigate_to is not working.
+4. **BATTLES**: Use press_buttons with battle moves. Select moves carefully based on the current situation and the enemy's Pokemon. If below 75% health, prioritize using healing moves that also cause damage like (absorb, gigadrain, etc) if these moves are available.
 5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
-6. **OBJECTIVES**: Use complete_direct_objective when you've finished a guided objective and receive the next objective
-7. **STUCK DETECTION**: If you've been attempting the same move (UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
+6. **STUCK DETECTION**: If you've been attempting the same move (UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
+
+🔴 **REMEMBER**: You MUST call complete_direct_objective() as soon as you've completed the current objective! The agent will NOT automatically know you're done - you must explicitly call the function.
 
 IMPORTANT: Always check the game screen for dialogue boxes before planning movement!
 **CRITICAL**: After performing any action, proactively check if your current direct objective is complete!

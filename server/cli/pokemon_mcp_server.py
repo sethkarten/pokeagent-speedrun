@@ -155,6 +155,97 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
         # Get current state for pathfinding
         state = env.get_comprehensive_state()
 
+        # CRITICAL: Load porymap data into state for pathfinding
+        # The pathfinder needs map['porymap']['grid'] which is normally added by format_state_for_llm
+        location_name = state.get('player', {}).get('location', 'Unknown')
+        if location_name and location_name != 'Unknown' and location_name != 'TITLE_SEQUENCE':
+            try:
+                from utils.porymap_json_builder import build_json_map_for_llm
+                from utils.pokeemerald_parser import PokeemeraldMapLoader
+                from pathlib import Path
+                import os
+                
+                # Get pokeemerald root (use same logic as state_formatter)
+                pokeemerald_root = None
+                # Try environment variable first (same as state_formatter)
+                root = os.environ.get('POKEEMERALD_ROOT')
+                if root:
+                    root_path = Path(root).resolve()
+                    if (root_path / "data" / "maps").exists():
+                        pokeemerald_root = root_path
+                
+                # Try porymap_data directory (same as state_formatter)
+                if not pokeemerald_root:
+                    # Get the server/cli directory's parent's parent (pokeagent-speedrun root)
+                    current_dir = Path(__file__).parent.parent.parent
+                    porymap_path = current_dir / "porymap_data"
+                    if (porymap_path / "data" / "maps").exists():
+                        pokeemerald_root = porymap_path.resolve()
+                
+                # Try common relative paths (same as state_formatter)
+                if not pokeemerald_root:
+                    current_dir = Path(__file__).parent.parent.parent
+                    possible_paths = [
+                        current_dir / "pokeemerald",
+                        current_dir / "../pokeemerald",
+                        current_dir / "../../pokeemerald",
+                    ]
+                    for path in possible_paths:
+                        resolved = path.resolve()
+                        if (resolved / "data" / "maps").exists():
+                            pokeemerald_root = resolved
+                            break
+                
+                if pokeemerald_root:
+                    # Map ROM location to porymap name (simplified version)
+                    ROM_TO_PORYMAP_MAP = {
+                        "LITTLEROOT TOWN": "LittlerootTown",
+                        "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
+                        "PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
+                        "ROUTE 101": "Route101",
+                        "OLDALE TOWN": "OldaleTown",
+                    }
+                    
+                    porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
+                    
+                    # Try fuzzy matching if not in direct mapping
+                    if not porymap_map_name:
+                        map_loader = PokeemeraldMapLoader(pokeemerald_root)
+                        maps_dir = pokeemerald_root / "data" / "maps"
+                        if maps_dir.exists():
+                            location_normalized = location_name.lower().replace(" ", "").replace("_", "")
+                            for map_dir in maps_dir.iterdir():
+                                if map_dir.is_dir() and map_dir.name != "map_groups.json":
+                                    map_normalized = map_dir.name.lower().replace(" ", "").replace("_", "")
+                                    if location_normalized in map_normalized or map_normalized in location_normalized:
+                                        porymap_map_name = map_dir.name
+                                        break
+                    
+                    if porymap_map_name:
+                        # Build JSON map with grid for pathfinding
+                        json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+                        if json_map and 'grid' in json_map:
+                            # Ensure map dict exists
+                            if 'map' not in state:
+                                state['map'] = {}
+                            if 'porymap' not in state['map']:
+                                state['map']['porymap'] = {}
+                            
+                            # Add porymap data for pathfinding
+                            state['map']['porymap']['grid'] = json_map['grid']
+                            state['map']['porymap']['objects'] = json_map.get('objects', [])
+                            state['map']['porymap']['dimensions'] = json_map.get('dimensions', {})
+                            state['map']['porymap']['warps'] = json_map.get('warps', [])
+                            logger.debug(f"Loaded porymap data for '{porymap_map_name}' (ROM: '{location_name}')")
+                        else:
+                            logger.warning(f"Porymap data for '{porymap_map_name}' missing grid data")
+                    else:
+                        logger.warning(f"Could not map ROM location '{location_name}' to porymap map name")
+                else:
+                    logger.warning(f"Could not find pokeemerald root for porymap data")
+            except Exception as porymap_err:
+                logger.warning(f"Failed to load porymap data for pathfinding: {porymap_err}")
+
         # Get player position
         player_pos = state.get('player', {}).get('position', {})
         start_x = player_pos.get('x', 0)
@@ -187,6 +278,8 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
         }
     except Exception as e:
         logger.error(f"Failed to navigate: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {"success": False, "error": str(e)}
 
 

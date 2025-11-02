@@ -1,0 +1,27 @@
+LittlerootTown_BrendansHouse_2F Map (9x8 metatiles) (8x9):
+
+#########
+#######.#
+.........
+.........
+.........
+.#.......
+.........
+.........
+
+================================================================================
+Map Metadata:
+  Map ID: MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F
+  Layout: LAYOUT_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F
+  Music: MUS_LITTLEROOT
+  Map Type: MAP_TYPE_INDOOR
+  Dimensions: 9x8 metatiles
+  Warps: 1
+    - (7, 1) -> MAP_LITTLEROOT_TOWN_BRENDANS_HOUSE_1F
+  Object Events: 16
+    - OBJ_EVENT_GFX_RIVAL_BRENDAN_NORMAL at (7, 1)
+    - OBJ_EVENT_GFX_VAR_0 at (0, 0)
+    - OBJ_EVENT_GFX_VAR_1 at (0, 1)
+    - OBJ_EVENT_GFX_VAR_2 at (0, 2)
+    - OBJ_EVENT_GFX_VAR_3 at (0, 3)
+    ... and 11 more
