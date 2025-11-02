@@ -330,7 +330,7 @@ class DirectObjectiveManager:
                 description="Travel north through Oldale Town to Route 103",
                 action_type="navigate",
                 target_location="Route 103",
-                navigation_hint="Move north through Oldale Town to reach Route 103",
+                navigation_hint="Move north through Oldale Town to reach Route 103 using navigate_to() for fast and efficient navigation.",
                 completion_condition="location_contains_route_103",
                 priority=1
             ),
@@ -351,7 +351,16 @@ class DirectObjectiveManager:
                 navigation_hint="Approach the rival trainer and interact with them to start the battle. Use your starter Pokemon and damaging moves to win the battle.",
                 completion_condition="battle_completed",
                 priority=1
-            )
+            ),
+            DirectObjective(
+                id="birch_2_06_south_to_professor_birch_lab",
+                description="Travel back south to Professor Birch's lab to receive the pokedex",
+                action_type="navigate",
+                target_location="Professor Birch's Lab",
+                navigation_hint="Travel south through oldale town, route 101, and littleroot town to reach Professor Birch's lab",
+                completion_condition="received_pokedex",
+                priority=1
+            ),
         ]
         self.current_index = min(start_index, len(self.current_sequence))
         # Mark all objectives before start_index as completed
