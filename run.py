@@ -129,7 +129,7 @@ def main():
     parser.add_argument("--no-ocr", action="store_true", 
                        help="Disable OCR dialogue detection")
     parser.add_argument("--direct-objectives", type=str, 
-                       help="Load a specific direct objective sequence (e.g., 'tutorial_to_starter')")
+                       help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival')")
     parser.add_argument("--direct-objectives-start", type=int, default=0,
                        help="Start index for direct objectives (for resuming from checkpoints)")
     

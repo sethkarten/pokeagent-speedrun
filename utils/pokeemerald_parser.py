@@ -46,22 +46,49 @@ class PokeemeraldLayoutParser:
             self.layout_lookup[layout_name] = layout
     
     def get_layout_info(self, layout_name_or_id: str) -> Optional[Dict]:
-        """Get layout information by name or ID"""
-        # Try direct lookup
+        """
+        Get layout information by name or ID.
+        
+        Uses strict matching first, then falls back to more flexible matching.
+        This ensures each location gets its own unique layout.
+        """
+        # Try direct lookup first (exact match)
         if layout_name_or_id in self.layout_lookup:
             return self.layout_lookup[layout_name_or_id]
         
-        # Try case-insensitive lookup
+        # Try case-insensitive exact match (but not partial)
         for key, layout in self.layout_lookup.items():
             if key.upper() == layout_name_or_id.upper():
                 return layout
         
-        # Try partial match
-        layout_name_lower = layout_name_or_id.lower().replace("_layout", "")
+        # Normalize for partial matching (only if exact match failed)
+        # Remove common prefixes/suffixes
+        normalized_input = layout_name_or_id.upper().replace("LAYOUT_", "").replace("_", "").replace(" ", "")
+        
+        # Try to match normalized names, but prefer exact matches
+        best_match = None
+        best_match_score = 0
+        
         for key, layout in self.layout_lookup.items():
-            key_lower = key.lower().replace("layout_", "").replace("_", "")
-            if layout_name_lower in key_lower or key_lower in layout_name_lower:
+            # Normalize the key similarly
+            normalized_key = key.upper().replace("LAYOUT_", "").replace("_", "").replace(" ", "")
+            
+            # Check for exact normalized match first (highest priority)
+            if normalized_input == normalized_key:
                 return layout
+            
+            # Calculate partial match score (lower priority, only if no exact match)
+            # Prefer matches that start with the input or where input starts with the key
+            if normalized_input.startswith(normalized_key) or normalized_key.startswith(normalized_input):
+                match_score = min(len(normalized_input), len(normalized_key))
+                # Only update if this is a better match (longer match)
+                if match_score > best_match_score:
+                    best_match = layout
+                    best_match_score = match_score
+        
+        # Only return partial match if it's a very good match (at least 80% of characters match)
+        if best_match and best_match_score >= max(len(normalized_input) * 0.8, len(normalized_input) - 5):
+            return best_match
         
         return None
     
@@ -156,13 +183,129 @@ class PokeemeraldLayoutParser:
         elevation = (metatile_value & 0xF000) >> 12  # Bits 12-15
         return (metatile_id, collision, elevation)
     
+    def _infer_behavior_from_metatile_id(self, metatile_id: int, collision: int) -> MetatileBehavior:
+        """
+        Infer metatile behavior from metatile ID using heuristics.
+        
+        This is a fallback when tileset metatile_attributes.bin is not available.
+        Uses common metatile ID ranges from Pokemon Emerald.
+        
+        Args:
+            metatile_id: Metatile ID (0-1023)
+            collision: Collision value (0-3)
+            
+        Returns:
+            Inferred MetatileBehavior
+        """
+        # Invalid/out of bounds
+        if metatile_id == 1023:
+            return MetatileBehavior.NORMAL
+        
+        # Blocked tiles (collision > 0)
+        if collision > 0:
+            # Check for directional impassable
+            if 768 <= metatile_id < 832:
+                # Common impassable ranges (varies by tileset)
+                return MetatileBehavior.SECRET_BASE_WALL
+            return MetatileBehavior.SECRET_BASE_WALL
+        
+        # Walkable tiles - use metatile ID ranges to infer behavior
+        # These ranges are approximate and vary by tileset, but work for common cases
+        
+        # Water tiles (commonly in ranges 144-223, varies by tileset)
+        if 144 <= metatile_id < 224:
+            # Try to distinguish water types (heuristic)
+            if 144 <= metatile_id < 160:
+                return MetatileBehavior.POND_WATER
+            elif 160 <= metatile_id < 176:
+                return MetatileBehavior.DEEP_WATER
+            elif 176 <= metatile_id < 192:
+                return MetatileBehavior.OCEAN_WATER
+            elif 192 <= metatile_id < 208:
+                return MetatileBehavior.SHALLOW_WATER
+            else:
+                return MetatileBehavior.WATERFALL
+        
+        # Grass tiles (commonly in ranges 16-63)
+        if 16 <= metatile_id < 64:
+            if 16 <= metatile_id < 32:
+                return MetatileBehavior.TALL_GRASS
+            elif 32 <= metatile_id < 48:
+                return MetatileBehavior.LONG_GRASS
+            elif 48 <= metatile_id < 56:
+                return MetatileBehavior.SHORT_GRASS
+            else:
+                return MetatileBehavior.LONG_GRASS_SOUTH_EDGE
+        
+        # Sand (commonly around 80-95)
+        if 80 <= metatile_id < 96:
+            if 86 <= metatile_id < 88:
+                return MetatileBehavior.DEEP_SAND
+            else:
+                return MetatileBehavior.SAND
+        
+        # Ice (commonly around 224-255)
+        if 224 <= metatile_id < 256:
+            if 230 <= metatile_id < 232:
+                return MetatileBehavior.THIN_ICE
+            elif 232 <= metatile_id < 234:
+                return MetatileBehavior.CRACKED_ICE
+            else:
+                return MetatileBehavior.ICE
+        
+        # Ledges (commonly in ranges 384-447)
+        if 384 <= metatile_id < 448:
+            # Jump directions
+            if 400 <= metatile_id < 408:
+                return MetatileBehavior.JUMP_EAST
+            elif 408 <= metatile_id < 416:
+                return MetatileBehavior.JUMP_WEST
+            elif 416 <= metatile_id < 424:
+                return MetatileBehavior.JUMP_NORTH
+            elif 424 <= metatile_id < 432:
+                return MetatileBehavior.JUMP_SOUTH
+            elif 432 <= metatile_id < 440:
+                return MetatileBehavior.JUMP_NORTHEAST
+            elif 440 <= metatile_id < 448:
+                return MetatileBehavior.JUMP_NORTHWEST
+        
+        # Water currents (commonly around 512-575)
+        if 512 <= metatile_id < 576:
+            if 528 <= metatile_id < 536:
+                return MetatileBehavior.EASTWARD_CURRENT
+            elif 536 <= metatile_id < 544:
+                return MetatileBehavior.WESTWARD_CURRENT
+            elif 544 <= metatile_id < 552:
+                return MetatileBehavior.NORTHWARD_CURRENT
+            elif 552 <= metatile_id < 560:
+                return MetatileBehavior.SOUTHWARD_CURRENT
+        
+        # Warps/stairs/doors (commonly in ranges 640-767)
+        if 640 <= metatile_id < 768:
+            if 656 <= metatile_id < 664:
+                return MetatileBehavior.NON_ANIMATED_DOOR
+            elif 664 <= metatile_id < 672:
+                return MetatileBehavior.LADDER
+            elif 672 <= metatile_id < 680:
+                return MetatileBehavior.SOUTH_ARROW_WARP
+        
+        # Special terrain
+        if 96 <= metatile_id < 112:
+            return MetatileBehavior.HOT_SPRINGS
+        if 256 <= metatile_id < 320:
+            return MetatileBehavior.CAVE
+        
+        # Default to NORMAL for walkable tiles
+        return MetatileBehavior.NORMAL
+    
     def get_metatiles_with_behavior(self, layout_name_or_id: str) -> Optional[List[List[Tuple[int, MetatileBehavior, int, int]]]]:
         """
         Parse map.bin and return metatiles with behavior.
         
         Returns:
             2D list of tuples: (metatile_id, behavior, collision, elevation)
-            Behavior is estimated from collision and basic heuristics.
+            Behavior is inferred from metatile_id using heuristics since
+            tileset metatile_attributes.bin files are not available.
         """
         metatiles = self.parse_map_bin(layout_name_or_id)
         if metatiles is None:
@@ -174,19 +317,8 @@ class PokeemeraldLayoutParser:
             for metatile_value in row:
                 metatile_id, collision, elevation = self.unpack_metatile(metatile_value)
                 
-                # Estimate behavior from collision and metatile_id
-                # For now, use NORMAL for most tiles
-                # Collision == 0 means walkable, non-zero means blocked
-                behavior = MetatileBehavior.NORMAL
-                
-                # Try to infer some behaviors from metatile_id
-                # This is a simplified approach - proper behavior would come from metatile_attributes.bin
-                if collision > 0:
-                    # Blocked tiles - could be various types
-                    if metatile_id > 512:  # Higher IDs often indicate special tiles
-                        behavior = MetatileBehavior.SECRET_BASE_WALL
-                elif metatile_id == 1023:  # 0x3FF - invalid/out of bounds
-                    behavior = MetatileBehavior.NORMAL
+                # Infer behavior from metatile_id and collision
+                behavior = self._infer_behavior_from_metatile_id(metatile_id, collision)
                 
                 result_row.append((metatile_id, behavior, collision, elevation))
             result.append(result_row)

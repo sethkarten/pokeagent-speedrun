@@ -33,7 +33,19 @@ class Node:
         self.f_cost = self.g_cost + self.h_cost
     
     def __lt__(self, other):
-        return self.f_cost < other.f_cost
+        """
+        Comparison for heapq tie-breaking.
+        When f_cost is equal, prefer nodes with higher g_cost (closer to goal),
+        or if still equal, prefer nodes closer to goal by h_cost (lower h_cost = closer).
+        This ensures deterministic, optimal path selection.
+        """
+        if self.f_cost != other.f_cost:
+            return self.f_cost < other.f_cost
+        # Tie-breaking: prefer nodes with higher g_cost (explored more = closer to goal)
+        if self.g_cost != other.g_cost:
+            return self.g_cost > other.g_cost
+        # Secondary tie-breaking: prefer nodes closer to goal (lower h_cost)
+        return self.h_cost < other.h_cost
     
     def __eq__(self, other):
         return self.x == other.x and self.y == other.y
@@ -71,8 +83,8 @@ class Pathfinder:
         Find a path from start to goal using A* algorithm.
         
         Args:
-            start: Starting position (x, y)
-            goal: Goal position (x, y)
+            start: Starting position (x, y) - ROM coordinates (0,0 = top-left of current map)
+            goal: Goal position (x, y) - ROM coordinates
             game_state: Current game state with map data, NPCs, etc.
             max_distance: Maximum distance to search (prevents infinite loops)
             
@@ -81,12 +93,61 @@ class Pathfinder:
         """
         # Extract map data from game state
         map_data = self._extract_map_data(game_state)
+        
+        # CRITICAL: Require porymap data - no fallback allowed
         if not map_data:
-            logger.warning("No map data available for pathfinding")
-            return self._simple_path(start, goal)
+            logger.error(f"Pathfinding: No map data available from {start} to {goal}")
+            return None
+        
+        # Only use porymap data - reject other map types
+        if map_data.get('type') != 'porymap':
+            logger.error(f"Pathfinding: Map data type is '{map_data.get('type')}', but only 'porymap' is allowed. Rejecting pathfinding.")
+            return None
+        
+        if 'grid' not in map_data or not map_data.get('grid'):
+            logger.error(f"Pathfinding: Porymap data missing 'grid' field. Cannot pathfind.")
+            return None
+        
+        # Get current location for debugging
+        location_name = game_state.get('player', {}).get('location', 'Unknown')
+        logger.info(f"Pathfinding: {start} -> {goal} in {location_name}")
+        logger.debug(f"Map type: {map_data.get('type')}, dimensions: {map_data.get('width', '?')}x{map_data.get('height', '?')}")
         
         # Get blocked positions (walls, NPCs, water, etc.)
-        blocked = self._get_blocked_positions(game_state, map_data)
+        # CRITICAL: Exclude start position - player is there so it must be walkable
+        blocked = self._get_blocked_positions(game_state, map_data, start_pos=start)
+        
+        # Get warp positions and ensure they're walkable (doors/stairs)
+        warps = self._get_warp_positions(game_state, map_data)
+        for warp_pos in warps:
+            blocked.discard(warp_pos)  # Warps are always walkable
+        
+        # Double-check: ensure start and goal are never blocked
+        blocked.discard(start)
+        blocked.discard(goal)
+        
+        # Log grid cell status for debugging
+        if map_data.get('type') == 'porymap' and 'grid' in map_data:
+            grid = map_data['grid']
+            start_x, start_y = start
+            goal_x, goal_y = goal
+            if 0 <= start_y < len(grid) and isinstance(grid[start_y], (list, str)):
+                row = grid[start_y]
+                if isinstance(row, str):
+                    start_cell = row[start_x] if 0 <= start_x < len(row) else '?'
+                else:
+                    start_cell = row[start_x] if 0 <= start_x < len(row) else '?'
+                logger.debug(f"Start ({start_x}, {start_y}) in grid: '{start_cell}' {'(was blocked, now unblocked)' if start_cell == '#' else ''}")
+            if 0 <= goal_y < len(grid) and isinstance(grid[goal_y], (list, str)):
+                row = grid[goal_y]
+                if isinstance(row, str):
+                    goal_cell = row[goal_x] if 0 <= goal_x < len(row) else '?'
+                else:
+                    goal_cell = row[goal_x] if 0 <= goal_x < len(row) else '?'
+                goal_pos = (goal_x, goal_y)
+                logger.debug(f"Goal ({goal_x}, {goal_y}) in grid: '{goal_cell}' {'(warp - unblocked)' if goal_pos in warps else ''}")
+        
+        logger.debug(f"Total blocked positions: {len(blocked)}, warps: {len(warps)}")
         
         # Run A* algorithm
         path = self._astar(start, goal, blocked, map_data, max_distance)
@@ -96,32 +157,67 @@ class Pathfinder:
             # Try to find nearest reachable position
             nearest = self._find_nearest_reachable(start, goal, blocked, map_data)
             if nearest and nearest != start:
+                logger.info(f"Using nearest reachable position {nearest} instead of {goal}")
                 path = self._astar(start, nearest, blocked, map_data, max_distance)
         
         if not path:
-            logger.warning(f"No path found from {start} to {goal}")
+            logger.warning(f"Pathfinding failed: {start} -> {goal} in {location_name}")
+            logger.warning(f"  Blocked count: {len(blocked)}, Map: {map_data.get('type', 'unknown')}")
             return None
         
-        # Convert path to button commands
+        logger.info(f"Path found: {len(path)} steps from {start} to {goal}")
+        
+        # Warn if path is significantly longer than Manhattan distance (suggests suboptimal pathfinding)
+        manhattan_dist = abs(start[0] - goal[0]) + abs(start[1] - goal[1])
+        if len(path) > manhattan_dist * 1.5:
+            logger.warning(f"⚠️ Suboptimal path detected: {len(path)} steps (expected ~{manhattan_dist} for straight line)")
+            logger.debug(f"Path positions (first 10): {path[:10]}")
+            # Log what's blocking the direct path
+            direct_path_blocked = []
+            if start[0] == goal[0]:  # Vertical path
+                for y in range(min(start[1], goal[1]), max(start[1], goal[1]) + 1):
+                    pos = (start[0], y)
+                    if pos in blocked:
+                        direct_path_blocked.append(pos)
+                if direct_path_blocked:
+                    logger.warning(f"Direct vertical path blocked at: {direct_path_blocked[:5]}")
+            elif start[1] == goal[1]:  # Horizontal path
+                for x in range(min(start[0], goal[0]), max(start[0], goal[0]) + 1):
+                    pos = (x, start[1])
+                    if pos in blocked:
+                        direct_path_blocked.append(pos)
+                if direct_path_blocked:
+                    logger.warning(f"Direct horizontal path blocked at: {direct_path_blocked[:5]}")
+        
         return self._path_to_buttons(path)
     
     def _extract_map_data(self, game_state: Dict) -> Optional[Dict]:
-        """Extract map data from game state."""
-        # Try to get map data from various possible locations in game state
-        if 'map_data' in game_state:
-            return game_state['map_data']
-        elif 'game_state' in game_state and 'map_data' in game_state['game_state']:
-            return game_state['game_state']['map_data']
-        elif 'visual' in game_state and 'map' in game_state['visual']:
-            return game_state['visual']['map']
-        elif 'map' in game_state:
-            # This is the actual structure from get_comprehensive_state()
-            return game_state['map']
+        """Extract map data from game state. ONLY returns porymap data - no fallbacks."""
+        # ONLY use porymap data (ground truth from JSON) - no fallbacks
+        map_data = game_state.get('map', {})
+        if map_data and 'porymap' in map_data:
+            porymap = map_data['porymap']
+            if porymap.get('grid'):
+                # Return porymap data structure for pathfinding
+                return {
+                    'type': 'porymap',
+                    'grid': porymap['grid'],  # ASCII grid: [['.', '#', ...], ...]
+                    'objects': porymap.get('objects', []),
+                    'width': porymap.get('dimensions', {}).get('width', 0),
+                    'height': porymap.get('dimensions', {}).get('height', 0),
+                    'warps': porymap.get('warps', [])  # Include warps for pathfinding
+                }
+        
+        # No porymap data available - return None (no fallback)
         return None
     
-    def _get_blocked_positions(self, game_state: Dict, map_data: Dict) -> Set[Tuple[int, int]]:
+    def _get_blocked_positions(self, game_state: Dict, map_data: Dict, start_pos: Optional[Tuple[int, int]] = None) -> Set[Tuple[int, int]]:
         """
         Get all blocked positions on the current map.
+        ONLY uses porymap ASCII grid data - no fallbacks.
+        
+        Args:
+            start_pos: Starting position - will NEVER be marked as blocked (player is there, so it's walkable)
 
         Returns set of (x, y) tuples that are not walkable.
         Note: Ledges are handled separately via directional checks.
@@ -132,18 +228,52 @@ class Pathfinder:
         width = map_data.get('width', 50)
         height = map_data.get('height', 50)
 
-        # Check collision data from map tiles
-        if 'tiles' in map_data:
-            tiles = map_data['tiles']
-            for y, row in enumerate(tiles):
-                if isinstance(row, list):
-                    for x, tile in enumerate(row):
-                        if self._is_tile_blocked(tile):
-                            blocked.add((x, y))
+        # REQUIRED: Only use porymap ASCII grid (ground truth data)
+        if map_data.get('type') != 'porymap' or 'grid' not in map_data:
+            logger.error(f"_get_blocked_positions: Expected porymap data with grid, got type='{map_data.get('type')}', has_grid={'grid' in map_data}")
+            return blocked
+        
+        grid = map_data['grid']
+        for y, row in enumerate(grid):
+            if isinstance(row, list):
+                for x, cell in enumerate(row):
+                    # In porymap ASCII: '.' = walkable, '#' = blocked, 'X' = out of bounds, 'P' = player
+                    if cell == '#' or cell == 'X':
+                        pos = (x, y)
+                        # CRITICAL: Never block the starting position - player is there so it must be walkable
+                        if start_pos and pos == start_pos:
+                            logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
+                            continue
+                        blocked.add(pos)
+            elif isinstance(row, str):
+                # Handle string rows (each character is a cell)
+                for x, cell in enumerate(row):
+                    if cell == '#' or cell == 'X':
+                        pos = (x, y)
+                        if start_pos and pos == start_pos:
+                            logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
+                            continue
+                        blocked.add(pos)
 
-        # Add NPC positions as blocked
-        npcs = self._get_npc_positions(game_state)
-        blocked.update(npcs)
+        # Add NPC/object positions as blocked (from porymap objects)
+        if 'objects' in map_data:
+            objects = map_data['objects']
+            for obj in objects:
+                obj_x = obj.get('x', 0)
+                obj_y = obj.get('y', 0)
+                # Block objects that are stationary or have limited movement
+                # Block: NONE, FACE_*, WANDER_AROUND (they occupy their position)
+                # Allow: WALK_*, RUN_*, JUMP_* (they actively move around)
+                movement_type = obj.get('movement_type', '')
+                movement_type_upper = movement_type.upper()
+                
+                # Block stationary objects
+                if ('NONE' in movement_type_upper or 
+                    'STATIC' in movement_type_upper or 
+                    'FACE_' in movement_type_upper or  # FACE_DOWN, FACE_UP, etc.
+                    'WANDER' in movement_type_upper or  # WANDER_AROUND
+                    not movement_type):
+                    blocked.add((obj_x, obj_y))
 
         # Add out-of-bounds positions
         for x in range(-1, width + 1):
@@ -260,6 +390,44 @@ class Pathfinder:
                     npcs.add((npc['x'], npc['y']))
 
         return npcs
+    
+    def _get_warp_positions(self, game_state: Dict, map_data: Dict) -> Set[Tuple[int, int]]:
+        """
+        Get positions of warps (doors, stairs, transitions) which are always walkable.
+        
+        Args:
+            game_state: Current game state
+            map_data: Map data structure
+            
+        Returns:
+            Set of (x, y) positions that are warps (always walkable even if marked as blocked)
+        """
+        warps = set()
+        
+        # Get warps from porymap data
+        if map_data.get('type') == 'porymap':
+            # Check if warps are in a separate field
+            # Porymap JSON structure should have warps array
+            if 'warps' in map_data:
+                for warp in map_data['warps']:
+                    if isinstance(warp, dict) and 'x' in warp and 'y' in warp:
+                        warps.add((warp['x'], warp['y']))
+        
+        # Also check game_state for warp information
+        map_info = game_state.get('map', {})
+        if 'warps' in map_info:
+            for warp in map_info['warps']:
+                if isinstance(warp, dict) and 'x' in warp and 'y' in warp:
+                    warps.add((warp['x'], warp['y']))
+        
+        # Check porymap JSON data if available
+        porymap_data = map_info.get('porymap', {})
+        if 'warps' in porymap_data:
+            for warp in porymap_data['warps']:
+                if isinstance(warp, dict) and 'x' in warp and 'y' in warp:
+                    warps.add((warp['x'], warp['y']))
+        
+        return warps
 
     def _can_move_to(self, from_pos: Tuple[int, int], to_pos: Tuple[int, int],
                      map_data: Dict) -> bool:
@@ -324,13 +492,24 @@ class Pathfinder:
             closed_set.add((current.x, current.y))
             
             # Check all neighbors
-            for neighbor_pos in self._get_neighbors(current, blocked):
+            neighbors = self._get_neighbors(current, blocked)
+            # Sort neighbors by direction preference for deterministic tie-breaking:
+            # Prefer moving toward goal (lower h_cost) when f_cost is equal
+            # This helps find optimal paths faster
+            neighbors_with_cost = []
+            for neighbor_pos in neighbors:
                 if neighbor_pos in closed_set:
                     continue
                 
                 g_cost = current.g_cost + 1  # All moves cost 1 in Pokemon
                 h_cost = self._heuristic(neighbor_pos, goal)
-                
+                neighbors_with_cost.append((neighbor_pos, g_cost, h_cost))
+            
+            # Sort by h_cost (distance to goal) so we explore promising directions first
+            # This helps find optimal paths when multiple neighbors have same f_cost
+            neighbors_with_cost.sort(key=lambda x: x[2])  # Sort by h_cost
+            
+            for neighbor_pos, g_cost, h_cost in neighbors_with_cost:
                 if neighbor_pos not in node_map:
                     neighbor = Node(neighbor_pos[0], neighbor_pos[1], g_cost, h_cost)
                     neighbor.parent = current

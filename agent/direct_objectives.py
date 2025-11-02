@@ -169,14 +169,17 @@ class DirectObjectiveManager:
         self.current_index = 0
         logger.info(f"Loaded hackathon Route 102 to Petalburg sequence with {len(self.current_sequence)} objectives")
         
-    def load_tutorial_to_starter_sequence(self, start_index: int = 0):
-        """Load the hardcoded sequence for transitioning from tutorial completion to starter selection
+    def load_tutorial_to_rival_sequence(self, start_index: int = 0):
+        """Load the combined sequence from tutorial to rival battle (19 objectives total).
+        
+        This is one continuous sequence from the start of the game through the rival battle.
         
         Args:
             start_index: Index to start the sequence at (for resuming from checkpoints)
         """
-        self.sequence_name = "tutorial_to_starter"
+        self.sequence_name = "tutorial_to_rival"
         self.current_sequence = [
+            # ========== TUTORIAL TO STARTER (Objectives 1-14) ==========
             DirectObjective(
                 id="tutorial_01_exit_truck",
                 description="Exit the moving truck and enter Littleroot Town",
@@ -186,7 +189,6 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_littleroot",
                 priority=1
             ),
-
             DirectObjective(
                 id="tutorial_02_go_to_bedroom",
                 description="Once you exit the truck, you're mom will immediately greet you and take you into your (Brendan) house. Press A to advance through the dialogue (this will take you to 1F of the house) and navigate to the stairs to go upstairs to the player's (your)bedroom",
@@ -255,39 +257,30 @@ class DirectObjectiveManager:
                 description="Move north from Littleroot Town to Route 101",
                 action_type="navigate",
                 target_location="Route 101",
-                navigation_hint="Move north from Littleroot Town to reach Route 101. The route is straight north in between your house and the rival's house, so you will have to navigate left once you've left the rival's house and then north past both you and your rival's house. There will be an NPC at position (10, 1) that you will have to move around on the right, before continuing to go north through the passage.",
+                navigation_hint="Move north from Littleroot Town to reach Route 101. The route is straight north in between your house and the rival's house, so you will have to navigate left once you've left the rival's house and then north past both you and your rival's house. Continue to go north through the passage that leads to route 101.",
                 completion_condition="location_contains_route_101",
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_10_find_prof_birch",
-                description="Find Professor Birch on Route 101. This should be triggered by walking a few steps into route 101 and triggering an event with a man in a lab coat.",
+                id="tutorial_10_find_and_approach_birch",
+                description="Find Professor Birch on Route 101 and interact with the bag to pick your starter. Walk a few steps into route 101 to trigger the event with Professor Birch. Then approach the bag on the ground by the ledge (at position 7, 14) and interact with it to pick your starter (treeko, leftmost option). Once you pick treeko, it will trigger a battle with a zigzagoon. Make sure you see treeko in the visual frame before pressing A.",
                 action_type="navigate",
                 target_location="Route 101",
-                navigation_hint="Look for Professor Birch - he should be visible on the route",
-                completion_condition="prof_birch_found",
-                priority=1
-            ),
-            DirectObjective(
-                id="tutorial_11_approach_birch",
-                description="Professor Birch will need your help, interact with the bag on the ground by the ledge and pick your starter Pokemon from it. Once you pick your starter, it will trigger a battle with a zigzagoon.",
-                action_type="navigate",
-                target_location="Route 101",
-                navigation_hint="The bag will be on the ground to your left, in between you and professor birch at position (7, 14). You need to face the bag and then press A to interact with it. Make sure that you are facing the bag in the visual frame before pressing A.",
+                navigation_hint="Walk into Route 101 to find Professor Birch (the event should trigger automatically). The bag will be on the ground to your left, in between you and professor birch at position (7, 14). Face the bag and press A to interact with it. Make sure you are facing the bag in the visual frame before pressing A.",
                 completion_condition="birch_encounter_triggered",
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_12_select_treeko_and_battle_zigzagoon",
-                description="Battle the zigzagoon",
+                id="tutorial_11_select_treeko_and_battle_zigzagoon",
+                description="Select treeko as your starter and Battle the zigzagoon.",
                 action_type="battle",
                 target_location="Route 101",
-                navigation_hint="Navigate the pokemon selection screen using left/right and select treeko as your starter.Battle the zigzagoon by selecting a damaging move and pressing A to attack",
+                navigation_hint="Navigate the pokemon selection screen using left and select treeko as your starter. Make sure you see treeko in the visual frame before pressing A. Battle the zigzagoon by selecting a damaging move and pressing A to attack",
                 completion_condition="zigzagoon_battle_complete",
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_13_interact_with_professor_birch",
+                id="tutorial_12_interact_with_professor_birch",
                 description="After battling the zigzagoon, professor birch will interact with you. Advance through the dialogue by pressing A to continue. After this interaction, he will transport you to the lab",
                 action_type="interact",
                 target_location="Route 101",
@@ -295,9 +288,8 @@ class DirectObjectiveManager:
                 completion_condition="professor_birch_interaction_complete",
                 priority=1
             ),
-
             DirectObjective(
-                id="tutorial_14_talk_to_professor_birch_in_lab",
+                id="tutorial_13_talk_to_professor_birch_in_lab",
                 description="Talk to professor birch in the lab to receive the pokedex. Advance through the dialogue by pressing A to continue.",
                 action_type="navigate",
                 target_location="Professor Birch's Lab",
@@ -306,12 +298,58 @@ class DirectObjectiveManager:
                 priority=1
             ),
             DirectObjective(
-                id="tutorial_15_exit_professor_birch_lab",
+                id="tutorial_14_exit_professor_birch_lab",
                 description="Once dialogue is complete, exit the lab by walking immediately south through the door (D) to littleroot town",
                 action_type="interact",
                 target_location="Professor Birch's Lab",
                 navigation_hint="Walk south through the door (D) to littleroot town. For reference, the lab is to the south of your mom's house.",
                 completion_condition="exited_professor_birch_lab",
+                priority=1
+            ),
+            # ========== BIRCH_2 TO RIVAL (Objectives 15-19) ==========
+            DirectObjective(
+                id="birch_2_01_north_route101",
+                description="Travel north to Route 101",
+                action_type="navigate",
+                target_location="Route 101",
+                navigation_hint="Move north from Littleroot Town to reach Route 101",
+                completion_condition="location_contains_route_101",
+                priority=1
+            ),
+            DirectObjective(
+                id="birch_2_02_route101_to_oldale",
+                description="Navigate route 101 to Oldale Town (to the north)",
+                action_type="navigate",
+                target_location="Route 101",
+                navigation_hint="Use pathfinding to navigate precisely around obstacles so that you can continue to make progress northwards.",
+                completion_condition="location_contains_oldale",
+                priority=1
+            ),
+            DirectObjective(
+                id="birch_2_03_oldale_to_route103",
+                description="Travel north through Oldale Town to Route 103",
+                action_type="navigate",
+                target_location="Route 103",
+                navigation_hint="Move north through Oldale Town to reach Route 103",
+                completion_condition="location_contains_route_103",
+                priority=1
+            ),
+            DirectObjective(
+                id="birch_2_04_route103_rival",
+                description="Travel north through Route 103 to find and interact with your rival.",
+                action_type="navigate",
+                target_location="Route 103",
+                navigation_hint="Use navigate_to() to efficiently navigate towards your rival's position on the map.",
+                completion_condition="passed_route103_first_grass",
+                priority=1
+            ),
+            DirectObjective(
+                id="birch_2_05_battle_rival",
+                description="Interact with rival and battle them",
+                action_type="battle",
+                target_location="Route 103",
+                navigation_hint="Approach the rival trainer and interact with them to start the battle. Use your starter Pokemon and damaging moves to win the battle.",
+                completion_condition="battle_completed",
                 priority=1
             )
         ]
@@ -320,7 +358,7 @@ class DirectObjectiveManager:
         for i in range(start_index):
             if i < len(self.current_sequence):
                 self.current_sequence[i].completed = True
-        logger.info(f"Loaded tutorial_to_starter sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index}")
+        logger.info(f"Loaded tutorial_to_rival sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index}")
         
     def get_current_objective(self) -> Optional[DirectObjective]:
         """Get the current objective in the sequence"""
@@ -396,6 +434,15 @@ class DirectObjectiveManager:
             elif objective.completion_condition == "reached_petalburg_city":
                 # Check if we've reached Petalburg City (this one is reliable)
                 return "PETALBURG" in location
+            elif objective.completion_condition == "passed_route101_ledge_grass":
+                # Let LLM determine completion based on context
+                return False
+            elif objective.completion_condition == "passed_route103_first_grass":
+                # Let LLM determine completion based on context
+                return False
+            elif objective.completion_condition == "passed_route103_second_grass":
+                # Let LLM determine completion based on context
+                return False
                 
         except Exception as e:
             logger.warning(f"Error checking objective completion: {e}")
@@ -429,24 +476,20 @@ class DirectObjectiveManager:
         return len(self.current_sequence) > 0 and self.current_index < len(self.current_sequence)
     
     def get_objective_context(self, game_state: Dict[str, Any]) -> str:
-        """Get previous, current, and next objective context for better agent understanding"""
+        """Get previous objective context for better agent understanding (NEXT removed to avoid confusion)"""
         if not self.is_sequence_active():
             return ""
         
         context_parts = []
         
-        # Previous objective
+        # Previous objective only (removed NEXT to avoid confusing the agent)
         if self.current_index > 0:
             prev_obj = self.current_sequence[self.current_index - 1]
             status = "✅" if prev_obj.completed else "❌"
             context_parts.append(f"⏮️  PREVIOUS: {prev_obj.description} {status}")
         
         # Skip current objective in context - it's displayed separately
-        
-        # Next objective
-        if self.current_index + 1 < len(self.current_sequence):
-            next_obj = self.current_sequence[self.current_index + 1]
-            context_parts.append(f"⏭️  NEXT: {next_obj.description}")
+        # NEXT objective removed - it was confusing the agent
         
         return "\n".join(context_parts)
 

@@ -15,7 +15,7 @@ import base64
 import io
 import os, sys
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from pokemon_env.enums import MetatileBehavior
 from utils import state_formatter as sf
 
@@ -617,6 +617,15 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     if not map_info:
         return context_parts
     
+    # Ensure map_info is actually part of state (not a copy)
+    # This ensures porymap data we store persists in the state
+    if full_state_data and 'map' not in full_state_data:
+        full_state_data['map'] = map_info
+    elif full_state_data and full_state_data.get('map') is not map_info:
+        # If map_info is a different object, merge our changes back
+        full_state_data['map'].update(map_info)
+        map_info = full_state_data['map']
+    
     # Get location name from player data
     location_name = None
     if player_data and 'location' in player_data and player_data['location']:
@@ -649,9 +658,19 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     # MapStitcher map display removed - using porymap ground truth instead
     
     # Add porymap ground truth data (JSON and ASCII map)
-    porymap_info = _format_porymap_info(location_name)
-    if porymap_info:
-        context_parts.extend(porymap_info)
+    porymap_result = _format_porymap_info(location_name, player_coords)
+    if isinstance(porymap_result, tuple):
+        porymap_info, porymap_data = porymap_result
+        if porymap_info:
+            context_parts.extend(porymap_info)
+            # Store porymap data in map_info for pathfinding (don't add to context text)
+            if 'porymap' not in map_info:
+                map_info['porymap'] = {}
+            map_info['porymap']['grid'] = porymap_data.get('grid')
+            map_info['porymap']['objects'] = porymap_data.get('objects', [])
+            map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
+    elif porymap_result:
+        context_parts.extend(porymap_result)
     
     return context_parts
 
@@ -1127,9 +1146,13 @@ ROM_TO_PORYMAP_MAP = {
     
     # Buildings (common patterns)
     "PETALBURG WOODS": "PetalburgWoods",
+    
+    # Professor Birch's Lab
+    "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
+    "PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
 }
 
-def _format_porymap_info(location_name: Optional[str]) -> List[str]:
+def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None) -> List[str]:
     """
     Format porymap ground truth data (JSON and ASCII map) for the agent.
     
@@ -1160,13 +1183,21 @@ def _format_porymap_info(location_name: Optional[str]) -> List[str]:
             
             def normalize_for_matching(name: str) -> str:
                 """Normalize location name for fuzzy matching."""
-                return str(name).lower().replace(" ", "").replace("_", "").replace("town", "").replace("city", "").replace("route", "")
+                # Normalize: lowercase, remove spaces/underscores, remove common suffixes
+                normalized = str(name).lower().replace(" ", "").replace("_", "").replace("town", "").replace("city", "").replace("route", "")
+                # Also try removing "professor", "birchs", "lab" for building matching
+                if "professor" in normalized or "birch" in normalized or "lab" in normalized:
+                    normalized = normalized.replace("professor", "").replace("birchs", "").replace("birch", "").replace("lab", "")
+                return normalized
             
             rom_normalized = normalize_for_matching(location_name)
             maps_dir = pokeemerald_root / "data" / "maps"
             
             if maps_dir.exists():
                 # Try direct directory name match
+                best_match = None
+                best_match_score = 0
+                
                 for map_dir in maps_dir.iterdir():
                     if not map_dir.is_dir() or map_dir.name == "map_groups.json":
                         continue
@@ -1174,10 +1205,23 @@ def _format_porymap_info(location_name: Optional[str]) -> List[str]:
                     map_name = map_dir.name
                     map_normalized = normalize_for_matching(map_name)
                     
+                    # Exact match
                     if rom_normalized == map_normalized:
                         porymap_map_name = map_name
                         logger.info(f"Porymap: Matched '{location_name}' to '{porymap_map_name}' via fuzzy match")
                         break
+                    
+                    # Partial match scoring (for cases like "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" -> "LittlerootTown_ProfessorBirchsLab")
+                    if rom_normalized in map_normalized or map_normalized in rom_normalized:
+                        match_length = min(len(rom_normalized), len(map_normalized))
+                        if match_length > best_match_score and match_length > 5:  # Require at least 5 chars match
+                            best_match = map_name
+                            best_match_score = match_length
+                
+                # Use best partial match if no exact match found
+                if not porymap_map_name and best_match:
+                    porymap_map_name = best_match
+                    logger.info(f"Porymap: Matched '{location_name}' to '{porymap_map_name}' via partial match (score: {best_match_score})")
         
         if not porymap_map_name:
             logger.warning(f"Porymap: Could not map ROM location '{location_name}' to porymap map name")
@@ -1185,8 +1229,16 @@ def _format_porymap_info(location_name: Optional[str]) -> List[str]:
         
         logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}')")
         
-        # Build JSON map
+        # Build JSON map (with grid included for pathfinding, even though we don't show it in prompt)
         json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+        
+        # Ensure grid is built (even if we don't include it in the text output)
+        if not json_map.get('grid'):
+            # Rebuild with grid if needed
+            from utils.porymap_json_builder import build_json_map
+            json_map_with_grid = build_json_map(porymap_map_name, pokeemerald_root, include_grid=True, include_ascii=True)
+            if json_map_with_grid and json_map_with_grid.get('grid'):
+                json_map['grid'] = json_map_with_grid['grid']
         
         if not json_map:
             logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
@@ -1197,11 +1249,33 @@ def _format_porymap_info(location_name: Optional[str]) -> List[str]:
         context_parts.append(f"Location: {json_map.get('name', porymap_map_name)}")
         context_parts.append(f"Dimensions: {json_map['dimensions']['width']}x{json_map['dimensions']['height']}")
         
-        # Add ASCII map
+        # Add ASCII map with player position marked
         if json_map.get('ascii'):
+            ascii_map = json_map['ascii']
+            
+            # Insert player position 'P' if provided
+            if player_coords and json_map.get('grid'):
+                px, py = player_coords[0], player_coords[1]
+                grid = json_map['grid']
+                
+                # Check if player position is within map bounds
+                if 0 <= py < len(grid) and 0 <= px < len(grid[0]) if grid else False:
+                    # Split ASCII map into lines
+                    ascii_lines = ascii_map.split('\n')
+                    
+                    # Find the line corresponding to player's Y coordinate
+                    if py < len(ascii_lines):
+                        line = list(ascii_lines[py])
+                        # Replace character at player's X position with 'P'
+                        if px < len(line):
+                            original_char = line[px]
+                            line[px] = 'P'
+                            ascii_lines[py] = ''.join(line)
+                            ascii_map = '\n'.join(ascii_lines)
+            
             context_parts.append("\nASCII Map:")
-            context_parts.append(json_map['ascii'])
-            context_parts.append("(Legend: '.' = walkable, '#' = blocked, 'X' = out of bounds)")
+            context_parts.append(ascii_map)
+            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'X' = out of bounds)")
         
         # Add warps
         warps = json_map.get('warps', [])
@@ -1250,6 +1324,10 @@ def _format_porymap_info(location_name: Optional[str]) -> List[str]:
         
         logger.info(f"Porymap: Successfully added map data for '{porymap_map_name}' ({json_map['dimensions']['width']}x{json_map['dimensions']['height']})")
         
+        # Store porymap data in context_parts for later extraction (hidden from LLM but accessible for pathfinding)
+        # We'll store it as a special marker that can be extracted from state
+        return context_parts, json_map  # Return both formatted text and raw data
+        
     except ImportError as e:
         # Log import errors as warnings
         logger.warning(f"Porymap modules not available: {e}")
@@ -1257,6 +1335,7 @@ def _format_porymap_info(location_name: Optional[str]) -> List[str]:
         # Log errors but don't break state formatting
         logger.warning(f"Error adding porymap info for location '{location_name}': {e}", exc_info=True)
     
+    # Return formatted text only if json_map not available
     return context_parts
 
 def _format_game_state(game_data, state_data=None, include_movement_preview=True):

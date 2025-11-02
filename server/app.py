@@ -1777,8 +1777,8 @@ async def mcp_get_game_state():
             # Load direct objectives sequence if specified
             if direct_objectives_sequence:
                 if not direct_objectives_manager.is_sequence_active():
-                    if direct_objectives_sequence == "tutorial_to_starter":
-                        direct_objectives_manager.load_tutorial_to_starter_sequence(direct_objectives_start_index)
+                    if direct_objectives_sequence == "tutorial_to_rival":
+                        direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index)
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
             
@@ -1879,8 +1879,8 @@ async def mcp_complete_direct_objective(request: dict):
         # Load direct objectives sequence if specified
         if direct_objectives_sequence:
             if not direct_objectives_manager.is_sequence_active():
-                if direct_objectives_sequence == "tutorial_to_starter":
-                    direct_objectives_manager.load_tutorial_to_starter_sequence(direct_objectives_start_index)
+                if direct_objectives_sequence == "tutorial_to_rival":
+                    direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index)
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
         
@@ -2564,7 +2564,7 @@ def main():
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
-    parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence (e.g., 'tutorial_to_starter')")
+    parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival')")
     parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for direct objectives (for resuming from checkpoints)")
     # Server always runs headless - display handled by client
     

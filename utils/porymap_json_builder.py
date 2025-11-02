@@ -45,7 +45,7 @@ def tile_to_symbol(tile_tuple: Tuple[int, Any, int, int], location_name: str = "
     Returns:
         Single character symbol representing the tile
     """
-    if not tile_tuple:
+    if not tile_tuple or len(tile_tuple) < 4:
         return '?'
     
     metatile_id, behavior, collision, elevation = tile_tuple
@@ -56,7 +56,7 @@ def tile_to_symbol(tile_tuple: Tuple[int, Any, int, int], location_name: str = "
     elif metatile_id == 1023:  # 0x3FF - invalid/out of bounds
         return 'X'  # Out of bounds
     else:
-        # Walkable tile - could be grass, path, etc.
+        # Walkable tile
         return '.'  # Default walkable
 
 
@@ -159,14 +159,16 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
             "trainer_sight_or_berry_tree_id": obj.get("trainer_sight_or_berry_tree_id", "?")
         })
     
-    # Extract connections
+    # Extract connections (handle null case)
     connections = []
-    for conn in map_data.get("connections", []):
-        connections.append({
-            "direction": conn.get("direction", "?"),
-            "offset": conn.get("offset", 0),
-            "map": conn.get("map", "?")
-        })
+    connections_data = map_data.get("connections")
+    if connections_data is not None:  # Check for None explicitly (not just falsy)
+        for conn in connections_data:
+            connections.append({
+                "direction": conn.get("direction", "?"),
+                "offset": conn.get("offset", 0),
+                "map": conn.get("map", "?")
+            })
     
     # Build complete JSON structure
     json_map = {

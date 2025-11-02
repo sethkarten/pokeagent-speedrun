@@ -1,0 +1,114 @@
+{
+  "milestones": {
+    "GAME_RUNNING": {
+      "completed": true,
+      "timestamp": 1758408676.0675476,
+      "first_completed": 1758408676.0675476,
+      "split_time": 0.0,
+      "split_formatted": "00:00:00",
+      "total_time": 0.0,
+      "total_formatted": "00:00:00"
+    },
+    "PLAYER_NAME_SET": {
+      "completed": true,
+      "timestamp": 1758408704.600714,
+      "first_completed": 1758408704.600714,
+      "split_time": 28.53316640853882,
+      "split_formatted": "00:00:28",
+      "total_time": 28.53316640853882,
+      "total_formatted": "00:00:28"
+    },
+    "INTRO_CUTSCENE_COMPLETE": {
+      "completed": true,
+      "timestamp": 1758408742.802946,
+      "first_completed": 1758408742.802946,
+      "split_time": 38.202232122421265,
+      "split_formatted": "00:00:38",
+      "total_time": 66.73539853096008,
+      "total_formatted": "00:01:06"
+    },
+    "LITTLEROOT_TOWN": {
+      "completed": true,
+      "timestamp": 1761504318.9845128,
+      "first_completed": 1761504318.9845128,
+      "split_time": 3095576.1815667152,
+      "split_formatted": "859:52:56",
+      "total_time": 3095642.916965246,
+      "total_formatted": "859:54:02"
+    },
+    "PLAYER_HOUSE_ENTERED": {
+      "completed": true,
+      "timestamp": 1761504348.317333,
+      "first_completed": 1761504348.317333,
+      "split_time": 29.332820177078247,
+      "split_formatted": "00:00:29",
+      "total_time": 3095672.2497854233,
+      "total_formatted": "859:54:32"
+    },
+    "PLAYER_BEDROOM": {
+      "completed": true,
+      "timestamp": 1761504383.9398355,
+      "first_completed": 1761504383.9398355,
+      "split_time": 35.62250256538391,
+      "split_formatted": "00:00:35",
+      "total_time": 3095707.8722879887,
+      "total_formatted": "859:55:07"
+    },
+    "CLOCK_SET": {
+      "completed": true,
+      "timestamp": 1761505053.9326663,
+      "first_completed": 1761505053.9326663,
+      "split_time": 669.9928307533264,
+      "split_formatted": "00:11:09",
+      "total_time": 3096377.865118742,
+      "total_formatted": "860:06:17"
+    },
+    "RIVAL_HOUSE": {
+      "completed": true,
+      "timestamp": 1761509763.687841,
+      "first_completed": 1761509763.687841,
+      "split_time": 5379.748005390167,
+      "split_formatted": "01:29:39",
+      "total_time": 3101087.620293379,
+      "total_formatted": "861:24:47"
+    },
+    "RIVAL_BEDROOM": {
+      "completed": true,
+      "timestamp": 1761511002.0258427,
+      "first_completed": 1761511002.0258427,
+      "split_time": 1238.3380017280579,
+      "split_formatted": "00:20:38",
+      "total_time": 3102325.958295107,
+      "total_formatted": "861:45:25"
+    },
+    "ROUTE_101": {
+      "completed": true,
+      "timestamp": 1762109180.242777,
+      "first_completed": 1762109180.242777,
+      "split_time": 598178.2169344425,
+      "split_formatted": "166:09:38",
+      "total_time": 3700504.1752295494,
+      "total_formatted": "1027:55:04"
+    },
+    "STARTER_CHOSEN": {
+      "completed": true,
+      "timestamp": 1762109263.3915865,
+      "first_completed": 1762109263.3915865,
+      "split_time": 83.1488094329834,
+      "split_formatted": "00:01:23",
+      "total_time": 3700587.3240389824,
+      "total_formatted": "1027:56:27"
+    },
+    "BIRCH_LAB_VISITED": {
+      "completed": true,
+      "timestamp": 1762109374.7893624,
+      "first_completed": 1762109374.7893624,
+      "split_time": 111.397775888443,
+      "split_formatted": "00:01:51",
+      "total_time": 3700698.721814871,
+      "total_formatted": "1027:58:18"
+    }
+  },
+  "last_updated": 1762109374.78938,
+  "version": "1.0"
+}
