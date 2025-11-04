@@ -35,26 +35,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Local application imports
 from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
-
-# MCP tool imports - lazy loaded to avoid circular imports
-_pokemon_mcp_tools = None
-_baseline_mcp_tools = None
-
-def _get_pokemon_mcp_tools():
-    """Lazy load Pokemon MCP tools"""
-    global _pokemon_mcp_tools
-    if _pokemon_mcp_tools is None:
-        from server.cli import pokemon_mcp_server
-        _pokemon_mcp_tools = pokemon_mcp_server
-    return _pokemon_mcp_tools
-
-def _get_baseline_mcp_tools():
-    """Lazy load Baseline MCP tools"""
-    global _baseline_mcp_tools
-    if _baseline_mcp_tools is None:
-        from server.cli import baseline_mcp_server
-        _baseline_mcp_tools = baseline_mcp_server
-    return _baseline_mcp_tools
+from utils.pathfinding import find_path # Import find_path directly
+from utils.state_formatter import format_state_for_llm
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -62,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 # Global state
 env = None
+knowledge_base = {} # In-memory knowledge base
 anticheat_tracker = None  # AntiCheat tracker for submission logging
 step_counter = 0  # Track steps for submission logging
 last_action_time = None  # Track time of last action for decision time calculation
@@ -1715,15 +1698,13 @@ async def mcp_get_game_state():
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
-
         # Create wrapper that uses JSON map format
         def json_state_formatter(state):
             return format_state_for_llm(state, use_json_map=True)
 
-        # Use helper function from pokemon_mcp_server
-        return pokemon_mcp_server.get_game_state_direct(env, json_state_formatter)
+        state = env.get_comprehensive_state()
+        formatted_state = json_state_formatter(state)
+        return {"success": True, "state": formatted_state}
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
         return {"success": False, "error": str(e)}
@@ -1785,7 +1766,7 @@ async def mcp_navigate_to(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from server.cli import pokemon_mcp_server
+        # from server.cli import pokemon_mcp_server # Removed
 
         x = request.get("x")
         y = request.get("y")
@@ -1801,22 +1782,29 @@ async def mcp_navigate_to(request: dict):
         except (ValueError, TypeError):
             return {"success": False, "error": f"Invalid coordinates: x={x}, y={y}"}
 
-        # Calculate path and get buttons
-        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason)
+        # Get current game state for pathfinding
+        game_state = env.get_comprehensive_state()
+        player_pos = game_state.get("player", {}).get("position", {})
+        start_coords = (player_pos.get("x"), player_pos.get("y"))
 
-        if not result.get("success"):
-            return result
+        if start_coords[0] is None or start_coords[1] is None:
+            return {"success": False, "error": "Could not get current player position for pathfinding."}
+
+        # Calculate path and get buttons using utils.pathfinding.find_path
+        buttons = find_path(start_coords, (x, y), game_state)
+
+        if not buttons:
+            return {"success": False, "error": "No path found to target."}
 
         # Queue buttons via take_action to ensure metrics tracking
-        buttons = result.get("buttons", [])
         if buttons:
             action_request = ActionRequest(buttons=buttons)
             await take_action(action_request)
 
         return {
             "success": True,
-            "target": result.get("target"),
-            "path_length": result.get("path_length"),
+            "target": {"x": x, "y": y},
+            "path_length": len(buttons),
             "buttons_queued": len(buttons),
             "reason": reason
         }
@@ -1828,17 +1816,16 @@ async def mcp_navigate_to(request: dict):
 @app.post("/mcp/add_knowledge")
 async def mcp_add_knowledge(request: dict):
     """MCP Tool: Add knowledge to knowledge base"""
+    global knowledge_base
     try:
-        from server.cli import pokemon_mcp_server
-
-        return pokemon_mcp_server.add_knowledge_direct(
-            category=request.get("category"),
-            title=request.get("title"),
-            content=request.get("content"),
-            location=request.get("location"),
-            coordinates=request.get("coordinates"),
-            importance=request.get("importance", 3)
-        )
+        key = request.get("key")
+        value = request.get("value")
+        if not key or not value:
+            return {"success": False, "error": "key and value are required"}
+        
+        knowledge_base[key] = value
+        logger.info(f"🧠 Knowledge added: {key} = {value}")
+        return {"success": True, "key": key, "value": value}
     except Exception as e:
         logger.error(f"Error adding knowledge: {e}")
         return {"success": False, "error": str(e)}
@@ -1847,29 +1834,34 @@ async def mcp_add_knowledge(request: dict):
 @app.post("/mcp/search_knowledge")
 async def mcp_search_knowledge(request: dict):
     """MCP Tool: Search knowledge base"""
+    global knowledge_base
     try:
-        from server.cli import pokemon_mcp_server
+        query = request.get("query")
+        if not query:
+            return {"success": False, "error": "query is required"}
 
-        return pokemon_mcp_server.search_knowledge_direct(
-            category=request.get("category"),
-            query=request.get("query"),
-            location=request.get("location"),
-            min_importance=request.get("min_importance", 1)
-        )
+        results = {}
+        for key, value in knowledge_base.items():
+            if query.lower() in str(value).lower() or query.lower() in str(key).lower():
+                results[key] = value
+        
+        logger.info(f"🧠 Knowledge search for '{query}': Found {len(results)} results")
+        return {"success": True, "query": query, "results": results}
     except Exception as e:
         logger.error(f"Error searching knowledge: {e}")
         return {"success": False, "error": str(e)}
 
 
 @app.post("/mcp/get_knowledge_summary")
-async def mcp_search_knowledge_summary(request: dict):
+async def mcp_get_knowledge_summary(request: dict):
     """MCP Tool: Get knowledge summary"""
+    global knowledge_base
     try:
-        from server.cli import pokemon_mcp_server
-
-        return pokemon_mcp_server.get_knowledge_summary_direct(
-            min_importance=request.get("min_importance", 3)
-        )
+        summary = {
+            "total_entries": len(knowledge_base),
+            "keys": list(knowledge_base.keys())
+        }
+        return {"success": True, "summary": summary}
     except Exception as e:
         logger.error(f"Error getting knowledge summary: {e}")
         return {"success": False, "error": str(e)}
@@ -2143,81 +2135,245 @@ async def mcp_get_walkthrough(request: dict):
 @app.post("/mcp/read_file")
 async def mcp_read_file(request: dict):
     """MCP Tool: Read file contents"""
-    tools = _get_baseline_mcp_tools()
-    return tools.read_file(file_path=request.get("file_path"))
+    file_path = request.get("file_path")
+    if not file_path:
+        return {"success": False, "error": "file_path is required"}
+    
+    # Security: Restrict to .pokeagent_cache
+    safe_path = os.path.abspath(os.path.join(CACHE_DIR, file_path))
+    if not safe_path.startswith(os.path.abspath(CACHE_DIR)):
+        return {"success": False, "error": "Access denied"}
+
+    try:
+        with open(safe_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return {"success": True, "content": content}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/write_file")
 async def mcp_write_file(request: dict):
     """MCP Tool: Write file (restricted to .pokeagent_cache/cli/)"""
-    tools = _get_baseline_mcp_tools()
-    return tools.write_file(file_path=request.get("file_path"), content=request.get("content"))
+    file_path = request.get("file_path")
+    content = request.get("content")
+    if not file_path or content is None:
+        return {"success": False, "error": "file_path and content are required"}
+
+    # Security: Restrict to .pokeagent_cache/cli
+    write_dir = os.path.join(CACHE_DIR, "cli")
+    os.makedirs(write_dir, exist_ok=True)
+    safe_path = os.path.abspath(os.path.join(write_dir, file_path))
+    if not safe_path.startswith(os.path.abspath(write_dir)):
+        return {"success": False, "error": "Access denied"}
+
+    try:
+        with open(safe_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return {"success": True, "message": f"File written to {safe_path}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/list_directory")
 async def mcp_list_directory(request: dict):
     """MCP Tool: List directory contents"""
-    tools = _get_baseline_mcp_tools()
-    return tools.list_directory(
-        path=request.get("path"),
-        recursive=request.get("recursive", False),
-        max_depth=request.get("max_depth", 3)
-    )
+    path = request.get("path", ".")
+    
+    # Security: Restrict to .pokeagent_cache
+    safe_path = os.path.abspath(os.path.join(CACHE_DIR, path))
+    if not safe_path.startswith(os.path.abspath(CACHE_DIR)):
+        return {"success": False, "error": "Access denied"}
+
+    try:
+        files = os.listdir(safe_path)
+        return {"success": True, "files": files}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/glob")
 async def mcp_glob(request: dict):
     """MCP Tool: Find files matching glob pattern"""
-    tools = _get_baseline_mcp_tools()
-    return tools.glob(pattern=request.get("pattern"), path=request.get("path", "."))
+    pattern = request.get("pattern")
+    path = request.get("path", ".")
+    if not pattern:
+        return {"success": False, "error": "pattern is required"}
+
+    # Security: Restrict to .pokeagent_cache
+    safe_path = os.path.abspath(os.path.join(CACHE_DIR, path))
+    if not safe_path.startswith(os.path.abspath(CACHE_DIR)):
+        return {"success": False, "error": "Access denied"}
+
+    try:
+        results = glob.glob(os.path.join(safe_path, pattern), recursive=True)
+        # Return relative paths
+        results = [os.path.relpath(p, CACHE_DIR) for p in results]
+        return {"success": True, "files": results}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/search_file_content")
 async def mcp_search_file_content(request: dict):
     """MCP Tool: Search files for regex pattern"""
-    tools = _get_baseline_mcp_tools()
-    return tools.search_file_content(
-        pattern=request.get("pattern"),
-        path=request.get("path"),
-        file_pattern=request.get("file_pattern", "*")
-    )
+    import re
+    pattern = request.get("pattern")
+    path = request.get("path", ".")
+    if not pattern:
+        return {"success": False, "error": "pattern is required"}
+
+    # Security: Restrict to .pokeagent_cache
+    safe_path = os.path.abspath(os.path.join(CACHE_DIR, path))
+    if not safe_path.startswith(os.path.abspath(CACHE_DIR)):
+        return {"success": False, "error": "Access denied"}
+
+    try:
+        results = {}
+        for root, _, files in os.walk(safe_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                    if re.search(pattern, content):
+                        relative_path = os.path.relpath(file_path, CACHE_DIR)
+                        results[relative_path] = "Match found"
+                except Exception:
+                    continue
+        return {"success": True, "results": results}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/replace")
 async def mcp_replace(request: dict):
     """MCP Tool: Replace text in file"""
-    tools = _get_baseline_mcp_tools()
-    return tools.replace(
-        file_path=request.get("file_path"),
-        old_text=request.get("old_text"),
-        new_text=request.get("new_text"),
-        regex=request.get("regex", False)
-    )
+    file_path = request.get("file_path")
+    old = request.get("old")
+    new = request.get("new")
+    if not file_path or old is None or new is None:
+        return {"success": False, "error": "file_path, old, and new are required"}
+
+    # Security: Restrict to .pokeagent_cache
+    safe_path = os.path.abspath(os.path.join(CACHE_DIR, file_path))
+    if not safe_path.startswith(os.path.abspath(CACHE_DIR)):
+        return {"success": False, "error": "Access denied"}
+
+    try:
+        with open(safe_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        new_content = content.replace(old, new)
+        
+        with open(safe_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        
+        return {"success": True, "message": "Replacement successful"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/read_many_files")
 async def mcp_read_many_files(request: dict):
     """MCP Tool: Read multiple files"""
-    tools = _get_baseline_mcp_tools()
-    return tools.read_many_files(file_paths=request.get("file_paths", []))
+    file_paths = request.get("file_paths", [])
+    if not file_paths:
+        return {"success": False, "error": "file_paths is required"}
+
+    results = {}
+    for file_path in file_paths:
+        # Security: Restrict to .pokeagent_cache
+        safe_path = os.path.abspath(os.path.join(CACHE_DIR, file_path))
+        if not safe_path.startswith(os.path.abspath(CACHE_DIR)):
+            results[file_path] = {"success": False, "error": "Access denied"}
+            continue
+
+        try:
+            with open(safe_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            results[file_path] = {"success": True, "content": content}
+        except Exception as e:
+            results[file_path] = {"success": False, "error": str(e)}
+    return {"success": True, "results": results}
 
 @app.post("/mcp/run_shell_command")
 async def mcp_run_shell_command(request: dict):
     """MCP Tool: Run shell command (allowlist only)"""
-    tools = _get_baseline_mcp_tools()
-    return tools.run_shell_command(command=request.get("command"), description=request.get("description", ""))
+    import subprocess
+    command = request.get("command")
+    if not command:
+        return {"success": False, "error": "command is required"}
+
+    # Security: Allowlist of safe commands
+    allowed_commands = ["ls", "echo", "pwd"]
+    if not any(command.startswith(cmd) for cmd in allowed_commands):
+        return {"success": False, "error": f"Command not allowed: {command}"}
+
+    try:
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
+        return {
+            "success": True,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "returncode": result.returncode
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/web_fetch")
 async def mcp_web_fetch(request: dict):
     """MCP Tool: Fetch and parse web pages"""
-    tools = _get_baseline_mcp_tools()
-    return tools.web_fetch(prompt=request.get("prompt"))
+    url = request.get("url")
+    if not url:
+        return {"success": False, "error": "url is required"}
+
+    try:
+        response = requests.get(url, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Basic content extraction
+        for element in soup(['script', 'style', 'nav', 'footer', 'header']):
+            element.decompose()
+        content = soup.get_text(separator='\n', strip=True)
+        
+        max_chars = 5000
+        if len(content) > max_chars:
+            content = content[:max_chars] + "\n\n[Content truncated]"
+
+        return {"success": True, "content": content}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/google_web_search")
 async def mcp_google_web_search(request: dict):
     """MCP Tool: Search web using DuckDuckGo"""
-    tools = _get_baseline_mcp_tools()
-    return tools.google_web_search(query=request.get("query"))
+    query = request.get("query")
+    if not query:
+        return {"success": False, "error": "query is required"}
+
+    try:
+        search_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+        response = requests.get(search_url, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
+        response.raise_for_status()
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        results = []
+        for result in soup.find_all('a', class_='result__a'):
+            results.append({
+                "title": result.get_text(strip=True),
+                "url": result['href']
+            })
+        
+        return {"success": True, "results": results[:5]} # Return top 5
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/mcp/save_memory")
 async def mcp_save_memory(request: dict):
     """MCP Tool: Save facts to persistent memory"""
-    tools = _get_baseline_mcp_tools()
-    return tools.save_memory(fact=request.get("fact"))
+    fact = request.get("fact")
+    if not fact:
+        return {"success": False, "error": "fact is required"}
+    
+    # Use the same logic as add_knowledge, with a timestamped key
+    key = f"memory_{int(time.time())}"
+    return await mcp_add_knowledge({"key": key, "value": fact})
 
 
 # ============================================================================
@@ -2693,4 +2849,4 @@ if os.environ.get("ROM_PATH") and __name__ != "__main__":
     init_for_multiprocess()
 
 if __name__ == "__main__":
-    main() 
+    main()
