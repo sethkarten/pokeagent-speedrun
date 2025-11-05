@@ -37,6 +37,8 @@ from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
 from utils.pathfinding import find_path # Import find_path directly
 from utils.state_formatter import format_state_for_llm
+from utils.map_stitcher_singleton import get_instance as get_map_stitcher
+from utils.map_visualizer import MapVisualizer
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -2290,6 +2292,58 @@ async def mcp_read_many_files(request: dict):
         except Exception as e:
             results[file_path] = {"success": False, "error": str(e)}
     return {"success": True, "results": results}
+
+@app.post("/mcp/get_world_map")
+async def mcp_get_world_map(request: dict):
+    """MCP Tool: Get a text-based overview of the entire discovered world map."""
+    try:
+        stitcher = get_map_stitcher()
+        if not stitcher or not stitcher.map_areas:
+            return {"success": False, "error": "Map data is not yet available."}
+        
+        visualizer = MapVisualizer(stitcher)
+        world_overview = visualizer.generate_complete_world_overview()
+        
+        return {
+            "success": True,
+            "world_map_overview": world_overview
+        }
+    except Exception as e:
+        logger.error(f"Error in get_world_map: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_navigation_hints")
+async def mcp_get_navigation_hints(request: dict):
+    """MCP Tool: Get navigation hints to a target location."""
+    try:
+        target_area_name = request.get("target_area_name")
+        if not target_area_name:
+            return {"success": False, "error": "target_area_name is required"}
+
+        stitcher = get_map_stitcher()
+        if not stitcher or not stitcher.map_areas:
+            return {"success": False, "error": "Map data is not yet available."}
+
+        # Get current area ID from the game state
+        if env is None:
+            return {"success": False, "error": "Emulator not initialized"}
+        
+        current_map_bank = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_BANK)
+        current_map_number = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_NUMBER)
+        current_area_id = (current_map_bank << 8) | current_map_number
+
+        visualizer = MapVisualizer(stitcher)
+        navigation_hints = visualizer.generate_navigation_hints(current_area_id, target_area_name)
+        
+        return {
+            "success": True,
+            "navigation_hints": navigation_hints
+        }
+    except Exception as e:
+        logger.error(f"Error in get_navigation_hints: {e}")
+        return {"success": False, "error": str(e)}
+
 
 @app.post("/mcp/run_shell_command")
 async def mcp_run_shell_command(request: dict):
