@@ -9,6 +9,7 @@ from .deprecated.perception import perception_step
 from .deprecated.planning import planning_step
 from .simple import SimpleAgent, get_simple_agent, simple_mode_processing_multiprocess, configure_simple_agent_defaults
 from .react import ReActAgent, create_react_agent
+from .hierarchical_agent import HierarchicalAgent
 
 
 class Agent:
@@ -17,12 +18,13 @@ class Agent:
     The client just calls agent.step(game_state) and gets back an action.
     """
     
-    def __init__(self, args=None):
+    def __init__(self, args=None, server_url=None):
         """
         Initialize the agent based on configuration.
         
         Args:
             args: Command line arguments with agent configuration
+            server_url: The URL of the MCP server
         """
         # Extract configuration
         backend = args.backend if args else "gemini"
@@ -46,12 +48,17 @@ class Agent:
             # Use global SimpleAgent instance to enable checkpoint persistence
             self.agent_impl = get_simple_agent(self.vlm)
             print(f"   Scaffold: Simple (direct frame->action)")
-            
+
         elif scaffold == "react":
             # Create ReAct agent
             vlm_client = VLM(backend=backend, model_name=model_name)
             self.agent_impl = create_react_agent(vlm_client=vlm_client, verbose=True)
             print(f"   Scaffold: ReAct (Thought->Action->Observation)")
+
+        elif scaffold == "hierarchical":
+            # Create Hierarchical agent
+            self.agent_impl = HierarchicalAgent(vlm=self.vlm, mcp_server_url=server_url)
+            print(f"   Scaffold: Hierarchical (Strategic/Tactical Layers)")
 
         else:  # fourmodule (default)
             # Four-module agent context
@@ -78,9 +85,12 @@ class Agent:
         Returns:
             dict: Contains 'action' and optionally 'reasoning'
         """
-        if self.scaffold in ["simple", "react"]:
+        if self.scaffold in ["simple", "react", "hierarchical"]:
             # Delegate to specific agent implementation
             if self.scaffold == "simple":
+                return self.agent_impl.step(game_state)
+
+            elif self.scaffold == "hierarchical":
                 return self.agent_impl.step(game_state)
 
             elif self.scaffold == "react":
@@ -143,5 +153,6 @@ __all__ = [
     'simple_mode_processing_multiprocess',
     'configure_simple_agent_defaults',
     'ReActAgent',
-    'create_react_agent'
+    'create_react_agent',
+    'HierarchicalAgent'
 ]

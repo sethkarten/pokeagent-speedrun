@@ -23,6 +23,7 @@ except ImportError:
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent import Agent
+from agent.hierarchical_agent import HierarchicalAgent
 from utils.state_formatter import format_state_for_llm
 
 
@@ -72,7 +73,8 @@ def run_multiprocess_client(server_port=8000, args=None):
     server_url = f"http://localhost:{server_port}"
     
     # Initialize the agent (it handles VLM, simple vs 4-module, etc internally)
-    agent = Agent(args)
+    agent = Agent(args, server_url=server_url)
+
     print(f"✅ Agent initialized")
     print(f"🎮 Client connected to server at {server_url}")
     

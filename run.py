@@ -105,8 +105,8 @@ def main():
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="simple",
-                       choices=["simple", "react"],
-                       help="Agent scaffold: simple (default) or react")
+                       choices=["simple", "react", "hierarchical"],
+                       help="Agent scaffold: simple, react, or hierarchical")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
@@ -164,7 +164,8 @@ def main():
         print(f"   Model: {args.model_name}")
         scaffold_descriptions = {
             "simple": "Simple mode (direct frame→action)",
-            "react": "ReAct agent (Thought→Action→Observation loop)"
+            "react": "ReAct agent (Thought→Action→Observation loop)",
+            "hierarchical": "Hierarchical agent with strategic and tactical layers"
         }
         print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
