@@ -348,7 +348,7 @@ _knowledge_base = None
 
 
 def get_knowledge_base() -> KnowledgeBase:
-    """Get or create the global knowledge base instance."""
+    """Get or create the global knowledge base instance (persistent across runs)."""
     global _knowledge_base
     if _knowledge_base is None:
         _knowledge_base = KnowledgeBase()
