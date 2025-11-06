@@ -122,9 +122,26 @@ class Pathfinder:
         for warp_pos in warps:
             blocked.discard(warp_pos)  # Warps are always walkable
         
-        # Double-check: ensure start and goal are never blocked
+        # Ensure start is never blocked
         blocked.discard(start)
-        blocked.discard(goal)
+        
+        # Check if goal is blocked - if so, find nearest reachable position first
+        goal_was_blocked = goal in blocked
+        if goal_was_blocked:
+            logger.info(f"Goal {goal} is on a blocked tile, finding nearest reachable position")
+            # Temporarily add goal back to blocked for nearest search
+            blocked.add(goal)
+            nearest = self._find_nearest_reachable(start, goal, blocked, map_data)
+            if nearest and nearest != start:
+                logger.info(f"Using nearest reachable position {nearest} instead of blocked goal {goal}")
+                goal = nearest
+            else:
+                logger.warning(f"Could not find reachable position near blocked goal {goal}")
+            # Remove goal from blocked now that we have a new goal
+            blocked.discard(goal)
+        else:
+            # Goal is not blocked, but ensure it's not in blocked set
+            blocked.discard(goal)
         
         # Log grid cell status for debugging
         if map_data.get('type') == 'porymap' and 'grid' in map_data:
@@ -151,14 +168,6 @@ class Pathfinder:
         
         # Run A* algorithm
         path = self._astar(start, goal, blocked, map_data, max_distance)
-        
-        if not path:
-            logger.info(f"No path found from {start} to {goal}, trying nearest reachable")
-            # Try to find nearest reachable position
-            nearest = self._find_nearest_reachable(start, goal, blocked, map_data)
-            if nearest and nearest != start:
-                logger.info(f"Using nearest reachable position {nearest} instead of {goal}")
-                path = self._astar(start, nearest, blocked, map_data, max_distance)
         
         if not path:
             logger.warning(f"Pathfinding failed: {start} -> {goal} in {location_name}")

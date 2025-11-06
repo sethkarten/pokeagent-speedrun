@@ -1308,17 +1308,68 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             if len(connections) > 5:
                 context_parts.append(f"  ... and {len(connections) - 5} more connections")
         
-        # Add compact JSON map data (without grid to save tokens - ASCII map is sufficient)
+        # Add compact JSON map data (simplified format to save tokens)
         context_parts.append("\nMap Data (JSON):")
-        # Exclude grid and ASCII to save tokens - ASCII is already shown above
+        
+        # Build tile-level coordinates mapping (only blocked tiles to save tokens)
+        # Format: maps symbol to list of coordinates
+        tile_level_coordinates = {}
+        if json_map.get('grid'):
+            grid = json_map['grid']
+            for y, row in enumerate(grid):
+                if isinstance(row, list):
+                    for x, cell in enumerate(row):
+                        if cell == '#' or cell == 'X':  # Only store blocked tiles
+                            if cell not in tile_level_coordinates:
+                                tile_level_coordinates[cell] = []
+                            tile_level_coordinates[cell].append({"x": x, "y": y})
+                elif isinstance(row, str):
+                    for x, cell in enumerate(row):
+                        if cell == '#' or cell == 'X':  # Only store blocked tiles
+                            if cell not in tile_level_coordinates:
+                                tile_level_coordinates[cell] = []
+                            tile_level_coordinates[cell].append({"x": x, "y": y})
+        
+        # Simplified objects (remove unnecessary fields)
+        simplified_objects = []
+        for obj in json_map.get('objects', []):
+            simplified_objects.append({
+                "x": obj.get('x', 0),
+                "y": obj.get('y', 0),
+                "elevation": obj.get('elevation', 0),
+                "graphics_id": obj.get('graphics_id', '?'),
+                "movement_type": obj.get('movement_type', '?')
+            })
+        
+        # Simplified warps
+        simplified_warps = []
+        for warp in json_map.get('warps', []):
+            simplified_warps.append({
+                "x": warp.get('x', 0),
+                "y": warp.get('y', 0),
+                "elevation": warp.get('elevation', 0),
+                "dest_map": warp.get('dest_map', '?'),
+                "dest_warp_id": warp.get('dest_warp_id', 0)
+            })
+        
+        # Simplified connections
+        simplified_connections = []
+        for conn in json_map.get('connections', []):
+            simplified_connections.append({
+                "direction": conn.get('direction', '?'),
+                "offset": conn.get('offset', 0),
+                "map": conn.get('map', '?')
+            })
+        
+        # Build compact JSON map (matching example format)
         compact_json_map = {
             "name": json_map.get('name'),
             "id": json_map.get('id'),
             "dimensions": json_map.get('dimensions'),
-            "warps": json_map.get('warps'),
-            "objects": json_map.get('objects'),
-            "connections": json_map.get('connections'),
-            "metadata": json_map.get('metadata')
+            "warps": simplified_warps,
+            "objects": simplified_objects,
+            "connections": simplified_connections,
+            "tile_level_coordinates": tile_level_coordinates  # Maps symbol to list of coordinates (only blocked tiles)
         }
         context_parts.append(json.dumps(compact_json_map, indent=2))
         

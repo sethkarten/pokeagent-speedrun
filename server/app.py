@@ -1780,6 +1780,8 @@ async def mcp_get_game_state():
                 if not direct_objectives_manager.is_sequence_active():
                     if direct_objectives_sequence == "tutorial_to_rival":
                         direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                    elif direct_objectives_sequence == "tutorial_to_rustboro_city":
+                        direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=current_run_dir)
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
             
@@ -1882,6 +1884,8 @@ async def mcp_complete_direct_objective(request: dict):
             if not direct_objectives_manager.is_sequence_active():
                 if direct_objectives_sequence == "tutorial_to_rival":
                     direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                elif direct_objectives_sequence == "tutorial_to_rustboro_city":
+                    direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=current_run_dir)
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
         
