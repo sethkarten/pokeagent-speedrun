@@ -100,14 +100,16 @@ def main():
                        help="Load from checkpoint files")
     
     # Agent configuration
-    parser.add_argument("--backend", type=str, default="gemini", 
-                       help="VLM backend (openai, gemini, local, openrouter)")
-    parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
+    parser.add_argument("--backend", type=str, default="gemini",
+                       help="VLM backend (openai, gemini, local, openrouter, vertex)")
+    parser.add_argument("--model-name", type=str, default="gemini-2.5-flash",
                        help="Model name to use")
+    parser.add_argument("--vertex-id", type=str,
+                       help="Google Cloud project ID for Vertex AI backend (required for --backend vertex)")
     parser.add_argument("--scaffold", type=str, default="simple",
                        choices=["simple", "react"],
                        help="Agent scaffold: simple (default) or react")
-    parser.add_argument("--simple", action="store_true", 
+    parser.add_argument("--simple", action="store_true",
                        help="DEPRECATED: Use --scaffold simple instead")
     
     # Operation modes
@@ -125,7 +127,11 @@ def main():
                        help="Disable OCR dialogue detection")
 
     args = parser.parse_args()
-    
+
+    # Validate vertex backend requirements
+    if args.backend == "vertex" and not args.vertex_id:
+        parser.error("--vertex-id is required when using --backend vertex")
+
     print("=" * 60)
     print("🎮 Pokemon Emerald AI Agent")
     print("=" * 60)

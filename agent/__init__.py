@@ -20,14 +20,14 @@ class Agent:
     def __init__(self, args=None):
         """
         Initialize the agent based on configuration.
-        
+
         Args:
             args: Command line arguments with agent configuration
         """
         # Extract configuration
         backend = args.backend if args else "gemini"
         model_name = args.model_name if args else "gemini-2.5-flash"
-        
+
         # Handle scaffold selection (with backward compatibility for --simple)
         if args and hasattr(args, 'scaffold'):
             scaffold = args.scaffold
@@ -35,9 +35,14 @@ class Agent:
             scaffold = "simple"
         else:
             scaffold = "fourmodule"
-        
+
+        # Prepare VLM kwargs
+        vlm_kwargs = {}
+        if args and hasattr(args, 'vertex_id') and args.vertex_id:
+            vlm_kwargs['vertex_id'] = args.vertex_id
+
         # Initialize VLM
-        self.vlm = VLM(backend=backend, model_name=model_name)
+        self.vlm = VLM(backend=backend, model_name=model_name, **vlm_kwargs)
         print(f"   VLM: {backend}/{model_name}")
         
         # Initialize agent based on scaffold
@@ -49,7 +54,7 @@ class Agent:
             
         elif scaffold == "react":
             # Create ReAct agent
-            vlm_client = VLM(backend=backend, model_name=model_name)
+            vlm_client = VLM(backend=backend, model_name=model_name, **vlm_kwargs)
             self.agent_impl = create_react_agent(vlm_client=vlm_client, verbose=True)
             print(f"   Scaffold: ReAct (Thought->Action->Observation)")
 

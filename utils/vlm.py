@@ -506,24 +506,29 @@ class LegacyOllamaBackend(VLMBackend):
 
 class VertexBackend(VLMBackend):
     """Google Gemini API with Vertex backend"""
-    
+
     def __init__(self, model_name: str, **kwargs):
         try:
             from google import genai
         except ImportError:
             raise ImportError("Google Generative AI package not found. Install with: pip install google-generativeai")
-        
+
         self.model_name = model_name
-        
+
+        # Get vertex_id from kwargs, raise error if not provided
+        vertex_id = kwargs.get('vertex_id')
+        if not vertex_id:
+            raise ValueError("vertex_id is required for VertexBackend. Pass it via --vertex-id parameter.")
+
         # Initialize the model
         self.client = genai.Client(
             vertexai=True,
-            project='pokeagent-011',
+            project=vertex_id,
             location='us-central1',
         )
         self.genai = genai
-        
-        logger.info(f"Gemini backend initialized with model: {model_name}")
+
+        logger.info(f"Vertex backend initialized with model: {model_name}, project: {vertex_id}")
     
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
         """Prepare image for Gemini API"""
