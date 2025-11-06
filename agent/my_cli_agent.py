@@ -52,6 +52,8 @@ class MCPToolAdapter:
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
                 "complete_direct_objective": "/mcp/complete_direct_objective",
+                "create_direct_objectives": "/mcp/create_direct_objectives",
+                "get_progress_summary": "/mcp/get_progress_summary",
 
                 # Baseline MCP tools (file/shell/web)
                 "read_file": "/mcp/read_file",
@@ -335,6 +337,49 @@ class MyCLIAgent:
                     "required": ["part"]
                 }
             },
+            {
+                "name": "create_direct_objectives",
+                "description": "Create the next 3 direct objectives when a sequence completes. Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "objectives": {
+                            "type_": "ARRAY",
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
+                                    "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
+                                    "action_type": {
+                                        "type_": "STRING",
+                                        "enum": ["navigate", "interact", "battle", "wait"],
+                                        "description": "Type of action"
+                                    },
+                                    "target_location": {"type_": "STRING", "description": "Target location/map name"},
+                                    "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
+                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
+                                },
+                                "required": ["id", "description", "action_type"]
+                            },
+                            "description": "Array of exactly 3 objectives to create next"
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
+                        }
+                    },
+                    "required": ["objectives", "reasoning"]
+                }
+            },
+            {
+                "name": "get_progress_summary",
+                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary. Use this when a sequence completes to understand what you've accomplished before creating next objectives.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {},
+                    "required": []
+                }
+            },
 
             # ============================================================
             # BASELINE MCP TOOLS (File/Shell/Web)
@@ -353,11 +398,11 @@ class MyCLIAgent:
             },
             {
                 "name": "write_file",
-                "description": "Write file to .pokeagent_cache/cli/ directory ONLY. Creates directories if needed.",
+                "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/"},
+                        "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
                         "content": {"type_": "STRING", "description": "File content"}
                     },
                     "required": ["file_path", "content"]
@@ -1197,34 +1242,67 @@ ACTION HISTORY (last 20 steps):
 {direct_objective_status}
 
 ================================================================================
-⚠️ CRITICAL: When you have completed the objective above, you MUST call:
+⚠️ CRITICAL: When you have completed the objective above, you MUST call (prioritize this before progressing through dialogue):
    complete_direct_objective(reasoning="<explain why it's complete>")
+   
+🔄 SEQUENCE COMPLETION HANDLING:
+When you see "All objectives completed!" or sequence_complete=True in the response:
+1. Call get_progress_summary() to see what you've accomplished (milestones, objectives, location, knowledge)
+2. Use get_walkthrough(part=X) to find the next relevant walkthrough part based on your current location/progress
+3. Optionally use lookup_pokemon_info() for specific location/NPC information
+4. Create the next 3 logical objectives using create_direct_objectives():
+   - Base them on walkthrough/wiki information
+   - Format them with clear descriptions, action_types, target_locations, navigation_hints
+   - Use completion_condition to specify how to verify completion
+5. Once created, proceed with the first new objective
+
+Example format for create_direct_objectives:
+create_direct_objectives(
+    objectives=[
+        {{
+            "id": "dynamic_01_navigate_route_102",
+            "description": "Travel to Route 102",
+            "action_type": "navigate",
+            "target_location": "Route 102",
+            "navigation_hint": "Move east from Petalburg City to reach Route 102",
+            "completion_condition": "location_contains_route_102"
+        }},
+        {{"id": "dynamic_02_...", "description": "...", ...}},
+        {{"id": "dynamic_03_...", "description": "...", ...}}
+    ],
+    reasoning="Based on walkthrough Part 5, the next step is to travel to Route 102..."
+)
 ================================================================================
 
 CURRENT GAME STATE:
 {state_text}
 
-**DIALOGUE CHECK**: Look at the game screen carefully - if you see a dialogue box with text, you MUST use press_buttons(["A"], reasoning) to advance it before doing anything else!
+**DIALOGUE CHECK**: Look at the game screen carefully - if you see a dialogue box with text, press_buttons(["A"], reasoning).
 
 AVAILABLE TOOLS - Use these function calls to interact with the game:
 
-🎮 **PRIMARY GAME TOOLS** (use these most often):
+🎮 **PRIMARY GAME TOOLS** :
 - get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
+- complete_direct_objective(reasoning) - Mark current direct objective as complete. (prioritize this before progressing through dialogue)
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
 - navigate_to(x, y, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data
-- complete_direct_objective(reasoning) - Mark current direct objective as complete
 
 🗺️ **NAVIGATION**: Use navigate_to(x, y, reason) to automatically pathfind to a coordinate. It uses A* pathfinding on the porymap ground truth map. You can also use press_buttons() for manual movement if navigate_to isn't working.
 
-📚 **INFORMATION TOOLS** (use when you need info):
+📚 **INFORMATION TOOLS** (use when you need info or are stuck in a loop):
 - lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis
 - get_walkthrough(part) - Get official Emerald walkthrough (parts 1-21)
 - search_knowledge(query, category) - Search your stored knowledge
 - add_knowledge(category, title, content, importance) - Store important discoveries
+- get_progress_summary() - Get comprehensive progress summary (milestones, objectives, location, knowledge)
 
 💾 **KNOWLEDGE TOOLS** (use to remember things):
 - get_knowledge_summary(min_importance) - Get summary of important discoveries
 - save_memory(fact) - Save facts to remember across sessions
+
+🎯 **OBJECTIVE MANAGEMENT** (use when sequences complete):
+- create_direct_objectives(objectives, reasoning) - Create next 3 direct objectives dynamically
+  Use this after get_progress_summary() and get_walkthrough() to plan your next steps
 
 ** COORDINATE & MOVEMENT EXAMPLES **:
 - Pressing LEFT decreases your X coordinate (moves you west)

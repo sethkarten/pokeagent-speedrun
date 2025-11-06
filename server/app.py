@@ -70,6 +70,7 @@ step_count = 0
 direct_objectives_sequence = None
 direct_objectives_start_index = 0
 direct_objectives_manager = None
+current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
 fps = 80
@@ -1768,7 +1769,7 @@ async def mcp_get_game_state():
         
         # Add direct objectives information
         if result.get("success", False):
-            global direct_objectives_manager
+            global direct_objectives_manager, current_run_dir
             
             # Initialize direct objective manager if needed
             if direct_objectives_manager is None:
@@ -1778,7 +1779,7 @@ async def mcp_get_game_state():
             if direct_objectives_sequence:
                 if not direct_objectives_manager.is_sequence_active():
                     if direct_objectives_sequence == "tutorial_to_rival":
-                        direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index)
+                        direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=current_run_dir)
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
             
@@ -1869,8 +1870,8 @@ async def mcp_complete_direct_objective(request: dict):
         
         game_state = game_state_result.get("raw_state", {})
         
-        # Use global direct objective manager
-        global direct_objectives_manager
+        # Use global direct objective manager and current_run_dir
+        global direct_objectives_manager, current_run_dir
         
         # Initialize direct objective manager if needed
         if direct_objectives_manager is None:
@@ -1880,7 +1881,7 @@ async def mcp_complete_direct_objective(request: dict):
         if direct_objectives_sequence:
             if not direct_objectives_manager.is_sequence_active():
                 if direct_objectives_sequence == "tutorial_to_rival":
-                    direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index)
+                    direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=current_run_dir)
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
         
@@ -1911,16 +1912,61 @@ async def mcp_complete_direct_objective(request: dict):
                 "sequence_status": direct_objectives_manager.get_sequence_status()
             }
         else:
-            return {
-                "success": True,
-                "completed_objective": {
-                    "id": current_obj.id,
-                    "description": current_obj.description
-                },
-                "next_objective": None,
-                "sequence_status": direct_objectives_manager.get_sequence_status(),
-                "message": "All objectives completed!"
-            }
+            # Sequence complete - save to history in timestamped run directory
+            if current_run_dir:
+                try:
+                    saved_file = direct_objectives_manager.save_completed_objectives(current_run_dir)
+                    logger.info(f"💾 Saved completed objectives to {saved_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to save completed objectives: {e}")
+            
+            # Automatically create a new objective to guide the agent through next steps
+            try:
+                from agent.direct_objectives import DirectObjective
+                
+                # Get current game state for context
+                next_step_obj = DirectObjective(
+                    id="sequence_complete_create_next_objectives",
+                    description="Sequence completed! Call get_progress_summary() to review accomplishments, then use get_walkthrough() to find the next relevant walkthrough part based on your location, and finally create the next 3 direct objectives using create_direct_objectives()",
+                    action_type="interact",
+                    target_location=None,
+                    navigation_hint="Step 1: Call get_progress_summary() to see milestones and current location. Step 2: Use get_walkthrough(part=X) based on your location to plan next steps. Step 3: Call create_direct_objectives() with 3 new objectives based on the walkthrough information.",
+                    completion_condition="dynamic_objectives_created",
+                    priority=1
+                )
+                
+                # Add the new objective to the sequence
+                direct_objectives_manager.current_sequence.append(next_step_obj)
+                
+                # Get guidance for the new objective
+                next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+                
+                return {
+                    "success": True,
+                    "completed_objective": {
+                        "id": current_obj.id,
+                        "description": current_obj.description
+                    },
+                    "next_objective": next_guidance,
+                    "sequence_status": direct_objectives_manager.get_sequence_status(),
+                    "message": "All objectives completed! A new objective has been automatically created to guide you through creating the next 3 objectives. Follow the steps: get_progress_summary() → get_walkthrough() → create_direct_objectives()",
+                    "sequence_complete": False,  # Not complete anymore - we added a new objective
+                    "auto_objective_created": True
+                }
+            except Exception as e:
+                logger.error(f"Failed to create auto objective: {e}")
+                # Fallback to original behavior if auto-objective creation fails
+                return {
+                    "success": True,
+                    "completed_objective": {
+                        "id": current_obj.id,
+                        "description": current_obj.description
+                    },
+                    "next_objective": None,
+                    "sequence_status": direct_objectives_manager.get_sequence_status(),
+                    "message": "All objectives completed! Use get_progress_summary() to see what you've accomplished, then get_walkthrough() to plan next steps, and create_direct_objectives() to create the next 3 objectives.",
+                    "sequence_complete": True
+                }
             
     except Exception as e:
         logger.error(f"Error completing direct objective: {e}")
@@ -1976,7 +2022,7 @@ async def mcp_navigate_to(request: dict):
 
 @app.post("/mcp/add_knowledge")
 async def mcp_add_knowledge(request: dict):
-    """MCP Tool: Add knowledge to knowledge base"""
+    """MCP Tool: Add knowledge to knowledge base (persistent across runs)"""
     try:
         from server.cli import pokemon_mcp_server
 
@@ -1995,7 +2041,7 @@ async def mcp_add_knowledge(request: dict):
 
 @app.post("/mcp/search_knowledge")
 async def mcp_search_knowledge(request: dict):
-    """MCP Tool: Search knowledge base"""
+    """MCP Tool: Search knowledge base (persistent across runs)"""
     try:
         from server.cli import pokemon_mcp_server
 
@@ -2012,7 +2058,7 @@ async def mcp_search_knowledge(request: dict):
 
 @app.post("/mcp/get_knowledge_summary")
 async def mcp_search_knowledge_summary(request: dict):
-    """MCP Tool: Get knowledge summary"""
+    """MCP Tool: Get knowledge summary (persistent across runs)"""
     try:
         from server.cli import pokemon_mcp_server
 
@@ -2297,9 +2343,33 @@ async def mcp_read_file(request: dict):
 
 @app.post("/mcp/write_file")
 async def mcp_write_file(request: dict):
-    """MCP Tool: Write file (restricted to .pokeagent_cache/cli/)"""
+    """MCP Tool: Write file (restricted to .pokeagent_cache/cli/ or current run directory)"""
     tools = _get_baseline_mcp_tools()
-    return tools.write_file(file_path=request.get("file_path"), content=request.get("content"))
+    
+    # Allow writing to current run directory as well
+    file_path = request.get("file_path")
+    global current_run_dir
+    
+    # If path is relative and run_dir exists, allow writing to run_dir
+    if current_run_dir and file_path and not os.path.isabs(file_path):
+        # If relative path, write to run directory
+        run_file_path = os.path.join(current_run_dir, file_path)
+        try:
+            os.makedirs(os.path.dirname(run_file_path), exist_ok=True)
+            with open(run_file_path, 'w', encoding='utf-8') as f:
+                f.write(request.get("content", ""))
+            return {
+                "success": True,
+                "message": f"Successfully wrote to {run_file_path}",
+                "path": run_file_path,
+                "write_dir": current_run_dir
+            }
+        except Exception as e:
+            logger.error(f"Failed to write to run directory: {e}")
+            return {"success": False, "error": str(e)}
+    
+    # Otherwise use baseline tool (restricted to .pokeagent_cache/cli/)
+    return tools.write_file(file_path=file_path, content=request.get("content"))
 
 @app.post("/mcp/list_directory")
 async def mcp_list_directory(request: dict):
@@ -2364,9 +2434,190 @@ async def mcp_google_web_search(request: dict):
 
 @app.post("/mcp/save_memory")
 async def mcp_save_memory(request: dict):
-    """MCP Tool: Save facts to persistent memory"""
-    tools = _get_baseline_mcp_tools()
-    return tools.save_memory(fact=request.get("fact"))
+    """MCP Tool: Save facts to persistent memory (saved to run directory)"""
+    global current_run_dir
+    
+    fact = request.get("fact")
+    if not fact:
+        return {"success": False, "error": "fact is required"}
+    
+    try:
+        # Save to current run directory if available
+        if current_run_dir:
+            memory_file = os.path.join(current_run_dir, "AGENT.md")
+            
+            # Read existing content
+            if os.path.exists(memory_file):
+                with open(memory_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            else:
+                content = "# Agent Memory\n\nThis file stores facts and observations from the AI agent.\n"
+            
+            # Check if "## Agent Memories" section exists
+            if "## Agent Memories" not in content:
+                if content and not content.endswith('\n'):
+                    content += '\n'
+                content += "\n## Agent Memories\n"
+            
+            # Append the fact
+            content += f"- {fact}\n"
+            
+            # Write back
+            with open(memory_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            return {
+                "success": True,
+                "message": f"Memory saved to {memory_file}",
+                "path": memory_file
+            }
+        else:
+            # Fallback to baseline tool if no run directory
+            tools = _get_baseline_mcp_tools()
+            return tools.save_memory(fact=fact)
+    except Exception as e:
+        logger.error(f"Failed to save memory: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/mcp/create_direct_objectives")
+async def mcp_create_direct_objectives(request: dict):
+    """MCP Tool: Create next 3 direct objectives dynamically"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+    
+    try:
+        from agent.direct_objectives import DirectObjectiveManager
+        
+        objectives_data = request.get("objectives", [])
+        reasoning = request.get("reasoning", "")
+        
+        if len(objectives_data) != 3:
+            return {"success": False, "error": f"Must provide exactly 3 objectives (got {len(objectives_data)})"}
+        
+        # Validate required fields
+        for i, obj in enumerate(objectives_data):
+            if not obj.get("id"):
+                return {"success": False, "error": f"Objective {i+1} missing 'id' field"}
+            if not obj.get("description"):
+                return {"success": False, "error": f"Objective {i+1} missing 'description' field"}
+            if not obj.get("action_type"):
+                return {"success": False, "error": f"Objective {i+1} missing 'action_type' field"}
+        
+        global direct_objectives_manager
+        if direct_objectives_manager is None:
+            direct_objectives_manager = DirectObjectiveManager()
+        
+        # Check if we need to complete the "sequence_complete_create_next_objectives" objective first
+        current_obj = direct_objectives_manager.get_current_objective()
+        should_complete_auto_obj = False
+        if current_obj and current_obj.id == "sequence_complete_create_next_objectives":
+            should_complete_auto_obj = True
+        
+        # Add dynamic objectives
+        direct_objectives_manager.add_dynamic_objectives(objectives_data)
+        
+        # If we just created the auto-objective to create new objectives, mark it as completed
+        if should_complete_auto_obj:
+            direct_objectives_manager._mark_objective_completed(current_obj)
+            direct_objectives_manager.current_index += 1
+            logger.info(f"✅ Marked sequence_complete_create_next_objectives as completed after creating {len(objectives_data)} new objectives")
+        
+        # Get current game state for context
+        from utils.state_formatter import format_state_for_llm
+        from server.cli import pokemon_mcp_server
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state = game_state_result.get("raw_state", {})
+        
+        # Get next objective guidance (should now be the first of the newly created objectives)
+        next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+        
+        return {
+            "success": True,
+            "message": f"Created {len(objectives_data)} objectives",
+            "reasoning": reasoning,
+            "next_objective": next_guidance,
+            "sequence_status": direct_objectives_manager.get_sequence_status(),
+            "context": {
+                "current_location": game_state.get("player", {}).get("location"),
+                "milestones_completed": [
+                    m for m, d in (env.milestone_tracker.milestones.items() if env.milestone_tracker else [])
+                    if d.get("completed", False)
+                ]
+            },
+            "auto_objective_completed": should_complete_auto_obj
+        }
+    except Exception as e:
+        logger.error(f"Error creating direct objectives: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+@app.post("/mcp/get_progress_summary")
+async def mcp_get_progress_summary():
+    """MCP Tool: Get comprehensive progress summary including milestones, completed objectives, and knowledge"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+    
+    try:
+        # Get milestones
+        milestones = env.milestone_tracker.milestones if env.milestone_tracker else {}
+        completed_milestones = [mid for mid, data in milestones.items() if data.get("completed", False)]
+        
+        # Get current game state
+        from utils.state_formatter import format_state_for_llm
+        from server.cli import pokemon_mcp_server
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state = game_state_result.get("raw_state", {})
+        
+        # Get direct objective status
+        global direct_objectives_manager
+        obj_status = {}
+        completed_history = []
+        if direct_objectives_manager:
+            obj_status = direct_objectives_manager.get_sequence_status()
+            
+            # Load completed objectives history from current run directory
+            global current_run_dir
+            if current_run_dir:
+                completed_obj_file = os.path.join(current_run_dir, "completed_objectives.json")
+                if os.path.exists(completed_obj_file):
+                    import json
+                    with open(completed_obj_file, 'r') as f:
+                        history_data = json.load(f)
+                        completed_history = history_data.get("sequences", [])
+        
+        # Get knowledge summary (persistent)
+        kb_result = pokemon_mcp_server.get_knowledge_summary_direct(min_importance=3)
+        kb_summary = kb_result.get("summary", "No knowledge yet") if isinstance(kb_result, dict) else "No knowledge yet"
+        
+        # Get location and coordinates
+        location = game_state.get("player", {}).get("location", "Unknown")
+        player_pos = game_state_result.get("player_position", {}) if game_state_result.get("success") else {}
+        
+        return {
+            "success": True,
+            "progress": {
+                "milestones_completed": completed_milestones,
+                "total_milestones_completed": len(completed_milestones),
+                "current_location": location,
+                "player_coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")} if player_pos else None,
+                "direct_objectives": {
+                    "current_sequence": obj_status.get("sequence_name"),
+                    "objectives_completed_in_current_sequence": obj_status.get("completed_count", 0),
+                    "total_in_current_sequence": obj_status.get("total_objectives", 0),
+                    "is_sequence_complete": obj_status.get("is_complete", False),
+                    "current_objective": obj_status.get("current_objective")
+                },
+                "completed_sequences_history": completed_history,
+                "knowledge_summary": kb_summary,
+                "run_directory": current_run_dir
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting progress summary: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
 
 
 # ============================================================================
@@ -2629,6 +2880,14 @@ def main():
         print("🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
+    # Initialize run directory for this execution
+    global current_run_dir
+    if current_run_dir is None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        current_run_dir = os.path.join(CACHE_DIR, f"run_{timestamp}")
+        os.makedirs(current_run_dir, exist_ok=True)
+        print(f"📁 Run directory: {current_run_dir}")
+    
     # Initialize video recording if requested
     init_video_recording(args.record)
     print("Server mode - headless operation, display handled by client")

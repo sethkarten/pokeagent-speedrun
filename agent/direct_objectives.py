@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
+import json
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -169,15 +171,12 @@ class DirectObjectiveManager:
         self.current_index = 0
         logger.info(f"Loaded hackathon Route 102 to Petalburg sequence with {len(self.current_sequence)} objectives")
         
-    def load_tutorial_to_rival_sequence(self, start_index: int = 0):
-        """Load the combined sequence from tutorial to rival battle (19 objectives total).
+    def load_tutorial_to_rustboro_city_sequence(self, start_index: int = 0, run_dir: Optional[str] = None):
+        """Load the combined sequence from tutorial to rustboro city (10 objectives total).
         
-        This is one continuous sequence from the start of the game through the rival battle.
-        
-        Args:
-            start_index: Index to start the sequence at (for resuming from checkpoints)
+        This is one continuous sequence from the start of the game through the rustboro city.
         """
-        self.sequence_name = "tutorial_to_rival"
+        self.sequence_name = "tutorial_to_rustboro_city"
         self.current_sequence = [
             # ========== TUTORIAL TO STARTER (Objectives 1-14) ==========
             DirectObjective(
@@ -306,7 +305,7 @@ class DirectObjectiveManager:
                 completion_condition="exited_professor_birch_lab",
                 priority=1
             ),
-            # ========== BIRCH_2 TO RIVAL (Objectives 15-19) ==========
+            # ========== BIRCH_2 TO RIVAL (Objectives 15-20) ==========
             DirectObjective(
                 id="birch_2_01_north_route101",
                 description="Travel north to Route 101",
@@ -361,13 +360,103 @@ class DirectObjectiveManager:
                 completion_condition="received_pokedex",
                 priority=1
             ),
+
+            # ========== Rival to Petalburg (Objectives 21-26) ==========
+            DirectObjective(
+                id="professor_birch_to_route_102",
+                description="Travel to route 102",
+                action_type="navigate",
+                target_location="Route 102",
+                navigation_hint="Travel to route 101 -> oldale town -> route 102",
+                completion_condition="location_contains_route_102",
+                priority=1
+            ),
+            DirectObjective(
+                id="route_102_to_petalburg",
+                description="Travel to petalburg city. You may have to encounter and battle trainers along the way",
+                action_type="navigate",
+                target_location="Petalburg City",
+                navigation_hint="Travel to route 102 -> petalburg city",
+                completion_condition="reached_petalburg_city",
+                priority=1
+            ),
+            DirectObjective(
+                id="petalburg_city_to_dad_first_meeting",
+                description="Travel to dad's first meeting with you",
+                action_type="navigate",
+                target_location="Petalburg City Gym",
+                navigation_hint="Travel to petalburg city -> petalburg city gym",
+                completion_condition="reached_dad_first_meeting",
+                priority=1
+            ),
+            DirectObjective(
+                id="help_wally_catch_ralts",
+                description="Help Wally catch a Ralts",
+                action_type="battle",
+                target_location="Petalburg City",
+                navigation_hint="After receiving pokeballs from your dad, Wally will take you to go and catch a Ralts. You will need to use a pokeball from his bag to catch the Ralts.",
+                completion_condition="caught_ralts",
+                priority=1
+            ),
+
+            # ========== Petalburg to Rustboro City (Objectives 27-32) ==========
+            DirectObjective(
+                id="petalburg_city_to_route_104",
+                description="Travel to route 104",
+                action_type="navigate",
+                target_location="Route 104",
+                navigation_hint="Travel to petalburg city -> route 104",
+                completion_condition="location_contains_route_104",
+                priority=1
+            ),
+            DirectObjective(
+                id="route_104_to_rustboro_city",
+                description="Travel to rustboro city",
+                action_type="navigate",
+                target_location="Rustboro City",
+                navigation_hint="Travel to route 104 -> rustboro city",
+                completion_condition="reached_rustboro_city",
+                priority=1
+            ),
         ]
         self.current_index = min(start_index, len(self.current_sequence))
         # Mark all objectives before start_index as completed
+        initial_completed = []
         for i in range(start_index):
             if i < len(self.current_sequence):
-                self.current_sequence[i].completed = True
-        logger.info(f"Loaded tutorial_to_rival sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index}")
+                obj = self.current_sequence[i]
+                obj.completed = True
+                obj.completed_at = datetime.now()  # Mark as completed at load time
+                initial_completed.append({
+                    "id": obj.id,
+                    "description": obj.description,
+                    "target_location": obj.target_location,
+                    "action_type": obj.action_type,
+                    "completed_at": obj.completed_at.isoformat(),
+                    "completed_at_load": True  # Flag to indicate these were pre-completed
+                })
+        
+        # Save initial completed objectives to run directory if provided and start_index > 0
+        if run_dir and start_index > 0 and initial_completed:
+            try:
+                filename = os.path.join(run_dir, "completed_objectives.json")
+                initial_data = {
+                    "sequence_name": self.sequence_name,
+                    "completed_at": datetime.now().isoformat(),
+                    "completed_objectives": initial_completed,
+                    "total_objectives_completed": len(initial_completed),
+                    "total_objectives": len(self.current_sequence),
+                    "start_index": start_index,
+                    "note": f"Initial completed objectives (loaded at index {start_index})"
+                }
+                history = {"sequences": [initial_data], "last_updated": datetime.now().isoformat()}
+                with open(filename, 'w') as f:
+                    json.dump(history, f, indent=2)
+                logger.info(f"💾 Saved {len(initial_completed)} initial completed objectives to {filename}")
+            except Exception as e:
+                logger.warning(f"Failed to save initial completed objectives: {e}")
+        
+        logger.info(f"Loaded tutorial_to_rival sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
         
     def get_current_objective(self) -> Optional[DirectObjective]:
         """Get the current objective in the sequence"""
@@ -452,6 +541,10 @@ class DirectObjectiveManager:
             elif objective.completion_condition == "passed_route103_second_grass":
                 # Let LLM determine completion based on context
                 return False
+            elif objective.completion_condition == "dynamic_objectives_created":
+                # This is marked complete when create_direct_objectives is successfully called
+                # The completion is handled in the create_direct_objectives endpoint
+                return False  # Always return False here - completion is handled explicitly by the endpoint
                 
         except Exception as e:
             logger.warning(f"Error checking objective completion: {e}")
@@ -462,6 +555,79 @@ class DirectObjectiveManager:
         """Mark an objective as completed"""
         objective.completed = True
         objective.completed_at = datetime.now()
+    
+    def add_dynamic_objectives(self, objectives_data: List[Dict[str, Any]]):
+        """Add dynamically created objectives to the current sequence
+        
+        Args:
+            objectives_data: List of dicts with objective properties (id, description, action_type, etc.)
+        """
+        for obj_data in objectives_data:
+            obj = DirectObjective(
+                id=obj_data.get("id", f"dynamic_{len(self.current_sequence) + 1}"),
+                description=obj_data["description"],
+                action_type=obj_data.get("action_type", "navigate"),
+                target_location=obj_data.get("target_location"),
+                target_coords=obj_data.get("target_coords"),
+                navigation_hint=obj_data.get("navigation_hint"),
+                completion_condition=obj_data.get("completion_condition"),
+                priority=1
+            )
+            self.current_sequence.append(obj)
+        logger.info(f"Added {len(objectives_data)} dynamic objectives to sequence")
+    
+    def save_completed_objectives(self, run_dir: Optional[str] = None):
+        """Save completed objectives history to file in timestamped run directory
+        
+        Args:
+            run_dir: Optional run directory path. If None, uses timestamped directory.
+        """
+        if not run_dir:
+            # Create timestamped directory similar to video recordings
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            run_dir = os.path.join(".pokeagent_cache", f"run_{timestamp}")
+        
+        os.makedirs(run_dir, exist_ok=True)
+        
+        filename = os.path.join(run_dir, "completed_objectives.json")
+        
+        completed_data = {
+            "sequence_name": self.sequence_name,
+            "completed_at": datetime.now().isoformat(),
+            "completed_objectives": [
+                {
+                    "id": obj.id,
+                    "description": obj.description,
+                    "target_location": obj.target_location,
+                    "action_type": obj.action_type,
+                    "completed_at": obj.completed_at.isoformat() if hasattr(obj, 'completed_at') and obj.completed_at else None
+                }
+                for obj in self.current_sequence if obj.completed
+            ],
+            "total_objectives_completed": sum(1 for obj in self.current_sequence if obj.completed),
+            "total_objectives": len(self.current_sequence)
+        }
+        
+        # Load existing history and append (preserving initial completed objectives if present)
+        if os.path.exists(filename):
+            with open(filename, 'r') as f:
+                history = json.load(f)
+            # Check if this sequence name already exists (from initial load)
+            existing_sequences = history.get("sequences", [])
+            # If there's already a sequence with the same name from initial load, we'll append to it
+            # Otherwise, just append the new completion data
+        else:
+            history = {"sequences": []}
+        
+        # Append the new completion data (this could be final completion or dynamic objectives)
+        history["sequences"].append(completed_data)
+        history["last_updated"] = datetime.now().isoformat()
+        
+        with open(filename, 'w') as f:
+            json.dump(history, f, indent=2)
+        
+        logger.info(f"Saved completed objectives to {filename}")
+        return filename
         
     def get_sequence_status(self) -> Dict[str, Any]:
         """Get current status of the objective sequence"""
