@@ -367,7 +367,7 @@ class DirectObjectiveManager:
                 description="Travel to route 102",
                 action_type="navigate",
                 target_location="Route 102",
-                navigation_hint="Travel to route 101 -> oldale town -> route 102",
+                navigation_hint="Travel to route 101 -> oldale town -> route 102.",
                 completion_condition="location_contains_route_102",
                 priority=1
             ),

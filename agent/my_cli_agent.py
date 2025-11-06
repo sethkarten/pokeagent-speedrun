@@ -1285,7 +1285,7 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 - get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
 - complete_direct_objective(reasoning) - Mark current direct objective as complete. (prioritize this before progressing through dialogue)
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
-- navigate_to(x, y, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data
+- navigate_to(x, y, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data. Make sure the coordinate you are requesting a path to is walkable. If it isnt, pathfinding will fail and you wont move. NOTE: the top-left corner of the map is (0, 0).
 
 🗺️ **NAVIGATION**: Use navigate_to(x, y, reason) to automatically pathfind to a coordinate. It uses A* pathfinding on the porymap ground truth map. You can also use press_buttons() for manual movement if navigate_to isn't working.
 
@@ -1320,7 +1320,7 @@ STRATEGY - PRIORITY ORDER:
 1. **CHECK OBJECTIVE COMPLETION FIRST**: Before doing ANYTHING, check if your current direct objective is complete. If you've accomplished what the objective asks for, IMMEDIATELY call complete_direct_objective(reasoning="...") 
 2. **DIALOGUE SECOND**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
 3. **MOVEMENT**: Preferentially use navigate_to(x, y, reason) to automatically pathfind to a coordinate. Use press_buttons(["UP"], reasoning) etc. for manual movement only if navigate_to is not working.
-4. **BATTLES**: Use press_buttons with battle moves. Select moves carefully based on the current situation and the enemy's Pokemon. If below 75% health, prioritize using healing moves that also cause damage like (absorb, gigadrain, etc) if these moves are available.
+4. **BATTLES**: Use press_buttons with battle moves. Select moves carefully based on the current situation and the enemy's Pokemon. If below 50% health, prioritize using healing moves that also cause damage like (absorb, gigadrain, etc) if these moves are available.
 5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
 6. **STUCK DETECTION**: If you've been attempting the same move (UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
 

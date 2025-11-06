@@ -253,6 +253,18 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
         start = (start_x, start_y)
         goal = (x, y)
 
+        # Check if requested goal is blocked (for agent notification)
+        goal_was_blocked = False
+        map_data = state.get('map', {}).get('porymap', {})
+        if map_data.get('grid'):
+            grid = map_data['grid']
+            if 0 <= y < len(grid):
+                row = grid[y]
+                if isinstance(row, (list, str)) and 0 <= x < len(row):
+                    cell = row[x] if isinstance(row, str) else row[x]
+                    if cell == '#':
+                        goal_was_blocked = True
+
         # Calculate path buttons using Pathfinder
         buttons = pathfinder.find_path(start, goal, state)
 
@@ -269,13 +281,19 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
 
         logger.info(f"🗺️ {nav_reason} - Buttons calculated: {len(buttons)}")
 
-        return {
+        result = {
             "success": True,
             "buttons": buttons,
             "target": f"({x}, {y})",
             "path_length": len(buttons),
             "reason": reason
         }
+        
+        # Inform agent if goal was blocked and adjusted
+        if goal_was_blocked:
+            result["note"] = f"Requested target ({x}, {y}) was blocked; navigated to nearest reachable tile"
+
+        return result
     except Exception as e:
         logger.error(f"Failed to navigate: {e}")
         import traceback
