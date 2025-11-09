@@ -458,19 +458,19 @@ class DirectObjectiveManager:
             ),
             DirectObjective(
                 id="catch_first_pokemon_in_route_104",
-                description="Keep walking around the grass until you encounter and catch a pokemon. (pokemon are easier to catch when they have low health). CRITICAL: The following are valid pokemon that can be caught in route 104: marill, poochyena, taillow, wingull. Any other pokemon can simply be defeated!",
+                description="Keep walking around the grass until you encounter and catch a pokemon. (once the opposing pokemon has < 50% health, use a pokeball). CRITICAL: The following are valid pokemon that can be caught in route 104: marill, poochyena, taillow, wingull. Any other pokemon can simply be defeated!",
                 action_type="navigate",
                 target_location="Route 104",
-                navigation_hint="Navigate back to route 104, enter the grass patch in the north west corner of the map, and keep walking around the grass until you encounter and catch a pokemon",
+                navigation_hint="Navigate back to route 104, enter the grass patch in the north west corner of the map, and keep walking around the grass until you encounter and catch a pokemon. Once in the bag, navigate the PokeBalls menu carefully via (LEFT, RIGHT) and then carefully select a pokeball to use.",
                 completion_condition="caught_first_pokemon",
                 priority=1
             ),
             DirectObjective(
                 id="catch_second_pokemon_in_route_104",
-                description="Keep walking around the grass until you encounter and catch a pokemon. Use pound once, and then throw a pokeball to catch the pokemon (pokemon are easier to catch when they have low health)",
+                description="Keep walking around the grass until you encounter and catch a pokemon. (once the opposing pokemon has < 50% health, use a pokeball). CRITICAL: Dont catch wurmple or pokemon already in your party!",
                 action_type="navigate",
                 target_location="Route 104",
-                navigation_hint="Navigate back to route 104, enter the grass patch in the north west corner of the map, and keep walking around the grass until you encounter and catch a pokemon",
+                navigation_hint="Navigate back to route 104, enter the grass patch in the north west corner of the map, and keep walking around the grass until you encounter and catch a pokemon. Once in the bag, navigate the PokeBalls menu carefully via (LEFT, RIGHT) and then carefully select a pokeball to use.",
                 completion_condition="caught_second_pokemon",
                 priority=1
             ),
