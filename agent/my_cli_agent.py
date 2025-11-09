@@ -166,8 +166,14 @@ class MyCLIAgent:
             # Use VLM for other backends (like vertex)
             # Create tool declarations for function calling
             self.tools = self._create_tool_declarations()
-            self.vlm = VLM(backend=self.backend, model_name=self.model, tools=self.tools)
+            self.vlm = VLM(
+                backend=self.backend,
+                model_name=self.model,
+                tools=self.tools,
+                system_instruction=self.system_instructions
+            )
             print(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
+            print(f"✅ System instructions loaded ({len(self.system_instructions)} chars)")
 
         # Initialize LLM logger
         from utils.llm_logger import get_llm_logger
@@ -1225,8 +1231,7 @@ Some pointers to keep in mind (guard rails) as you problem solve:
 2) Always provide detailed, context-aware responses that bias for ground-truth.
 3) Consider the current situation in the game as well as what you've learned over time.
 4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
-5) **CRITICAL**: Always check the game screen for dialogue boxes first - if you see dialogue, advance it with press_buttons(["A"]) before doing anything else.
-Especially If a current approach is leading to consistent failure without providing knowledge on how to improve.
+
 
 ACTION HISTORY (last 20 steps):
 {action_history}
