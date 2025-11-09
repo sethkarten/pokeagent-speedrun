@@ -361,7 +361,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
 
-            # ========== Rival to Petalburg (Objectives 21-26) ==========
+            # ========== Rival to Petalburg (Objectives 21-24) ==========
             DirectObjective(
                 id="professor_birch_to_route_102",
                 description="Travel to route 102",
@@ -399,22 +399,40 @@ class DirectObjectiveManager:
                 priority=1
             ),
 
-            # ========== Petalburg to Rustboro City (Objectives 27-32) ==========
+            # ========== Petalburg to Rustboro City (Objectives 25-28) ==========
             DirectObjective(
-                id="petalburg_city_to_route_104",
+                id="petalbug_to_route_104",
                 description="Travel to route 104",
                 action_type="navigate",
                 target_location="Route 104",
-                navigation_hint="Travel to petalburg city -> route 104",
-                completion_condition="location_contains_route_104",
+                navigation_hint="Travel from petalburg city -> route 104",
+                completion_condition="reached_route_104",
                 priority=1
             ),
             DirectObjective(
-                id="route_104_to_rustboro_city",
+                id="route_104_to_petalburg_woods",
+                description="Travel north to petalburg woods",
+                action_type="navigate",
+                target_location="Petalburg Woods",
+                navigation_hint="Travel from route 104 to -> petalburg woods by requesting a path to the leftmost set of warps (S), closest to you. (note, if you request a path and fail to make meaningful progress, try to request a path to a different warp that can get you to the same destination)",
+                completion_condition="reached_petalburg_woods",
+                priority=1
+            ),
+            DirectObjective(
+                id="petalburg_woods_to_route_104",
+                description="Travel to north to the final section of route 104 ",
+                action_type="navigate",
+                target_location="Route 104",
+                navigation_hint="Travel north from petalburg woods to -> route 104 by using the navigate_to() tool. Note (you will need to navigate to the north most warp to reach the northern section of route 104",
+                completion_condition="reached_route_104",
+                priority=1
+            ),
+            DirectObjective(
+                id="route_104_north_to_rustboro_city",
                 description="Travel to rustboro city",
                 action_type="navigate",
                 target_location="Rustboro City",
-                navigation_hint="Travel to route 104 -> rustboro city",
+                navigation_hint="Travel from route 104 north -> rustboro city",
                 completion_condition="reached_rustboro_city",
                 priority=1
             ),

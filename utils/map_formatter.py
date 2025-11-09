@@ -5,7 +5,22 @@ Centralized Map Formatting Utility
 Single source of truth for all map formatting across the codebase.
 """
 
-from pokemon_env.enums import MetatileBehavior
+try:
+    from pokemon_env.enums import MetatileBehavior
+except ImportError:  # Allow usage in builder scripts without mgba
+    class _FallbackEnum(int):
+        name = "NORMAL"
+
+        def __new__(cls, value=0):
+            obj = int.__new__(cls, value)
+            obj._name = "NORMAL"
+            return obj
+
+        @property
+        def name(self):
+            return self._name
+
+    MetatileBehavior = type("MetatileBehavior", (), {"NORMAL": _FallbackEnum(0)})
 
 
 def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=None, stairs_pos=None):

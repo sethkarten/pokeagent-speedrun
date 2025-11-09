@@ -28,6 +28,7 @@ class PokeemeraldLayoutParser:
     def __init__(self, pokeemerald_root: Path):
         self.root = Path(pokeemerald_root)
         self.layouts_dir = self.root / "data" / "layouts"
+        self.tilesets_dir = self.root / "data" / "tilesets"
         
         # Load layout index
         layouts_json = self.layouts_dir / "layouts.json"
@@ -44,6 +45,85 @@ class PokeemeraldLayoutParser:
             self.layout_lookup[layout["id"]] = layout
             layout_name = layout.get("name", "").replace("_Layout", "")
             self.layout_lookup[layout_name] = layout
+        
+        # Tileset name to directory mapping (complete list of all Pokemon Emerald tilesets)
+        self.tileset_to_dir = {
+            # Primary tilesets
+            "gTileset_General": "primary/general",
+            "gTileset_Building": "primary/building",
+            "gTileset_SecretBase": "primary/secret_base",
+            # Secondary tilesets (all 67 of them)
+            "gTileset_BattleArena": "secondary/battle_arena",
+            "gTileset_BattleDome": "secondary/battle_dome",
+            "gTileset_BattleFactory": "secondary/battle_factory",
+            "gTileset_BattleFrontier": "secondary/battle_frontier",
+            "gTileset_BattleFrontierOutsideEast": "secondary/battle_frontier_outside_east",
+            "gTileset_BattleFrontierOutsideWest": "secondary/battle_frontier_outside_west",
+            "gTileset_BattleFrontierRankingHall": "secondary/battle_frontier_ranking_hall",
+            "gTileset_BattlePalace": "secondary/battle_palace",
+            "gTileset_BattlePike": "secondary/battle_pike",
+            "gTileset_BattlePyramid": "secondary/battle_pyramid",
+            "gTileset_BattleTent": "secondary/battle_tent",
+            "gTileset_BikeShop": "secondary/bike_shop",
+            "gTileset_BrendansMaysHouse": "secondary/brendans_mays_house",
+            "gTileset_CableClub": "secondary/cable_club",
+            "gTileset_Cave": "secondary/cave",
+            "gTileset_Contest": "secondary/contest",
+            "gTileset_Dewford": "secondary/dewford",
+            "gTileset_DewfordGym": "secondary/dewford_gym",
+            "gTileset_EliteFour": "secondary/elite_four",
+            "gTileset_EverGrande": "secondary/ever_grande",
+            "gTileset_Facility": "secondary/facility",
+            "gTileset_Fallarbor": "secondary/fallarbor",
+            "gTileset_Fortree": "secondary/fortree",
+            "gTileset_FortreeGym": "secondary/fortree_gym",
+            "gTileset_GenericBuilding": "secondary/generic_building",
+            "gTileset_InsideOfTruck": "secondary/inside_of_truck",
+            "gTileset_InsideShip": "secondary/inside_ship",
+            "gTileset_IslandHarbor": "secondary/island_harbor",
+            "gTileset_Lab": "secondary/lab",
+            "gTileset_Lavaridge": "secondary/lavaridge",
+            "gTileset_LavaridgeGym": "secondary/lavaridge_gym",
+            "gTileset_Lilycove": "secondary/lilycove",
+            "gTileset_LilycoveMuseum": "secondary/lilycove_museum",
+            "gTileset_Mauville": "secondary/mauville",
+            "gTileset_MauvilleGameCorner": "secondary/mauville_game_corner",
+            "gTileset_MauvilleGym": "secondary/mauville_gym",
+            "gTileset_MeteorFalls": "secondary/meteor_falls",
+            "gTileset_MirageTower": "secondary/mirage_tower",
+            "gTileset_Mossdeep": "secondary/mossdeep",
+            "gTileset_MossdeepGameCorner": "secondary/mossdeep_game_corner",
+            "gTileset_MossdeepGym": "secondary/mossdeep_gym",
+            "gTileset_MysteryEventsHouse": "secondary/mystery_events_house",
+            "gTileset_NavelRock": "secondary/navel_rock",
+            "gTileset_OceanicMuseum": "secondary/oceanic_museum",
+            "gTileset_Pacifidlog": "secondary/pacifidlog",
+            "gTileset_Petalburg": "secondary/petalburg",
+            "gTileset_PetalburgGym": "secondary/petalburg_gym",
+            "gTileset_PokemonCenter": "secondary/pokemon_center",
+            "gTileset_PokemonDayCare": "secondary/pokemon_day_care",
+            "gTileset_PokemonFanClub": "secondary/pokemon_fan_club",
+            "gTileset_PokemonSchool": "secondary/pokemon_school",
+            "gTileset_PrettyPetalFlowerShop": "secondary/pretty_petal_flower_shop",
+            "gTileset_Rustboro": "secondary/rustboro",
+            "gTileset_RustboroGym": "secondary/rustboro_gym",
+            "gTileset_RusturfTunnel": "secondary/rusturf_tunnel",
+            "gTileset_SeashoreHouse": "secondary/seashore_house",
+            "gTileset_SecretBase": "secondary/secret_base",
+            "gTileset_Shop": "secondary/shop",
+            "gTileset_Slateport": "secondary/slateport",
+            "gTileset_Sootopolis": "secondary/sootopolis",
+            "gTileset_SootopolisGym": "secondary/sootopolis_gym",
+            "gTileset_TrainerHill": "secondary/trainer_hill",
+            "gTileset_TrickHousePuzzle": "secondary/trick_house_puzzle",
+            "gTileset_Underwater": "secondary/underwater",
+            "gTileset_UnionRoom": "secondary/union_room",
+            "gTileset_Unused1": "secondary/unused_1",
+            "gTileset_Unused2": "secondary/unused_2",
+        }
+        
+        # Cache loaded tileset attributes to avoid re-reading files
+        self._tileset_attributes_cache = {}
     
     def get_layout_info(self, layout_name_or_id: str) -> Optional[Dict]:
         """
@@ -183,6 +263,66 @@ class PokeemeraldLayoutParser:
         elevation = (metatile_value & 0xF000) >> 12  # Bits 12-15
         return (metatile_id, collision, elevation)
     
+    def _load_tileset_attributes(self, tileset_name: str) -> List[int]:
+        """
+        Load metatile_attributes.bin for a tileset and extract behavior values.
+        
+        The metatile_attributes.bin file contains packed u16 values with:
+        - Bits 0-7 (mask 0x00FF): Behavior ID (MB_NORMAL, MB_JUMP_EAST, etc.)
+        - Bits 12-15 (mask 0xF000): Layer type
+        
+        This is the GROUND TRUTH source for metatile behaviors including ledges,
+        grass, water, warps, etc. No heuristics or fallbacks are used.
+        
+        Args:
+            tileset_name: Tileset name like "gTileset_General"
+            
+        Returns:
+            List of behavior values (unpacked, bits 0-7 only)
+            
+        Raises:
+            ValueError: If tileset name is unknown
+            FileNotFoundError: If attributes file doesn't exist
+        """
+        # Check cache first
+        if tileset_name in self._tileset_attributes_cache:
+            return self._tileset_attributes_cache[tileset_name]
+        
+        # Get tileset directory
+        tileset_dir = self.tileset_to_dir.get(tileset_name)
+        if not tileset_dir:
+            # Fail loudly for unknown tilesets
+            raise ValueError(
+                f"Unknown tileset: '{tileset_name}'. "
+                f"Add mapping to tileset_to_dir. Known tilesets: {list(self.tileset_to_dir.keys())}"
+            )
+        
+        attributes_path = self.tilesets_dir / tileset_dir / "metatile_attributes.bin"
+        if not attributes_path.exists():
+            raise FileNotFoundError(
+                f"Tileset attributes file not found: {attributes_path}\n"
+                f"Ensure pokeemerald root is correct and contains data/tilesets/")
+        
+        # Read attribute file (each entry is u16 = 2 bytes)
+        with open(attributes_path, 'rb') as f:
+            data = f.read()
+        
+        # Parse as array of u16 (little-endian)
+        # Note: attributes are packed values with behavior in bits 0-7 (mask 0x00FF)
+        # and layer type in bits 12-15 (mask 0xF000)
+        num_metatiles = len(data) // 2
+        attributes = []
+        for i in range(num_metatiles):
+            offset = i * 2
+            packed_attr = struct.unpack('<H', data[offset:offset+2])[0]
+            # Unpack behavior from bits 0-7
+            behavior = packed_attr & 0x00FF
+            attributes.append(behavior)
+        
+        # Cache for future use
+        self._tileset_attributes_cache[tileset_name] = attributes
+        return attributes
+    
     def _infer_behavior_from_metatile_id(self, metatile_id: int, collision: int) -> MetatileBehavior:
         """
         Infer metatile behavior from metatile ID using heuristics.
@@ -298,31 +438,86 @@ class PokeemeraldLayoutParser:
         # Default to NORMAL for walkable tiles
         return MetatileBehavior.NORMAL
     
-    def get_metatiles_with_behavior(self, layout_name_or_id: str) -> Optional[List[List[Tuple[int, MetatileBehavior, int, int]]]]:
+    def get_metatiles_with_behavior(self, layout_name_or_id: str) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
         """
-        Parse map.bin and return metatiles with behavior.
+        Parse map.bin and return metatiles with actual behavior from tileset attributes.
         
+        Args:
+            layout_name_or_id: Layout name or ID
+            
         Returns:
             2D list of tuples: (metatile_id, behavior, collision, elevation)
-            Behavior is inferred from metatile_id using heuristics since
-            tileset metatile_attributes.bin files are not available.
+            Behavior is loaded from tileset metatile_attributes.bin files.
+            
+        Raises:
+            ValueError: If layout not found or missing tileset information
+            FileNotFoundError: If tileset attributes files don't exist
+            IndexError: If metatile ID is out of range for the tileset
         """
+        # Get layout info
+        layout_info = self.get_layout_info(layout_name_or_id)
+        if not layout_info:
+            raise ValueError(f"Layout not found: '{layout_name_or_id}'")
+        
+        # Get tileset names
+        primary_tileset = layout_info.get("primary_tileset")
+        secondary_tileset = layout_info.get("secondary_tileset")
+        
+        if not primary_tileset or not secondary_tileset:
+            raise ValueError(
+                f"Layout '{layout_name_or_id}' missing tileset information. "
+                f"primary_tileset={primary_tileset}, secondary_tileset={secondary_tileset}"
+            )
+        
+        # Load tileset attributes (will fail loudly if not found)
+        primary_attrs = self._load_tileset_attributes(primary_tileset)
+        secondary_attrs = self._load_tileset_attributes(secondary_tileset)
+        
+        # Parse map.bin
         metatiles = self.parse_map_bin(layout_name_or_id)
         if metatiles is None:
-            return None
+            raise ValueError(f"Failed to parse map.bin for layout '{layout_name_or_id}'")
         
+        # Unpack each metatile and add actual behavior from tilesets
         result = []
         for row in metatiles:
             result_row = []
             for metatile_value in row:
                 metatile_id, collision, elevation = self.unpack_metatile(metatile_value)
                 
-                # Infer behavior from metatile_id and collision
-                behavior = self._infer_behavior_from_metatile_id(metatile_id, collision)
+                # Look up actual behavior from tileset attributes
+                # Primary tileset: metatiles 0-511
+                # Secondary tileset: metatiles 512-1023
+                if metatile_id < 512:
+                    # Primary tileset
+                    if metatile_id >= len(primary_attrs):
+                        raise IndexError(
+                            f"Metatile ID {metatile_id} out of range for primary tileset '{primary_tileset}' "
+                            f"(has {len(primary_attrs)} metatiles)"
+                        )
+                    behavior_value = primary_attrs[metatile_id]
+                else:
+                    # Secondary tileset (offset by 512)
+                    secondary_id = metatile_id - 512
+                    if secondary_id >= len(secondary_attrs):
+                        raise IndexError(
+                            f"Metatile ID {metatile_id} (secondary {secondary_id}) out of range for "
+                            f"secondary tileset '{secondary_tileset}' (has {len(secondary_attrs)} metatiles)"
+                        )
+                    behavior_value = secondary_attrs[secondary_id]
                 
-                result_row.append((metatile_id, behavior, collision, elevation))
+                # Convert to MetatileBehavior enum
+                try:
+                    behavior_enum = MetatileBehavior(behavior_value)
+                except ValueError:
+                    # Fail loudly on unknown behavior values
+                    raise ValueError(
+                        f"Unknown behavior value {behavior_value} (0x{behavior_value:04X}) for metatile {metatile_id} "
+                        f"in layout '{layout_name_or_id}'. This may indicate a missing or corrupted tileset file."
+                    )
+                
+                result_row.append((metatile_id, behavior_enum, collision, elevation))
             result.append(result_row)
-        
         return result
 
 

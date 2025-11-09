@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Tuple, Any
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from utils.map_formatter import format_tile_to_symbol
 from utils.pokeemerald_parser import PokeemeraldMapLoader, PokeemeraldLayoutParser
 
 try:
@@ -35,29 +36,10 @@ except ImportError:
 
 
 def tile_to_symbol(tile_tuple: Tuple[int, Any, int, int], location_name: str = "") -> str:
-    """
-    Convert a tile tuple to a single character symbol.
-    
-    Args:
-        tile_tuple: (metatile_id, behavior, collision, elevation)
-        location_name: Optional location name for context-specific symbols
-        
-    Returns:
-        Single character symbol representing the tile
-    """
-    if not tile_tuple or len(tile_tuple) < 4:
+    """Proxy to shared formatter so behaviour-based symbols stay in sync."""
+    if not tile_tuple:
         return '?'
-    
-    metatile_id, behavior, collision, elevation = tile_tuple
-    
-    # Collision == 0 means walkable, >0 means blocked
-    if collision > 0:
-        return '#'  # Wall/blocked
-    elif metatile_id == 1023:  # 0x3FF - invalid/out of bounds
-        return 'X'  # Out of bounds
-    else:
-        # Walkable tile
-        return '.'  # Default walkable
+    return format_tile_to_symbol(tile_tuple, location_name=location_name)
 
 
 def build_json_map(map_name: str, pokeemerald_root: Path, 

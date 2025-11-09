@@ -78,6 +78,35 @@ ACTION: [calls press_buttons(['A'], "Advance dialogue")]
 - Call tools without explaining your thinking first
 - Make multiple movement actions in one step
 
+## 🎮 Game Boy Advance Button Controls
+
+**YOU CAN ONLY PRESS THESE 10 PHYSICAL GBA BUTTONS:**
+
+| Button | Use |
+|--------|-----|
+| `A` | Confirm, Talk, Select |
+| `B` | Cancel, Back |
+| `START` | Open menu |
+| `SELECT` | Special functions |
+| `UP` | Move up, Navigate menus |
+| `DOWN` | Move down, Navigate menus |
+| `LEFT` | Move left, Navigate menus |
+| `RIGHT` | Move right, Navigate menus |
+| `L` | Left shoulder button |
+| `R` | Right shoulder button |
+
+**⚠️ CRITICAL - DO NOT CONFUSE BUTTONS WITH GAME ACTIONS:**
+- ❌ **WRONG**: `press_buttons(['QUICK ATTACK'])` - This is a Pokemon move, NOT a button!
+- ❌ **WRONG**: `press_buttons(['TACKLE'])` - This is a Pokemon move, NOT a button!
+- ❌ **WRONG**: `press_buttons(['USE POTION'])` - This is a game action, NOT a button!
+- ✅ **CORRECT**: `press_buttons(['A'])` - Selects the highlighted move in battle
+- ✅ **CORRECT**: `press_buttons(['DOWN', 'DOWN', 'A'])` - Navigate down twice, then confirm
+
+**To use Pokemon moves in battle:**
+1. Use `UP`/`DOWN` to highlight the move you want
+2. Press `A` to select it
+3. The game will execute the move automatically
+
 ## Available MCP Tools
 
 The `pokemon-emerald` MCP server provides these tools:
@@ -90,9 +119,10 @@ The `pokemon-emerald` MCP server provides these tools:
 
 2. **press_buttons** - Control the game by pressing GBA buttons
    - Parameters: `buttons` (array), `reasoning` (string)
-   - Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R
+   - **VALID BUTTONS ONLY**: `A`, `B`, `START`, `SELECT`, `UP`, `DOWN`, `LEFT`, `RIGHT`, `L`, `R`
    - Returns: Updated game state after buttons are executed
    - Use for: Moving, talking to NPCs, selecting menu options, battling
+   - **⚠️ IMPORTANT**: You can ONLY press these physical GBA buttons. You CANNOT directly press Pokemon moves like "QUICK ATTACK" or "TACKLE". To use moves in battle, navigate the battle menu with A/B/UP/DOWN buttons.
 
 3. **navigate_to** - Automatically pathfind to coordinates
    - Parameters: `x` (integer), `y` (integer), `reason` (string)
@@ -131,6 +161,7 @@ The `pokemon-emerald` MCP server provides these tools:
 
 - **NEVER save the game** using the START menu - this disrupts the game flow
 - Do not open START menu unless absolutely necessary (checking Pokemon status)
+- **ONLY press valid GBA buttons** (A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R) - Never try to press Pokemon moves or game actions directly
 - Always use your knowledge base to remember important information
 - Store NPCs, item locations, puzzle solutions, and strategies as you discover them
 

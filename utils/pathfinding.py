@@ -77,7 +77,7 @@ class Pathfinder:
         start: Tuple[int, int], 
         goal: Tuple[int, int],
         game_state: Dict,
-        max_distance: int = 50
+        max_distance: int = 150
     ) -> Optional[List[str]]:
         """
         Find a path from start to goal using A* algorithm.
@@ -86,7 +86,7 @@ class Pathfinder:
             start: Starting position (x, y) - ROM coordinates (0,0 = top-left of current map)
             goal: Goal position (x, y) - ROM coordinates
             game_state: Current game state with map data, NPCs, etc.
-            max_distance: Maximum distance to search (prevents infinite loops)
+            max_distance: Maximum distance to search (default 150, handles large Pokemon maps)
             
         Returns:
             List of button commands to reach the goal, or None if no path found
@@ -166,13 +166,30 @@ class Pathfinder:
         
         logger.debug(f"Total blocked positions: {len(blocked)}, warps: {len(warps)}")
         
-        # Run A* algorithm
-        path = self._astar(start, goal, blocked, map_data, max_distance)
+        # Run A* algorithm (returns both path and best_node if path fails)
+        result = self._astar(start, goal, blocked, map_data, max_distance)
         
-        if not path:
-            logger.warning(f"Pathfinding failed: {start} -> {goal} in {location_name}")
-            logger.warning(f"  Blocked count: {len(blocked)}, Map: {map_data.get('type', 'unknown')}")
-            return None
+        if isinstance(result, tuple):
+            # A* returned (None, best_node) - no complete path but found closest point
+            path, best_node = result
+            if best_node and (best_node.x, best_node.y) != start:
+                logger.warning(f"Pathfinding failed: {start} -> {goal} in {location_name}")
+                logger.warning(f"  Blocked count: {len(blocked)}, Map: {map_data.get('type', 'unknown')}")
+                logger.info(f"Using partial path to closest point: {(best_node.x, best_node.y)} (distance {best_node.h_cost:.1f} from goal)")
+                
+                # Return partial path (up to 25 steps) toward the goal
+                partial_path = self._reconstruct_path(best_node)
+                if len(partial_path) > 25:
+                    partial_path = partial_path[:15]
+                    logger.info(f"Limiting partial path to first 25 steps")
+                
+                logger.info(f"Partial path: {len(partial_path)} steps toward goal")
+                return self._path_to_buttons(partial_path)
+            else:
+                logger.warning(f"No progress possible toward {goal}")
+                return None
+        else:
+            path = result
         
         logger.info(f"Path found: {len(path)} steps from {start} to {goal}")
         
@@ -246,8 +263,10 @@ class Pathfinder:
         for y, row in enumerate(grid):
             if isinstance(row, list):
                 for x, cell in enumerate(row):
-                    # In porymap ASCII: '.' = walkable, '#' = blocked, 'X' = out of bounds, 'P' = player
-                    if cell == '#' or cell == 'X':
+                    # In porymap ASCII:
+                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), '←↓↑→' (ledges - directionally walkable)
+                    # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf)
+                    if cell in ['#', 'X', 'W']:
                         pos = (x, y)
                         # CRITICAL: Never block the starting position - player is there so it must be walkable
                         if start_pos and pos == start_pos:
@@ -257,7 +276,7 @@ class Pathfinder:
             elif isinstance(row, str):
                 # Handle string rows (each character is a cell)
                 for x, cell in enumerate(row):
-                    if cell == '#' or cell == 'X':
+                    if cell in ['#', 'X', 'W']:
                         pos = (x, y)
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
@@ -276,11 +295,12 @@ class Pathfinder:
                 movement_type = obj.get('movement_type', '')
                 movement_type_upper = movement_type.upper()
                 
-                # Block stationary objects
                 if ('NONE' in movement_type_upper or 
                     'STATIC' in movement_type_upper or 
                     'FACE_' in movement_type_upper or  # FACE_DOWN, FACE_UP, etc.
                     'WANDER' in movement_type_upper or  # WANDER_AROUND
+                    'LOOK' in movement_type_upper or  # LOOK_AROUND, LOOK_AROUND_EX
+                    'BERRY' in movement_type_upper or  # BERRY_TREE_GROWTH
                     not movement_type):
                     blocked.add((obj_x, obj_y))
 
@@ -444,25 +464,63 @@ class Pathfinder:
         Check if movement from from_pos to to_pos is valid.
 
         Handles one-way ledges: can only move in the direction of the ledge.
-        - JUMP_EAST (56): can only move TO this tile from the WEST (x-1)
-        - JUMP_WEST (57): can only move TO this tile from the EAST (x+1)
-        - JUMP_NORTH (58): can only move TO this tile from the SOUTH (y+1)
-        - JUMP_SOUTH (59): can only move TO this tile from the NORTH (y-1)
+        - JUMP_EAST (→): can only jump TO this tile by moving EAST (from x-1)
+        - JUMP_WEST (←): can only jump TO this tile by moving WEST (from x+1)
+        - JUMP_NORTH (↑): can only jump TO this tile by moving NORTH (from y+1)
+        - JUMP_SOUTH (↓): can only jump TO this tile by moving SOUTH (from y-1)
         """
-        if 'tiles' not in map_data:
+        if 'grid' not in map_data:
             return True
 
-        tiles = map_data['tiles']
-
-        # Get tile at destination
-        # Assuming tiles is centered around player
-        # Need to convert world coordinates to tile array indices
-        # This is tricky - for now, just allow all movements
-        # The blocking is handled by _is_tile_blocked
-
-        # TODO: Implement proper ledge direction checking when we have
-        # reliable world-to-tile coordinate mapping
-
+        grid = map_data['grid']
+        
+        # Check bounds
+        to_y, to_x = to_pos[1], to_pos[0]  # grid is [y][x]
+        if to_y < 0 or to_y >= len(grid) or to_x < 0 or to_x >= len(grid[0]):
+            return False
+        
+        # Get symbol at destination
+        dest_symbol = grid[to_y][to_x]
+        
+        # Check if destination is a ledge - if so, validate direction
+        # Calculate movement direction
+        dx = to_pos[0] - from_pos[0]  # positive = moving east, negative = moving west
+        dy = to_pos[1] - from_pos[1]  # positive = moving south, negative = moving north
+        
+        # Ledge direction rules:
+        # - Can ONLY move TO a ledge from the correct direction
+        # - Moving away from a ledge is always OK
+        if dest_symbol == '→':  # JUMP_EAST ledge
+            # Can only jump east (dx > 0)
+            if dx <= 0:  # Trying to move west, north, south, or diagonal
+                return False
+        elif dest_symbol == '←':  # JUMP_WEST ledge
+            # Can only jump west (dx < 0)
+            if dx >= 0:  # Trying to move east, north, south, or diagonal
+                return False
+        elif dest_symbol == '↑':  # JUMP_NORTH ledge
+            # Can only jump north (dy < 0)
+            if dy >= 0:  # Trying to move south, east, west, or diagonal
+                return False
+        elif dest_symbol == '↓':  # JUMP_SOUTH ledge
+            # Can only jump south (dy > 0)
+            if dy <= 0:  # Trying to move north, east, west, or diagonal
+                return False
+        elif dest_symbol in ['↗', '↖', '↘', '↙']:  # Diagonal ledges
+            # Diagonal ledges require both components to match
+            if dest_symbol == '↗':  # JUMP_NORTHEAST
+                if dx <= 0 or dy >= 0:  # Must move east AND north
+                    return False
+            elif dest_symbol == '↖':  # JUMP_NORTHWEST
+                if dx >= 0 or dy >= 0:  # Must move west AND north
+                    return False
+            elif dest_symbol == '↘':  # JUMP_SOUTHEAST
+                if dx <= 0 or dy <= 0:  # Must move east AND south
+                    return False
+            elif dest_symbol == '↙':  # JUMP_SOUTHWEST
+                if dx >= 0 or dy <= 0:  # Must move west AND south
+                    return False
+        
         return True
     
     def _astar(
@@ -472,12 +530,13 @@ class Pathfinder:
         blocked: Set[Tuple[int, int]],
         map_data: Dict,
         max_distance: int
-    ) -> Optional[List[Tuple[int, int]]]:
+    ):
         """
         A* pathfinding algorithm implementation.
         
         Returns:
-            List of (x, y) positions from start to goal, or None if no path found
+            - List of (x, y) positions from start to goal if path found
+            - Tuple of (None, best_node) if no complete path found (for partial paths)
         """
         start_node = Node(start[0], start[1], 0, self._heuristic(start, goal))
         goal_node = Node(goal[0], goal[1])
@@ -486,6 +545,9 @@ class Pathfinder:
         heapq.heappush(open_list, start_node)
         closed_set = set()
         node_map = {start: start_node}
+        
+        # Track the best node (closest to goal) in case we can't reach it
+        best_node = start_node
         
         while open_list:
             current = heapq.heappop(open_list)
@@ -500,6 +562,10 @@ class Pathfinder:
             
             closed_set.add((current.x, current.y))
             
+            # Update best node if this one is closer to goal
+            if current.h_cost < best_node.h_cost:
+                best_node = current
+            
             # Check all neighbors
             neighbors = self._get_neighbors(current, blocked)
             # Sort neighbors by direction preference for deterministic tie-breaking:
@@ -508,6 +574,10 @@ class Pathfinder:
             neighbors_with_cost = []
             for neighbor_pos in neighbors:
                 if neighbor_pos in closed_set:
+                    continue
+                
+                # Check if this move is valid (handles ledge directions)
+                if not self._can_move_to((current.x, current.y), neighbor_pos, map_data):
                     continue
                 
                 g_cost = current.g_cost + 1  # All moves cost 1 in Pokemon
@@ -531,7 +601,8 @@ class Pathfinder:
                         neighbor.f_cost = g_cost + neighbor.h_cost
                         neighbor.parent = current
         
-        return None
+        # No path found - return the best node we explored (for partial paths)
+        return (None, best_node)
     
     def _get_neighbors(self, node: Node, blocked: Set[Tuple[int, int]]) -> List[Tuple[int, int]]:
         """Get valid neighbor positions for a node."""
@@ -570,13 +641,24 @@ class Pathfinder:
         start: Tuple[int, int], 
         goal: Tuple[int, int], 
         blocked: Set[Tuple[int, int]],
-        map_data: Dict
+        map_data: Dict,
+        max_distance: int = 10
     ) -> Optional[Tuple[int, int]]:
         """
         Find the nearest reachable position to the goal.
         
         Uses BFS to explore positions near the goal and find the closest
         reachable one.
+        
+        Args:
+            start: Starting position
+            goal: Goal position (may be blocked)
+            blocked: Set of blocked positions
+            map_data: Map data for pathfinding
+            max_distance: Maximum distance to search from goal (default 10)
+        
+        Returns:
+            Nearest reachable position, or None if none found
         """
         if goal not in blocked:
             return goal
@@ -584,7 +666,7 @@ class Pathfinder:
         visited = set()
         queue = [(goal, 0)]
         visited.add(goal)
-        max_search_distance = 10
+        max_search_distance = max_distance
         
         while queue:
             pos, dist = queue.pop(0)
@@ -606,8 +688,10 @@ class Pathfinder:
                         if new_pos not in blocked:
                             # Found a reachable position
                             # Check if we can path from start to here
-                            test_path = self._astar(start, new_pos, blocked, map_data, 50)
-                            if test_path:
+                            test_result = self._astar(start, new_pos, blocked, map_data, 50)
+                            # Handle both tuple (None, best_node) and list returns
+                            if isinstance(test_result, list):
+                                # Found a complete path
                                 return new_pos
                         
                         queue.append((new_pos, dist + 1))
