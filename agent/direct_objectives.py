@@ -399,7 +399,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
 
-            # ========== Petalburg to Rustboro City (Objectives 25-28) ==========
+            # ========== Petalburg to Rustboro City (Objectives 25-27) ==========
             DirectObjective(
                 id="petalbug_to_route_104",
                 description="Travel to route 104",
@@ -418,15 +418,15 @@ class DirectObjectiveManager:
                 completion_condition="reached_petalburg_woods",
                 priority=1
             ),
-            DirectObjective(
-                id="petalburg_woods_to_route_104",
-                description="Travel to north to the final section of route 104 ",
-                action_type="navigate",
-                target_location="Route 104",
-                navigation_hint="Travel north from petalburg woods to -> route 104 by using the navigate_to() tool. Note (you will need to navigate to the north most warp to reach the northern section of route 104",
-                completion_condition="reached_route_104",
-                priority=1
-            ),
+            # DirectObjective(
+            #     id="petalburg_woods_to_route_104",
+            #     description="Travel to north to the final section of route 104 ",
+            #     action_type="navigate",
+            #     target_location="Route 104",
+            #     navigation_hint="Travel north from petalburg woods to -> route 104 by using the navigate_to() tool. Note (you will need to navigate to the north most warp to reach the northern section of route 104",
+            #     completion_condition="reached_route_104",
+            #     priority=1
+            # ),
             DirectObjective(
                 id="route_104_north_to_rustboro_city",
                 description="Travel to rustboro city",

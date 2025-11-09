@@ -517,7 +517,7 @@ class VertexBackend(VLMBackend):
     traditional text-based agents.
     """
     
-    def __init__(self, model_name: str, tools: list = None, **kwargs):
+    def __init__(self, model_name: str, tools: list = None, system_instruction: str = None, **kwargs):
         try:
             import vertexai
             from vertexai.generative_models import (
@@ -531,6 +531,7 @@ class VertexBackend(VLMBackend):
         
         self.model_name = model_name
         self.tools = tools or []
+        self.system_instruction = system_instruction
         
         # Initialize VertexAI
         vertexai.init(project='pokeagent-011', location='us-central1')
@@ -539,10 +540,14 @@ class VertexBackend(VLMBackend):
         if self.tools:
             self._setup_function_calling()
         
-        # Create the model WITHOUT tools (tools are passed during generate_content call)
-        self.model = GenerativeModel(model_name)
+        # Create the model WITH system instructions if provided
+        if self.system_instruction:
+            self.model = GenerativeModel(model_name, system_instruction=[self.system_instruction])
+            logger.info(f"Vertex backend initialized with model: {model_name} and system instructions ({len(self.system_instruction)} chars)")
+        else:
+            self.model = GenerativeModel(model_name)
+            logger.info(f"Vertex backend initialized with model: {model_name}")
         
-        logger.info(f"Vertex backend initialized with model: {model_name}")
         if self.tools:
             logger.info(f"Function calling enabled with {len(self.tools)} tools")
     
@@ -862,13 +867,15 @@ class VertexBackend(VLMBackend):
 class GeminiBackend(VLMBackend):
     """Google Gemini API backend"""
     
-    def __init__(self, model_name: str, **kwargs):
+    def __init__(self, model_name: str, tools: list = None, system_instruction: str = None, **kwargs):
         try:
             import google.generativeai as genai
         except ImportError:
             raise ImportError("Google Generative AI package not found. Install with: pip install google-generativeai")
         
         self.model_name = model_name
+        self.tools = tools or []
+        self.system_instruction = system_instruction
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         
         if not self.api_key:
@@ -877,11 +884,15 @@ class GeminiBackend(VLMBackend):
         # Configure the API
         genai.configure(api_key=self.api_key)
         
-        # Initialize the model
-        self.model = genai.GenerativeModel(model_name)
-        self.genai = genai
+        # Initialize the model WITH system instructions if provided
+        if self.system_instruction:
+            self.model = genai.GenerativeModel(model_name, system_instruction=self.system_instruction)
+            logger.info(f"Gemini backend initialized with model: {model_name} and system instructions ({len(self.system_instruction)} chars)")
+        else:
+            self.model = genai.GenerativeModel(model_name)
+            logger.info(f"Gemini backend initialized with model: {model_name}")
         
-        logger.info(f"Gemini backend initialized with model: {model_name}")
+        self.genai = genai
     
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
         """Prepare image for Gemini API"""
@@ -1032,7 +1043,7 @@ class VLM:
         'vertex': VertexBackend,  # Added Vertex backend
     }
     
-    def __init__(self, model_name: str, backend: str = 'openai', port: int = 8010, tools: list = None, **kwargs):
+    def __init__(self, model_name: str, backend: str = 'openai', port: int = 8010, tools: list = None, system_instruction: str = None, **kwargs):
         """
         Initialize VLM with specified backend
         
@@ -1041,11 +1052,13 @@ class VLM:
             backend: Backend type ('openai', 'openrouter', 'local', 'gemini', 'ollama', 'vertex')
             port: Port for Ollama backend (legacy)
             tools: List of tool declarations for function calling
+            system_instruction: System instructions for the model (supported by vertex, gemini)
             **kwargs: Additional arguments passed to backend
         """
         self.model_name = model_name
         self.backend_type = backend.lower()
         self.tools = tools or []
+        self.system_instruction = system_instruction
         
         # Auto-detect backend based on model name if not explicitly specified
         if backend == 'auto':
@@ -1061,9 +1074,9 @@ class VLM:
         if self.backend_type == 'ollama':
             self.backend = backend_class(model_name, port=port, **kwargs)
         else:
-            # Pass tools to backends that support function calling
+            # Pass tools and system_instruction to backends that support function calling
             if self.backend_type in ['vertex', 'gemini']:
-                self.backend = backend_class(model_name, tools=self.tools, **kwargs)
+                self.backend = backend_class(model_name, tools=self.tools, system_instruction=self.system_instruction, **kwargs)
             else:
                 self.backend = backend_class(model_name, **kwargs)
         

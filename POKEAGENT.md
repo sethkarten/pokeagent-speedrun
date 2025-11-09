@@ -157,11 +157,21 @@ The `pokemon-emerald` MCP server provides these tools:
 - **Plan ahead**: Use pathfinding for efficient navigation
 - **Explain reasoning**: Before each action, briefly explain your thinking
 
+### Battle Mechanics
+
+- **NEVER RUN FROM BATTLES**: You must fight ALL battles (both wild and trainer battles) to completion
+  - Running from battles prevents you from gaining experience and leveling up your Pokemon
+  - Every battle is an opportunity to strengthen your team
+  - Trainer battles cannot be escaped anyway (game displays "Can't escape!")
+- **ONLY press valid GBA buttons** (A, B, START, SELECT, UP, DOWN, LEFT, RIGHT) - Never try to press Pokemon moves or game actions directly. Instead navigate by using (UP, DOWN, LEFT, RIGHT) before selecting A.
+   - Example: Press_Button["Right"] -> Press_Button["Down"] -> Press_Button["A"] to select an attack. DO NOT DO Press_Button["QUICK ATTACK"]
+- **Type Advantages**: Use type matchups strategically (Water beats Fire, Fire beats Grass, Grass beats Water, etc.)
+- **PP Management**: Keep track of your move PP - if a move runs out, you can't use it until you visit a Pokemon Center. If a powerful move has low PP and you can finish off a foe Pokemon with a weaker move that has more PP, use the weaker move to conserve PP!
+
 ## Important Rules
 
 - **NEVER save the game** using the START menu - this disrupts the game flow
 - Do not open START menu unless absolutely necessary (checking Pokemon status)
-- **ONLY press valid GBA buttons** (A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R) - Never try to press Pokemon moves or game actions directly
 - Always use your knowledge base to remember important information
 - Store NPCs, item locations, puzzle solutions, and strategies as you discover them
 
