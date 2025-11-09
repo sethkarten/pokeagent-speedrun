@@ -1820,13 +1820,25 @@ async def mcp_press_buttons(request: dict):
         # Valid buttons (including WAIT for no-op)
         valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
 
-        # Filter out WAIT buttons (they're just for agent decision-making, not actual button presses)
-        actual_buttons = [b for b in buttons if b != "WAIT"]
-
-        # Validate all buttons
+        # Validate and normalize buttons with fallback to 'A'
+        normalized_buttons = []
+        invalid_buttons = []
+        
         for button in buttons:
-            if button not in valid_buttons:
-                return {"success": False, "error": f"Invalid button: {button}"}
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+            
+            # Check if valid
+            if button_upper in valid_buttons:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                invalid_buttons.append(button)
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append('A')
+        
+        # Filter out WAIT buttons (they're just for agent decision-making, not actual button presses)
+        actual_buttons = [b for b in normalized_buttons if b != "WAIT"]
 
         # If only WAIT was requested, treat it as a no-op but still complete successfully
         if not actual_buttons:
@@ -1843,11 +1855,17 @@ async def mcp_press_buttons(request: dict):
         await take_action(action_request)
 
         logger.info(f"🎮 Queued buttons via MCP: {actual_buttons} - {reasoning}")
-        return {
+        response_dict = {
             "success": True,
             "buttons_queued": actual_buttons,
             "reasoning": reasoning
         }
+        
+        # Include warning if any buttons were invalid
+        if invalid_buttons:
+            response_dict["warning"] = f"Invalid buttons replaced with 'A': {invalid_buttons}"
+        
+        return response_dict
     except Exception as e:
         logger.error(f"Error pressing buttons: {e}")
         return {"success": False, "error": str(e)}

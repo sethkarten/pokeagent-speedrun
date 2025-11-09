@@ -340,7 +340,11 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
     is_in_battle = game_data.get('is_in_battle', False) or game_data.get('in_battle', False)
     
     if is_in_battle:
-        # BATTLE MODE: Focus on battle-relevant information
+        # Remove heavy overworld map data while in battle to reduce prompt size
+        map_info = state_data.get('map') if isinstance(state_data, dict) else None
+        if isinstance(map_info, dict):
+            map_info.pop('porymap', None)
+         # BATTLE MODE: Focus on battle-relevant information
         context_parts.append("=== BATTLE MODE ===")
         context_parts.append("Currently in battle - map and dialogue information hidden")
         
@@ -1150,6 +1154,9 @@ ROM_TO_PORYMAP_MAP = {
     # Professor Birch's Lab
     "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
     "PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
+    
+    # Raw map IDs (fallback when memory reader can't resolve location name)
+    "Map_18_0B": "PetalburgWoods",  # Group 0x18 (Dungeons), Map 0x0B
 }
 
 def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None) -> List[str]:
@@ -1311,25 +1318,6 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         # Add compact JSON map data (simplified format to save tokens)
         context_parts.append("\nMap Data (JSON):")
         
-        # Build tile-level coordinates mapping (only blocked tiles to save tokens)
-        # Format: maps symbol to list of coordinates
-        tile_level_coordinates = {}
-        if json_map.get('grid'):
-            grid = json_map['grid']
-            for y, row in enumerate(grid):
-                if isinstance(row, list):
-                    for x, cell in enumerate(row):
-                        if cell == '#' or cell == 'X':  # Only store blocked tiles
-                            if cell not in tile_level_coordinates:
-                                tile_level_coordinates[cell] = []
-                            tile_level_coordinates[cell].append({"x": x, "y": y})
-                elif isinstance(row, str):
-                    for x, cell in enumerate(row):
-                        if cell == '#' or cell == 'X':  # Only store blocked tiles
-                            if cell not in tile_level_coordinates:
-                                tile_level_coordinates[cell] = []
-                            tile_level_coordinates[cell].append({"x": x, "y": y})
-        
         # Simplified objects (remove unnecessary fields)
         simplified_objects = []
         for obj in json_map.get('objects', []):
@@ -1368,8 +1356,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             "dimensions": json_map.get('dimensions'),
             "warps": simplified_warps,
             "objects": simplified_objects,
-            "connections": simplified_connections,
-            "tile_level_coordinates": tile_level_coordinates  # Maps symbol to list of coordinates (only blocked tiles)
+            "connections": simplified_connections
         }
         context_parts.append(json.dumps(compact_json_map, indent=2))
         

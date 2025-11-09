@@ -119,13 +119,29 @@ def press_buttons_direct(buttons, action_queue, reasoning="") -> dict:
         return {"success": False, "error": "No buttons provided"}
 
     try:
+        # Validate and normalize buttons
+        VALID_BUTTONS = {'A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R'}
+        normalized_buttons = []
+        
+        for button in buttons:
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+            
+            # Check if valid
+            if button_upper in VALID_BUTTONS:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append('A')
+        
         # Add to action queue
-        action_queue.extend(buttons)
-        logger.info(f"🎮 Queued buttons: {buttons} - {reasoning}")
+        action_queue.extend(normalized_buttons)
+        logger.info(f"🎮 Queued buttons: {normalized_buttons} - {reasoning}")
 
         return {
             "success": True,
-            "buttons_queued": buttons,
+            "buttons_queued": normalized_buttons,
             "reasoning": reasoning
         }
     except Exception as e:
@@ -197,14 +213,8 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
                             break
                 
                 if pokeemerald_root:
-                    # Map ROM location to porymap name (simplified version)
-                    ROM_TO_PORYMAP_MAP = {
-                        "LITTLEROOT TOWN": "LittlerootTown",
-                        "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
-                        "PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
-                        "ROUTE 101": "Route101",
-                        "OLDALE TOWN": "OldaleTown",
-                    }
+                    # Import comprehensive ROM to Porymap mapping from state_formatter
+                    from utils.state_formatter import ROM_TO_PORYMAP_MAP
                     
                     porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
                     
@@ -401,10 +411,28 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
         return {"success": False, "error": "No buttons provided"}
 
     try:
-        # Send buttons to server
+        # Validate and normalize buttons
+        VALID_BUTTONS = {'A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R'}
+        normalized_buttons = []
+        invalid_buttons = []
+        
+        for button in buttons:
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+            
+            # Check if valid
+            if button_upper in VALID_BUTTONS:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                invalid_buttons.append(button)
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append('A')
+        
+        # Send normalized buttons to server
         response = requests.post(
             f"{SERVER_URL}/action",
-            json={"buttons": buttons},
+            json={"buttons": normalized_buttons},
             timeout=10
         )
         response.raise_for_status()
@@ -413,13 +441,19 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
         # Get updated state after action
         state_response = get_game_state()
 
-        return {
+        response_dict = {
             "success": True,
-            "buttons_pressed": buttons,
+            "buttons_pressed": normalized_buttons,
             "reasoning": reasoning,
             "result": result,
             "new_state": state_response.get("state_text", "State unavailable")
         }
+        
+        # Include warning if any buttons were invalid
+        if invalid_buttons:
+            response_dict["warning"] = f"Invalid buttons replaced with 'A': {invalid_buttons}"
+        
+        return response_dict
     except Exception as e:
         logger.error(f"Failed to press buttons: {e}")
         return {"success": False, "error": str(e)}

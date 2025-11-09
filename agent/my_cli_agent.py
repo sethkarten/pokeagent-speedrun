@@ -1380,6 +1380,12 @@ PLAN: I need to advance this dialogue by pressing A to read what he says and con
 ACTION: Pressing A to advance the dialogue and hear what Professor Birch has to say.'''
 )
 
+**ANOTHER BAD EXAMPLE** (invalid button action):
+press_buttons(
+    buttons=["QUICK ATTACK"],
+    reasoning="Using QUICK ATTACK to attack the enemy Pokemon. 
+) This is invalid because QUICK ATTACK is not a valid button in the game.
+
 **WHY THIS MATTERS**: 
 - Detailed reasoning helps track your decision-making process
 - It makes debugging easier when things go wrong
