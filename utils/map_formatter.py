@@ -136,6 +136,8 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
             return "↙"
         else:
             return "J"
+    elif "BRIDGE" in behavior_name:
+        return "&"  # Bridge tiles are walkable
     elif "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
         return "#"  # Blocked
     elif "INDOOR" in behavior_name:
@@ -322,6 +324,7 @@ def get_symbol_legend():
         "F": "Flowers/Plants",
         "C": "Counter/Desk",
         "=": "Bed",
+        "&": "Bridge (walkable)",
         "t": "Table/Chair",
         "K": "Clock (Wall)",
         "O": "Clock",

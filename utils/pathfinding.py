@@ -264,7 +264,7 @@ class Pathfinder:
             if isinstance(row, list):
                 for x, cell in enumerate(row):
                     # In porymap ASCII:
-                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), '←↓↑→' (ledges - directionally walkable)
+                    # Walkable: '.' (normal), '~' (grass), '&' (bridges), 'S' (stairs/warps), '←↓↑→' (ledges - directionally walkable)
                     # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf)
                     if cell in ['#', 'X', 'W']:
                         pos = (x, y)

@@ -436,6 +436,80 @@ class DirectObjectiveManager:
                 completion_condition="reached_rustboro_city",
                 priority=1
             ),
+
+            # ========== Rustboro City to Rustboro Gym (Objectives 28-35) ==========
+            DirectObjective(
+                id="rustboro_pokemon_center",
+                description="Visit the pokemon center in rustboro city",
+                action_type="navigate",
+                target_location="Rustboro City Pokemon Center",
+                navigation_hint="Travel from rustboro city -> rustboro city pokemon center",
+                completion_condition="reached_rustboro_city_pokemon_center",
+                priority=1
+            ),
+            DirectObjective(
+                id="heal_pokemon_at_rustboro_pokemon_center",
+                description="Heal your pokemon at the pokemon center in rustboro city",
+                action_type="interact",
+                target_location="Rustboro City Pokemon Center",
+                navigation_hint="Interact with the nurse in the rustboro city to heal your pokemon",
+                completion_condition="healed_pokemon_at_rustboro_pokemon_center",
+                priority=1
+            ),
+            DirectObjective(
+                id="catch_first_pokemon_in_route_104",
+                description="Keep walking around the grass until you encounter and catch a pokemon. (pokemon are easier to catch when they have low health). CRITICAL: The following are valid pokemon that can be caught in route 104: marill, poochyena, taillow, wingull. Any other pokemon can simply be defeated!",
+                action_type="navigate",
+                target_location="Route 104",
+                navigation_hint="Navigate back to route 104, enter the grass patch in the north west corner of the map, and keep walking around the grass until you encounter and catch a pokemon",
+                completion_condition="caught_first_pokemon",
+                priority=1
+            ),
+            DirectObjective(
+                id="catch_second_pokemon_in_route_104",
+                description="Keep walking around the grass until you encounter and catch a pokemon. Use pound once, and then throw a pokeball to catch the pokemon (pokemon are easier to catch when they have low health)",
+                action_type="navigate",
+                target_location="Route 104",
+                navigation_hint="Navigate back to route 104, enter the grass patch in the north west corner of the map, and keep walking around the grass until you encounter and catch a pokemon",
+                completion_condition="caught_second_pokemon",
+                priority=1
+            ),
+            DirectObjective(
+                id="rustboro_pokemon_center_2",
+                description="Visit the pokemon center in rustboro city again",
+                action_type="navigate",
+                target_location="Rustboro City Pokemon Center",
+                navigation_hint="Travel from route 104 -> rustboro city -> rustboro city pokemon center",
+                completion_condition="reached_rustboro_city_pokemon_center",
+                priority=1
+            ),
+            DirectObjective(
+                id="heal_pokemon_at_rustboro_pokemon_center_2",
+                description="Heal your pokemon at the pokemon center in rustboro city again",
+                action_type="interact",
+                target_location="Rustboro City Pokemon Center",
+                navigation_hint="Interact with the nurse in the rustboro city to heal your pokemon",
+                completion_condition="healed_pokemon_at_rustboro_pokemon_center",
+                priority=1
+            ),
+            DirectObjective(
+                id="enter_rustboro_gym",
+                description="Enter the rustboro gym",
+                action_type="navigate",
+                target_location="Rustboro City Gym",
+                navigation_hint="Travel from rustboro city -> rustboro city gym",
+                completion_condition="entered_rustboro_gym",
+                priority=1
+            ),
+            DirectObjective(
+                id="navigate_to_rustboro_gym_leader",
+                description="Navigate to the rustboro gym leader. You will battle pokemon trainers along the way!",
+                action_type="navigate",
+                target_location="Rustboro City Gym",
+                navigation_hint="The gym leader (roxanne) is located in the north of the gym. Use navigate_to() to efficiently navigate towards the gym leader.",
+                completion_condition="reached_rustboro_gym_leader",
+                priority=1
+            ),
         ]
         self.current_index = min(start_index, len(self.current_sequence))
         # Mark all objectives before start_index as completed
