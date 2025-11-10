@@ -103,7 +103,7 @@ def get_game_state_direct(env, state_formatter, action_history=None) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def press_buttons_direct(buttons, action_queue, reasoning="") -> dict:
+def press_buttons_direct(buttons, action_queue, reasoning="", source=None, metadata=None) -> dict:
     """
     Queue buttons without HTTP calls - for use by server endpoints.
 
@@ -149,7 +149,7 @@ def press_buttons_direct(buttons, action_queue, reasoning="") -> dict:
         return {"success": False, "error": str(e)}
 
 
-def navigate_to_direct(env, x, y, reason="") -> dict:
+def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = None) -> dict:
     """
     Calculate path to coordinates without HTTP calls - for use by server endpoints.
     Returns buttons to be queued via take_action.
@@ -167,6 +167,22 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
         # Ensure x and y are integers
         x = int(x)
         y = int(y)
+
+        variance_level = None
+        nav_reason = "" if reason is None else str(reason)
+
+        if variance is not None:
+            variance_str = str(variance).strip()
+            variance_lower = variance_str.lower()
+            if variance_lower in {"low", "medium", "high"}:
+                variance_level = variance_lower
+            elif variance_lower in {"", "none"}:
+                variance_level = None
+            elif not reason:
+                nav_reason = variance_str
+        elif nav_reason.lower() in {"low", "medium", "high"}:
+            variance_level = nav_reason.lower()
+            nav_reason = ""
 
         # Get current state for pathfinding
         state = env.get_comprehensive_state()
@@ -218,22 +234,48 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
                     
                     porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
                     
-                    # Try fuzzy matching if not in direct mapping
+                    # Try fuzzy matching if not in direct mapping (use fuzzywuzzy like state_formatter)
                     if not porymap_map_name:
-                        map_loader = PokeemeraldMapLoader(pokeemerald_root)
-                        maps_dir = pokeemerald_root / "data" / "maps"
-                        if maps_dir.exists():
-                            location_normalized = location_name.lower().replace(" ", "").replace("_", "")
-                            for map_dir in maps_dir.iterdir():
-                                if map_dir.is_dir() and map_dir.name != "map_groups.json":
-                                    map_normalized = map_dir.name.lower().replace(" ", "").replace("_", "")
-                                    if location_normalized in map_normalized or map_normalized in location_normalized:
-                                        porymap_map_name = map_dir.name
-                                        break
+                        try:
+                            from fuzzywuzzy import process
+                            map_loader = PokeemeraldMapLoader(pokeemerald_root)
+                            maps_dir = pokeemerald_root / "data" / "maps"
+                            if maps_dir.exists():
+                                available_maps = [d.name for d in maps_dir.iterdir() if d.is_dir() and d.name != "map_groups.json"]
+                                best_match, best_match_score = process.extractOne(location_name, available_maps)
+                                # Only accept matches with score >= 70 to avoid bad matches
+                                if best_match_score >= 70:
+                                    porymap_map_name = best_match
+                                    logger.debug(f"Fuzzy matched '{location_name}' to '{porymap_map_name}' (score: {best_match_score})")
+                        except ImportError:
+                            # Fallback: use simple substring matching but prefer exact substring matches
+                            # and prefer longer matches (more specific)
+                            map_loader = PokeemeraldMapLoader(pokeemerald_root)
+                            maps_dir = pokeemerald_root / "data" / "maps"
+                            if maps_dir.exists():
+                                location_normalized = location_name.lower().replace(" ", "").replace("_", "")
+                                best_candidate = None
+                                best_match_len = 0
+                                for map_dir in maps_dir.iterdir():
+                                    if map_dir.is_dir() and map_dir.name != "map_groups.json":
+                                        map_normalized = map_dir.name.lower().replace(" ", "").replace("_", "")
+                                        # Check if location is a substring of map name (prefer longer matches)
+                                        if location_normalized in map_normalized:
+                                            match_len = len(map_normalized)
+                                            if match_len > best_match_len:
+                                                best_candidate = map_dir.name
+                                                best_match_len = match_len
+                                if best_candidate:
+                                    porymap_map_name = best_candidate
                     
                     if porymap_map_name:
                         # Build JSON map with grid for pathfinding
-                        json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+                        try:
+                            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+                        except ValueError as e:
+                            logger.error(f"Failed to build porymap for '{porymap_map_name}' due to corrupted tileset: {e}")
+                            json_map = None
+                        
                         if json_map and 'grid' in json_map:
                             # Ensure map dict exists
                             if 'map' not in state:
@@ -276,7 +318,7 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
                         goal_was_blocked = True
 
         # Calculate path buttons using Pathfinder
-        buttons = pathfinder.find_path(start, goal, state)
+        buttons = pathfinder.find_path(start, goal, state, variance=variance_level)
 
         if not buttons:
             return {
@@ -285,18 +327,21 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
                 "target": f"({x}, {y})"
             }
 
-        nav_reason = f"Navigating from ({start_x}, {start_y}) to ({x}, {y})"
-        if reason:
-            nav_reason += f": {reason}"
+        nav_reason_text = f"Navigating from ({start_x}, {start_y}) to ({x}, {y})"
+        if nav_reason:
+            nav_reason_text += f": {nav_reason}"
+        if variance_level:
+            nav_reason_text += f" (variance={variance_level})"
 
-        logger.info(f"🗺️ {nav_reason} - Buttons calculated: {len(buttons)}")
+        logger.info(f"🗺️ {nav_reason_text} - Buttons calculated: {len(buttons)}")
 
         result = {
             "success": True,
             "buttons": buttons,
             "target": f"({x}, {y})",
             "path_length": len(buttons),
-            "reason": reason
+            "reason": nav_reason,
+            "variance": variance_level or "none"
         }
         
         # Inform agent if goal was blocked and adjusted
@@ -394,7 +439,12 @@ def get_game_state() -> dict:
 
 
 @mcp.tool()
-def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
+def press_buttons(
+    buttons: List[str],
+    reasoning: str = "",
+    source: str = "",
+    metadata: Optional[Dict[str, Any]] = None
+) -> dict:
     """
     Press buttons on the Game Boy Advance emulator. Buttons are executed sequentially.
     You will automatically receive the updated game state after buttons are executed.
@@ -403,6 +453,8 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
         buttons: List of buttons to press in sequence (e.g., ['A', 'A', 'B'])
                  Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R
         reasoning: Brief explanation of why you're pressing these buttons
+        source: Optional label identifying where this action originated (e.g., 'navigate_to')
+        metadata: Optional dictionary of metadata to attach to the action (e.g., {'variance': 'high'})
 
     Returns:
         Dictionary with success status, buttons pressed, and updated game state
@@ -430,9 +482,15 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
                 normalized_buttons.append('A')
         
         # Send normalized buttons to server
+        payload = {"buttons": normalized_buttons}
+        if source:
+            payload["source"] = source
+        if metadata is not None:
+            payload["metadata"] = metadata
+
         response = requests.post(
             f"{SERVER_URL}/action",
-            json={"buttons": normalized_buttons},
+            json=payload,
             timeout=10
         )
         response.raise_for_status()
@@ -460,7 +518,7 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
 
 
 @mcp.tool()
-def navigate_to(x: int, y: int, reason: str = "") -> dict:
+def navigate_to(x: int, y: int, variance: str = "none", reason: str = "") -> dict:
     """
     Automatically pathfind and move to a specific coordinate on the current map using A* algorithm.
     Handles collision detection and finds the optimal path. The pathfinding will be executed
@@ -469,7 +527,8 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
     Args:
         x: Target X coordinate
         y: Target Y coordinate
-        reason: Why you're navigating to this location
+        variance: Path variance level ('low', 'medium', 'high', or 'none')
+        reason: Why you're navigating to this location (optional context)
 
     Returns:
         Dictionary with success status, path information, and navigation result
@@ -488,6 +547,22 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
         return {"success": False, "error": f"Failed to get state for pathfinding: {e}"}
 
     try:
+        variance_level = None
+        nav_reason = "" if reason is None else str(reason)
+
+        if variance is not None:
+            variance_str = str(variance).strip()
+            variance_lower = variance_str.lower()
+            if variance_lower in {"low", "medium", "high"}:
+                variance_level = variance_lower
+            elif variance_lower in {"", "none"}:
+                variance_level = None
+            elif not reason:
+                nav_reason = variance_str
+        elif nav_reason.lower() in {"low", "medium", "high"}:
+            variance_level = nav_reason.lower()
+            nav_reason = ""
+
         # Get player position from state
         player_pos = state.get('player', {}).get('position', {})
         start_x = player_pos.get('x', 0)
@@ -496,7 +571,7 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
         goal = (x, y)
         
         # Calculate path using Pathfinder
-        buttons = pathfinder.find_path(start, goal, state)
+        buttons = pathfinder.find_path(start, goal, state, variance=variance_level)
 
         if not buttons:
             return {
@@ -506,18 +581,27 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
             }
 
         # Execute navigation
-        nav_reason = f"Navigating to ({x}, {y})"
-        if reason:
-            nav_reason += f": {reason}"
+        nav_reason_text = f"Navigating to ({x}, {y})"
+        if nav_reason:
+            nav_reason_text += f": {nav_reason}"
+        if variance_level:
+            nav_reason_text += f" (variance={variance_level})"
 
-        result = press_buttons(buttons, nav_reason)
+        variance_metadata = variance_level or "none"
+        result = press_buttons(
+            buttons,
+            nav_reason_text,
+            source="navigate_to",
+            metadata={"variance": variance_metadata}
+        )
 
         return {
             "success": True,
             "target": f"({x}, {y})",
             "path_length": len(buttons),
             "buttons_executed": len(buttons),
-            "reason": reason,
+            "reason": nav_reason,
+            "variance": variance_level or "none",
             "navigation_result": result
         }
     except Exception as e:

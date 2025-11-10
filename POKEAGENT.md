@@ -61,7 +61,7 @@ ANALYSIS: I'm in Littleroot Town, inside May's house on the 2nd floor. I can see
 
 PLAN: I'll navigate to the stairs to go down to the first floor. I'll use navigate_to since it's more efficient than manually pressing buttons.
 
-ACTION: [calls navigate_to(1, 7, "Go downstairs to first floor")]
+ACTION: [calls navigate_to(1, 7, "none", "Go downstairs to first floor")]
 ```
 
 **WAIT action example:**
@@ -125,9 +125,29 @@ The `pokemon-emerald` MCP server provides these tools:
    - **⚠️ IMPORTANT**: You can ONLY press these physical GBA buttons. You CANNOT directly press Pokemon moves like "QUICK ATTACK" or "TACKLE". To use moves in battle, navigate the battle menu with A/B/UP/DOWN buttons.
 
 3. **navigate_to** - Automatically pathfind to coordinates
-   - Parameters: `x` (integer), `y` (integer), `reason` (string)
+   - Parameters: `x` (integer), `y` (integer), `variance` (string: `none`, `low`, `medium`, `high`), `reason` (string, optional)
    - Returns: Path calculated and executed, with updated state
    - Use for: Efficiently moving to specific locations on the map
+   
+   **Path Variance (IMPORTANT for getting unstuck):**
+   - The **third positional argument controls path variance** - how the pathfinder explores alternative routes
+   - `"none"` (default): Uses the optimal A* path (deterministic, always same path)
+   - `"low"`: Explores paths with different first move (1-step variation)
+   - `"medium"`: Explores paths with different first 3 moves (more exploration)
+   - `"high"`: Explores paths with different first 5 moves (maximum exploration)
+   
+   **When to use variance:**
+   - ⚠️ **If you get BLOCKED repeatedly at the same position or are in a clutered location with several obstacles/npcs**, this means the default path is hitting an obstacle
+   - **Solution**: Increase variance to explore alternative routes: `navigate_to(x, y, "medium", "Try alternative path")`
+   - Start with `"low"`, then try `"medium"` or `"high"` if still blocked
+   - Higher variance may find paths that go around obstacles (e.g., going DOWN to reach a target that's UP)
+   
+   **Examples:**
+   ```python
+   navigate_to(10, 5, "none", "Go to NPC")  # Standard optimal path
+   navigate_to(10, 5, "medium", "Try going around obstacle")  # If blocked, explore alternatives
+   navigate_to(x, y, reason="Just providing reason")  # Defaults to "none" variance
+   ```
 
 4. **complete_direct_objective** - Complete current direct objective
    - Parameters: `reasoning` (string)
@@ -174,6 +194,7 @@ The `pokemon-emerald` MCP server provides these tools:
 - Do not open START menu unless absolutely necessary (checking Pokemon status)
 - Always use your knowledge base to remember important information
 - Store NPCs, item locations, puzzle solutions, and strategies as you discover them
+- **If navigate_to gets you BLOCKED repeatedly at the same position**, increase the `variance` parameter (`"low"`, `"medium"`, or `"high"`) to explore alternative paths around obstacles
 
 ## Map Navigation Mechanics
 

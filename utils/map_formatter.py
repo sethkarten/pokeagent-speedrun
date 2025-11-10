@@ -404,7 +404,7 @@ def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coord
     Format raw tiles into LLM-friendly grid format with detailed NPC information.
     
     Args:
-        raw_tiles: 2D list of tile tuples
+        raw_tiles: 2D list of tile tuples  
         player_facing: Direction player is facing
         npcs: List of NPC/object events
         player_coords: Player position for relative positioning

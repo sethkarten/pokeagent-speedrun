@@ -87,7 +87,7 @@ def get_map_data(map_name: str, pokeemerald_root: Path) -> tuple:
     
     # If direct lookup failed, try converting layout ID to name format
     if not layout_info:
-        layout_name = layout_id.replace("LAYOUT_", "").lower().replace("_", " ").title().replace(" ", "")
+    layout_name = layout_id.replace("LAYOUT_", "").lower().replace("_", " ").title().replace(" ", "")
         layout_info = layout_parser.get_layout_info(layout_name)
     
     # If still not found, try alternative name formats

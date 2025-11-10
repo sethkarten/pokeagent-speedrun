@@ -437,7 +437,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
 
-            # ========== Rustboro City to Rustboro Gym (Objectives 28-35) ==========
+            # ========== Rustboro City to Rustboro Gym (Objectives 28-36) ==========
             DirectObjective(
                 id="rustboro_pokemon_center",
                 description="Visit the pokemon center in rustboro city",
@@ -506,8 +506,17 @@ class DirectObjectiveManager:
                 description="Navigate to the rustboro gym leader. You will battle pokemon trainers along the way!",
                 action_type="navigate",
                 target_location="Rustboro City Gym",
-                navigation_hint="The gym leader (roxanne) is located in the north of the gym. Use navigate_to() to efficiently navigate towards the gym leader.",
+                navigation_hint="The gym leader (roxanne) is located in the north of the gym. Use navigate_to() to efficiently navigate towards the gym leader. If navigate_to() is failing, manually via PRESS_BUTTON a few steps away and try to pathfind from a different location.",
                 completion_condition="reached_rustboro_gym_leader",
+                priority=1
+            ),
+            DirectObjective(
+                id="battle_rustboro_gym_leader",
+                description="Battle the rustboro gym leader. Prioritize using supereffective moves. If a pokemon faints make sure to use (LEFT/RIGHT/UP/DOWN) in the pokemon selection screen before pressing A to carefully select the next pokemon. Make sure the pokemon you are selecting is highligted with a red outline (this is how you know the pokemon is selected) before pressing A!",
+                action_type="battle",
+                target_location="Rustboro City Gym",
+                navigation_hint="Battle the rustboro gym leader. If you lose this battle, renavigate back to rustboro gym -> roxanne and try again.",
+                completion_condition="roxanne_defeated_and_received_badge",
                 priority=1
             ),
         ]

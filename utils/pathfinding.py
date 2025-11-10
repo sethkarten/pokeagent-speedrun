@@ -7,6 +7,7 @@ intelligent navigation around obstacles.
 
 import heapq
 import logging
+import random
 from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass, field
 
@@ -17,6 +18,13 @@ except ImportError:
     MetatileBehavior = None
 
 logger = logging.getLogger(__name__)
+
+# Mapping from variance level to the number of initial moves that must differ
+VARIANCE_LEVEL_TO_STEPS = {
+    "low": 1,
+    "medium": 3,
+    "high": 5,
+}
 
 
 @dataclass
@@ -77,7 +85,8 @@ class Pathfinder:
         start: Tuple[int, int], 
         goal: Tuple[int, int],
         game_state: Dict,
-        max_distance: int = 150
+        max_distance: int = 150,
+        variance: Optional[str] = None
     ) -> Optional[List[str]]:
         """
         Find a path from start to goal using A* algorithm.
@@ -87,6 +96,9 @@ class Pathfinder:
             goal: Goal position (x, y) - ROM coordinates
             game_state: Current game state with map data, NPCs, etc.
             max_distance: Maximum distance to search (default 150, handles large Pokemon maps)
+            variance: Optional variance level ('low', 'medium', 'high') controlling
+                how many initial moves must differ when sampling alternative paths.
+                When None or invalid, pathfinding remains deterministic.
             
         Returns:
             List of button commands to reach the goal, or None if no path found
@@ -113,9 +125,20 @@ class Pathfinder:
         logger.info(f"Pathfinding: {start} -> {goal} in {location_name}")
         logger.debug(f"Map type: {map_data.get('type')}, dimensions: {map_data.get('width', '?')}x{map_data.get('height', '?')}")
         
+        # Normalize variance level (None when disabled)
+        variance_level = None
+        if variance:
+            variance_lower = str(variance).strip().lower()
+            if variance_lower in VARIANCE_LEVEL_TO_STEPS:
+                variance_level = variance_lower
+            elif variance_lower in ("", "none"):
+                variance_level = None
+            else:
+                logger.debug(f"Ignoring unrecognized variance level '{variance}'")
+
         # Get blocked positions (walls, NPCs, water, etc.)
         # CRITICAL: Exclude start position - player is there so it must be walkable
-        blocked = self._get_blocked_positions(game_state, map_data, start_pos=start)
+        blocked = self._get_blocked_positions(game_state, map_data, start_pos=start, goal_pos=goal)
         
         # Get warp positions and ensure they're walkable (doors/stairs)
         warps = self._get_warp_positions(game_state, map_data)
@@ -215,7 +238,30 @@ class Pathfinder:
                 if direct_path_blocked:
                     logger.warning(f"Direct horizontal path blocked at: {direct_path_blocked[:5]}")
         
-        return self._path_to_buttons(path)
+        base_buttons = self._path_to_buttons(path)
+
+        if variance_level:
+            variance_steps = VARIANCE_LEVEL_TO_STEPS.get(variance_level)
+            if variance_steps:
+                variant_buttons = self._generate_variance_candidates(
+                    start=start,
+                    goal=goal,
+                    blocked=blocked,
+                    map_data=map_data,
+                    max_distance=max_distance,
+                    variance_steps=variance_steps,
+                    base_path_buttons=base_buttons
+                )
+                if variant_buttons:
+                    chosen_buttons = random.choice(variant_buttons)
+                    logger.info(
+                        f"Variance '{variance_level}' selected alternative path (prefix {chosen_buttons[:variance_steps]})"
+                    )
+                    return chosen_buttons
+                else:
+                    logger.debug(f"No alternative paths found for variance level '{variance_level}', using base path")
+
+        return base_buttons
     
     def _extract_map_data(self, game_state: Dict) -> Optional[Dict]:
         """Extract map data from game state. ONLY returns porymap data - no fallbacks."""
@@ -237,13 +283,20 @@ class Pathfinder:
         # No porymap data available - return None (no fallback)
         return None
     
-    def _get_blocked_positions(self, game_state: Dict, map_data: Dict, start_pos: Optional[Tuple[int, int]] = None) -> Set[Tuple[int, int]]:
+    def _get_blocked_positions(
+        self,
+        game_state: Dict,
+        map_data: Dict,
+        start_pos: Optional[Tuple[int, int]] = None,
+        goal_pos: Optional[Tuple[int, int]] = None
+    ) -> Set[Tuple[int, int]]:
         """
         Get all blocked positions on the current map.
         ONLY uses porymap ASCII grid data - no fallbacks.
         
         Args:
             start_pos: Starting position - will NEVER be marked as blocked (player is there, so it's walkable)
+            goal_pos: Goal position - excluded from stationary NPC blocking so we can reach the target NPC.
 
         Returns set of (x, y) tuples that are not walkable.
         Note: Ledges are handled separately via directional checks.
@@ -264,7 +317,7 @@ class Pathfinder:
             if isinstance(row, list):
                 for x, cell in enumerate(row):
                     # In porymap ASCII:
-                    # Walkable: '.' (normal), '~' (grass), '&' (bridges), 'S' (stairs/warps), '←↓↑→' (ledges - directionally walkable)
+                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), '←↓↑→' (ledges - directionally walkable)
                     # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf)
                     if cell in ['#', 'X', 'W']:
                         pos = (x, y)
@@ -302,7 +355,10 @@ class Pathfinder:
                     'LOOK' in movement_type_upper or  # LOOK_AROUND, LOOK_AROUND_EX
                     'BERRY' in movement_type_upper or  # BERRY_TREE_GROWTH
                     not movement_type):
-                    blocked.add((obj_x, obj_y))
+                    obj_pos = (obj_x, obj_y)
+                    if goal_pos and obj_pos == goal_pos:
+                        continue
+                    blocked.add(obj_pos)
 
         # Add out-of-bounds positions
         for x in range(-1, width + 1):
@@ -698,6 +754,111 @@ class Pathfinder:
         
         return None
     
+    def _generate_variance_candidates(
+        self,
+        start: Tuple[int, int],
+        goal: Tuple[int, int],
+        blocked: Set[Tuple[int, int]],
+        map_data: Dict,
+        max_distance: int,
+        variance_steps: int,
+        base_path_buttons: List[str],
+        max_variants: int = 8
+    ) -> List[List[str]]:
+        """
+        Generate alternative button sequences that reach the goal but differ in their initial moves.
+        """
+        if variance_steps <= 0 or not base_path_buttons or len(base_path_buttons) < variance_steps:
+            return []
+
+        base_prefix_key = tuple(base_path_buttons[:variance_steps])
+        seen_prefixes = {base_prefix_key}
+        candidates: List[List[str]] = []
+
+        prefix_paths = self._enumerate_prefix_paths(
+            start=start,
+            blocked=blocked,
+            map_data=map_data,
+            steps_required=variance_steps,
+            max_prefixes=max_variants * 4  # oversample to increase odds of unique prefixes
+        )
+
+        for prefix_positions in prefix_paths:
+            prefix_buttons = self._path_to_buttons(prefix_positions)
+            if len(prefix_buttons) < variance_steps:
+                continue
+
+            prefix_key = tuple(prefix_buttons[:variance_steps])
+            if prefix_key in seen_prefixes:
+                continue
+
+            remainder = self._astar(prefix_positions[-1], goal, blocked, map_data, max_distance)
+            if not isinstance(remainder, list) or len(remainder) < 1:
+                continue
+
+            full_positions = prefix_positions + remainder[1:]
+            buttons = self._path_to_buttons(full_positions)
+            if len(buttons) < variance_steps:
+                continue
+
+            initial_key = tuple(buttons[:variance_steps])
+            if initial_key in seen_prefixes:
+                continue
+
+            seen_prefixes.add(initial_key)
+            candidates.append(buttons)
+
+            if len(candidates) >= max_variants:
+                break
+
+        return candidates
+
+    def _enumerate_prefix_paths(
+        self,
+        start: Tuple[int, int],
+        blocked: Set[Tuple[int, int]],
+        map_data: Dict,
+        steps_required: int,
+        max_prefixes: int = 256
+    ) -> List[List[Tuple[int, int]]]:
+        """
+        Enumerate walkable position sequences originating from start with a fixed number of steps.
+        """
+        if steps_required <= 0:
+            return []
+
+        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+        results: List[List[Tuple[int, int]]] = []
+        seen_paths: Set[Tuple[Tuple[int, int], ...]] = set()
+        stack = [(start, [start])]
+
+        while stack and len(results) < max_prefixes:
+            current_pos, positions = stack.pop()
+            steps_taken = len(positions) - 1
+
+            if steps_taken == steps_required:
+                path_tuple = tuple(positions)
+                if path_tuple not in seen_paths:
+                    seen_paths.add(path_tuple)
+                    results.append(positions)
+                continue
+
+            for dx, dy in directions:
+                next_pos = (current_pos[0] + dx, current_pos[1] + dy)
+
+                if next_pos in blocked:
+                    continue
+
+                if next_pos in positions:
+                    continue
+
+                if not self._can_move_to(current_pos, next_pos, map_data):
+                    continue
+
+                stack.append((next_pos, positions + [next_pos]))
+
+        return results
+    
     def _path_to_buttons(self, path: List[Tuple[int, int]]) -> List[str]:
         """Convert a path of positions to button commands."""
         if len(path) < 2:
@@ -745,7 +906,13 @@ class Pathfinder:
 
 
 # Convenience function
-def find_path(start: Tuple[int, int], goal: Tuple[int, int], game_state: Dict) -> Optional[List[str]]:
+def find_path(
+    start: Tuple[int, int],
+    goal: Tuple[int, int],
+    game_state: Dict,
+    max_distance: int = 150,
+    variance: Optional[str] = None
+) -> Optional[List[str]]:
     """
     Find a path from start to goal position.
     
@@ -753,9 +920,11 @@ def find_path(start: Tuple[int, int], goal: Tuple[int, int], game_state: Dict) -
         start: Starting position (x, y)
         goal: Goal position (x, y)
         game_state: Current game state with map data
+        max_distance: Maximum distance to search (default 150)
+        variance: Optional variance level ('low', 'medium', 'high')
         
     Returns:
         List of button commands to reach the goal, or None if no path found
     """
     pathfinder = Pathfinder()
-    return pathfinder.find_path(start, goal, game_state)
+    return pathfinder.find_path(start, goal, game_state, max_distance=max_distance, variance=variance)
