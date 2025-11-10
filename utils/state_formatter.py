@@ -1237,15 +1237,24 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}')")
         
         # Build JSON map (with grid included for pathfinding, even though we don't show it in prompt)
-        json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+        try:
+            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+        except ValueError as e:
+            logger.error(f"Porymap: Failed to build map for '{porymap_map_name}' due to corrupted tileset data: {e}")
+            logger.error("This likely indicates missing or corrupted tileset files in the porymap_data directory.")
+            logger.error("Pathfinding will not be available for this location.")
+            return context_parts
         
         # Ensure grid is built (even if we don't include it in the text output)
         if not json_map.get('grid'):
             # Rebuild with grid if needed
             from utils.porymap_json_builder import build_json_map
-            json_map_with_grid = build_json_map(porymap_map_name, pokeemerald_root, include_grid=True, include_ascii=True)
-            if json_map_with_grid and json_map_with_grid.get('grid'):
-                json_map['grid'] = json_map_with_grid['grid']
+            try:
+                json_map_with_grid = build_json_map(porymap_map_name, pokeemerald_root, include_grid=True, include_ascii=True)
+                if json_map_with_grid and json_map_with_grid.get('grid'):
+                    json_map['grid'] = json_map_with_grid['grid']
+            except ValueError as e:
+                logger.error(f"Porymap: Failed to rebuild grid for '{porymap_map_name}': {e}")
         
         if not json_map:
             logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
@@ -1318,16 +1327,8 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         # Add compact JSON map data (simplified format to save tokens)
         context_parts.append("\nMap Data (JSON):")
         
-        # Simplified objects (remove unnecessary fields)
-        simplified_objects = []
-        for obj in json_map.get('objects', []):
-            simplified_objects.append({
-                "x": obj.get('x', 0),
-                "y": obj.get('y', 0),
-                "elevation": obj.get('elevation', 0),
-                "graphics_id": obj.get('graphics_id', '?'),
-                "movement_type": obj.get('movement_type', '?')
-            })
+        # Include full object details (retain additional fields for precision)
+        objects_for_json = json_map.get('objects', [])
         
         # Simplified warps
         simplified_warps = []
@@ -1355,7 +1356,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             "id": json_map.get('id'),
             "dimensions": json_map.get('dimensions'),
             "warps": simplified_warps,
-            "objects": simplified_objects,
+            "objects": objects_for_json,
             "connections": simplified_connections
         }
         context_parts.append(json.dumps(compact_json_map, indent=2))
@@ -1822,29 +1823,46 @@ def format_action_history(action_history, max_actions=10):
         
         start_x, start_y, start_loc = start_pos
         end_x, end_y, end_loc = end_pos
-        
-        # Check if movement actually occurred
+        sequence_index = action.get('sequence_index', 0)
+        metadata = action.get('metadata') or {}
+        source = action.get('source')
+
+        # Build base line text
         if button in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
             if start_x is not None and end_x is not None:
                 if start_x == end_x and start_y == end_y and start_loc == end_loc:
-                    # Movement blocked
-                    lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → BLOCKED (stayed at same position)")
+                    line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → BLOCKED (stayed at same position)"
                 else:
-                    # Movement succeeded
                     if start_loc == end_loc:
-                        lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → ({end_x:3},{end_y:3})")
+                        line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → ({end_x:3},{end_y:3})"
                     else:
-                        # Changed location (went through door/warp)
-                        lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) [{start_loc}] → ({end_x:3},{end_y:3}) [{end_loc}]")
+                        line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) [{start_loc}] → ({end_x:3},{end_y:3}) [{end_loc}]"
             else:
-                lines.append(f"  {i}. {button:5} (position unavailable)")
+                line = f"  {i}. {button:5} (position unavailable)"
         else:
-            # Non-movement action (A, B, START, SELECT)
             if start_x is not None:
-                lines.append(f"  {i}. {button:5} @ ({start_x:3},{start_y:3})")
+                line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3})"
             else:
-                lines.append(f"  {i}. {button:5}")
-    
+                line = f"  {i}. {button:5}"
+
+        # Append contextual metadata (only on first button of a sequence)
+        context_parts = []
+        if sequence_index == 0:
+            if source == 'navigate_to':
+                variance = metadata.get('variance')
+                if variance is not None:
+                    context_parts.append(f"navigate_to variance={variance}")
+            elif source:
+                context_parts.append(str(source))
+            elif metadata:
+                for key, value in metadata.items():
+                    context_parts.append(f"{key}={value}")
+
+        if context_parts:
+            line += " [" + "; ".join(str(part) for part in context_parts) + "]"
+
+        lines.append(line)
+        
     return "\n".join(lines)
 
 

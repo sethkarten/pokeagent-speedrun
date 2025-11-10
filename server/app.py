@@ -26,8 +26,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from urllib.parse import quote_plus
+
+from typing import Any, Dict, List, Optional
 
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -252,7 +254,9 @@ app.add_middleware(
 
 # Models for API requests and responses
 class ActionRequest(BaseModel):
-    buttons: list = []  # List of button names: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT
+    buttons: List[str] = Field(default_factory=list)  # List of button names: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT
+    source: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class GameStateResponse(BaseModel):
     screenshot_base64: str
@@ -757,15 +761,28 @@ async def take_action(request: ActionRequest):
             location = player_data.get('location', 'Unknown')
             start_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
             
-            for button in request.buttons:
+            source = request.source
+            metadata = request.metadata or {}
+            sequence_length = len(request.buttons)
+
+            for idx, button in enumerate(request.buttons):
                 # Add all buttons to recent actions with starting position
-                recent_button_presses.append({
+                action_entry = {
                     "button": button,
                     "timestamp": current_time,
                     "start_pos": start_pos,
                     "end_pos": None,  # Will be filled when action completes
-                    "completed": False
-                })
+                    "completed": False,
+                    "sequence_index": idx,
+                    "sequence_length": sequence_length
+                }
+
+                if source:
+                    action_entry["source"] = source
+                if metadata:
+                    action_entry["metadata"] = dict(metadata)
+
+                recent_button_presses.append(action_entry)
             
             # Update total actions count in metrics
             with step_lock:
@@ -1813,6 +1830,9 @@ async def mcp_press_buttons(request: dict):
     try:
         buttons = request.get("buttons", [])
         reasoning = request.get("reasoning", "")
+        source = request.get("source")
+        metadata = request.get("metadata")
+        metadata_dict = metadata if isinstance(metadata, dict) else {}
 
         if not buttons:
             return {"success": False, "error": "No buttons specified"}
@@ -1823,7 +1843,7 @@ async def mcp_press_buttons(request: dict):
         # Validate and normalize buttons with fallback to 'A'
         normalized_buttons = []
         invalid_buttons = []
-        
+
         for button in buttons:
             # Normalize to uppercase
             button_upper = str(button).upper().strip()
@@ -1851,7 +1871,11 @@ async def mcp_press_buttons(request: dict):
             }
 
         # Call the existing take_action function to ensure metrics tracking
-        action_request = ActionRequest(buttons=actual_buttons)
+        action_request = ActionRequest(
+            buttons=actual_buttons,
+            source=source,
+            metadata=metadata_dict
+        )
         await take_action(action_request)
 
         logger.info(f"🎮 Queued buttons via MCP: {actual_buttons} - {reasoning}")
@@ -2007,6 +2031,7 @@ async def mcp_navigate_to(request: dict):
         x = request.get("x")
         y = request.get("y")
         reason = request.get("reason", "")
+        variance = request.get("variance")
 
         if x is None or y is None:
             return {"success": False, "error": "x and y coordinates required"}
@@ -2019,7 +2044,7 @@ async def mcp_navigate_to(request: dict):
             return {"success": False, "error": f"Invalid coordinates: x={x}, y={y}"}
 
         # Calculate path and get buttons
-        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason)
+        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason=reason, variance=variance)
 
         if not result.get("success"):
             return result
@@ -2027,7 +2052,14 @@ async def mcp_navigate_to(request: dict):
         # Queue buttons via take_action to ensure metrics tracking
         buttons = result.get("buttons", [])
         if buttons:
-            action_request = ActionRequest(buttons=buttons)
+            variance_value = result.get("variance")
+            if variance_value is None:
+                variance_value = variance or "none"
+            action_request = ActionRequest(
+                buttons=buttons,
+                source="navigate_to",
+                metadata={"variance": variance_value}
+            )
             await take_action(action_request)
 
         return {
@@ -2035,7 +2067,8 @@ async def mcp_navigate_to(request: dict):
             "target": result.get("target"),
             "path_length": result.get("path_length"),
             "buttons_queued": len(buttons),
-            "reason": reason
+            "reason": reason,
+            "variance": result.get("variance", variance or "none")
         }
     except Exception as e:
         logger.error(f"Error in navigate_to: {e}")

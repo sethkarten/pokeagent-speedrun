@@ -444,7 +444,7 @@ class PokeemeraldLayoutParser:
         
         Args:
             layout_name_or_id: Layout name or ID
-            
+        
         Returns:
             2D list of tuples: (metatile_id, behavior, collision, elevation)
             Behavior is loaded from tileset metatile_attributes.bin files.

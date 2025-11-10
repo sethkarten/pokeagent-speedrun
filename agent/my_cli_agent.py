@@ -234,15 +234,20 @@ class MyCLIAgent:
             },
             {
                 "name": "navigate_to",
-                "description": "Automatically navigate to specific coordinates using A* pathfinding.",
+                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium' or 'high' to explore alternative paths.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
                         "x": {"type_": "INTEGER", "description": "Target X coordinate"},
                         "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
+                        "variance": {
+                            "type_": "STRING", 
+                            "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if still blocked). Default: 'none'",
+                            "enum": ["none", "low", "medium", "high"]
+                        },
                         "reason": {"type_": "STRING", "description": "Why you are navigating here"}
                     },
-                    "required": ["x", "y", "reason"]
+                    "required": ["x", "y", "variance", "reason"]
                 }
             },
             {
@@ -574,7 +579,8 @@ class MyCLIAgent:
                 if hasattr(self, '_pending_action_details') and 'navigate_to' in self._pending_action_details:
                     entry["action_details"] = self._pending_action_details['navigate_to']
                 else:
-                    entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']})"
+                    variance = last_call['args'].get('variance', 'none')
+                    entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
             elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
                 entry["action_details"] = f"Pressed {last_call['args']['buttons']}"
             else:
@@ -830,10 +836,11 @@ class MyCLIAgent:
                         except:
                             pass
                         
+                        variance = last_tool_call.get('args', {}).get('variance', 'none')
                         if final_pos:
-                            action_details = f"navigate_to({target_x}, {target_y}) → Ended at ({final_pos[0]}, {final_pos[1]})"
+                            action_details = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_pos[0]}, {final_pos[1]})"
                         else:
-                            action_details = f"navigate_to({target_x}, {target_y})"
+                            action_details = f"navigate_to({target_x}, {target_y}, variance={variance})"
                     elif last_tool_call['name'] == "complete_direct_objective":
                         action_details = "Completed direct objective"
                     else:
@@ -1002,11 +1009,12 @@ class MyCLIAgent:
                             if "x" in last_call["args"] and "y" in last_call["args"]:
                                 target_x = last_call["args"]["x"]
                                 target_y = last_call["args"]["y"]
+                                variance = last_call["args"].get("variance", "none")
                                 if final_position:
                                     final_x, final_y = final_position
-                                    action_details_str = f"navigate_to({target_x}, {target_y}) → Ended at ({final_x}, {final_y})"
+                                    action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_x}, {final_y})"
                                 else:
-                                    action_details_str = f"navigate_to({target_x}, {target_y})"
+                                    action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance})"
                         
                         # Add to history with action details
                         self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str)
@@ -1290,9 +1298,9 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 - get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
 - complete_direct_objective(reasoning) - Mark current direct objective as complete. (prioritize this before progressing through dialogue)
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
-- navigate_to(x, y, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data. Make sure the coordinate you are requesting a path to is walkable. If it isnt, pathfinding will fail and you wont move. NOTE: the top-left corner of the map is (0, 0).
+- navigate_to(x, y, variance, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data. Make sure the coordinate you are requesting a path to is walkable. If it isnt, pathfinding will fail and you wont move. NOTE: the top-left corner of the map is (0, 0).
 
-🗺️ **NAVIGATION**: Use navigate_to(x, y, reason) to automatically pathfind to a coordinate. It uses A* pathfinding on the porymap ground truth map. You can also use press_buttons() for manual movement if navigate_to isn't working.
+🗺️ **NAVIGATION**: Use navigate_to(x, y, variance, reason) to automatically pathfind to a coordinate. It uses A* pathfinding on the porymap ground truth map. You can also use press_buttons() for manual movement if navigate_to isn't working.
 
 📚 **INFORMATION TOOLS** (use when you need info or are stuck in a loop):
 - lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis
@@ -1324,7 +1332,7 @@ Example: If you are at position (3, 8) and press UP, you will move to (3, 7)
 STRATEGY - PRIORITY ORDER:
 1. **CHECK OBJECTIVE COMPLETION FIRST**: Before doing ANYTHING, check if your current direct objective is complete. If you've accomplished what the objective asks for, IMMEDIATELY call complete_direct_objective(reasoning="...") 
 2. **DIALOGUE SECOND**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
-3. **MOVEMENT**: Preferentially use navigate_to(x, y, reason) to automatically pathfind to a coordinate. Use press_buttons(["UP"], reasoning) etc. for manual movement only if navigate_to is not working.
+3. **MOVEMENT**: Preferentially use navigate_to(x, y, variance, reason) to automatically pathfind to a coordinate. Use press_buttons(["UP"], reasoning) etc. for manual movement only if navigate_to is not working.
 4. **BATTLES**: Use press_buttons with battle moves. Select moves carefully based on the current situation and the enemy's Pokemon. If below 50% health, prioritize using healing moves that also cause damage like (absorb, gigadrain, etc) if these moves are available.
 5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
 6. **STUCK DETECTION**: If you've been attempting the same move (UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
