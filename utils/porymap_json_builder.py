@@ -23,16 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.map_formatter import format_tile_to_symbol
 from utils.pokeemerald_parser import PokeemeraldMapLoader, PokeemeraldLayoutParser
-
-try:
-    from pokemon_env.enums import MetatileBehavior
-except ImportError:
-    # Fallback if mgba not available
-    from enum import IntEnum
-    class MetatileBehavior(IntEnum):
-        NORMAL = 0
-        SECRET_BASE_WALL = 1
-        # ... add more as needed
+from pokemon_env.enums import MetatileBehavior
 
 
 def tile_to_symbol(tile_tuple: Tuple[int, Any, int, int], location_name: str = "") -> str:
@@ -113,6 +104,33 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                 for row in metatiles:
                     line = "".join(tile_to_symbol(tile, map_name) for tile in row)
                     ascii_lines.append(line)
+
+                # Overlay special object markers (TV, Clock, etc.)
+                # This must be done BEFORE joining ascii_lines into ascii_map
+                # Convert lines to list of lists for easier modification
+                ascii_grid = [list(line) for line in ascii_lines]
+
+                # Define special object graphics IDs and their symbols
+                special_object_markers = {
+                    # TVs - common graphics_id for TV objects
+                    "OBJ_EVENT_GFX_ITEM_BALL": "I",  # Item balls
+                    "OBJ_EVENT_GFX_CUTTABLE_TREE": "T",  # Tree
+                    # Add more as needed
+                }
+
+                # For specific locations, add hardcoded object markers
+                # This ensures important interactive objects are visible on the map
+                if "BrendansHouse_2F" in map_name or "MaysHouse_2F" in map_name:
+                    # Clock is at (5, 1) - to the right of TV - coordinates x=5, y=1
+                    # In ASCII grid: ascii_grid[y][x] = ascii_grid[1][5]
+                    if height > 1 and width > 5:
+                        ascii_grid[1][5] = 'K'  # Clock marker at (5,1)
+
+                    # Note: TV at (4, 1) should already be rendered from the base map data
+                    # We don't need to override it here
+
+                # Convert back to strings
+                ascii_lines = [''.join(row) for row in ascii_grid]
                 ascii_map = "\n".join(ascii_lines)
     
     # Extract warps
