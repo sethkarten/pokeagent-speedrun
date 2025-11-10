@@ -1291,7 +1291,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             
             context_parts.append("\nASCII Map:")
             context_parts.append(ascii_map)
-            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'X' = out of bounds)")
+            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
         
         # Add warps
         warps = json_map.get('warps', [])

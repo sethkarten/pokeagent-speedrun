@@ -55,7 +55,7 @@
         
         .game-panel {
             width: 895px;
-            height: 890px;
+            height: 950px;
             display: flex;
             flex-direction: column;
             background-color: #1a1a1a;
@@ -67,7 +67,7 @@
         
         .frame-container {
             width: 895px;
-            height: 890px;
+            height: 597px;
             margin: 0 auto;
             position: relative;
             background-color: #000000;
@@ -76,16 +76,16 @@
             box-sizing: border-box;
             padding: 0;
             overflow: hidden;
-            /* Game frame: 972px total - 140px milestones - 150px actions = 682px */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* GBA aspect ratio 3:2 (240x160) - 895/597 = 1.5:1 */
         }
-        
+
         .frame {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: fill;
             image-rendering: pixelated;
         }
         
@@ -204,8 +204,8 @@
         }
         
         .brain-panel {
-            width: 1080px;
-            height: 972px;
+            width: 995px;
+            height: 950px;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -220,8 +220,8 @@
             box-sizing: border-box;
         }
         
-        .brain-section:nth-child(1) { height: 400px; } /* Agent Thinking */
-        .brain-section:nth-child(2) { height: 520px; } /* Party Status */
+        .brain-section:nth-child(1) { height: 650px; } /* Agent Thinking */
+        .brain-section:nth-child(2) { height: 270px; } /* Map + Party Combined */
         
         .section-title {
             color: #ff6177;
@@ -231,7 +231,7 @@
         }
         
         .agent-thinking {
-            height: 340px;
+            height: 590px;
             line-height: 1.6;
             overflow-y: auto;
             padding: 5px;
@@ -242,6 +242,49 @@
             word-wrap: break-word;
             white-space: normal;
             text-align: left;
+            position: relative;
+            z-index: 15;
+        }
+
+        .combined-container {
+            display: flex;
+            gap: 10px;
+            height: 210px;
+        }
+
+        .map-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .party-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .subsection-title {
+            color: #ff6177;
+            margin-bottom: 5px;
+            font-weight: bold;
+            text-shadow: 0 0 5px #ff6177;
+            font-size: 12px;
+        }
+
+        .map-visualization {
+            flex: 1;
+            line-height: 1.2;
+            overflow-y: auto;
+            padding: 5px;
+            background-color: #0a0a0a;
+            border: 1px solid #33ff33;
+            font-family: 'VT323', monospace;
+            font-size: 12px;
+            white-space: pre;
+            overflow-x: auto;
+            position: relative;
+            z-index: 15;
         }
 
         .llm-entry {
@@ -341,11 +384,13 @@
         }
         
         .game-state {
+            flex: 1;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            height: 460px;
             overflow-y: auto;
+            position: relative;
+            z-index: 15;
         }
 
         .party-pokemon {
@@ -494,21 +539,30 @@
                 <div class="section-title"># AGENT_THINKING</div>
                 <div id="agent-thinking" class="agent-thinking">INITIALIZING AGENT...</div>
             </div>
-            
+
             <div class="brain-section">
-                <div class="section-title">◑ PARTY_STATUS</div>
-                <div id="party-status" class="game-state">
-                    <div class="party-pokemon">
-                        <div class="pokemon-header">
-                            <span class="pokemon-name">LOADING...</span>
-                            <span class="pokemon-level">Lv.??</span>
-                        </div>
-                        <div class="pokemon-hp">
-                            <span>HP:</span>
-                            <div class="hp-bar">
-                                <div class="hp-fill" style="width: 0%"></div>
+                <div class="section-title">◈ MAP & PARTY</div>
+                <div class="combined-container">
+                    <div class="map-section">
+                        <div class="subsection-title">MAP</div>
+                        <div id="map-visualization" class="map-visualization">LOADING MAP...</div>
                     </div>
-                            <span>--/--</span>
+                    <div class="party-section">
+                        <div class="subsection-title">PARTY</div>
+                        <div id="party-status" class="game-state">
+                            <div class="party-pokemon">
+                                <div class="pokemon-header">
+                                    <span class="pokemon-name">LOADING...</span>
+                                    <span class="pokemon-level">Lv.??</span>
+                                </div>
+                                <div class="pokemon-hp">
+                                    <span>HP:</span>
+                                    <div class="hp-bar">
+                                        <div class="hp-fill" style="width: 0%"></div>
+                                    </div>
+                                    <span>--/--</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1082,6 +1136,41 @@
             }
         }
 
+        // Function to fetch and update map visualization
+        async function updateMapVisualization() {
+            try {
+                const response = await fetch(`${serverUrl}/state`);
+                const data = await response.json();
+
+                const mapContainer = document.getElementById('map-visualization');
+
+                if (data.map && data.map.visual_map) {
+                    // Filter out rows that only contain numbers, minus, space, #, and N
+                    let lines = data.map.visual_map.split('\n');
+                    lines = lines.filter(line => {
+                        const cleanLine = line.trim();
+                        if (cleanLine === '') return false; // Skip empty lines
+
+                        // Skip rows that only contain: numbers, minus, space, #, and N
+                        const onlyBoringChars = /^[\d\-\s#N]+$/.test(cleanLine);
+                        return !onlyBoringChars;
+                    });
+
+                    if (lines.length > 0) {
+                        mapContainer.textContent = lines.join('\n');
+                    } else {
+                        mapContainer.textContent = 'NO_MAP_DATA';
+                    }
+                } else {
+                    mapContainer.textContent = 'NO_MAP_DATA';
+                }
+
+            } catch (error) {
+                console.error('Error fetching map visualization:', error);
+                document.getElementById('map-visualization').textContent = 'ERROR_LOADING_MAP';
+            }
+        }
+
         // Frame updates are already handled by pollFrameUpdate()
         // No need for updateScreenshot()
 
@@ -1092,9 +1181,10 @@
         setInterval(() => {
             updateRecentActions();
             updatePartyStatus();
+            updateMapVisualization();
         }, 2000); // Update every 2 seconds (reduced from 1s)
 
-        // Less frequent updates for milestones  
+        // Less frequent updates for milestones
         setInterval(() => {
             updateMilestones();
         }, 10000); // Update every 10 seconds (reduced from 5s)
@@ -1103,6 +1193,7 @@
         updateRecentActions();
         updateMilestones();
         updatePartyStatus();
+        updateMapVisualization();
     </script>
 </body>
 </html>

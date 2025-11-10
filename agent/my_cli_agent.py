@@ -903,6 +903,9 @@ class MyCLIAgent:
                     return True, text_content
             else:
                 # Original Gemini function calling logic
+                part = None  # Initialize to avoid UnboundLocalError
+                function_call = None  # Initialize to avoid UnboundLocalError
+                function_result = None  # Initialize to avoid UnboundLocalError
                 while response.parts and tool_call_count < max_tool_calls:
                     # First, extract any text parts for reasoning
                     for part in response.parts:
@@ -1030,36 +1033,39 @@ class MyCLIAgent:
                         return True, full_response
 
                     # Check if we've hit the limit
-                    if tool_call_count >= max_tool_calls:
-                        logger.warning(f"⚠️ Reached max tool calls ({max_tool_calls}). Forcing text response.")
-                        # Send function result with a prompt to respond with text
-                        response = self.chat.send_message(
-                            genai.protos.Content(
-                                parts=[genai.protos.Part(
-                                    function_response=genai.protos.FunctionResponse(
-                                        name=function_call.name,
-                                        response={"result": function_result}
-                                    )
-                                ), genai.protos.Part(
-                                    text="You have reached the maximum number of tool calls for this step. Please provide a brief text response summarizing what you accomplished and what you plan to do next."
-                                )]
+                    # Note: This code is currently unreachable due to early return at line 1031
+                    # but kept for safety. It requires function_call and function_result to be defined.
+                    if function_call is not None and function_result is not None:
+                        if tool_call_count >= max_tool_calls:
+                            logger.warning(f"⚠️ Reached max tool calls ({max_tool_calls}). Forcing text response.")
+                            # Send function result with a prompt to respond with text
+                            response = self.chat.send_message(
+                                genai.protos.Content(
+                                    parts=[genai.protos.Part(
+                                        function_response=genai.protos.FunctionResponse(
+                                            name=function_call.name,
+                                            response={"result": function_result}
+                                        )
+                                    ), genai.protos.Part(
+                                        text="You have reached the maximum number of tool calls for this step. Please provide a brief text response summarizing what you accomplished and what you plan to do next."
+                                    )]
+                                )
                             )
-                        )
-                    else:
-                        # Send function result back to Gemini
-                        response = self.chat.send_message(
-                            genai.protos.Content(
-                                parts=[genai.protos.Part(
-                                    function_response=genai.protos.FunctionResponse(
-                                        name=function_call.name,
-                                        response={"result": function_result}
-                                    )
-                                )]
+                        else:
+                            # Send function result back to Gemini
+                            response = self.chat.send_message(
+                                genai.protos.Content(
+                                    parts=[genai.protos.Part(
+                                        function_response=genai.protos.FunctionResponse(
+                                            name=function_call.name,
+                                            response={"result": function_result}
+                                        )
+                                    )]
+                                )
                             )
-                        )
-                
+
                 # Check if we got a text response instead of function call
-                if not hasattr(part, 'function_call') or not part.function_call:
+                if part is not None and (not hasattr(part, 'function_call') or not part.function_call):
                     # Check if any part has text
                     for part in response.parts:
                         if hasattr(part, 'text') and part.text:
@@ -1599,14 +1605,14 @@ Step {step_count}"""
                 logger.info(f"🔧 VLM wants to call: {function_call.name} ({tool_call_count}/{max_tool_calls})")
                 
                 # Execute the function
-                function_result = self._execute_function_call(function_call, self.mcp_adapter)
+                function_result = self._execute_function_call(function_call)
                 result_str = str(function_result)
                 logger.info(f"📥 Function result: {result_str[:200]}...")
                 
-                # Track tool call with result
+                # Track tool call with result (convert protobuf args to JSON-serializable types)
                 tool_calls_made.append({
                     "name": function_call.name,
-                    "args": dict(function_call.args),
+                    "args": self._convert_protobuf_args(function_call.args),
                     "result": function_result
                 })
                 
@@ -1620,16 +1626,16 @@ Step {step_count}"""
     
     def _extract_text_from_response(self, response):
         """Extract text content from response (handles both string and GenerationResponse)
-        
+
         Args:
             response: Response object (string or GenerationResponse)
-            
+
         Returns:
             str: Extracted text content
         """
         if isinstance(response, str):
             return response.strip()
-        
+
         # Try to extract text from GenerationResponse
         try:
             if hasattr(response, 'text'):
@@ -1637,20 +1643,6 @@ Step {step_count}"""
             return ""
         except:
             return ""
-    
-    def _execute_function_call(self, function_call, mcp_adapter):
-        """Execute a function call using the MCP adapter."""
-        try:
-            # Convert function call to the format expected by MCP adapter
-            function_name = function_call.name
-            function_args = dict(function_call.args)
-            
-            # Call the MCP tool
-            result = mcp_adapter.call_tool(function_name, function_args)
-            return result
-        except Exception as e:
-            logger.error(f"Error executing function call {function_call.name}: {e}")
-            return {"error": str(e)}
 
 
 def main():
