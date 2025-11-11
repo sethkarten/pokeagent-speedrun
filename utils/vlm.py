@@ -44,16 +44,21 @@ def retry_with_exponential_backoff(
 
 class VLMBackend(ABC):
     """Abstract base class for VLM backends"""
-    
+
     @abstractmethod
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
         """Process an image and text prompt"""
         pass
-    
+
     @abstractmethod
     def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
         """Process a text-only prompt"""
         pass
+
+    def get_structured_query(self, img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]], text: str,
+                            response_schema: Dict[str, Any], module_name: str = "Unknown") -> Dict[str, Any]:
+        """Process image(s) and text prompt with structured output (JSON schema)"""
+        raise NotImplementedError("Structured output not supported for this backend")
 
 class OpenAIBackend(VLMBackend):
     """OpenAI API backend"""
@@ -73,42 +78,59 @@ class OpenAIBackend(VLMBackend):
         
         self.client = OpenAI(api_key=self.api_key)
         self.errors = (openai.RateLimitError,)
+        self.chat_history = []
     
     @retry_with_exponential_backoff
-    def _call_completion(self, messages):
+    def _call_completion(self, recency=50):
         """Calls the completions.create method with exponential backoff."""
         return self.client.chat.completions.create(
             model=self.model_name,
-            messages=messages
+            messages=self.chat_history[-recency:]
         )
+        
+    def _update_chat_history(self, role: str, text: str, img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]]):
+        image_contents = []
+        if img:
+            # Handle single image or list of images
+            if isinstance(img, list):
+                images = [i for i in img if i is not None]
+            else:
+                images = [img] if img is not None else []
+
+            # Convert all images to base64
+            for image_data in images:
+                # Handle both PIL Images and numpy arrays
+                if hasattr(image_data, 'convert'):  # It's a PIL Image
+                    image = image_data
+                elif hasattr(image_data, 'shape'):  # It's a numpy array
+                    image = Image.fromarray(image_data)
+                else:
+                    raise ValueError(f"Unsupported image type: {type(image_data)}")
+
+                buffered = BytesIO()
+                image.save(buffered, format="PNG")
+                image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                image_contents.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}})
+
+        # Build message content: text first, then all images
+        content = [{"type": "text", "text": text}] + image_contents
+        
+        new_message = {
+            "role": role,
+            "content": content
+        }
+        self.chat_history.append(new_message)
     
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
         """Process an image and text prompt using OpenAI API"""
         start_time = time.time()
         
-        # Handle both PIL Images and numpy arrays
-        if hasattr(img, 'convert'):  # It's a PIL Image
-            image = img
-        elif hasattr(img, 'shape'):  # It's a numpy array
-            image = Image.fromarray(img)
-        else:
-            raise ValueError(f"Unsupported image type: {type(img)}")
-        
-        buffered = BytesIO()
-        image.save(buffered, format="PNG")
-        image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
-        messages = [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": text},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
-            ]
-        }]
+        self._update_chat_history("user", text, img)
         
         try:
-            response = self._call_completion(messages)
+            response = self._call_completion()
             result = response.choices[0].message.content
+            self._update_chat_history("assistant", result, None)
             duration = time.time() - start_time
             
             # Extract token usage if available
@@ -146,14 +168,12 @@ class OpenAIBackend(VLMBackend):
         """Process a text-only prompt using OpenAI API"""
         start_time = time.time()
         
-        messages = [{
-            "role": "user",
-            "content": [{"type": "text", "text": text}]
-        }]
+        self._update_chat_history("user", text)
         
         try:
-            response = self._call_completion(messages)
+            response = self._call_completion()
             result = response.choices[0].message.content
+            self._update_chat_history("assistant", result, None)
             duration = time.time() - start_time
             
             # Extract token usage if available
@@ -185,6 +205,59 @@ class OpenAIBackend(VLMBackend):
                 metadata={"model": self.model_name, "backend": "openai", "duration": duration, "has_image": False}
             )
             logger.error(f"OpenAI API error: {e}")
+            raise
+
+    @retry_with_exponential_backoff
+    def _call_completion_parse(self, response_format, recency=50):
+        return self.client.chat.completions.parse(
+            model=self.model_name,
+            messages=self.chat_history[-recency:],
+            response_format=response_format
+        )
+
+    def get_structured_query(self, img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]], text: str,
+                            response_schema: Any, module_name: str = "Unknown") -> Any:
+        start_time = time.time()
+
+        self._update_chat_history("user", text, img)
+
+        try:
+            response = self._call_completion_parse(response_schema)
+            result = response.choices[0].message.parsed
+            content = response.choices[0].message.content
+            
+            self._update_chat_history("assistant", content, None)
+            duration = time.time() - start_time
+
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage'):
+                token_usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens
+                }
+
+            # Log the interaction
+            log_llm_interaction(
+                interaction_type=f"openai_{module_name}_structured",
+                prompt=text,
+                response=str(result),
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "openai", "has_image": True, "structured": True, "token_usage": token_usage},
+                model_info={"model": self.model_name, "backend": "openai"}
+            )
+
+            return result
+        except Exception as e:
+            duration = time.time() - start_time
+            log_llm_error(
+                interaction_type=f"openai_{module_name}_structured",
+                prompt=text,
+                error=str(e),
+                metadata={"model": self.model_name, "backend": "openai", "duration": duration, "has_image": True}
+            )
+            logger.error(f"OpenAI structured output error: {e}")
             raise
 
 class OpenRouterBackend(VLMBackend):
@@ -808,6 +881,88 @@ class GeminiBackend(VLMBackend):
             logger.warning(f"[{module_name}] Returning default response due to error: {e}")
             return "I encountered an error processing the request. I'll proceed with a basic action: press 'A' to continue."
 
+    def get_structured_query(self, img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]], text: str,
+                            response_schema: Any, module_name: str = "Unknown") -> Any:
+        """
+        Process image(s) and text prompt with structured output using Gemini API.
+
+        Args:
+            img: Single image or list of images to process
+            text: Text prompt
+            response_schema: Pydantic model class defining the output structure
+            module_name: Name for logging
+
+        Returns:
+            Parsed Pydantic model instance
+        """
+        start_time = time.time()
+        try:
+            # Handle single image or list of images
+            if isinstance(img, list):
+                images = [self._prepare_image(i) for i in img if i is not None]
+            else:
+                images = [self._prepare_image(img)] if img is not None else []
+
+            # Prepare content for Gemini: text first, then all images
+            content_parts = [text] + images
+
+            # Log the prompt
+            prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
+            logger.info(f"[{module_name}] GEMINI STRUCTURED VLM IMAGE QUERY:")
+            logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
+
+            # Generate response with structured output config
+            response = self.model.generate_content(
+                content_parts,
+                generation_config={
+                    "response_mime_type": "application/json",
+                    "response_schema": response_schema.model_json_schema()
+                }
+            )
+            response.resolve()
+
+            # Parse and validate with Pydantic
+            result = response_schema.model_validate_json(response.text)
+            duration = time.time() - start_time
+
+            # Extract token usage if available
+            token_usage = {}
+            if hasattr(response, 'usage_metadata'):
+                usage = response.usage_metadata
+                token_usage = {
+                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
+                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
+                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                }
+
+            # Log the interaction
+            log_llm_interaction(
+                interaction_type=f"gemini_{module_name}_structured",
+                prompt=text,
+                response=str(result),
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "gemini", "has_image": True, "structured": True, "token_usage": token_usage},
+                model_info={"model": self.model_name, "backend": "gemini"}
+            )
+
+            # Log the response
+            result_preview = str(result)[:1000] + "..." if len(str(result)) > 1000 else str(result)
+            logger.info(f"[{module_name}] RESPONSE: {result_preview}")
+            logger.info(f"[{module_name}] ---")
+
+            return result
+
+        except Exception as e:
+            duration = time.time() - start_time
+            log_llm_error(
+                interaction_type=f"gemini_{module_name}_structured",
+                prompt=text,
+                error=str(e),
+                metadata={"model": self.model_name, "backend": "gemini", "duration": duration, "has_image": True}
+            )
+            logger.error(f"Gemini structured output error: {e}")
+            raise
+
 class VLM:
     """Main VLM class that supports multiple backends"""
     
@@ -896,5 +1051,32 @@ class VLM:
                 prompt=text,
                 error=str(e),
                 metadata={"model": self.model_name, "backend": self.backend.__class__.__name__, "duration": duration, "has_image": False}
+            )
+            raise
+
+    def get_structured_query(self, img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]], text: str,
+                            response_schema: Any, module_name: str = "Unknown") -> Any:
+        """
+        Process image(s) and text prompt with structured output.
+
+        Args:
+            img: Single image or list of images to process
+            text: Text prompt
+            response_schema: Pydantic model class (for OpenAI/Gemini) or dict schema
+            module_name: Name for logging
+
+        Returns:
+            Structured output (Pydantic model instance or dict)
+        """
+        try:
+            result = self.backend.get_structured_query(img, text, response_schema, module_name)
+            return result
+        except Exception as e:
+            duration = 0
+            log_llm_error(
+                interaction_type=f"{self.backend.__class__.__name__.lower()}_{module_name}_structured",
+                prompt=text,
+                error=str(e),
+                metadata={"model": self.model_name, "backend": self.backend.__class__.__name__, "duration": duration, "has_image": True, "structured": True}
             )
             raise

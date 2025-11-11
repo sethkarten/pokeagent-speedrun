@@ -806,13 +806,39 @@ async def take_action(request: ActionRequest):
                 
             except Exception as e:
                 logger.warning(f"Error logging to submission.log: {e}")
-        
-        # Return lightweight response without any lock acquisition
+
+        # SYNCHRONOUS EXECUTION: Wait for all actions to be consumed before returning
+        # This makes the /action endpoint truly synchronous
+        if actions_added > 0:
+            logger.info(f"⏳ Waiting for {actions_added} actions to complete...")
+            wait_start_time = time.time()
+
+            # Busy loop: wait until queue is empty AND no action is currently executing
+            while True:
+                queue_empty = (len(action_queue) == 0 and
+                               current_action is None and
+                               action_frames_remaining == 0 and
+                               release_frames_remaining == 0)
+
+                if queue_empty:
+                    wait_time = time.time() - wait_start_time
+                    logger.info(f"✅ All actions completed in {wait_time:.2f}s")
+                    break
+
+                # Sleep briefly to avoid burning CPU
+                time.sleep(0.01)  # 10ms sleep
+
+                # Timeout safety: if waiting too long, something is wrong
+                if time.time() - wait_start_time > 30:
+                    logger.error(f"⚠️ Timeout waiting for actions to complete!")
+                    break
+
+        # Return response after all actions are completed
         return {
-            "status": "success", 
+            "status": "success",
             "actions_queued": actions_added,
-            "queue_length": len(action_queue),  # action_queue access is atomic for lists
-            "message": f"Added {actions_added} actions to queue"
+            "queue_length": len(action_queue),
+            "message": f"Completed {actions_added} actions"
         }
             
     except Exception as e:

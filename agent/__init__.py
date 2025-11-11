@@ -10,6 +10,7 @@ from .deprecated.planning import planning_step
 from .simple import SimpleAgent, get_simple_agent, simple_mode_processing_multiprocess, configure_simple_agent_defaults
 from .react import ReActAgent, create_react_agent
 from .hierarchical_agent import HierarchicalAgent
+from .planning_agent import PlanningAgent
 
 
 class Agent:
@@ -60,6 +61,11 @@ class Agent:
             self.agent_impl = HierarchicalAgent(vlm=self.vlm, mcp_server_url=server_url)
             print(f"   Scaffold: Hierarchical (Strategic/Tactical Layers)")
 
+        elif scaffold == "planning":
+            # Create Planning agent with sub-agents
+            self.agent_impl = PlanningAgent(vlm=self.vlm, mcp_server_url=server_url)
+            print(f"   Scaffold: Planning (High-level planner with ExploreAgent/BattleAgent/UtilsAgent)")
+
         else:  # fourmodule (default)
             # Four-module agent context
             self.agent_impl = None  # Will use internal four-module processing
@@ -85,12 +91,15 @@ class Agent:
         Returns:
             dict: Contains 'action' and optionally 'reasoning'
         """
-        if self.scaffold in ["simple", "react", "hierarchical"]:
+        if self.scaffold in ["simple", "react", "hierarchical", "planning"]:
             # Delegate to specific agent implementation
             if self.scaffold == "simple":
                 return self.agent_impl.step(game_state)
 
             elif self.scaffold == "hierarchical":
+                return self.agent_impl.step(game_state)
+
+            elif self.scaffold == "planning":
                 return self.agent_impl.step(game_state)
 
             elif self.scaffold == "react":
@@ -154,5 +163,6 @@ __all__ = [
     'configure_simple_agent_defaults',
     'ReActAgent',
     'create_react_agent',
-    'HierarchicalAgent'
+    'HierarchicalAgent',
+    'PlanningAgent'
 ]

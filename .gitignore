@@ -9,6 +9,9 @@ CLAUDE.md
 AGENTS.md
 docs
 examples
+*.tar.xz
+
+mGBA-0.10.5-*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
