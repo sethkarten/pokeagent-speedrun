@@ -591,57 +591,57 @@ class DirectObjectiveManager:
                 action_type="select",
                 target_location="Title Screen",
                 navigation_hint="Use directional buttons to select gender and input name when prompted by Professor Birch",
-                completion_condition="character_created",
+                completion_condition="screen_transitions_to_moving_truck_interior",
                 priority=1
             ),
             
             DirectObjective(
                 id="home_01_exit_truck",
-                description="Exit the moving truck and enter Littleroot Town",
+                description="Exit the moving truck and enter Littleroot Town. Mom will greet you and take you inside your new home",
                 action_type="navigate",
                 target_location="Littleroot Town",
-                navigation_hint="Walk right to the door to exit the truck and enter Littleroot Town. Mom will greet you and take you inside",
-                completion_condition="entered_littleroot",
+                navigation_hint="Walk right to the door to exit the truck. Mom will automatically greet you outside and lead you into the house",
+                completion_condition="player_enters_house_first_floor",
                 priority=1
             ),
             
             DirectObjective(
                 id="home_02_go_to_bedroom",
-                description="Navigate upstairs to your bedroom and set the clock",
+                description="Navigate upstairs to your bedroom and set the clock on the wall",
                 action_type="interact",
                 target_location="Player's Bedroom",
                 navigation_hint="Walk north to the stairs at position (8, 2) and go upstairs. Interact with the clock at position (5, 1) by standing at (5, 2) and facing UP. Press A to set the time",
-                completion_condition="clock_set",
+                completion_condition="clock_setting_screen_closes_and_player_control_returns",
                 priority=1
             ),
             
             DirectObjective(
                 id="home_03_watch_tv",
-                description="Return downstairs and watch the TV segment with Mom about Petalburg Gym where your father is the new Gym Leader",
+                description="Return downstairs and watch the TV segment with Mom about Petalburg Gym where your father Norman is the new Gym Leader",
                 action_type="dialogue",
                 target_location="Player's House 1F",
                 navigation_hint="Go back downstairs and talk to Mom. She'll call you over to watch a TV program about your dad Norman at Petalburg Gym",
-                completion_condition="tv_segment_watched",
+                completion_condition="tv_segment_dialogue_ends_and_mom_suggests_visiting_birch",
                 priority=1
             ),
             
             DirectObjective(
                 id="littleroot_01_visit_birch_house",
-                description="Visit Professor Birch's house next door and go upstairs to meet May/Brendan",
+                description="Visit Professor Birch's house next door, talk to his wife downstairs, then go upstairs to meet May/Brendan. Inspect the Poké Ball on the floor to trigger their appearance",
                 action_type="navigate",
                 target_location="May/Brendan's Bedroom",
-                navigation_hint="Exit your house and enter the adjacent house. Talk to Birch's wife on the first floor, then go upstairs. Inspect the Poké Ball on the floor to trigger May/Brendan's appearance",
-                completion_condition="met_rival",
+                navigation_hint="Exit your house and enter the adjacent house. Talk to Birch's wife on the first floor, then go upstairs. The room appears empty - inspect the Poké Ball on the floor. May/Brendan will enter and introduce themselves before leaving",
+                completion_condition="may_brendan_exits_room_after_dialogue_about_helping_birch",
                 priority=1
             ),
             
             DirectObjective(
                 id="route101_01_save_birch",
-                description="Travel to Route 101 and save Professor Birch from a wild Zigzagoon",
+                description="Travel to Route 101 north of Littleroot Town and find Professor Birch being chased by a wild Zigzagoon",
                 action_type="navigate",
                 target_location="Route 101",
-                navigation_hint="Exit Littleroot Town heading north to Route 101. You'll find Professor Birch being chased by a wild Zigzagoon",
-                completion_condition="found_birch_in_danger",
+                navigation_hint="Exit Littleroot Town heading north to Route 101. Continue north until you find Professor Birch being chased. The cutscene will automatically trigger",
+                completion_condition="cutscene_starts_showing_birch_being_chased",
                 priority=1
             ),
             
@@ -650,128 +650,138 @@ class DirectObjectiveManager:
                 description="Choose your starter Pokémon from Birch's Bag: Treecko (Grass), Torchic (Fire), or Mudkip (Water)",
                 action_type="select",
                 target_location="Route 101",
-                navigation_hint="Open Birch's Bag and select one starter. Treecko is strong vs Water/Rock/Ground but weak to Fire/Bug/Poison/Flying/Ice. Torchic is strong vs Grass/Bug/Ice/Steel but weak to Water/Ground. Mudkip is strong vs Fire/Rock/Ground but weak to Grass/Electric",
-                completion_condition="starter_selected",
+                navigation_hint="Birch will ask you to choose a Pokémon from his Bag. Open the Bag and select one starter: Treecko (strong vs Water/Rock/Ground, weak to Fire/Bug/Poison/Flying/Ice), Torchic (strong vs Grass/Bug/Ice/Steel, weak to Water/Ground), or Mudkip (strong vs Fire/Rock/Ground, weak to Grass/Electric)",
+                completion_condition="starter_pokemon_selection_confirmed_and_battle_begins",
                 priority=1
             ),
             
             DirectObjective(
                 id="route101_03_defeat_zigzagoon",
-                description="Battle and defeat the wild Level 2 Zigzagoon attacking Professor Birch",
+                description="Battle and defeat the wild Level 2 Zigzagoon attacking Professor Birch using your newly chosen starter",
                 action_type="battle",
                 target_location="Route 101",
-                navigation_hint="Use your starter's basic attack move to defeat the Level 2 Zigzagoon. This should be an easy battle",
-                completion_condition="saved_birch",
+                navigation_hint="Use your starter's basic attack move to defeat the Level 2 Zigzagoon. This should be an easy first battle",
+                completion_condition="battle_ends_and_birch_thanks_you_invites_to_lab",
                 priority=1
             ),
             
             DirectObjective(
                 id="lab_01_receive_starter",
-                description="Return to Professor Birch's Lab where he officially gives you the starter Pokémon and directs you to Route 103",
+                description="Return to Professor Birch's Lab in Littleroot Town where he officially gives you the starter Pokémon and directs you to find May/Brendan on Route 103",
                 action_type="dialogue",
                 target_location="Professor Birch's Lab",
-                navigation_hint="Walk back to Littleroot Town and enter the Lab. Birch will thank you and let you keep the starter. He'll encourage you to find May/Brendan on Route 103 for training tips",
-                completion_condition="starter_officially_received",
+                navigation_hint="Walk south back to Littleroot Town and enter the Lab (southern building). Birch will thank you and let you keep the starter. He'll encourage you to find May/Brendan on Route 103 for training tips",
+                completion_condition="dialogue_ends_and_birch_mentions_route_103",
                 priority=1
             ),
             
             DirectObjective(
                 id="oldale_01_travel_and_explore",
-                description="Travel north through Route 101 to reach Oldale Town. Speak to the Poké Mart worker to receive a free Potion",
+                description="Travel north through Route 101 to reach Oldale Town. Speak to the Poké Mart worker near the southeast house to receive a free Potion",
                 action_type="navigate",
                 target_location="Oldale Town",
-                navigation_hint="Walk north through tall grass on Route 101 (wild Pokémon appear but can't be caught yet). In Oldale, talk to the woman near the southeast house who will show you the Poké Mart and give you a free Potion",
-                completion_condition="received_free_potion",
+                navigation_hint="Walk north through tall grass on Route 101 (wild Pokémon appear but can't be caught yet - you have no Poké Balls). In Oldale, talk to the woman near the southeast house. She'll show you the Poké Mart and give you a free Potion as part of a promotion",
+                completion_condition="received_potion_item_and_dialogue_ends",
                 priority=1
             ),
             
             DirectObjective(
                 id="route103_01_rival_battle",
-                description="Travel to Route 103 north of Oldale Town and battle your rival May/Brendan",
+                description="Travel to Route 103 north of Oldale Town, walk through the tall grass, and battle your rival May/Brendan",
                 action_type="battle",
                 target_location="Route 103",
-                navigation_hint="Head north from Oldale to Route 103. Walk through tall grass to find your rival. They'll have a Level 5 starter with type advantage over yours (Torchic if you chose Treecko, Mudkip if you chose Torchic, Treecko if you chose Mudkip). Use Potions if needed",
-                completion_condition="defeated_rival_first_time",
+                navigation_hint="Head north from Oldale to Route 103. Walk west through tall grass until you encounter your rival. They'll challenge you to a battle with a Level 5 starter that has type advantage over yours (Torchic if you chose Treecko, Mudkip if you chose Torchic, Treecko if you chose Mudkip). Use Potions if your HP gets low",
+                completion_condition="battle_ends_and_rival_says_theyre_returning_to_lab",
                 priority=1
             ),
             
             DirectObjective(
                 id="lab_02_receive_pokedex",
-                description="Return to Professor Birch's Lab to receive the Pokédex and 5 Poké Balls",
+                description="Follow your rival back to Professor Birch's Lab to receive the Pokédex from Birch and 5 Poké Balls from May/Brendan",
                 action_type="dialogue",
                 target_location="Professor Birch's Lab",
-                navigation_hint="Follow your rival back to Littleroot Town and enter the Lab. Professor Birch will give you a Pokédex (records all Pokémon you see/catch). May/Brendan will give you 5 Poké Balls to start catching Pokémon",
-                completion_condition="received_pokedex",
+                navigation_hint="Walk south through Route 103, through Oldale Town, then south through Route 101 back to Littleroot Town. Enter the Lab. Professor Birch will give you a Pokédex (automatically records all Pokémon you see or catch). May/Brendan will give you 5 Poké Balls to start catching wild Pokémon",
+                completion_condition="received_pokeballs_and_lab_dialogue_fully_ends",
                 priority=1
             ),
             
             DirectObjective(
                 id="littleroot_02_running_shoes",
-                description="Receive Running Shoes from Mom as you leave Littleroot Town",
+                description="Exit the Lab and receive Running Shoes from Mom as you attempt to leave Littleroot Town",
                 action_type="dialogue",
                 target_location="Littleroot Town",
-                navigation_hint="As you exit the Lab and try to leave town, Mom will stop you and give you Running Shoes. Hold B while moving to run at double speed",
-                completion_condition="received_running_shoes",
+                navigation_hint="Exit the Lab. As you try to leave Littleroot Town, Mom will automatically stop you outside. She'll give you Running Shoes that let you run at double speed by holding the B button while moving",
+                completion_condition="received_running_shoes_and_mom_dialogue_ends",
                 priority=1
             ),
             
             DirectObjective(
                 id="route102_01_travel_west",
-                description="Travel back to Oldale Town and head west on Route 102 toward Petalburg City",
+                description="Travel back through Route 101 to Oldale Town, then head west on Route 102 toward Petalburg City",
                 action_type="navigate",
                 target_location="Route 102",
-                navigation_hint="Go north through Route 101 to Oldale Town. The western exit (Route 102) should now be unblocked. Head west through Route 102",
-                completion_condition="entered_route_102",
+                navigation_hint="Go north through Route 101 to Oldale Town. The western exit (Route 102) should now be unblocked - the sketch artist has left. Head west to enter Route 102",
+                completion_condition="player_location_is_route_102",
                 priority=1
             ),
             
             DirectObjective(
-                id="petalburg_01_meet_norman",
-                description="Arrive at Petalburg City and meet your father Norman at the Petalburg Gym",
+                id="petalburg_01_reach_city",
+                description="Continue west through Route 102 to arrive at Petalburg City",
+                action_type="navigate",
+                target_location="Petalburg City",
+                navigation_hint="Walk west along Route 102. You may encounter wild Pokémon in tall grass and Trainers may challenge you, but you can avoid them. Continue until you reach Petalburg City",
+                completion_condition="player_location_is_petalburg_city",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="petalburg_02_meet_norman",
+                description="Enter the Petalburg Gym and meet your father Norman, the Gym Leader",
                 action_type="dialogue",
                 target_location="Petalburg Gym",
-                navigation_hint="Continue west on Route 102 to reach Petalburg City. Enter the Pokémon Gym (large building in center-north). Talk to Norman, who is surprised you've made it this far",
-                completion_condition="met_dad_at_gym",
+                navigation_hint="Walk to the Pokémon Gym (large building in center-north of the city) and enter through the front door. Talk to Norman standing in the lobby. He'll be surprised you've made it this far",
+                completion_condition="norman_dialogue_ends_before_wally_enters",
                 priority=1
             ),
             
             DirectObjective(
-                id="petalburg_02_help_wally",
-                description="Meet Wally and help him catch his first Pokémon",
+                id="petalburg_03_help_wally",
+                description="Meet Wally who enters the Gym asking for help. Accompany him to Route 102 to help him catch his first Pokémon",
+                action_type="dialogue",
+                target_location="Route 102",
+                navigation_hint="After Norman's dialogue, Wally enters and asks for help catching a Pokémon. Norman loans him a Zigzagoon and Poké Ball. The game will automatically take you back to Route 102 where a cutscene plays showing Wally successfully catching a Ralts using Norman's Zigzagoon",
+                completion_condition="wally_catches_ralts_and_cutscene_ends",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="petalburg_04_receive_objective",
+                description="Return to Petalburg Gym where Norman gives you the objective to challenge Gym Leader Roxanne in Rustboro City before battling other Gym Leaders",
                 action_type="dialogue",
                 target_location="Petalburg Gym",
-                navigation_hint="After talking to Norman, Wally enters and asks for help catching a Pokémon. Norman loans him a Zigzagoon and Poké Ball. Accompany Wally back to Route 102 and watch him successfully catch a Ralts",
-                completion_condition="wally_caught_ralts",
+                navigation_hint="You'll automatically return to the Gym after Wally's capture. Wally thanks you profusely. Norman then advises you to defeat Gym Leader Roxanne in Rustboro City first before challenging other Gyms. He won't accept your challenge until you have earned four Badges",
+                completion_condition="norman_finishes_advice_about_roxanne_and_four_badges",
                 priority=1
             ),
             
             DirectObjective(
-                id="petalburg_03_receive_objective",
-                description="Return to the Gym where Norman gives you advice to challenge Gym Leader Roxanne in Rustboro City",
-                action_type="dialogue",
-                target_location="Petalburg Gym",
-                navigation_hint="After Wally catches his Ralts, return to Petalburg Gym. Wally thanks you, and Norman advises you to defeat Gym Leader Roxanne in Rustboro City first. He won't battle you until you have four Badges",
-                completion_condition="received_norman_advice",
-                priority=1
-            ),
-            
-            DirectObjective(
-                id="petalburg_04_mysterious_man",
-                description="Head west toward Route 104 and encounter the mysterious man in sunglasses",
+                id="petalburg_05_mysterious_man",
+                description="Exit the Gym and head toward the western exit of Petalburg City where a mysterious man in sunglasses will stop you",
                 action_type="dialogue",
                 target_location="Petalburg City",
-                navigation_hint="Exit the Gym and head toward the western exit of Petalburg City. A man in sunglasses will stop you, judge you as a rookie Trainer, mention he's searching for powerful Trainers, then leave for Route 104",
-                completion_condition="sunglasses_man_left",
+                navigation_hint="Exit the Gym and walk toward the western exit of the city (toward Route 104). A man in sunglasses will automatically stop and talk to you. He judges you as a rookie Trainer, mentions he's searching for powerful Trainers, apologizes for taking your time, then leaves for Route 104",
+                completion_condition="sunglasses_man_dialogue_ends_and_he_walks_away",
                 priority=1
             ),
             
             DirectObjective(
                 id="part1_complete",
-                description="Part 1 Complete! Prepare to head to Route 104 and continue toward Rustboro City",
+                description="Part 1 Complete! You are now ready to continue west to Route 104 and begin your journey toward Rustboro City",
                 action_type="navigate",
-                target_location="Route 104",
-                navigation_hint="You now have your starter, Pokédex, Poké Balls, and Running Shoes. Your next goal is to travel west through Route 104 to reach Rustboro City and challenge Gym Leader Roxanne. This concludes Part 1",
-                completion_condition="part_1_complete",
+                target_location="Route 104 Entrance",
+                navigation_hint="You now have your starter Pokémon, Pokédex, 5 Poké Balls, and Running Shoes. Your next goal is to travel west through Route 104 to eventually reach Rustboro City and challenge Gym Leader Roxanne. Walk to the western exit of Petalburg City",
+                completion_condition="player_is_at_route_104_entrance_or_has_entered_route_104",
                 priority=1
             )
         ]

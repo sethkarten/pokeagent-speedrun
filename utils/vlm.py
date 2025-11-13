@@ -4,6 +4,7 @@ import os
 import base64
 import random
 import time
+import threading
 import logging
 from abc import ABC, abstractmethod
 from typing import Union, List, Dict, Any, Optional
@@ -504,6 +505,208 @@ class LegacyOllamaBackend(VLMBackend):
         
         return result
 
+class ThreadSafeGenerativeModelWrapper:
+    """
+    Thread-safe wrapper for GenerativeModel that protects _prediction_client access.
+    
+    This prevents race conditions when multiple threads try to access or refresh
+    the gRPC client, especially after credential refresh (which happens after ~30 calls).
+    
+    Uses double-check locking pattern to ensure only one thread initializes the client,
+    even if multiple threads pass the initial check simultaneously.
+    
+    Based on solution from: https://github.com/googleapis/python-aiplatform/issues/3365
+    """
+    # Class-level lock shared across all instances
+    _prediction_client_lock = threading.Lock()
+    
+    def __init__(self, model):
+        self._model = model
+        self._prediction_client_value = None
+        self._access_count = 0  # Track how many times client is accessed
+        self._init_time = None  # Track when client was initialized
+    
+    @property
+    def _prediction_client(self):
+        """Thread-safe access to _prediction_client using double-check locking pattern"""
+        thread_id = threading.current_thread().ident
+        thread_name = threading.current_thread().name
+        self._access_count += 1
+        access_num = self._access_count
+        
+        logger.info(f"🔍 [_prediction_client] Access #{access_num} from thread {thread_id} ({thread_name})")
+        
+        # First check: Fast path if already initialized (no lock needed)
+        if self._prediction_client_value is not None:
+            logger.debug(f"   ✅ Fast path: client already initialized (init'd at {self._init_time})")
+            return self._prediction_client_value
+        
+        logger.info(f"   ⚠️  Client not initialized, acquiring lock...")
+        lock_start = time.time()
+        
+        # Acquire lock: Only one thread can initialize at a time
+        with self._prediction_client_lock:
+            lock_acquired_time = time.time() - lock_start
+            if lock_acquired_time > 0.1:
+                logger.warning(f"   ⏱️  Waited {lock_acquired_time:.3f}s to acquire lock (possible contention)")
+            
+            logger.info(f"   🔒 Lock acquired by thread {thread_id}")
+            
+            # Second check: Another thread might have initialized while we waited for the lock
+            if self._prediction_client_value is None:
+                logger.info(f"   🏗️  Initializing _prediction_client (first time or after refresh)")
+                init_start = time.time()
+                
+                try:
+                    # Access the underlying model's client (this may trigger credential refresh)
+                    # This is the only place where initialization happens
+                    self._prediction_client_value = self._model._prediction_client
+                    init_duration = time.time() - init_start
+                    self._init_time = time.time()
+                    
+                    logger.info(f"   ✅ Client initialized in {init_duration:.3f}s")
+                except Exception as e:
+                    logger.error(f"   ❌ Failed to initialize client: {type(e).__name__}: {e}")
+                    raise
+            else:
+                logger.info(f"   ℹ️  Another thread initialized client while we waited (double-check worked)")
+        
+        logger.info(f"   🔓 Lock released by thread {thread_id}")
+        return self._prediction_client_value
+    
+    def __getattr__(self, name):
+        """Delegate all other attributes to the wrapped model"""
+        return getattr(self._model, name)
+    
+    def generate_content(self, *args, **kwargs):
+        """Delegate generate_content calls to wrapped model with detailed logging"""
+        thread_id = threading.current_thread().ident
+        thread_name = threading.current_thread().name
+        
+        logger.info(f"📞 [generate_content] Called from thread {thread_id} ({thread_name})")
+        logger.info(f"   Args: {len(args)} positional, {len(kwargs)} keyword")
+        
+        # Log detailed argument information
+        if args:
+            logger.debug(f"   Positional args types: {[type(a).__name__ for a in args]}")
+        if kwargs:
+            logger.debug(f"   Keyword args: {list(kwargs.keys())}")
+            if 'tools' in kwargs:
+                tools = kwargs['tools']
+                logger.info(f"   🔧 Tools provided: {len(tools) if hasattr(tools, '__len__') else 'unknown'} tool(s)")
+                if hasattr(tools, '__iter__') and len(list(tools)) > 0:
+                    logger.debug(f"   First tool type: {type(list(tools)[0]).__name__}")
+            if 'generation_config' in kwargs:
+                logger.debug(f"   Generation config: {type(kwargs['generation_config']).__name__}")
+        
+        gen_start = time.time()
+        last_heartbeat = gen_start
+        heartbeat_interval = 5.0  # Log heartbeat every 5 seconds
+        
+        # Create a flag to track if the call completed
+        call_completed = threading.Event()
+        call_exception = [None]  # Use list to allow modification in nested function
+        
+        def heartbeat_logger():
+            """Background thread to log heartbeats during long-running calls"""
+            while not call_completed.is_set():
+                time.sleep(heartbeat_interval)  # Wait first, then check
+                if not call_completed.is_set():  # Only log if still running
+                    elapsed = time.time() - gen_start
+                    logger.warning(f"   ⏳ Still waiting... {elapsed:.1f}s elapsed (thread {thread_id})")
+                    # Log thread state
+                    import sys
+                    try:
+                        frames = len(sys._current_frames())
+                        logger.debug(f"   Thread stack: {frames} active frames")
+                    except:
+                        pass
+        
+        heartbeat_thread = None
+        
+        try:
+            # Access _prediction_client before calling generate_content to ensure it's ready
+            logger.info(f"   🔍 Ensuring _prediction_client is accessible...")
+            client_access_start = time.time()
+            _ = self._prediction_client
+            client_access_duration = time.time() - client_access_start
+            if client_access_duration > 0.1:
+                logger.warning(f"   ⚠️  _prediction_client access took {client_access_duration:.3f}s")
+            logger.info(f"   ✅ Client accessible, calling generate_content...")
+            
+            # Start heartbeat logger in background
+            heartbeat_thread = threading.Thread(target=heartbeat_logger, daemon=True)
+            heartbeat_thread.start()
+            
+            # Log the exact moment we enter the SDK call
+            sdk_call_start = time.time()
+            logger.info(f"   🚀 Entering SDK generate_content at {time.strftime('%H:%M:%S.%f')}")
+            
+            try:
+                result = self._model.generate_content(*args, **kwargs)
+            except Exception as sdk_exception:
+                sdk_call_duration = time.time() - sdk_call_start
+                logger.error(f"   💥 SDK generate_content raised exception after {sdk_call_duration:.3f}s")
+                logger.error(f"   Exception type: {type(sdk_exception).__name__}")
+                logger.error(f"   Exception message: {str(sdk_exception)}")
+                
+                # Check for specific gRPC errors
+                if 'grpc' in str(type(sdk_exception)).lower() or 'rpc' in str(type(sdk_exception)).lower():
+                    logger.error(f"   🚨 gRPC-related exception detected!")
+                
+                # Log full traceback
+                import traceback
+                tb_str = traceback.format_exc()
+                logger.error(f"   Full SDK exception traceback:\n{tb_str}")
+                
+                call_exception[0] = sdk_exception
+                raise
+            
+            sdk_call_duration = time.time() - sdk_call_start
+            logger.info(f"   ✅ SDK generate_content returned after {sdk_call_duration:.3f}s")
+            
+            # Check result type
+            if result is not None:
+                logger.debug(f"   Result type: {type(result).__name__}")
+                if hasattr(result, 'candidates'):
+                    logger.debug(f"   Result has {len(result.candidates) if hasattr(result.candidates, '__len__') else 'unknown'} candidates")
+                if hasattr(result, 'text'):
+                    result_preview = str(result.text)[:100] if result.text else "None"
+                    logger.debug(f"   Result text preview: {result_preview}...")
+            
+            gen_duration = time.time() - gen_start
+            logger.info(f"   ✅ generate_content completed in {gen_duration:.3f}s total")
+            
+            return result
+            
+        except KeyboardInterrupt:
+            gen_duration = time.time() - gen_start
+            logger.error(f"   ⛔ KeyboardInterrupt after {gen_duration:.3f}s")
+            raise
+        except Exception as e:
+            gen_duration = time.time() - gen_start
+            logger.error(f"   ❌ generate_content failed after {gen_duration:.3f}s: {type(e).__name__}: {e}")
+            
+            # Log additional context
+            logger.error(f"   Thread: {thread_id} ({thread_name})")
+            logger.error(f"   Args count: {len(args)} positional, {len(kwargs)} keyword")
+            
+            import traceback
+            tb_str = traceback.format_exc()
+            logger.error(f"   Full traceback:\n{tb_str}")
+            
+            # Check if this is a timeout or hang
+            if gen_duration > 25.0:
+                logger.error(f"   🚨 LONG-RUNNING CALL: This call took {gen_duration:.1f}s - possible hang!")
+            
+            raise
+        finally:
+            # Stop heartbeat logger
+            call_completed.set()
+            if heartbeat_thread and heartbeat_thread.is_alive():
+                heartbeat_thread.join(timeout=1.0)
+
+
 class VertexBackend(VLMBackend):
     """Google Gemini API with Vertex backend using vertexai.generative_models
     
@@ -540,29 +743,28 @@ class VertexBackend(VLMBackend):
         if self.tools:
             self._setup_function_calling()
         
-        # Create the model WITH system instructions and/or tools (Fix 1: Pass tools at model creation like Gemini)
-        # This matches the Gemini backend pattern and may prevent hanging issues
+        # Create the base model WITH system instructions (but NOT tools - pass tools at call time)
         if self.system_instruction:
-            if hasattr(self, 'tools_for_vertex') and self.tools_for_vertex:
-                self.model = GenerativeModel(
-                    model_name, 
-                    system_instruction=[self.system_instruction],
-                    tools=self.tools_for_vertex  # Pass tools at model creation
-                )
-                logger.info(f"Vertex backend initialized with model: {model_name}, system instructions ({len(self.system_instruction)} chars), and {len(self.tools)} tools")
-            else:
-                self.model = GenerativeModel(model_name, system_instruction=[self.system_instruction])
-                logger.info(f"Vertex backend initialized with model: {model_name} and system instructions ({len(self.system_instruction)} chars)")
+            base_model = GenerativeModel(model_name, system_instruction=[self.system_instruction])
+            logger.info(f"Vertex backend initialized with model: {model_name} and system instructions ({len(self.system_instruction)} chars)")
         else:
-            if hasattr(self, 'tools_for_vertex') and self.tools_for_vertex:
-                self.model = GenerativeModel(model_name, tools=self.tools_for_vertex)  # Pass tools at model creation
-                logger.info(f"Vertex backend initialized with model: {model_name} and {len(self.tools)} tools")
-            else:
-                self.model = GenerativeModel(model_name)
-                logger.info(f"Vertex backend initialized with model: {model_name}")
+            base_model = GenerativeModel(model_name)
+            logger.info(f"Vertex backend initialized with model: {model_name}")
+        
+        # Wrap the model with thread-safe _prediction_client access
+        # This prevents race conditions when credentials refresh after many calls
+        self.model = ThreadSafeGenerativeModelWrapper(base_model)
         
         if self.tools:
-            logger.info(f"Function calling enabled with {len(self.tools)} tools (configured at model creation)")
+            logger.info(f"Function calling enabled with {len(self.tools)} tools (will be passed at call time)")
+        
+        # Pre-initialize the client now (synchronously, before any threads)
+        # This ensures the client is created in the main thread, avoiding initial race conditions
+        try:
+            _ = self.model._prediction_client
+            logger.info("✅ Pre-initialized _prediction_client with thread-safe wrapper")
+        except Exception as e:
+            logger.warning(f"Could not pre-initialize _prediction_client: {e}")
     
     def _setup_function_calling(self):
         """Setup function calling for VertexAI using FunctionDeclaration and Tool objects"""
@@ -713,10 +915,14 @@ class VertexBackend(VLMBackend):
         """Calls the generate_content method using the VertexAI SDK pattern."""
         from vertexai.generative_models import Content, Part, GenerationConfig
         import io
-        import time
+        
+        thread_id = threading.current_thread().ident
+        thread_name = threading.current_thread().name
+        logger.info(f"🚀 [_call_generate_content] Starting in thread {thread_id} ({thread_name})")
         
         # Build Part objects following the official VertexAI pattern
         parts = []
+        part_start = time.time()
         for part in content_parts:
             if isinstance(part, str):
                 parts.append(Part.from_text(part))
@@ -729,39 +935,105 @@ class VertexBackend(VLMBackend):
             else:
                 logger.warning(f"Unknown content part type: {type(part)}")
         
+        part_duration = time.time() - part_start
+        logger.info(f"   📦 Built {len(parts)} content parts in {part_duration:.3f}s")
+        
         # Create user prompt Content object
         user_prompt_content = Content(role="user", parts=parts)
         
-        # Fix 1: Tools are now passed at model creation, so don't pass them again here
-        # Fix 2: Add timeout via retry configuration and logging
+        # Add timeout logging and monitoring
         call_start_time = time.time()
         has_tools = hasattr(self, 'tools_for_vertex') and self.tools_for_vertex
         
+        logger.info(f"   🔧 has_tools={has_tools}, about to call generate_content...")
+        
+        # Log content details
+        if user_prompt_content:
+            logger.debug(f"   Content parts: {len(user_prompt_content.parts) if hasattr(user_prompt_content, 'parts') else 'unknown'}")
+            if hasattr(user_prompt_content, 'parts') and user_prompt_content.parts:
+                part_types = [type(p).__name__ for p in user_prompt_content.parts]
+                logger.debug(f"   Part types: {part_types}")
+        
         try:
-            # Configure retry with timeout (Fix 2: Explicit timeout handling)
-            # Note: VertexAI SDK may not support direct timeout parameter, but we can use retry config
             if has_tools:
-                # Tools already configured on model, don't pass again
-                logger.debug(f"Calling generate_content with function calling (tools configured at model creation)")
-                response = self.model.generate_content(
-                    user_prompt_content,
-                    generation_config=GenerationConfig(temperature=0)
-                    # Tools removed - they're on the model already
-                )
+                # Pass tools at call time (not at model creation to avoid gRPC race condition)
+                logger.info(f"   📞 Calling generate_content with function calling (tools passed at call time)")
+                logger.info(f"   ⏱️  Call started at {time.strftime('%H:%M:%S.%f')}")
+                logger.debug(f"   Tools type: {type(self.tools_for_vertex).__name__}")
+                logger.debug(f"   Generation config: temperature=0")
+                
+                try:
+                    response = self.model.generate_content(
+                        user_prompt_content,
+                        generation_config=GenerationConfig(temperature=0),
+                        tools=self.tools_for_vertex  # Pass tools at call time
+                    )
+                except Exception as inner_e:
+                    inner_duration = time.time() - call_start_time
+                    logger.error(f"   💥 Inner generate_content exception after {inner_duration:.3f}s")
+                    logger.error(f"   Exception: {type(inner_e).__name__}: {inner_e}")
+                    import traceback
+                    logger.error(f"   Inner traceback:\n{traceback.format_exc()}")
+                    raise
             else:
-                logger.debug(f"Calling generate_content without function calling")
-                response = self.model.generate_content(user_prompt_content)
+                logger.info(f"   📞 Calling generate_content without function calling")
+                logger.info(f"   ⏱️  Call started at {time.strftime('%H:%M:%S.%f')}")
+                
+                try:
+                    response = self.model.generate_content(user_prompt_content)
+                except Exception as inner_e:
+                    inner_duration = time.time() - call_start_time
+                    logger.error(f"   💥 Inner generate_content exception after {inner_duration:.3f}s")
+                    logger.error(f"   Exception: {type(inner_e).__name__}: {inner_e}")
+                    import traceback
+                    logger.error(f"   Inner traceback:\n{traceback.format_exc()}")
+                    raise
             
             call_duration = time.time() - call_start_time
+            logger.info(f"   ✅ generate_content returned after {call_duration:.3f}s")
+            
+            # Log response details
+            if response is not None:
+                logger.debug(f"   Response type: {type(response).__name__}")
+                if hasattr(response, 'candidates'):
+                    num_candidates = len(response.candidates) if hasattr(response.candidates, '__len__') else 'unknown'
+                    logger.debug(f"   Response has {num_candidates} candidate(s)")
+                    if hasattr(response.candidates, '__iter__') and len(list(response.candidates)) > 0:
+                        first_candidate = list(response.candidates)[0]
+                        if hasattr(first_candidate, 'finish_reason'):
+                            logger.debug(f"   First candidate finish_reason: {first_candidate.finish_reason}")
+            
             if call_duration > 5.0:  # Log slow calls
                 logger.warning(f"⚠️  Slow generate_content call: {call_duration:.2f}s (has_tools={has_tools})")
             else:
                 logger.debug(f"✅ generate_content completed in {call_duration:.2f}s")
             
             return response
+        except KeyboardInterrupt:
+            call_duration = time.time() - call_start_time
+            logger.error(f"⛔ KeyboardInterrupt in _call_generate_content after {call_duration:.3f}s")
+            raise
         except Exception as e:
             call_duration = time.time() - call_start_time
             logger.error(f"❌ generate_content failed after {call_duration:.2f}s (has_tools={has_tools}): {type(e).__name__}: {e}")
+            
+            # Additional error context
+            logger.error(f"   Thread: {threading.current_thread().ident} ({threading.current_thread().name})")
+            logger.error(f"   Content parts: {len(user_prompt_content.parts) if hasattr(user_prompt_content, 'parts') else 'unknown'}")
+            
+            # Check for gRPC-specific errors
+            error_str = str(e).lower()
+            if 'grpc' in error_str or 'rpc' in error_str or 'deadline' in error_str or 'timeout' in error_str:
+                logger.error(f"   🚨 Network/gRPC-related error detected!")
+            
+            import traceback
+            tb_str = traceback.format_exc()
+            logger.error(f"   Full traceback:\n{tb_str}")
+            
+            # If it took a long time, this might be a hang
+            if call_duration > 25.0:
+                logger.error(f"   🚨 VERY LONG CALL: {call_duration:.1f}s - this might indicate a hang!")
+            
             raise
     
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
