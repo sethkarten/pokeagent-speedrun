@@ -128,6 +128,7 @@ The `pokemon-emerald` MCP server provides these tools:
    - Parameters: `x` (integer), `y` (integer), `variance` (string: `none`, `low`, `medium`, `high`, `extreme`), `reason` (string, optional)
    - Returns: Path calculated and executed, with updated state
    - Use for: Efficiently moving to specific locations on the map
+   - NOTE: Never request a path to a coordinate < 0. For example (8, -1) is invalid. If you want to navigate through a warp, first request a path to that warp and then manually use the press_buttons() endpoint to step through it.
    
    **Path Variance:**
       - The **third positional argument controls path variance** - how the pathfinder explores alternative routes

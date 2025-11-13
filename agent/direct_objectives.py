@@ -577,6 +577,243 @@ class DirectObjectiveManager:
         
         logger.info(f"Loaded tutorial_to_rival sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
         
+    def load_part_1_walkthrough_claude_4_5_sequence(self, start_index: int = 0, run_dir: Optional[str] = None):
+        """Load the Part 1 walkthrough sequence from game start through Route 104.
+        
+        This comprehensive sequence covers the entire Part 1 of Pokemon Emerald,
+        from character creation through reaching Route 104.
+        """
+        self.sequence_name = "part_1_walkthrough_claude_4_5"
+        self.current_sequence = [
+            DirectObjective(
+                id="intro_01_character_creation",
+                description="Watch Professor Birch's introduction and select your character's gender and name (up to 7 characters)",
+                action_type="select",
+                target_location="Title Screen",
+                navigation_hint="Use directional buttons to select gender and input name when prompted by Professor Birch",
+                completion_condition="character_created",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="home_01_exit_truck",
+                description="Exit the moving truck and enter Littleroot Town",
+                action_type="navigate",
+                target_location="Littleroot Town",
+                navigation_hint="Walk right to the door to exit the truck and enter Littleroot Town. Mom will greet you and take you inside",
+                completion_condition="entered_littleroot",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="home_02_go_to_bedroom",
+                description="Navigate upstairs to your bedroom and set the clock",
+                action_type="interact",
+                target_location="Player's Bedroom",
+                navigation_hint="Walk north to the stairs at position (8, 2) and go upstairs. Interact with the clock at position (5, 1) by standing at (5, 2) and facing UP. Press A to set the time",
+                completion_condition="clock_set",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="home_03_watch_tv",
+                description="Return downstairs and watch the TV segment with Mom about Petalburg Gym where your father is the new Gym Leader",
+                action_type="dialogue",
+                target_location="Player's House 1F",
+                navigation_hint="Go back downstairs and talk to Mom. She'll call you over to watch a TV program about your dad Norman at Petalburg Gym",
+                completion_condition="tv_segment_watched",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="littleroot_01_visit_birch_house",
+                description="Visit Professor Birch's house next door and go upstairs to meet May/Brendan",
+                action_type="navigate",
+                target_location="May/Brendan's Bedroom",
+                navigation_hint="Exit your house and enter the adjacent house. Talk to Birch's wife on the first floor, then go upstairs. Inspect the Poké Ball on the floor to trigger May/Brendan's appearance",
+                completion_condition="met_rival",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="route101_01_save_birch",
+                description="Travel to Route 101 and save Professor Birch from a wild Zigzagoon",
+                action_type="navigate",
+                target_location="Route 101",
+                navigation_hint="Exit Littleroot Town heading north to Route 101. You'll find Professor Birch being chased by a wild Zigzagoon",
+                completion_condition="found_birch_in_danger",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="route101_02_choose_starter",
+                description="Choose your starter Pokémon from Birch's Bag: Treecko (Grass), Torchic (Fire), or Mudkip (Water)",
+                action_type="select",
+                target_location="Route 101",
+                navigation_hint="Open Birch's Bag and select one starter. Treecko is strong vs Water/Rock/Ground but weak to Fire/Bug/Poison/Flying/Ice. Torchic is strong vs Grass/Bug/Ice/Steel but weak to Water/Ground. Mudkip is strong vs Fire/Rock/Ground but weak to Grass/Electric",
+                completion_condition="starter_selected",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="route101_03_defeat_zigzagoon",
+                description="Battle and defeat the wild Level 2 Zigzagoon attacking Professor Birch",
+                action_type="battle",
+                target_location="Route 101",
+                navigation_hint="Use your starter's basic attack move to defeat the Level 2 Zigzagoon. This should be an easy battle",
+                completion_condition="saved_birch",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="lab_01_receive_starter",
+                description="Return to Professor Birch's Lab where he officially gives you the starter Pokémon and directs you to Route 103",
+                action_type="dialogue",
+                target_location="Professor Birch's Lab",
+                navigation_hint="Walk back to Littleroot Town and enter the Lab. Birch will thank you and let you keep the starter. He'll encourage you to find May/Brendan on Route 103 for training tips",
+                completion_condition="starter_officially_received",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="oldale_01_travel_and_explore",
+                description="Travel north through Route 101 to reach Oldale Town. Speak to the Poké Mart worker to receive a free Potion",
+                action_type="navigate",
+                target_location="Oldale Town",
+                navigation_hint="Walk north through tall grass on Route 101 (wild Pokémon appear but can't be caught yet). In Oldale, talk to the woman near the southeast house who will show you the Poké Mart and give you a free Potion",
+                completion_condition="received_free_potion",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="route103_01_rival_battle",
+                description="Travel to Route 103 north of Oldale Town and battle your rival May/Brendan",
+                action_type="battle",
+                target_location="Route 103",
+                navigation_hint="Head north from Oldale to Route 103. Walk through tall grass to find your rival. They'll have a Level 5 starter with type advantage over yours (Torchic if you chose Treecko, Mudkip if you chose Torchic, Treecko if you chose Mudkip). Use Potions if needed",
+                completion_condition="defeated_rival_first_time",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="lab_02_receive_pokedex",
+                description="Return to Professor Birch's Lab to receive the Pokédex and 5 Poké Balls",
+                action_type="dialogue",
+                target_location="Professor Birch's Lab",
+                navigation_hint="Follow your rival back to Littleroot Town and enter the Lab. Professor Birch will give you a Pokédex (records all Pokémon you see/catch). May/Brendan will give you 5 Poké Balls to start catching Pokémon",
+                completion_condition="received_pokedex",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="littleroot_02_running_shoes",
+                description="Receive Running Shoes from Mom as you leave Littleroot Town",
+                action_type="dialogue",
+                target_location="Littleroot Town",
+                navigation_hint="As you exit the Lab and try to leave town, Mom will stop you and give you Running Shoes. Hold B while moving to run at double speed",
+                completion_condition="received_running_shoes",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="route102_01_travel_west",
+                description="Travel back to Oldale Town and head west on Route 102 toward Petalburg City",
+                action_type="navigate",
+                target_location="Route 102",
+                navigation_hint="Go north through Route 101 to Oldale Town. The western exit (Route 102) should now be unblocked. Head west through Route 102",
+                completion_condition="entered_route_102",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="petalburg_01_meet_norman",
+                description="Arrive at Petalburg City and meet your father Norman at the Petalburg Gym",
+                action_type="dialogue",
+                target_location="Petalburg Gym",
+                navigation_hint="Continue west on Route 102 to reach Petalburg City. Enter the Pokémon Gym (large building in center-north). Talk to Norman, who is surprised you've made it this far",
+                completion_condition="met_dad_at_gym",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="petalburg_02_help_wally",
+                description="Meet Wally and help him catch his first Pokémon",
+                action_type="dialogue",
+                target_location="Petalburg Gym",
+                navigation_hint="After talking to Norman, Wally enters and asks for help catching a Pokémon. Norman loans him a Zigzagoon and Poké Ball. Accompany Wally back to Route 102 and watch him successfully catch a Ralts",
+                completion_condition="wally_caught_ralts",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="petalburg_03_receive_objective",
+                description="Return to the Gym where Norman gives you advice to challenge Gym Leader Roxanne in Rustboro City",
+                action_type="dialogue",
+                target_location="Petalburg Gym",
+                navigation_hint="After Wally catches his Ralts, return to Petalburg Gym. Wally thanks you, and Norman advises you to defeat Gym Leader Roxanne in Rustboro City first. He won't battle you until you have four Badges",
+                completion_condition="received_norman_advice",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="petalburg_04_mysterious_man",
+                description="Head west toward Route 104 and encounter the mysterious man in sunglasses",
+                action_type="dialogue",
+                target_location="Petalburg City",
+                navigation_hint="Exit the Gym and head toward the western exit of Petalburg City. A man in sunglasses will stop you, judge you as a rookie Trainer, mention he's searching for powerful Trainers, then leave for Route 104",
+                completion_condition="sunglasses_man_left",
+                priority=1
+            ),
+            
+            DirectObjective(
+                id="part1_complete",
+                description="Part 1 Complete! Prepare to head to Route 104 and continue toward Rustboro City",
+                action_type="navigate",
+                target_location="Route 104",
+                navigation_hint="You now have your starter, Pokédex, Poké Balls, and Running Shoes. Your next goal is to travel west through Route 104 to reach Rustboro City and challenge Gym Leader Roxanne. This concludes Part 1",
+                completion_condition="part_1_complete",
+                priority=1
+            )
+        ]
+        self.current_index = min(start_index, len(self.current_sequence))
+        # Mark all objectives before start_index as completed
+        initial_completed = []
+        for i in range(start_index):
+            if i < len(self.current_sequence):
+                obj = self.current_sequence[i]
+                obj.completed = True
+                obj.completed_at = datetime.now()  # Mark as completed at load time
+                initial_completed.append({
+                    "id": obj.id,
+                    "description": obj.description,
+                    "target_location": obj.target_location,
+                    "action_type": obj.action_type,
+                    "completed_at": obj.completed_at.isoformat(),
+                    "completed_at_load": True  # Flag to indicate these were pre-completed
+                })
+        
+        # Save initial completed objectives to run directory if provided and start_index > 0
+        if run_dir and start_index > 0 and initial_completed:
+            try:
+                filename = os.path.join(run_dir, "completed_objectives.json")
+                initial_data = {
+                    "sequence_name": self.sequence_name,
+                    "completed_at": datetime.now().isoformat(),
+                    "completed_objectives": initial_completed,
+                    "total_objectives_completed": len(initial_completed),
+                    "total_objectives": len(self.current_sequence),
+                    "start_index": start_index,
+                    "note": f"Initial completed objectives (loaded at index {start_index})"
+                }
+                history = {"sequences": [initial_data], "last_updated": datetime.now().isoformat()}
+                with open(filename, 'w') as f:
+                    json.dump(history, f, indent=2)
+                logger.info(f"💾 Saved {len(initial_completed)} initial completed objectives to {filename}")
+            except Exception as e:
+                logger.warning(f"Failed to save initial completed objectives: {e}")
+        
+        logger.info(f"Loaded part_1_walkthrough_claude_4_5 sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
+        
     def get_current_objective(self) -> Optional[DirectObjective]:
         """Get the current objective in the sequence"""
         if self.current_index < len(self.current_sequence):
