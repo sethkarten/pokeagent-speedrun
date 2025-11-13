@@ -39,7 +39,11 @@ class DirectObjectiveManager:
         self.sequence_name: str = ""
         
     def load_birch_to_rival_sequence(self):
-        """Load the hardcoded sequence for transitioning from birch state to rival state"""
+        """Load the hardcoded sequence for transitioning from birch state to rival state.
+        
+        Note: This sequence is primarily used by my_simple.py agent, not the CLI agent.
+        The CLI agent uses load_tutorial_to_rustboro_city_sequence() instead.
+        """
         self.sequence_name = "birch_to_rival"
         self.current_sequence = [
             DirectObjective(
@@ -119,7 +123,11 @@ class DirectObjectiveManager:
         logger.info(f"Loaded birch_to_rival sequence with {len(self.current_sequence)} objectives")
         
     def load_hackathon_route102_to_petalburg_sequence(self):
-        """Load the hardcoded sequence for navigating from Route 102 to Petalburg City"""
+        """Load the hardcoded sequence for navigating from Route 102 to Petalburg City.
+        
+        Note: This sequence is primarily used by my_simple.py agent, not the CLI agent.
+        The CLI agent uses load_tutorial_to_rustboro_city_sequence() instead.
+        """
         self.sequence_name = "hackathon_route102_to_petalburg"
         self.current_sequence = [
             DirectObjective(
@@ -418,15 +426,7 @@ class DirectObjectiveManager:
                 completion_condition="reached_petalburg_woods",
                 priority=1
             ),
-            # DirectObjective(
-            #     id="petalburg_woods_to_route_104",
-            #     description="Travel to north to the final section of route 104 ",
-            #     action_type="navigate",
-            #     target_location="Route 104",
-            #     navigation_hint="Travel north from petalburg woods to -> route 104 by using the navigate_to() tool. Note (you will need to navigate to the north most warp to reach the northern section of route 104",
-            #     completion_condition="reached_route_104",
-            #     priority=1
-            # ),
+          
             DirectObjective(
                 id="route_104_north_to_rustboro_city",
                 description="Travel to rustboro city",
@@ -583,23 +583,18 @@ class DirectObjectiveManager:
             return self.current_sequence[self.current_index]
         return None
         
-    def get_current_objective_guidance(self, game_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Get guidance for the current objective instead of specific actions"""
+    def get_current_objective_guidance(self, game_state: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
+        """Get guidance for the current objective.
+        
+        Note: This method does NOT automatically check completion. The LLM must call
+        complete_direct_objective() endpoint to mark objectives as complete.
+        
+        Args:
+            game_state: Optional game state (kept for backward compatibility, not used)
+        """
         current_obj = self.get_current_objective()
         if not current_obj:
             return None
-            
-        # Check if current objective is completed
-        if self._is_objective_completed(current_obj, game_state):
-            self._mark_objective_completed(current_obj)
-            self.current_index += 1
-            logger.info(f"Completed objective: {current_obj.description}")
-            
-            # Get next objective
-            current_obj = self.get_current_objective()
-            if not current_obj:
-                logger.info("All objectives in sequence completed!")
-                return None
                 
         # Return guidance for current objective
         return {
@@ -613,61 +608,22 @@ class DirectObjectiveManager:
         }
         
     def _is_objective_completed(self, objective: DirectObjective, game_state: Dict[str, Any]) -> bool:
-        """Check if an objective is completed based on game state"""
-        try:
-            location = game_state.get("player", {}).get("location", "").upper()
-            
-            if objective.completion_condition == "location_contains_route_101":
-                return "ROUTE 101" in location or "ROUTE_101" in location
-            elif objective.completion_condition == "location_contains_oldale":
-                return "OLDALE" in location
-            elif objective.completion_condition == "location_contains_route_103":
-                return "ROUTE 103" in location or "ROUTE_103" in location
-            elif objective.completion_condition == "location_contains_littleroot":
-                # More specific check - should be in Littleroot Town but not in a house
-                return "LITTLEROOT" in location and "HOUSE" not in location
-            elif objective.completion_condition == "player_house_entered":
-                # Check if we're in the player's house (could be labeled as Brendan's house due to emulator bug)
-                return "HOUSE" in location and "LITTLEROOT" in location
-            elif objective.completion_condition == "battle_completed":
-                # Check if we're no longer in battle
-                return not game_state.get("game", {}).get("is_in_battle", False)
-            elif objective.completion_condition == "pokedex_received":
-                # Check if we have the Pokédex milestone
-                return game_state.get("milestones", {}).get("RECEIVED_POKEDEX", {}).get("completed", False)
-            elif objective.completion_condition == "passed_blue_hat_trainer":
-                # Let LLM determine completion based on context
-                # This will be handled by LLM completion commands
-                return False
-            elif objective.completion_condition == "passed_brown_hat_trainer":
-                # Let LLM determine completion based on context
-                return False
-            elif objective.completion_condition == "passed_grass_trainer":
-                # Let LLM determine completion based on context
-                return False
-            elif objective.completion_condition == "passed_ledge_gaps":
-                # Let LLM determine completion based on context
-                return False
-            elif objective.completion_condition == "reached_petalburg_city":
-                # Check if we've reached Petalburg City (this one is reliable)
-                return "PETALBURG" in location
-            elif objective.completion_condition == "passed_route101_ledge_grass":
-                # Let LLM determine completion based on context
-                return False
-            elif objective.completion_condition == "passed_route103_first_grass":
-                # Let LLM determine completion based on context
-                return False
-            elif objective.completion_condition == "passed_route103_second_grass":
-                # Let LLM determine completion based on context
-                return False
-            elif objective.completion_condition == "dynamic_objectives_created":
-                # This is marked complete when create_direct_objectives is successfully called
-                # The completion is handled in the create_direct_objectives endpoint
-                return False  # Always return False here - completion is handled explicitly by the endpoint
-                
-        except Exception as e:
-            logger.warning(f"Error checking objective completion: {e}")
-            
+        """DEPRECATED: Check if an objective is completed based on game state.
+        
+        This method is deprecated because the LLM now uses complete_direct_objective()
+        endpoint to explicitly mark objectives as complete. Automatic completion checking
+        has been removed from get_current_objective_guidance().
+        
+        This method is kept for backward compatibility but should not be used in new code.
+        """
+        import warnings
+        warnings.warn(
+            "_is_objective_completed() is deprecated. Use complete_direct_objective() endpoint instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        
+        # Return False - let LLM determine completion via complete_direct_objective()
         return False
         
     def _mark_objective_completed(self, objective: DirectObjective):
@@ -769,8 +725,14 @@ class DirectObjectiveManager:
         """Check if a sequence is currently active"""
         return len(self.current_sequence) > 0 and self.current_index < len(self.current_sequence)
     
-    def get_objective_context(self, game_state: Dict[str, Any]) -> str:
-        """Get previous objective context for better agent understanding (NEXT removed to avoid confusion)"""
+    def get_objective_context(self, game_state: Dict[str, Any] = None) -> str:
+        """Get previous objective context for better agent understanding.
+        
+        Note: game_state parameter is kept for backward compatibility but not used.
+        
+        Returns:
+            String with previous objective context (NEXT removed to avoid confusion)
+        """
         if not self.is_sequence_active():
             return ""
         
