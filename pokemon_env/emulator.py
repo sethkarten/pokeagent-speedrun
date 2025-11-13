@@ -1444,7 +1444,7 @@ class EmeraldEmulator:
                         return False
                     location = game_state.get("player", {}).get("location", "")
                     return (("ROUTE_104" in str(location).upper() or "ROUTE 104" in str(location).upper()) and 
-                            self.milestone_tracker.is_completed("DEVON_GOODS_OBTAINED"))
+                            self.milestone_tracker.is_completed("TEAM_AQUA_GRUNT_DEFEATED"))
                 return False
             elif milestone_id == "DEVON_CORP_VISITED":
                 if game_state:
