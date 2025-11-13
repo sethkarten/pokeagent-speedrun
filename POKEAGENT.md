@@ -125,23 +125,32 @@ The `pokemon-emerald` MCP server provides these tools:
    - **⚠️ IMPORTANT**: You can ONLY press these physical GBA buttons. You CANNOT directly press Pokemon moves like "QUICK ATTACK" or "TACKLE". To use moves in battle, navigate the battle menu with A/B/UP/DOWN buttons.
 
 3. **navigate_to** - Automatically pathfind to coordinates
-   - Parameters: `x` (integer), `y` (integer), `variance` (string: `none`, `low`, `medium`, `high`), `reason` (string, optional)
+   - Parameters: `x` (integer), `y` (integer), `variance` (string: `none`, `low`, `medium`, `high`, `extreme`), `reason` (string, optional)
    - Returns: Path calculated and executed, with updated state
    - Use for: Efficiently moving to specific locations on the map
    
-   **Path Variance (IMPORTANT for getting unstuck):**
-   - The **third positional argument controls path variance** - how the pathfinder explores alternative routes
-   - `"none"` (default): Uses the optimal A* path (deterministic, always same path)
-   - `"low"`: Explores paths with different first move (1-step variation)
-   - `"medium"`: Explores paths with different first 3 moves (more exploration)
-   - `"high"`: Explores paths with different first 5 moves (maximum exploration)
+   **Path Variance:**
+      - The **third positional argument controls path variance** - how the pathfinder explores alternative routes
+      - `"none"` (default): Uses the optimal A* path (deterministic, always same path)
+      - `"low"`: Explores paths with different first move (1-step variation)
+      - `"medium"`: Explores paths with different first 3 moves (moderate exploration)
+      - `"high"`: Explores paths with different first 5 moves (extensive exploration)
+      - `"extreme"`: Explores paths with different first 8 moves (maximum exploration, use as last resort)
    
-   **When to use variance:**
-   - ⚠️ **If you get BLOCKED repeatedly at the same position or are in a clutered location with several obstacles/npcs**, this means the default path is hitting an obstacle
-   - **Solution**: Increase variance to explore alternative routes: `navigate_to(x, y, "medium", "Try alternative path")`
-   - Start with `"low"`, then try `"medium"` or `"high"` if still blocked
-   - Higher variance may find paths that go around obstacles (e.g., going DOWN to reach a target that's UP)
-   
+   ** Guidance on Getting Unstuck **
+      **1. When to use variance:**
+         - ⚠️ **ONLY If you get BLOCKED repeatedly at the same position or are in a clutered location with several obstacles/npcs**, this means the default path is hitting an obstacle
+         - **Solution**: Increase variance to explore alternative routes: `navigate_to(x, y, "medium", "Try alternative path")`
+         - Start with `"low"`, then try `"medium"`, `"high"`, and finally `"extreme"` if still blocked
+         - Higher variance may find paths that go around obstacles (e.g., going DOWN to reach a target that's UP)
+         - If you succesfully make progress, make sure to return back to variance="low"/none
+
+      **2. Navigating to a different (intermediate) area of the map first**
+         - Sometimes pathfinding will continue to fail consistently even as we turn up variance, in this case, it may be fruitful to navigate to an intermediate area first (a medium distance away) before requesting a path to our final destination.
+
+      **3. Manual navigation**
+         - As an absolute last restort, take a look at the visual frame and continual press_buttons() to navigate to your final location while avoiding obstacles. 
+      
    **Examples:**
    ```python
    navigate_to(10, 5, "none", "Go to NPC")  # Standard optimal path
@@ -194,7 +203,7 @@ The `pokemon-emerald` MCP server provides these tools:
 - Do not open START menu unless absolutely necessary (checking Pokemon status)
 - Always use your knowledge base to remember important information
 - Store NPCs, item locations, puzzle solutions, and strategies as you discover them
-- **If navigate_to gets you BLOCKED repeatedly at the same position**, increase the `variance` parameter (`"low"`, `"medium"`, or `"high"`) to explore alternative paths around obstacles
+- **If navigate_to gets you BLOCKED repeatedly at the same position**, increase the `variance` parameter (`"low"`, `"medium"`, `"high"`, or `"extreme"`) to explore alternative paths around obstacles
 
 ## Map Navigation Mechanics
 

@@ -24,6 +24,7 @@ VARIANCE_LEVEL_TO_STEPS = {
     "low": 1,
     "medium": 3,
     "high": 5,
+    "extreme": 8,
 }
 
 
@@ -295,7 +296,7 @@ class Pathfinder:
         ONLY uses porymap ASCII grid data - no fallbacks.
         
         Args:
-            start_pos: Starting position - will NEVER be marked as blocked (player is there, so it's walkable)
+            start_pos: Starting position - will NEVER be marked as blocked (player is there, so it is walkable)
             goal_pos: Goal position - excluded from stationary NPC blocking so we can reach the target NPC.
 
         Returns set of (x, y) tuples that are not walkable.
@@ -375,7 +376,7 @@ class Pathfinder:
         Check if a tile is blocked based on its properties.
         Uses the same logic as MapStitcher and map_formatter for consistency.
 
-        Note: Ledges (JUMP_*) are NOT blocked here - they're handled
+        Note: Ledges (JUMP_*) are NOT blocked here - they are handled
         via directional validation in _can_move_to().
         """
         if isinstance(tile, tuple) and len(tile) >= 3:
@@ -520,10 +521,10 @@ class Pathfinder:
         Check if movement from from_pos to to_pos is valid.
 
         Handles one-way ledges: can only move in the direction of the ledge.
-        - JUMP_EAST (→): can only jump TO this tile by moving EAST (from x-1)
-        - JUMP_WEST (←): can only jump TO this tile by moving WEST (from x+1)
-        - JUMP_NORTH (↑): can only jump TO this tile by moving NORTH (from y+1)
-        - JUMP_SOUTH (↓): can only jump TO this tile by moving SOUTH (from y-1)
+        - JUMP_EAST: can only jump TO this tile by moving EAST (from x-1)
+        - JUMP_WEST: can only jump TO this tile by moving WEST (from x+1)
+        - JUMP_NORTH: can only jump TO this tile by moving NORTH (from y+1)
+        - JUMP_SOUTH: can only jump TO this tile by moving SOUTH (from y-1)
         """
         if 'grid' not in map_data:
             return True
@@ -767,10 +768,12 @@ class Pathfinder:
     ) -> List[List[str]]:
         """
         Generate alternative button sequences that reach the goal but differ in their initial moves.
+        Each path is guaranteed to have no cycles (never revisits a tile).
         """
         if variance_steps <= 0 or not base_path_buttons or len(base_path_buttons) < variance_steps:
             return []
 
+        # Track seen prefixes to ensure we generate diverse candidates
         base_prefix_key = tuple(base_path_buttons[:variance_steps])
         seen_prefixes = {base_prefix_key}
         candidates: List[List[str]] = []
@@ -792,11 +795,23 @@ class Pathfinder:
             if prefix_key in seen_prefixes:
                 continue
 
-            remainder = self._astar(prefix_positions[-1], goal, blocked, map_data, max_distance)
+            # Block all tiles in the prefix path (except the last one, which is the start of remainder)
+            # This prevents the remainder path from looping back through already-visited tiles
+            blocked_with_prefix = blocked.copy()
+            for pos in prefix_positions[:-1]:  # Exclude last position (start of remainder)
+                blocked_with_prefix.add(pos)
+            
+            remainder = self._astar(prefix_positions[-1], goal, blocked_with_prefix, map_data, max_distance)
             if not isinstance(remainder, list) or len(remainder) < 1:
                 continue
 
             full_positions = prefix_positions + remainder[1:]
+            
+            # Validate that the full path has no cycles (no position appears twice)
+            if len(set(full_positions)) != len(full_positions):
+                logger.debug(f"Rejecting path with cycle: {len(full_positions)} steps but only {len(set(full_positions))} unique positions")
+                continue
+            
             buttons = self._path_to_buttons(full_positions)
             if len(buttons) < variance_steps:
                 continue
