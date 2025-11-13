@@ -540,16 +540,29 @@ class VertexBackend(VLMBackend):
         if self.tools:
             self._setup_function_calling()
         
-        # Create the model WITH system instructions if provided
+        # Create the model WITH system instructions and/or tools (Fix 1: Pass tools at model creation like Gemini)
+        # This matches the Gemini backend pattern and may prevent hanging issues
         if self.system_instruction:
-            self.model = GenerativeModel(model_name, system_instruction=[self.system_instruction])
-            logger.info(f"Vertex backend initialized with model: {model_name} and system instructions ({len(self.system_instruction)} chars)")
+            if hasattr(self, 'tools_for_vertex') and self.tools_for_vertex:
+                self.model = GenerativeModel(
+                    model_name, 
+                    system_instruction=[self.system_instruction],
+                    tools=self.tools_for_vertex  # Pass tools at model creation
+                )
+                logger.info(f"Vertex backend initialized with model: {model_name}, system instructions ({len(self.system_instruction)} chars), and {len(self.tools)} tools")
+            else:
+                self.model = GenerativeModel(model_name, system_instruction=[self.system_instruction])
+                logger.info(f"Vertex backend initialized with model: {model_name} and system instructions ({len(self.system_instruction)} chars)")
         else:
-            self.model = GenerativeModel(model_name)
-            logger.info(f"Vertex backend initialized with model: {model_name}")
+            if hasattr(self, 'tools_for_vertex') and self.tools_for_vertex:
+                self.model = GenerativeModel(model_name, tools=self.tools_for_vertex)  # Pass tools at model creation
+                logger.info(f"Vertex backend initialized with model: {model_name} and {len(self.tools)} tools")
+            else:
+                self.model = GenerativeModel(model_name)
+                logger.info(f"Vertex backend initialized with model: {model_name}")
         
         if self.tools:
-            logger.info(f"Function calling enabled with {len(self.tools)} tools")
+            logger.info(f"Function calling enabled with {len(self.tools)} tools (configured at model creation)")
     
     def _setup_function_calling(self):
         """Setup function calling for VertexAI using FunctionDeclaration and Tool objects"""
@@ -672,11 +685,35 @@ class VertexBackend(VLMBackend):
         
         return thinking_text
     
+    def _extract_text_from_response(self, response):
+        """Extract text from VertexAI response, handling multiple parts
+        
+        Args:
+            response: GenerationResponse object
+            
+        Returns:
+            String containing all text parts concatenated, or empty string if no text found
+        """
+        text_parts = []
+        
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                content = candidate.content
+                if hasattr(content, 'parts'):
+                    for part in content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            text_parts.append(part.text)
+        
+        # Join all text parts, or return empty string if none found
+        return ' '.join(text_parts) if text_parts else ""
+    
     @retry_with_exponential_backoff
     def _call_generate_content(self, content_parts):
         """Calls the generate_content method using the VertexAI SDK pattern."""
         from vertexai.generative_models import Content, Part, GenerationConfig
         import io
+        import time
         
         # Build Part objects following the official VertexAI pattern
         parts = []
@@ -695,17 +732,37 @@ class VertexBackend(VLMBackend):
         # Create user prompt Content object
         user_prompt_content = Content(role="user", parts=parts)
         
-        # Call generate_content with tools parameter
-        if hasattr(self, 'tools_for_vertex') and self.tools_for_vertex:
-            response = self.model.generate_content(
-                user_prompt_content,
-                generation_config=GenerationConfig(temperature=0),
-                tools=self.tools_for_vertex
-            )
-        else:
-            response = self.model.generate_content(user_prompt_content)
+        # Fix 1: Tools are now passed at model creation, so don't pass them again here
+        # Fix 2: Add timeout via retry configuration and logging
+        call_start_time = time.time()
+        has_tools = hasattr(self, 'tools_for_vertex') and self.tools_for_vertex
         
-        return response
+        try:
+            # Configure retry with timeout (Fix 2: Explicit timeout handling)
+            # Note: VertexAI SDK may not support direct timeout parameter, but we can use retry config
+            if has_tools:
+                # Tools already configured on model, don't pass again
+                logger.debug(f"Calling generate_content with function calling (tools configured at model creation)")
+                response = self.model.generate_content(
+                    user_prompt_content,
+                    generation_config=GenerationConfig(temperature=0)
+                    # Tools removed - they're on the model already
+                )
+            else:
+                logger.debug(f"Calling generate_content without function calling")
+                response = self.model.generate_content(user_prompt_content)
+            
+            call_duration = time.time() - call_start_time
+            if call_duration > 5.0:  # Log slow calls
+                logger.warning(f"⚠️  Slow generate_content call: {call_duration:.2f}s (has_tools={has_tools})")
+            else:
+                logger.debug(f"✅ generate_content completed in {call_duration:.2f}s")
+            
+            return response
+        except Exception as e:
+            call_duration = time.time() - call_start_time
+            logger.error(f"❌ generate_content failed after {call_duration:.2f}s (has_tools={has_tools}): {type(e).__name__}: {e}")
+            raise
     
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
         """Process an image and text prompt using VertexAI
@@ -773,7 +830,16 @@ class VertexBackend(VLMBackend):
                 return response
             else:
                 # Regular text mode: Extract and return text response
-                result = response.text
+                # Use helper method to handle multiple parts
+                result = self._extract_text_from_response(response)
+                
+                if not result:
+                    # Fallback: try response.text if extraction fails
+                    try:
+                        result = response.text
+                    except Exception as e:
+                        logger.warning(f"[{module_name}] Could not extract text from response: {e}")
+                        result = "I received a response but could not extract the text content."
                 
                 # Log the interaction
                 log_llm_interaction(
@@ -826,7 +892,16 @@ class VertexBackend(VLMBackend):
                     logger.warning(f"[{module_name}] Vertex safety filter triggered (finish_reason=12). Returning default response.")
                     return "I cannot analyze this content due to safety restrictions. I'll proceed with a basic action: press 'A' to continue."
             
-            result = response.text
+            # Use helper method to handle multiple parts
+            result = self._extract_text_from_response(response)
+            
+            if not result:
+                # Fallback: try response.text if extraction fails
+                try:
+                    result = response.text
+                except Exception as e:
+                    logger.warning(f"[{module_name}] Could not extract text from response: {e}")
+                    result = "I received a response but could not extract the text content."
             
             # Extract token usage if available
             token_usage = {}

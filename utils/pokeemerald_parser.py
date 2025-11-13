@@ -2,8 +2,10 @@
 """
 Pokeemerald Map Data Parser
 
-Parses pokeemerald JSON map files and binary layout files (map.bin, border.bin)
+Parses pokeemerald JSON map files and binary layout files (map.bin)
 to extract map data for pathfinding and visualization.
+
+Uses ground truth metatile behavior data from tileset metatile_attributes.bin files.
 """
 
 import struct
@@ -23,7 +25,7 @@ except ImportError:
 
 
 class PokeemeraldLayoutParser:
-    """Parse pokeemerald layout binary files (map.bin and border.bin)"""
+    """Parse pokeemerald layout binary files (map.bin) and tileset attributes"""
     
     def __init__(self, pokeemerald_root: Path):
         self.root = Path(pokeemerald_root)
@@ -193,28 +195,6 @@ class PokeemeraldLayoutParser:
             
         return self._parse_binary_file(map_path, width, height)
     
-    def parse_border_bin(self, layout_name_or_id: str) -> Optional[List[List[int]]]:
-        """
-        Parse border.bin file for a given layout.
-        
-        Returns:
-            2D list of border metatile values, or None if file not found
-        """
-        layout_info = self.get_layout_info(layout_name_or_id)
-        if not layout_info:
-            return None
-            
-        border_path = self.root / layout_info["border_filepath"]
-        
-        if not border_path.exists():
-            return None
-        
-        # Border is typically 2x2 metatiles
-        border_width = 2
-        border_height = 2
-        
-        return self._parse_binary_file(border_path, border_width, border_height)
-    
     def _parse_binary_file(self, file_path: Path, width: int, height: int) -> List[List[int]]:
         """
         Parse a binary file containing metatile data.
@@ -323,121 +303,6 @@ class PokeemeraldLayoutParser:
         self._tileset_attributes_cache[tileset_name] = attributes
         return attributes
     
-    def _infer_behavior_from_metatile_id(self, metatile_id: int, collision: int) -> MetatileBehavior:
-        """
-        Infer metatile behavior from metatile ID using heuristics.
-        
-        This is a fallback when tileset metatile_attributes.bin is not available.
-        Uses common metatile ID ranges from Pokemon Emerald.
-        
-        Args:
-            metatile_id: Metatile ID (0-1023)
-            collision: Collision value (0-3)
-            
-        Returns:
-            Inferred MetatileBehavior
-        """
-        # Invalid/out of bounds
-        if metatile_id == 1023:
-            return MetatileBehavior.NORMAL
-        
-        # Blocked tiles (collision > 0)
-        if collision > 0:
-            # Check for directional impassable
-            if 768 <= metatile_id < 832:
-                # Common impassable ranges (varies by tileset)
-                return MetatileBehavior.SECRET_BASE_WALL
-            return MetatileBehavior.SECRET_BASE_WALL
-        
-        # Walkable tiles - use metatile ID ranges to infer behavior
-        # These ranges are approximate and vary by tileset, but work for common cases
-        
-        # Water tiles (commonly in ranges 144-223, varies by tileset)
-        if 144 <= metatile_id < 224:
-            # Try to distinguish water types (heuristic)
-            if 144 <= metatile_id < 160:
-                return MetatileBehavior.POND_WATER
-            elif 160 <= metatile_id < 176:
-                return MetatileBehavior.DEEP_WATER
-            elif 176 <= metatile_id < 192:
-                return MetatileBehavior.OCEAN_WATER
-            elif 192 <= metatile_id < 208:
-                return MetatileBehavior.SHALLOW_WATER
-            else:
-                return MetatileBehavior.WATERFALL
-        
-        # Grass tiles (commonly in ranges 16-63)
-        if 16 <= metatile_id < 64:
-            if 16 <= metatile_id < 32:
-                return MetatileBehavior.TALL_GRASS
-            elif 32 <= metatile_id < 48:
-                return MetatileBehavior.LONG_GRASS
-            elif 48 <= metatile_id < 56:
-                return MetatileBehavior.SHORT_GRASS
-            else:
-                return MetatileBehavior.LONG_GRASS_SOUTH_EDGE
-        
-        # Sand (commonly around 80-95)
-        if 80 <= metatile_id < 96:
-            if 86 <= metatile_id < 88:
-                return MetatileBehavior.DEEP_SAND
-            else:
-                return MetatileBehavior.SAND
-        
-        # Ice (commonly around 224-255)
-        if 224 <= metatile_id < 256:
-            if 230 <= metatile_id < 232:
-                return MetatileBehavior.THIN_ICE
-            elif 232 <= metatile_id < 234:
-                return MetatileBehavior.CRACKED_ICE
-            else:
-                return MetatileBehavior.ICE
-        
-        # Ledges (commonly in ranges 384-447)
-        if 384 <= metatile_id < 448:
-            # Jump directions
-            if 400 <= metatile_id < 408:
-                return MetatileBehavior.JUMP_EAST
-            elif 408 <= metatile_id < 416:
-                return MetatileBehavior.JUMP_WEST
-            elif 416 <= metatile_id < 424:
-                return MetatileBehavior.JUMP_NORTH
-            elif 424 <= metatile_id < 432:
-                return MetatileBehavior.JUMP_SOUTH
-            elif 432 <= metatile_id < 440:
-                return MetatileBehavior.JUMP_NORTHEAST
-            elif 440 <= metatile_id < 448:
-                return MetatileBehavior.JUMP_NORTHWEST
-        
-        # Water currents (commonly around 512-575)
-        if 512 <= metatile_id < 576:
-            if 528 <= metatile_id < 536:
-                return MetatileBehavior.EASTWARD_CURRENT
-            elif 536 <= metatile_id < 544:
-                return MetatileBehavior.WESTWARD_CURRENT
-            elif 544 <= metatile_id < 552:
-                return MetatileBehavior.NORTHWARD_CURRENT
-            elif 552 <= metatile_id < 560:
-                return MetatileBehavior.SOUTHWARD_CURRENT
-        
-        # Warps/stairs/doors (commonly in ranges 640-767)
-        if 640 <= metatile_id < 768:
-            if 656 <= metatile_id < 664:
-                return MetatileBehavior.NON_ANIMATED_DOOR
-            elif 664 <= metatile_id < 672:
-                return MetatileBehavior.LADDER
-            elif 672 <= metatile_id < 680:
-                return MetatileBehavior.SOUTH_ARROW_WARP
-        
-        # Special terrain
-        if 96 <= metatile_id < 112:
-            return MetatileBehavior.HOT_SPRINGS
-        if 256 <= metatile_id < 320:
-            return MetatileBehavior.CAVE
-        
-        # Default to NORMAL for walkable tiles
-        return MetatileBehavior.NORMAL
-    
     def get_metatiles_with_behavior(self, layout_name_or_id: str) -> List[List[Tuple[int, MetatileBehavior, int, int]]]:
         """
         Parse map.bin and return metatiles with actual behavior from tileset attributes.
@@ -544,20 +409,6 @@ class PokeemeraldMapLoader:
         
         with open(map_path) as f:
             return json.load(f)
-    
-    def get_map_connections(self, map_name: str) -> List[Dict]:
-        """Get all connections from a map"""
-        map_data = self.load_map(map_name)
-        if not map_data:
-            return []
-        return map_data.get("connections", []) or []
-    
-    def get_warp_events(self, map_name: str) -> List[Dict]:
-        """Get all warp points for a map"""
-        map_data = self.load_map(map_name)
-        if not map_data:
-            return []
-        return map_data.get("warp_events", [])
     
     def get_layout_name_from_map(self, map_name: str) -> Optional[str]:
         """Get the layout name from a map JSON"""
