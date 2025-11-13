@@ -234,7 +234,7 @@ class MyCLIAgent:
             },
             {
                 "name": "navigate_to",
-                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium' or 'high' to explore alternative paths.",
+                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium', 'high', or 'extreme' to explore alternative paths.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -242,8 +242,8 @@ class MyCLIAgent:
                         "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
                         "variance": {
                             "type_": "STRING", 
-                            "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if still blocked). Default: 'none'",
-                            "enum": ["none", "low", "medium", "high"]
+                            "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if very stuck), 'extreme' (8-step variation, use as last resort). Default: 'none'",
+                            "enum": ["none", "low", "medium", "high", "extreme"]
                         },
                         "reason": {"type_": "STRING", "description": "Why you are navigating here"}
                     },

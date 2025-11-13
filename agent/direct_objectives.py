@@ -437,7 +437,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
 
-            # ========== Rustboro City to Rustboro Gym (Objectives 28-36) ==========
+            # ========== Rustboro City to Rustboro Gym (Objectives 28-37) ==========
             DirectObjective(
                 id="rustboro_pokemon_center",
                 description="Visit the pokemon center in rustboro city",
@@ -517,6 +517,24 @@ class DirectObjectiveManager:
                 target_location="Rustboro City Gym",
                 navigation_hint="Battle the rustboro gym leader. If you lose this battle, renavigate back to rustboro gym -> roxanne and try again.",
                 completion_condition="roxanne_defeated_and_received_badge",
+                priority=1
+            ),
+            DirectObjective(
+                id="exit_rustboro_gym",
+                description="Exit the rustboro gym",
+                action_type="navigate",
+                target_location="Rustboro City Gym",
+                navigation_hint="Exit the rustboro gym by walking south through the gym to the exit. Use navigate_to() to efficiently navigate towards the exit. The gym environment may be somewhat obstructed, so you may need to increase the variance parameter",
+                completion_condition="exited_rustboro_gym",
+                priority=1
+            ),
+            DirectObjective(
+                id="go_to_rustboro_city_pokemon_center_and_heal_pokemon",
+                description="Go to the rustboro city pokemon center and heal your pokemon",
+                action_type="navigate",
+                target_location="Rustboro City Pokemon Center",
+                navigation_hint="Travel to the rustboro city pokemon center and heal your pokemon",
+                completion_condition="reached_rustboro_city_pokemon_center",
                 priority=1
             ),
         ]
