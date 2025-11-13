@@ -670,9 +670,14 @@ class ThreadSafeGenerativeModelWrapper:
                 logger.debug(f"   Result type: {type(result).__name__}")
                 if hasattr(result, 'candidates'):
                     logger.debug(f"   Result has {len(result.candidates) if hasattr(result.candidates, '__len__') else 'unknown'} candidates")
-                if hasattr(result, 'text'):
-                    result_preview = str(result.text)[:100] if result.text else "None"
-                    logger.debug(f"   Result text preview: {result_preview}...")
+                # Try to get text preview, but handle multiple parts gracefully
+                try:
+                    if hasattr(result, 'text'):
+                        result_preview = str(result.text)[:100] if result.text else "None"
+                        logger.debug(f"   Result text preview: {result_preview}...")
+                except ValueError as ve:
+                    # Multiple content parts (text + function_call) - this is expected for function calling
+                    logger.debug(f"   Result contains multiple parts (likely function call): {ve}")
             
             gen_duration = time.time() - gen_start
             logger.info(f"   ✅ generate_content completed in {gen_duration:.3f}s total")

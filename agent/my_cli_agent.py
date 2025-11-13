@@ -559,38 +559,8 @@ class MyCLIAgent:
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None, backend: str = None):
-        """Add interaction to conversation history.
-        
-        Args:
-            prompt: The prompt sent to the LLM
-            response: The response from the LLM
-            tool_calls: List of tool calls made (if any)
-            action_details: Optional detailed action description
-            backend: Backend name ('gemini' or 'vertex'), defaults to self.backend
-        """
-        if backend is None:
-            backend = self.backend
-        
-        # Extract action and action_details from tool_calls if available
-        action = None
-        if tool_calls:
-            last_call = tool_calls[-1]
-            action = last_call.get("name", "unknown")
-            if not action_details:
-                if last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get("args", {}):
-                    # Check if we have pending action details from navigation
-                    if hasattr(self, '_pending_action_details') and 'navigate_to' in self._pending_action_details:
-                        action_details = self._pending_action_details['navigate_to']
-                    else:
-                        variance = last_call['args'].get('variance', 'none')
-                        action_details = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
-                elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
-                    action_details = f"Pressed {last_call['args']['buttons']}"
-                else:
-                    action_details = f"Executed {last_call.get('name', 'unknown')}"
-        
-        # Use consistent format for both backends: 'prompt' and 'response' keys
+    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None):
+        """Add interaction to conversation history."""
         entry = {
             "step": self.step_count,
             "prompt": prompt,
@@ -599,11 +569,23 @@ class MyCLIAgent:
             "timestamp": time.time()
         }
         
-        # Add action-related fields if available
-        if action:
-            entry["action"] = action
-        if action_details:
-            entry["action_details"] = action_details
+        # Extract action and action_details from tool_calls if available
+        if tool_calls:
+            last_call = tool_calls[-1]
+            entry["action"] = last_call.get("name", "unknown")
+            if action_details:
+                entry["action_details"] = action_details
+            elif last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get("args", {}):
+                # Check if we have pending action details from navigation
+                if hasattr(self, '_pending_action_details') and 'navigate_to' in self._pending_action_details:
+                    entry["action_details"] = self._pending_action_details['navigate_to']
+                else:
+                    variance = last_call['args'].get('variance', 'none')
+                    entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
+            elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
+                entry["action_details"] = f"Pressed {last_call['args']['buttons']}"
+            else:
+                entry["action_details"] = f"Executed {last_call.get('name', 'unknown')}"
         
         self.conversation_history.append(entry)
 
@@ -616,13 +598,8 @@ class MyCLIAgent:
         """Calculate total character count of conversation history."""
         total_chars = 0
         for entry in self.conversation_history:
-            # Handle both formats for backward compatibility
-            # Format 1: 'prompt' and 'response' keys (Gemini and unified format)
-            # Format 2: 'content' and 'role' keys (old Vertex format - should be migrated)
-            prompt_text = entry.get("prompt") or entry.get("content", "")
-            response_text = entry.get("response") or entry.get("content", "")
-            total_chars += len(prompt_text)
-            total_chars += len(response_text)
+            total_chars += len(entry.get("prompt", ""))
+            total_chars += len(entry.get("response", ""))
             # Also count tool call strings
             for tool_call in entry.get("tool_calls", []):
                 total_chars += len(str(tool_call))
@@ -655,48 +632,11 @@ class MyCLIAgent:
         lines = [f"\n{'='*70}", "CONVERSATION HISTORY", '='*70]
 
         for entry in self.conversation_history[-10:]:  # Show last 10
-            try:
-                step_num = entry.get('step', '?')
-                lines.append(f"\nStep {step_num}:")
-                
-                # Handle two different history entry formats:
-                # Format 1 (Gemini): uses 'prompt' and 'response' keys
-                # Format 2 (VLM): uses 'content' and 'role' keys
-                if 'prompt' in entry:
-                    # Gemini format
-                    prompt_text = entry.get('prompt', 'N/A')
-                    if isinstance(prompt_text, str) and len(prompt_text) > 100:
-                        lines.append(f"  Prompt: {prompt_text[:100]}...")
-                    else:
-                        lines.append(f"  Prompt: {prompt_text}")
-                    
-                    response_text = entry.get('response', 'N/A')
-                    if isinstance(response_text, str) and len(response_text) > 100:
-                        lines.append(f"  Response: {response_text[:100]}...")
-                    else:
-                        lines.append(f"  Response: {response_text}")
-                elif 'content' in entry:
-                    # VLM format - show role and content
-                    role = entry.get('role', 'unknown')
-                    content_text = entry.get('content', 'N/A')
-                    if isinstance(content_text, str) and len(content_text) > 100:
-                        lines.append(f"  [{role}]: {content_text[:100]}...")
-                    else:
-                        lines.append(f"  [{role}]: {content_text}")
-                else:
-                    # Fallback for malformed entries
-                    available_keys = list(entry.keys())
-                    lines.append(f"  [Unknown format - keys: {available_keys}]")
-                
-                if entry.get('tool_calls'):
-                    tools = ', '.join(t.get('name', 'unknown') for t in entry.get('tool_calls', []))
-                    lines.append(f"  Tools called: {tools}")
-                    
-            except Exception as e:
-                # Handle malformed entries gracefully - don't crash on bad data
-                logger.warning(f"Error formatting history entry: {e}")
-                logger.debug(f"  Entry keys: {list(entry.keys()) if isinstance(entry, dict) else 'not a dict'}")
-                lines.append(f"  [Error formatting entry: {type(e).__name__}: {str(e)[:50]}]")
+            lines.append(f"\nStep {entry['step']}:")
+            lines.append(f"  Prompt: {entry['prompt'][:100]}...")
+            if entry.get('tool_calls'):
+                lines.append(f"  Tools called: {', '.join(t['name'] for t in entry['tool_calls'])}")
+            lines.append(f"  Response: {entry['response'][:100]}...")
 
         lines.append('='*70)
         return '\n'.join(lines)
@@ -951,6 +891,14 @@ class MyCLIAgent:
                     logger.info(f"✅ Step completed in {duration:.2f}s")
                     logger.info(f"📝 Response: {display_text}")
                     
+                    # Store in conversation history with action tracking
+                    self.conversation_history.append({
+                        "step": self.step_count,
+                        "role": "user",
+                        "content": prompt,
+                        "timestamp": time.time()
+                    })
+                    
                     # Extract action details for better tracking
                     action_taken = last_tool_call['name']
                     action_details = ""
@@ -984,13 +932,19 @@ class MyCLIAgent:
                     else:
                         action_details = f"Executed {last_tool_call['name']}"
                     
-                    # Store in conversation history using unified format
-                    # Add reasoning to response if available
-                    response_with_reasoning = full_response
-                    if tool_reasoning:
-                        response_with_reasoning = f"{full_response}\n\n{tool_reasoning}" if full_response else tool_reasoning
+                    self.conversation_history.append({
+                        "step": self.step_count,
+                        "role": "assistant", 
+                        "content": full_response,
+                        "tool_calls": tool_calls_made,
+                        "action": action_taken,
+                        "action_details": action_details,
+                        "reasoning": tool_reasoning,
+                        "timestamp": time.time()
+                    })
                     
-                    self._add_to_history(prompt, response_with_reasoning, tool_calls=tool_calls_made, action_details=action_details, backend=self.backend)
+                    # Compact history if needed
+                    self._compact_history()
                     
                     return True, full_response
                 else:
@@ -1015,8 +969,22 @@ class MyCLIAgent:
                     
                     logger.info(f"✅ Step completed in {duration:.2f}s")
                     
-                    # Store in conversation history using unified format
-                    self._add_to_history(prompt, text_content, tool_calls=None, action_details=None, backend=self.backend)
+                    # Store in conversation history
+                    self.conversation_history.append({
+                        "step": self.step_count,
+                        "role": "user",
+                        "content": prompt,
+                        "timestamp": time.time()
+                    })
+                    self.conversation_history.append({
+                        "step": self.step_count,
+                        "role": "assistant",
+                        "content": text_content,
+                        "timestamp": time.time()
+                    })
+                    
+                    # Compact history if needed
+                    self._compact_history()
                     
                     return True, text_content
             else:
@@ -1138,7 +1106,7 @@ class MyCLIAgent:
                                     action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance})"
                         
                         # Add to history with action details
-                        self._add_to_history(prompt, full_response, tool_calls=tool_calls_made, action_details=action_details_str)
+                        self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str)
 
                         # Log to LLM logger
                         self._log_thinking(prompt, full_response, duration, tool_calls_made)
@@ -1249,7 +1217,7 @@ class MyCLIAgent:
                             duration = time.time() - start_time
 
                             # Add to history
-                            self._add_to_history(prompt, text_response, tool_calls=tool_calls_made)
+                            self._add_to_history(prompt, text_response, tool_calls_made)
 
                             # Log to LLM logger with duration and tool calls
                             self._log_thinking(prompt, text_response, duration, tool_calls_made)
@@ -1679,37 +1647,12 @@ Step {step_count}"""
 
         except KeyboardInterrupt:
             logger.info("\n\n🛑 Agent stopped by user")
-            try:
-                history_display = self._format_history_for_display()
-                logger.info(history_display)
-            except Exception as e:
-                # Don't crash if history formatting fails - this is the KeyError we're trying to catch
-                logger.warning(f"⚠️ Could not format history: {type(e).__name__}: {e}")
-                logger.info(f"   History has {len(self.conversation_history)} entries")
-                # Try to show at least basic info
-                try:
-                    logger.info(f"   Last {min(5, len(self.conversation_history))} entries:")
-                    for i, entry in enumerate(self.conversation_history[-5:]):
-                        step = entry.get('step', '?')
-                        role = entry.get('role', 'unknown')
-                        has_prompt = 'prompt' in entry
-                        has_content = 'content' in entry
-                        has_response = 'response' in entry
-                        logger.info(f"     Entry {i+1}: Step {step}, Role: {role}, "
-                                  f"Has prompt: {has_prompt}, Has content: {has_content}, Has response: {has_response}")
-                except Exception as e2:
-                    logger.warning(f"   Could not show basic history info: {e2}")
+            logger.info(self._format_history_for_display())
             return 0
         except Exception as e:
             logger.error(f"\n❌ Fatal error: {e}")
             import traceback
             traceback.print_exc()
-            # Try to save state before exiting
-            try:
-                logger.info("Attempting to save checkpoint before exit...")
-                requests.post(f"{self.server_url}/checkpoint", json={"step_count": self.step_count}, timeout=5)
-            except:
-                pass
             return 1
 
         logger.info(f"\n🎯 Agent completed {self.step_count} steps")
