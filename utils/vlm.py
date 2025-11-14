@@ -760,8 +760,8 @@ class VertexBackend(VLMBackend):
         # This prevents race conditions when credentials refresh after many calls
         self.model = ThreadSafeGenerativeModelWrapper(base_model)
         
-        if self.tools:
-            logger.info(f"Function calling enabled with {len(self.tools)} tools (will be passed at call time)")
+        # if self.tools:
+        #     logger.info(f"Function calling enabled with {len(self.tools)} tools (will be passed at call time)")
         
         # Pre-initialize the client now (synchronously, before any threads)
         # This ensures the client is created in the main thread, avoiding initial race conditions
@@ -839,17 +839,24 @@ class VertexBackend(VLMBackend):
             "properties": properties,
             "required": required
         }
-    
+
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
-        """Prepare image for Gemini API"""
+        """Prepare image for Gemini API with 4x upscaling"""
         # Handle both PIL Images and numpy arrays
         if hasattr(img, 'convert'):  # It's a PIL Image
-            return img
+            image = img
         elif hasattr(img, 'shape'):  # It's a numpy array
-            return Image.fromarray(img)
+            image = Image.fromarray(img)
         else:
             raise ValueError(f"Unsupported image type: {type(img)}")
-    
+
+        # # Upscale by 4x using high-quality resampling
+        # new_width = image.width * 4
+        # new_height = image.height * 4
+        # image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        return image
+
     def _extract_thinking_from_response(self, response):
         """Extract thinking/reasoning text from response for logging
         
@@ -950,7 +957,7 @@ class VertexBackend(VLMBackend):
         call_start_time = time.time()
         has_tools = hasattr(self, 'tools_for_vertex') and self.tools_for_vertex
         
-        logger.info(f"   🔧 has_tools={has_tools}, about to call generate_content...")
+        # logger.info(f"   🔧 has_tools={has_tools}, about to call generate_content...")
         
         # Log content details
         if user_prompt_content:
@@ -962,10 +969,10 @@ class VertexBackend(VLMBackend):
         try:
             if has_tools:
                 # Pass tools at call time (not at model creation to avoid gRPC race condition)
-                logger.info(f"   📞 Calling generate_content with function calling (tools passed at call time)")
-                logger.info(f"   ⏱️  Call started at {time.strftime('%H:%M:%S.%f')}")
-                logger.debug(f"   Tools type: {type(self.tools_for_vertex).__name__}")
-                logger.debug(f"   Generation config: temperature=0")
+                # logger.info(f"   📞 Calling generate_content with function calling (tools passed at call time)")
+                # logger.info(f"   ⏱️  Call started at {time.strftime('%H:%M:%S.%f')}")
+                # logger.debug(f"   Tools type: {type(self.tools_for_vertex).__name__}")
+                # logger.debug(f"   Generation config: temperature=0")
                 
                 try:
                     response = self.model.generate_content(
@@ -1056,7 +1063,8 @@ class VertexBackend(VLMBackend):
             content_parts = [text, image]
             
             # Log the prompt
-            prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
+            # prompt_preview = text[-2000:] + "..." if len(text) > 2000 else text
+            prompt_preview = text
             logger.info(f"[{module_name}] VERTEX VLM IMAGE QUERY:")
             logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
             

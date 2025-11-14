@@ -13,7 +13,7 @@ import json
 import logging
 import requests
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -262,93 +262,92 @@ class MyCLIAgent:
                     "required": ["reasoning"]
                 }
             },
+            # # Knowledge Base Tools
+            # {
+            #     "name": "add_knowledge",
+            #     "description": "Store important discoveries in your knowledge base.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "category": {
+            #                 "type_": "STRING",
+            #                 "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
+            #                 "description": "Category of knowledge"
+            #             },
+            #             "title": {"type_": "STRING", "description": "Short title"},
+            #             "content": {"type_": "STRING", "description": "Detailed content"},
+            #             "location": {"type_": "STRING", "description": "Map name (optional)"},
+            #             "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
+            #             "importance": {
+            #                 "type_": "INTEGER",
+            #                 "description": "Importance 1-5",
+            #             }
+            #         },
+            #         "required": ["category", "title", "content", "importance"]
+            #     }
+            # },
+            # {
+            #     "name": "search_knowledge",
+            #     "description": "Search your knowledge base for stored information.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "category": {"type_": "STRING", "description": "Category (optional)"},
+            #             "query": {"type_": "STRING", "description": "Text to search (optional)"},
+            #             "location": {"type_": "STRING", "description": "Map name filter (optional)"},
+            #             "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"}
+            #         },
+            #         "required": []
+            #     }
+            # },
+            # {
+            #     "name": "get_knowledge_summary",
+            #     "description": "Get a summary of the most important things you've learned.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "min_importance": {"type_": "INTEGER", "description": "Min importance (default 3)"}
+            #         },
+            #         "required": []
+            #     }
+            # },
 
-            # Knowledge Base Tools
-            {
-                "name": "add_knowledge",
-                "description": "Store important discoveries in your knowledge base.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "category": {
-                            "type_": "STRING",
-                            "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
-                            "description": "Category of knowledge"
-                        },
-                        "title": {"type_": "STRING", "description": "Short title"},
-                        "content": {"type_": "STRING", "description": "Detailed content"},
-                        "location": {"type_": "STRING", "description": "Map name (optional)"},
-                        "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
-                        "importance": {
-                            "type_": "INTEGER",
-                            "description": "Importance 1-5",
-                        }
-                    },
-                    "required": ["category", "title", "content", "importance"]
-                }
-            },
-            {
-                "name": "search_knowledge",
-                "description": "Search your knowledge base for stored information.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "category": {"type_": "STRING", "description": "Category (optional)"},
-                        "query": {"type_": "STRING", "description": "Text to search (optional)"},
-                        "location": {"type_": "STRING", "description": "Map name filter (optional)"},
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"}
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "get_knowledge_summary",
-                "description": "Get a summary of the most important things you've learned.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance (default 3)"}
-                    },
-                    "required": []
-                }
-            },
-
-            # Wiki Tools
-            {
-                "name": "lookup_pokemon_info",
-                "description": "Look up Pokemon, moves, locations, items, NPCs from wikis (Bulbapedia, Serebii, PokemonDB, Marriland).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "topic": {"type_": "STRING", "description": "What to search (e.g., 'Mudkip', 'Route_101')"},
-                        "source": {
-                            "type_": "STRING",
-                            "enum": ["bulbapedia", "serebii", "pokemondb", "marriland"],
-                            "description": "Wiki source (default: bulbapedia)"
-                        }
-                    },
-                    "required": ["topic"]
-                }
-            },
-            {
-                "name": "list_wiki_sources",
-                "description": "List available Pokemon wiki sources.",
-                "parameters": {"type_": "OBJECT", "properties": {}, "required": []}
-            },
-            {
-                "name": "get_walkthrough",
-                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "part": {
-                            "type_": "INTEGER",
-                            "description": "Walkthrough part 1-21",
-                        }
-                    },
-                    "required": ["part"]
-                }
-            },
+            # # Wiki Tools
+            # {
+            #     "name": "lookup_pokemon_info",
+            #     "description": "Look up Pokemon, moves, locations, items, NPCs from wikis (Bulbapedia, Serebii, PokemonDB, Marriland).",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "topic": {"type_": "STRING", "description": "What to search (e.g., 'Mudkip', 'Route_101')"},
+            #             "source": {
+            #                 "type_": "STRING",
+            #                 "enum": ["bulbapedia", "serebii", "pokemondb", "marriland"],
+            #                 "description": "Wiki source (default: bulbapedia)"
+            #             }
+            #         },
+            #         "required": ["topic"]
+            #     }
+            # },
+            # {
+            #     "name": "list_wiki_sources",
+            #     "description": "List available Pokemon wiki sources.",
+            #     "parameters": {"type_": "OBJECT", "properties": {}, "required": []}
+            # },
+            # {
+            #     "name": "get_walkthrough",
+            #     "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "part": {
+            #                 "type_": "INTEGER",
+            #                 "description": "Walkthrough part 1-21",
+            #             }
+            #         },
+            #         "required": ["part"]
+            #     }
+            # },
             {
                 "name": "create_direct_objectives",
                 "description": "Create the next 3 direct objectives when a sequence completes. Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
@@ -392,115 +391,114 @@ class MyCLIAgent:
                     "required": []
                 }
             },
-
             # ============================================================
             # BASELINE MCP TOOLS (File/Shell/Web)
             # ============================================================
 
-            {
-                "name": "read_file",
-                "description": "Read file contents. Supports text, images, PDFs. Returns content or base64 for binary files.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "file_path": {"type_": "STRING", "description": "Absolute path to file"}
-                    },
-                    "required": ["file_path"]
-                }
-            },
-            {
-                "name": "write_file",
-                "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
-                        "content": {"type_": "STRING", "description": "File content"}
-                    },
-                    "required": ["file_path", "content"]
-                }
-            },
-            {
-                "name": "list_directory",
-                "description": "List files and directories at path.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "path": {"type_": "STRING", "description": "Directory path"}
-                    },
-                    "required": ["path"]
-                }
-            },
-            {
-                "name": "glob",
-                "description": "Find files matching glob pattern (e.g., '**/*.py', 'src/*.md').",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "pattern": {"type_": "STRING", "description": "Glob pattern"},
-                        "path": {"type_": "STRING", "description": "Starting directory (optional)"}
-                    },
-                    "required": ["pattern"]
-                }
-            },
-            {
-                "name": "search_file_content",
-                "description": "Search files for regex pattern. Returns matching lines.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "pattern": {"type_": "STRING", "description": "Regex pattern"},
-                        "path": {"type_": "STRING", "description": "Directory to search"},
-                        "file_pattern": {"type_": "STRING", "description": "File glob (e.g., '*.py')"}
-                    },
-                    "required": ["pattern", "path"]
-                }
-            },
-            {
-                "name": "run_shell_command",
-                "description": "Run shell command (42 safe commands allowed: ls, cat, grep, python, npm, etc. NO git, rm, sudo).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "command": {"type_": "STRING", "description": "Shell command"},
-                        "description": {"type_": "STRING", "description": "What this command does"}
-                    },
-                    "required": ["command", "description"]
-                }
-            },
-            {
-                "name": "web_fetch",
-                "description": "Fetch and parse web pages (up to 20 URLs). Extracts text content.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "prompt": {"type_": "STRING", "description": "Prompt with URLs and instructions"}
-                    },
-                    "required": ["prompt"]
-                }
-            },
-            {
-                "name": "google_web_search",
-                "description": "Search web using DuckDuckGo (privacy-friendly, no API key). Returns 10 results.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "query": {"type_": "STRING", "description": "Search query"}
-                    },
-                    "required": ["query"]
-                }
-            },
-            {
-                "name": "save_memory",
-                "description": "Save facts to remember across sessions (stored in .pokeagent_cache/cli/AGENT.md).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "fact": {"type_": "STRING", "description": "Clear, self-contained fact"}
-                    },
-                    "required": ["fact"]
-                }
-            },
+            # {
+            #     "name": "read_file",
+            #     "description": "Read file contents. Supports text, images, PDFs. Returns content or base64 for binary files.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "file_path": {"type_": "STRING", "description": "Absolute path to file"}
+            #         },
+            #         "required": ["file_path"]
+            #     }
+            # },
+            # {
+            #     "name": "write_file",
+            #     "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
+            #             "content": {"type_": "STRING", "description": "File content"}
+            #         },
+            #         "required": ["file_path", "content"]
+            #     }
+            # },
+            # {
+            #     "name": "list_directory",
+            #     "description": "List files and directories at path.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "path": {"type_": "STRING", "description": "Directory path"}
+            #         },
+            #         "required": ["path"]
+            #     }
+            # },
+            # {
+            #     "name": "glob",
+            #     "description": "Find files matching glob pattern (e.g., '**/*.py', 'src/*.md').",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "pattern": {"type_": "STRING", "description": "Glob pattern"},
+            #             "path": {"type_": "STRING", "description": "Starting directory (optional)"}
+            #         },
+            #         "required": ["pattern"]
+            #     }
+            # },
+            # {
+            #     "name": "search_file_content",
+            #     "description": "Search files for regex pattern. Returns matching lines.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "pattern": {"type_": "STRING", "description": "Regex pattern"},
+            #             "path": {"type_": "STRING", "description": "Directory to search"},
+            #             "file_pattern": {"type_": "STRING", "description": "File glob (e.g., '*.py')"}
+            #         },
+            #         "required": ["pattern", "path"]
+            #     }
+            # },
+            # {
+            #     "name": "run_shell_command",
+            #     "description": "Run shell command (42 safe commands allowed: ls, cat, grep, python, npm, etc. NO git, rm, sudo).",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "command": {"type_": "STRING", "description": "Shell command"},
+            #             "description": {"type_": "STRING", "description": "What this command does"}
+            #         },
+            #         "required": ["command", "description"]
+            #     }
+            # },
+            # {
+            #     "name": "web_fetch",
+            #     "description": "Fetch and parse web pages (up to 20 URLs). Extracts text content.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "prompt": {"type_": "STRING", "description": "Prompt with URLs and instructions"}
+            #         },
+            #         "required": ["prompt"]
+            #     }
+            # },
+            # {
+            #     "name": "google_web_search",
+            #     "description": "Search web using DuckDuckGo (privacy-friendly, no API key). Returns 10 results.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "query": {"type_": "STRING", "description": "Search query"}
+            #         },
+            #         "required": ["query"]
+            #     }
+            # },
+            # {
+            #     "name": "save_memory",
+            #     "description": "Save facts to remember across sessions (stored in .pokeagent_cache/cli/AGENT.md).",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "fact": {"type_": "STRING", "description": "Clear, self-contained fact"}
+            #         },
+            #         "required": ["fact"]
+            #     }
+            # },
         ]
 
         logger.info(f"✅ Created {len(tools)} tool declarations (9 Pokemon + 11 Baseline)")
@@ -559,40 +557,53 @@ class MyCLIAgent:
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None):
-        """Add interaction to conversation history."""
+    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None, player_coords: tuple = None):
+        """Add interaction to conversation history - ONLY stores LLM responses and actions."""
+        # CRITICAL: Do NOT store full prompts! They contain game state + screenshot + previous history
+        # Only store: LLM thinking (truncated), action taken, and player coordinates
+
+        # Strip whitespace from response to save tokens
+        response_stripped = response.strip() if response else ""
+
+        # CRITICAL SAFEGUARD: If response contains our prompt header, skip it entirely
+        # This means the LLM echoed back the prompt or we have corrupted data
+        if "You are an expert navigator and battle strategist" in response_stripped:
+            logger.warning(f"⚠️ Skipping corrupted history entry at step {self.step_count} (contains prompt echo)")
+            return  # Don't store corrupted data
+
         entry = {
             "step": self.step_count,
-            "prompt": prompt,
-            "response": response,
-            "tool_calls": tool_calls or [],
+            "llm_response": response_stripped[:500],  # LLM thinking only, max 500 chars
             "timestamp": time.time()
         }
-        
-        # Extract action and action_details from tool_calls if available
+
+        logger.debug(f"📝 Storing history entry for step {self.step_count}: {response_stripped[:100]}...")
+
+        # Extract action and action_details from tool_calls
         if tool_calls:
             last_call = tool_calls[-1]
             entry["action"] = last_call.get("name", "unknown")
             if action_details:
                 entry["action_details"] = action_details
             elif last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get("args", {}):
-                # Check if we have pending action details from navigation
-                if hasattr(self, '_pending_action_details') and 'navigate_to' in self._pending_action_details:
-                    entry["action_details"] = self._pending_action_details['navigate_to']
-                else:
-                    variance = last_call['args'].get('variance', 'none')
-                    entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
+                variance = last_call['args'].get('variance', 'none')
+                entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
             elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
-                entry["action_details"] = f"Pressed {last_call['args']['buttons']}"
+                entry["action_details"] = f"press_buttons({last_call['args']['buttons']})"
             else:
-                entry["action_details"] = f"Executed {last_call.get('name', 'unknown')}"
-        
+                entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
+
+        # Store player coordinates if available
+        if player_coords:
+            entry["player_coords"] = player_coords
+
         self.conversation_history.append(entry)
 
-        # Check if we need to compact history based on context length
-        current_context_size = self._calculate_context_size()
-        if current_context_size > self.max_context_chars:
-            self._compact_history()
+        # Keep only last 10 entries to prevent unbounded growth
+        if len(self.conversation_history) > 10:
+            self.conversation_history = self.conversation_history[-10:]
+
+        logger.debug(f"✅ History now has {len(self.conversation_history)} entries")
 
     def _calculate_context_size(self) -> int:
         """Calculate total character count of conversation history."""
@@ -605,25 +616,6 @@ class MyCLIAgent:
                 total_chars += len(str(tool_call))
         return total_chars
 
-    def _compact_history(self):
-        """Compact conversation history by removing oldest entries until under target size."""
-        current_size = self._calculate_context_size()
-
-        if current_size <= self.target_context_chars:
-            return
-
-        logger.info(f"📚 Compacting history: {current_size:,} chars → target {self.target_context_chars:,} chars")
-
-        # Remove oldest entries until we're under target
-        removed_count = 0
-        while len(self.conversation_history) > 1 and self._calculate_context_size() > self.target_context_chars:
-            self.conversation_history.pop(0)
-            removed_count += 1
-
-        new_size = self._calculate_context_size()
-        logger.info(f"   Removed {removed_count} oldest turns")
-        logger.info(f"   New size: {new_size:,} chars ({len(self.conversation_history)} turns remaining)")
-
     def _format_history_for_display(self) -> str:
         """Format conversation history for display."""
         if not self.conversation_history:
@@ -632,11 +624,15 @@ class MyCLIAgent:
         lines = [f"\n{'='*70}", "CONVERSATION HISTORY", '='*70]
 
         for entry in self.conversation_history[-10:]:  # Show last 10
-            lines.append(f"\nStep {entry['step']}:")
-            lines.append(f"  Prompt: {entry['prompt'][:100]}...")
-            if entry.get('tool_calls'):
-                lines.append(f"  Tools called: {', '.join(t['name'] for t in entry['tool_calls'])}")
-            lines.append(f"  Response: {entry['response'][:100]}...")
+            try:
+                lines.append(f"\nStep {entry['step']}:")
+                lines.append(f"  Prompt: {entry['prompt'][:100]}...")
+                if entry.get('tool_calls'):
+                    lines.append(f"  Tools called: {', '.join(t['name'] for t in entry['tool_calls'])}")
+                lines.append(f"  Response: {entry['response'][:100]}...")
+            except:
+                print("Error my_cli_agent.py L642")
+                continue
 
         lines.append('='*70)
         return '\n'.join(lines)
@@ -714,50 +710,34 @@ class MyCLIAgent:
 
             # Track duration
             start_time = time.time()
-
-            # Handle different backends
-            if self.backend == "gemini":
-                # Use original Gemini function calling
-                # Build message content with optional image
+            vlm_call_start = time.time()
+            try:
+                # Add timeout wrapper to prevent indefinite hangs
+                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+                
                 if screenshot_b64:
-                    # Send message with both text and image
                     import PIL.Image as PILImage
                     import io
                     import base64
-
+                    
                     # Decode base64 to image
                     image_data = base64.b64decode(screenshot_b64)
                     image = PILImage.open(io.BytesIO(image_data))
-
-                    # Send message with image and text
-                    response = self.chat.send_message([prompt, image])
-                else:
-                    # Send message with text only
-                    response = self.chat.send_message(prompt)
-            else:
-                # Use VLM for other backends (VertexAI, etc.)
-                vlm_call_start = time.time()
-                try:
-                    # Add timeout wrapper to prevent indefinite hangs
-                    from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
                     
-                    if screenshot_b64:
-                        import PIL.Image as PILImage
-                        import io
-                        import base64
-                        
-                        # Decode base64 to image
-                        image_data = base64.b64decode(screenshot_b64)
-                        image = PILImage.open(io.BytesIO(image_data))
-                        
-                        # Define function after image is created
-                        def call_vlm_with_image():
-                            return self.vlm.get_query(image, prompt, "CLI_Agent")
-                        
-                        # Use VLM with image - log start time for timeout detection
-                        logger.info(f"📡 Calling VLM API with image (prompt: {len(prompt)} chars, image: {len(screenshot_b64)} bytes)")
-                        logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 30s...")
-                        
+                    # Define function after image is created
+                    def call_vlm_with_image():
+                        return self.vlm.get_query(image, prompt, "CLI_Agent")
+                    
+                    # Use VLM with image - log start time for timeout detection
+                    logger.info(f"📡 Calling VLM API with image (prompt: {len(prompt)} chars, image: {len(screenshot_b64)} bytes)")
+                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 30s...")
+
+                    # Retry loop for timeouts
+                    max_retries = 3
+                    retry_count = 0
+                    response = None
+
+                    while retry_count < max_retries:
                         # Execute with timeout (30 seconds for VertexAI with function calling)
                         executor = ThreadPoolExecutor(max_workers=1)
                         future = None
@@ -765,29 +745,35 @@ class MyCLIAgent:
                             future = executor.submit(call_vlm_with_image)
                             response = future.result(timeout=30)  # 30 second timeout
                             vlm_duration = time.time() - vlm_call_start
-                            logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s")
+                            logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
+                            break  # Success - exit retry loop
                         except FutureTimeoutError:
+                            retry_count += 1
                             vlm_duration = time.time() - vlm_call_start
-                            logger.error(f"   ⏱️ VLM call TIMED OUT after {vlm_duration:.1f}s (30s limit)")
-                            logger.error(f"   ⚠️  Thread timed out but background call may still be running")
-                            logger.error(f"   🔍 Hanging here to debug - the gRPC call is likely still blocking")
-                            # Don't cancel or continue - let it hang so we can debug
-                            # Wait indefinitely to see if the background thread ever completes
-                            logger.error(f"   ⏳ Waiting for background thread to complete (this may hang indefinitely)...")
-                            future.result()  # Wait indefinitely for the actual result
-                            # This line should never be reached if it's truly hung
+                            logger.error(f"   ⏱️ VLM call TIMED OUT after {vlm_duration:.1f}s (attempt {retry_count}/{max_retries})")
+                            logger.error(f"   ⚠️  Abandoning timed-out thread and retrying immediately...")
+                            # Don't wait for the hung thread - immediately retry
+                            if retry_count >= max_retries:
+                                logger.error(f"   ❌ Max retries ({max_retries}) reached - giving up")
+                                raise TimeoutError(f"VLM call timed out after {max_retries} attempts")
                         finally:
                             # Always shutdown executor without waiting - critical to prevent hang
                             executor.shutdown(wait=False)
-                    else:
-                        # Define function for text-only call
-                        def call_vlm_with_text():
-                            return self.vlm.get_text_query(prompt, "CLI_Agent")
-                        
-                        # Use VLM with text only
-                        logger.info(f"📡 Calling VLM API with text only (prompt: {len(prompt)} chars)")
-                        logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 30s...")
-                        
+                else:
+                    # Define function for text-only call
+                    def call_vlm_with_text():
+                        return self.vlm.get_text_query(prompt, "CLI_Agent")
+                    
+                    # Use VLM with text only
+                    logger.info(f"📡 Calling VLM API with text only (prompt: {len(prompt)} chars)")
+                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 30s...")
+
+                    # Retry loop for timeouts
+                    max_retries = 3
+                    retry_count = 0
+                    response = None
+
+                    while retry_count < max_retries:
                         # Execute with timeout (30 seconds for VertexAI with function calling)
                         executor = ThreadPoolExecutor(max_workers=1)
                         future = None
@@ -795,49 +781,49 @@ class MyCLIAgent:
                             future = executor.submit(call_vlm_with_text)
                             response = future.result(timeout=30)  # 30 second timeout
                             vlm_duration = time.time() - vlm_call_start
-                            logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s")
+                            logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
+                            break  # Success - exit retry loop
                         except FutureTimeoutError:
+                            retry_count += 1
                             vlm_duration = time.time() - vlm_call_start
-                            logger.error(f"   ⏱️ VLM call TIMED OUT after {vlm_duration:.1f}s (30s limit)")
-                            logger.error(f"   ⚠️  Thread timed out but background call may still be running")
-                            logger.error(f"   🔍 Hanging here to debug - the gRPC call is likely still blocking")
-                            # Don't cancel or continue - let it hang so we can debug
-                            # Wait indefinitely to see if the background thread ever completes
-                            logger.error(f"   ⏳ Waiting for background thread to complete (this may hang indefinitely)...")
-                            future.result()  # Wait indefinitely for the actual result
-                            # This line should never be reached if it's truly hung
+                            logger.error(f"   ⏱️ VLM call TIMED OUT after {vlm_duration:.1f}s (attempt {retry_count}/{max_retries})")
+                            logger.error(f"   ⚠️  Abandoning timed-out thread and retrying immediately...")
+                            # Don't wait for the hung thread - immediately retry
+                            if retry_count >= max_retries:
+                                logger.error(f"   ❌ Max retries ({max_retries}) reached - giving up")
+                                raise TimeoutError(f"VLM call timed out after {max_retries} attempts")
                         finally:
                             # Always shutdown executor without waiting - critical to prevent hang
                             executor.shutdown(wait=False)
-                    
-                    # Determine if response is a GenerationResponse object (function calling) or string (text)
-                    is_function_calling = hasattr(response, 'candidates')
-                    
-                except KeyboardInterrupt:
-                    # Re-raise KeyboardInterrupt so it can be handled at the run() level
-                    vlm_duration = time.time() - vlm_call_start
-                    logger.warning(f"⚠️ VLM call interrupted by user after {vlm_duration:.1f}s")
-                    raise
-                except TimeoutError as e:
-                    # This should never be reached now since we wait indefinitely on timeout
-                    # But keep it for safety
-                    vlm_duration = time.time() - vlm_call_start
-                    logger.error(f"❌ VLM call TIMED OUT after {vlm_duration:.1f}s")
-                    logger.error(f"   This should not be reached - execution should hang above")
-                    return False, f"VLM API timeout after {vlm_duration:.1f}s: {str(e)}"
-                except Exception as e:
-                    # Catch network errors, timeouts, API errors, etc.
-                    vlm_duration = time.time() - vlm_call_start
-                    error_type = type(e).__name__
-                    error_msg = str(e)
-                    logger.error(f"❌ VLM call failed after {vlm_duration:.1f}s")
-                    logger.error(f"   Error type: {error_type}")
-                    logger.error(f"   Error message: {error_msg[:500]}")
-                    import traceback
-                    logger.error(f"   Full traceback:")
-                    traceback.print_exc()
-                    # Return failure but don't crash - let the run loop handle retry
-                    return False, f"VLM API error ({error_type}) after {vlm_duration:.1f}s: {error_msg[:200]}"
+                
+                # Determine if response is a GenerationResponse object (function calling) or string (text)
+                is_function_calling = hasattr(response, 'candidates')
+                
+            except KeyboardInterrupt:
+                # Re-raise KeyboardInterrupt so it can be handled at the run() level
+                vlm_duration = time.time() - vlm_call_start
+                logger.warning(f"⚠️ VLM call interrupted by user after {vlm_duration:.1f}s")
+                raise
+            except TimeoutError as e:
+                # This should never be reached now since we wait indefinitely on timeout
+                # But keep it for safety
+                vlm_duration = time.time() - vlm_call_start
+                logger.error(f"❌ VLM call TIMED OUT after {vlm_duration:.1f}s")
+                logger.error(f"   This should not be reached - execution should hang above")
+                return False, f"VLM API timeout after {vlm_duration:.1f}s: {str(e)}"
+            except Exception as e:
+                # Catch network errors, timeouts, API errors, etc.
+                vlm_duration = time.time() - vlm_call_start
+                error_type = type(e).__name__
+                error_msg = str(e)
+                logger.error(f"❌ VLM call failed after {vlm_duration:.1f}s")
+                logger.error(f"   Error type: {error_type}")
+                logger.error(f"   Error message: {error_msg[:500]}")
+                import traceback
+                logger.error(f"   Full traceback:")
+                traceback.print_exc()
+                # Return failure but don't crash - let the run loop handle retry
+                return False, f"VLM API error ({error_type}) after {vlm_duration:.1f}s: {error_msg[:200]}"
 
             # Process response - handle function calls
             # Limit the number of tool calls per step to prevent infinite loops
@@ -890,15 +876,7 @@ class MyCLIAgent:
                     
                     logger.info(f"✅ Step completed in {duration:.2f}s")
                     logger.info(f"📝 Response: {display_text}")
-                    
-                    # Store in conversation history with action tracking
-                    self.conversation_history.append({
-                        "step": self.step_count,
-                        "role": "user",
-                        "content": prompt,
-                        "timestamp": time.time()
-                    })
-                    
+
                     # Extract action details for better tracking
                     action_taken = last_tool_call['name']
                     action_details = ""
@@ -931,21 +909,10 @@ class MyCLIAgent:
                         action_details = "Completed direct objective"
                     else:
                         action_details = f"Executed {last_tool_call['name']}"
-                    
-                    self.conversation_history.append({
-                        "step": self.step_count,
-                        "role": "assistant", 
-                        "content": full_response,
-                        "tool_calls": tool_calls_made,
-                        "action": action_taken,
-                        "action_details": action_details,
-                        "reasoning": tool_reasoning,
-                        "timestamp": time.time()
-                    })
-                    
-                    # Compact history if needed
-                    self._compact_history()
-                    
+
+                    # Store in history
+                    self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details)
+
                     return True, full_response
                 else:
                     # No function calls found - this might indicate an issue with function calling setup
@@ -968,24 +935,10 @@ class MyCLIAgent:
                     duration = time.time() - start_time
                     
                     logger.info(f"✅ Step completed in {duration:.2f}s")
-                    
-                    # Store in conversation history
-                    self.conversation_history.append({
-                        "step": self.step_count,
-                        "role": "user",
-                        "content": prompt,
-                        "timestamp": time.time()
-                    })
-                    self.conversation_history.append({
-                        "step": self.step_count,
-                        "role": "assistant",
-                        "content": text_content,
-                        "timestamp": time.time()
-                    })
-                    
-                    # Compact history if needed
-                    self._compact_history()
-                    
+
+                    # Store in history (text-only response, no tool calls)
+                    self._add_to_history(prompt, text_content, tool_calls=[])
+
                     return True, text_content
             else:
                 # Original Gemini function calling logic
@@ -1105,8 +1058,11 @@ class MyCLIAgent:
                                 else:
                                     action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance})"
                         
-                        # Add to history with action details
-                        self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str)
+                        # Extract player coordinates from final position or game state
+                        player_coords = final_position if final_position else None
+
+                        # Add to history with action details and coordinates
+                        self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str, player_coords=player_coords)
 
                         # Log to LLM logger
                         self._log_thinking(prompt, full_response, duration, tool_calls_made)
@@ -1262,6 +1218,7 @@ class MyCLIAgent:
             except Exception as e:
                 logger.warning(f"Error checking queue status: {e}")
                 time.sleep(0.5)
+        time.sleep(1)
 
         logger.warning(f"⚠️ Timeout waiting for actions to complete after {timeout}s")
 
@@ -1292,6 +1249,18 @@ class MyCLIAgent:
         
         # Extract key information from game state
         state_text = game_state_data.get("state_text", "")
+
+        # Extract player coordinates for stuck detection
+        player_position = game_state_data.get("player_position", {})
+        current_coords = None
+        if player_position and "x" in player_position and "y" in player_position:
+            current_coords = (player_position["x"], player_position["y"])
+
+        # Add stuck warning if detected (prepend to state_text)
+        stuck_warning = self._get_stuck_warning(current_coords)
+        if stuck_warning:
+            state_text = stuck_warning + state_text
+
         direct_objective = game_state_data.get("direct_objective", "")
         direct_objective_status = game_state_data.get("direct_objective_status", "")
         direct_objective_context = game_state_data.get("direct_objective_context", "")
@@ -1322,9 +1291,18 @@ class MyCLIAgent:
         
         # Build action history summary for better context
         action_history = self._format_action_history()
-        
+
+        # Log component sizes BEFORE building prompt
+        logger.info(f"📏 Pre-prompt component sizes:")
+        logger.info(f"   state_text: {len(state_text):,} chars")
+        logger.info(f"   action_history: {len(action_history):,} chars")
+        logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
+        logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
+        logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
+
         # Build function-call focused prompt
         prompt = f"""You are an expert navigator and battle strategist playing Pokémon Emerald on a Game Boy Advance emulator.
+If you notice that you are repeating the same action sequences over and over again, you definitely need to try something different since what you are doing is wrong! Try exploring different new areas or interacting with different NPCs if you are stuck.
 
 Some pointers to keep in mind (guard rails) as you problem solve:
 1) You must think step-by-step when solving problems and making decisions. 
@@ -1333,7 +1311,7 @@ Some pointers to keep in mind (guard rails) as you problem solve:
 4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
 
 
-ACTION HISTORY (last 20 steps):
+ACTION HISTORY (last steps with thinking):
 {action_history}
 
 ================================================================================
@@ -1427,7 +1405,7 @@ STRATEGY - PRIORITY ORDER:
 3. **MOVEMENT**: Preferentially use navigate_to(x, y, variance, reason) to automatically pathfind to a coordinate. Use press_buttons(["UP"], reasoning) etc. for manual movement only if navigate_to is not working.
 4. **BATTLES**: Use press_buttons with battle moves. Select moves carefully based on the current situation and the enemy's Pokemon. If below 50% health, prioritize using healing moves that also cause damage like (absorb, gigadrain, etc) if these moves are available.
 5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
-6. **STUCK DETECTION**: If you've been attempting the same move (UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
+6. **STUCK DETECTION**: If you've been attempting the same action (A, UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
 
 🔴 **REMEMBER**: You MUST call complete_direct_objective() as soon as you've completed the current objective! The agent will NOT automatically know you're done - you must explicitly call the function.
 
@@ -1500,52 +1478,99 @@ press_buttons(
 Think step-by-step through ANALYZE → PLAN → EXECUTE, then call the appropriate function with your detailed reasoning.
 
 Step {step_count}"""
-        
+
+        # Log prompt size breakdown to debug token issues
+        prompt_size = len(prompt)
+        state_size = len(state_text)
+        history_size = len(action_history)
+        context_size = len(direct_objective_context)
+        objective_size = len(str(direct_objective))
+        status_size = len(direct_objective_status)
+
+        # Calculate static instruction size (approximate)
+        dynamic_total = state_size + history_size + context_size + objective_size + status_size
+        static_instructions = prompt_size - dynamic_total
+
+        logger.info(f"📏 Final prompt size breakdown:")
+        logger.info(f"   ═══════════════════════════════════════")
+        logger.info(f"   TOTAL PROMPT: {prompt_size:,} chars (~{prompt_size//4:,} tokens)")
+        logger.info(f"   ═══════════════════════════════════════")
+        logger.info(f"   Dynamic content:")
+        logger.info(f"     - State text: {state_size:,} chars")
+        logger.info(f"     - Action history: {history_size:,} chars")
+        logger.info(f"     - Objective context: {context_size:,} chars")
+        logger.info(f"     - Objective: {objective_size:,} chars")
+        logger.info(f"     - Status: {status_size:,} chars")
+        logger.info(f"     DYNAMIC TOTAL: {dynamic_total:,} chars")
+        logger.info(f"   ───────────────────────────────────────")
+        logger.info(f"   Static instructions: {static_instructions:,} chars")
+        logger.info(f"   ═══════════════════════════════════════")
+
         return prompt
 
 
+    def _detect_stuck_pattern(self, current_coords: Optional[Tuple[int, int]]) -> bool:
+        """Detect if agent is stuck (same position for multiple recent steps)"""
+        if not current_coords or len(self.conversation_history) < 3:
+            return False
+
+        # Get last 3 positions
+        recent_positions = []
+        for entry in self.conversation_history[-3:]:
+            coords = entry.get("player_coords")
+            if coords:
+                recent_positions.append(coords)
+
+        # If we have 3+ recent positions and they're all the same, we're stuck
+        if len(recent_positions) >= 3:
+            if all(pos == recent_positions[0] for pos in recent_positions):
+                return True
+
+        return False
+
+    def _get_stuck_warning(self, coords: Optional[Tuple[int, int]]) -> str:
+        """Generate warning text if stuck pattern detected"""
+        if self._detect_stuck_pattern(coords):
+            return "\n⚠️ WARNING: You appear to be stuck at this location. Try a different approach!\n" \
+                   "💡 TIP: If you try an action like RIGHT but coordinates don't change from (X,Y) to (X+1,Y), there's likely an obstacle. Check the map around player P for walls (#) or other barriers blocking your path.\n"
+        return ""
+
     def _format_action_history(self) -> str:
-        """Format action history for better context awareness"""
+        """Format action history - shows only LLM thinking and actions taken."""
         if not self.conversation_history:
+            logger.debug(f"📜 No conversation history to format")
             return "No previous actions recorded."
-        
-        # Get last 20 conversation entries
-        recent_entries = self.conversation_history[-20:]
-        
+
+        # Get last 10 entries only
+        recent_entries = self.conversation_history[-10:]
+        logger.debug(f"📜 Formatting {len(recent_entries)} history entries")
+
         history_lines = []
-        for i, entry in enumerate(recent_entries, 1):
+        for entry in recent_entries:
             step = entry.get("step", "?")
-            timestamp = entry.get("timestamp", "")
-            action = entry.get("action", "Unknown")
-            action_details = entry.get("action_details", "")
-            reasoning = entry.get("reasoning", "")
-            
-            # Format timestamp nicely
-            if timestamp:
-                try:
-                    from datetime import datetime
-                    if isinstance(timestamp, (int, float)):
-                        dt = datetime.fromtimestamp(timestamp)
-                    else:
-                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
-                    time_str = dt.strftime("%H:%M:%S")
-                except:
-                    time_str = str(timestamp)[:8] if len(str(timestamp)) > 8 else str(timestamp)
-            else:
-                time_str = "??:??:??"
-            
-            # Format action and reasoning
-            action_display = action_details if action_details else action
-            action_str = f"Step {step} ({time_str}): {action_display}"
-            if reasoning and reasoning != "No reasoning provided":
-                action_str += f" | Reasoning: {reasoning[:100]}{'...' if len(reasoning) > 100 else ''}"
-            
-            history_lines.append(action_str)
-        
-        return "\n".join(history_lines)
+            llm_response = entry.get("llm_response", "").strip()
+            action_details = entry.get("action_details", "").strip()
+            coords = entry.get("player_coords", None)
+
+            # Format: [Step X] at (x,y): LLM thinking → action
+            coord_str = f"({coords[0]},{coords[1]})" if coords else "(?)"
+
+            if llm_response or action_details:
+                history_lines.append(f"[{step}] at {coord_str}:")
+                if llm_response:
+                    history_lines.append(f"  {llm_response}")
+                if action_details:
+                    history_lines.append(f"  → {action_details}")
+                history_lines.append("")  # Separator
+
+        return "\n".join(history_lines).strip()
 
     def run(self) -> int:
         """Run the agent loop."""
+        # CRITICAL: Clear conversation history to prevent recursive prompt embedding from old runs
+        self.conversation_history = []
+        logger.info("🧹 Cleared conversation history (fresh start)")
+
         logger.info("=" * 70)
         logger.info("🎮 Pokemon Emerald My Custom CLI Agent (Gemini API)")
         logger.info("=" * 70)

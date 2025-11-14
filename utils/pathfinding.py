@@ -143,14 +143,57 @@ class Pathfinder:
         
         # Get warp positions and ensure they're walkable (doors/stairs)
         warps = self._get_warp_positions(game_state, map_data)
+        logger.debug(f"Found {len(warps)} warp positions: {list(warps)[:10]}")  # Show first 10
         for warp_pos in warps:
             blocked.discard(warp_pos)  # Warps are always walkable
-        
+            # IMPORTANT: Also unblock the tile ABOVE the warp (in case warp was moved down from a D/S tile)
+            # This handles the case where porymap_json_builder adjusted the warp position down by 1
+            above_pos = (warp_pos[0], warp_pos[1] - 1)
+            if above_pos[1] >= 0:  # Check it's not out of bounds
+                blocked.discard(above_pos)
+                logger.debug(f"Also unblocking position above warp: {above_pos} (warp at {warp_pos})")
+
+        # SAFEGUARD: Explicitly unblock all 'D' (door) and 'S' (stairs) tiles in the grid
+        if 'grid' in map_data and map_data.get('type') == 'porymap':
+            grid = map_data['grid']
+            doors_and_stairs = []
+            for y, row in enumerate(grid):
+                for x, cell in enumerate((row if isinstance(row, (list, str)) else [])):
+                    if cell in ['D', 'S']:
+                        pos = (x, y)
+                        if pos in blocked:
+                            logger.warning(f"Door/stairs at {pos} ('{cell}') was in blocked set - removing!")
+                        blocked.discard(pos)
+                        doors_and_stairs.append(pos)
+            if doors_and_stairs:
+                logger.debug(f"Explicitly unblocked {len(doors_and_stairs)} door/stairs tiles: {doors_and_stairs[:5]}")
+
         # Ensure start is never blocked
         blocked.discard(start)
-        
+
+        # Ensure door ('D') and stairs ('S') tiles at goal position are always walkable
+        if 'grid' in map_data and map_data.get('type') == 'porymap':
+            grid = map_data['grid']
+            goal_x, goal_y = goal
+            if 0 <= goal_y < len(grid) and isinstance(grid[goal_y], (list, str)):
+                row = grid[goal_y]
+                goal_cell = row[goal_x] if 0 <= goal_x < len(row) else '?'
+                if goal_cell in ['D', 'S']:
+                    blocked.discard(goal)
+                    logger.debug(f"Goal {goal} is on a door/stairs tile '{goal_cell}' - ensuring it's walkable")
+
+        # CRITICAL: Always unblock the goal if it's a warp position, regardless of tile type
+        # This handles cases where warps were adjusted (e.g., moved down 1 tile)
+        if goal in warps:
+            blocked.discard(goal)
+            logger.debug(f"Goal {goal} is a warp position - ensuring it's walkable")
+        else:
+            logger.debug(f"Goal {goal} is NOT in warp positions list")
+
         # Check if goal is blocked - if so, find nearest reachable position first
         goal_was_blocked = goal in blocked
+        if goal_was_blocked:
+            logger.warning(f"Goal {goal} is STILL BLOCKED after unblocking attempts!")
         if goal_was_blocked:
             logger.info(f"Goal {goal} is on a blocked tile, finding nearest reachable position")
             # Temporarily add goal back to blocked for nearest search
@@ -318,8 +361,9 @@ class Pathfinder:
             if isinstance(row, list):
                 for x, cell in enumerate(row):
                     # In porymap ASCII:
-                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), '←↓↑→' (ledges - directionally walkable)
+                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), 'D' (doors), '←↓↑→' (ledges - directionally walkable)
                     # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf)
+                    # CRITICAL: 'D' (door) and 'S' (stairs) tiles are ALWAYS walkable
                     if cell in ['#', 'X', 'W']:
                         pos = (x, y)
                         # CRITICAL: Never block the starting position - player is there so it must be walkable
@@ -327,15 +371,22 @@ class Pathfinder:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
                         blocked.add(pos)
+                    # Never block doors or stairs
+                    elif cell in ['D', 'S']:
+                        continue
             elif isinstance(row, str):
                 # Handle string rows (each character is a cell)
                 for x, cell in enumerate(row):
+                    # CRITICAL: 'D' (door) and 'S' (stairs) tiles are ALWAYS walkable
                     if cell in ['#', 'X', 'W']:
                         pos = (x, y)
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
                         blocked.add(pos)
+                    # Never block doors or stairs
+                    elif cell in ['D', 'S']:
+                        continue
 
         # Add NPC/object positions as blocked (from porymap objects)
         if 'objects' in map_data:
