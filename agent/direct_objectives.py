@@ -210,7 +210,7 @@ class DirectObjectiveManager:
                 description="Interact with the clock on the wall to set the time. Interacting with it will trigger a new screen with a clock that you have to navigate through.",
                 action_type="interact",
                 target_location="Player's Bedroom",
-                navigation_hint="Press A on the clock on the wall to set the time. The clock (K) is 2 tiles left of the stairs (S) and on the wall. The clock is at position (5,1) so you must navigate to position (5,2) once you  and face the clock by pressing UP.",
+                navigation_hint="Press Up and A on the clock on the wall to set the time. The clock (K) is 2 tiles left of the stairs (S) and on the wall. The clock is at position (5,1) so you must navigate to position (5,2) and once you face the clock by pressing UP and A.",
                 completion_condition="clock_set",
                 priority=1
             ),

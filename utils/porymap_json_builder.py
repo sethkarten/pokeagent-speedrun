@@ -136,9 +136,25 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     # Extract warps
     warps = []
     for warp in map_data.get("warp_events", []):
+        warp_x = warp.get("x", 0)
+        warp_y = warp.get("y", 0)
+
+        # Check if this warp is on a door tile in the south of the map
+        # If metatiles exist, check if the warp is on a 'D' (door) tile
+        if layout_name and metatiles:
+            # Check if warp position is valid
+            if 0 <= warp_y < len(metatiles) and 0 <= warp_x < len(metatiles[0]):
+                tile = metatiles[warp_y][warp_x]
+                symbol = tile_to_symbol(tile, map_name)
+
+                # If it's a door tile (D) and in the southern half of the map
+                if (symbol == 'D' or symbol == 'S') and warp_y >= len(metatiles) // 2:
+                    # Move the warp 1 block down
+                    warp_y += 1
+
         warps.append({
-            "x": warp.get("x", 0),
-            "y": warp.get("y", 0),
+            "x": warp_x,
+            "y": warp_y,
             "elevation": warp.get("elevation", 0),
             "dest_map": warp.get("dest_map", "?"),
             "dest_warp_id": warp.get("dest_warp_id", 0)
