@@ -142,6 +142,8 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         return "#"  # Blocked
     elif "INDOOR" in behavior_name:
         return "."  # Indoor tiles are walkable
+    elif "CAVE" in behavior_name:
+        return "."  # Cave tiles are walkable
     elif "DECORATION" in behavior_name or "HOLDS" in behavior_name:
         return "."  # Decorations are walkable
     elif behavior == 999:

@@ -145,13 +145,18 @@ class Pathfinder:
         warps = self._get_warp_positions(game_state, map_data)
         logger.debug(f"Found {len(warps)} warp positions: {list(warps)[:10]}")  # Show first 10
         for warp_pos in warps:
+            was_blocked = warp_pos in blocked
             blocked.discard(warp_pos)  # Warps are always walkable
+            if was_blocked:
+                logger.info(f"🚪 Unblocked warp at {warp_pos} (was blocked)")
             # IMPORTANT: Also unblock the tile ABOVE the warp (in case warp was moved down from a D/S tile)
             # This handles the case where porymap_json_builder adjusted the warp position down by 1
             above_pos = (warp_pos[0], warp_pos[1] - 1)
             if above_pos[1] >= 0:  # Check it's not out of bounds
+                was_above_blocked = above_pos in blocked
                 blocked.discard(above_pos)
-                logger.debug(f"Also unblocking position above warp: {above_pos} (warp at {warp_pos})")
+                if was_above_blocked:
+                    logger.info(f"🚪 Unblocked position above warp: {above_pos} (warp at {warp_pos}, was blocked)")
 
         # SAFEGUARD: Explicitly unblock all 'D' (door) and 'S' (stairs) tiles in the grid
         if 'grid' in map_data and map_data.get('type') == 'porymap':
@@ -179,21 +184,32 @@ class Pathfinder:
                 row = grid[goal_y]
                 goal_cell = row[goal_x] if 0 <= goal_x < len(row) else '?'
                 if goal_cell in ['D', 'S']:
+                    was_blocked_before = goal in blocked
                     blocked.discard(goal)
-                    logger.debug(f"Goal {goal} is on a door/stairs tile '{goal_cell}' - ensuring it's walkable")
+                    logger.info(f"🚪 Goal {goal} is on door/stairs tile '{goal_cell}' - ensuring walkable (was blocked: {was_blocked_before})")
 
         # CRITICAL: Always unblock the goal if it's a warp position, regardless of tile type
         # This handles cases where warps were adjusted (e.g., moved down 1 tile)
         if goal in warps:
+            was_blocked_before = goal in blocked
             blocked.discard(goal)
-            logger.debug(f"Goal {goal} is a warp position - ensuring it's walkable")
+            logger.info(f"🚪 Goal {goal} is a warp position - ensuring walkable (was blocked: {was_blocked_before})")
         else:
             logger.debug(f"Goal {goal} is NOT in warp positions list")
 
         # Check if goal is blocked - if so, find nearest reachable position first
         goal_was_blocked = goal in blocked
         if goal_was_blocked:
-            logger.warning(f"Goal {goal} is STILL BLOCKED after unblocking attempts!")
+            # Log detailed info about why it's blocked
+            if 'grid' in map_data and map_data.get('type') == 'porymap':
+                grid = map_data['grid']
+                goal_x, goal_y = goal
+                if 0 <= goal_y < len(grid) and isinstance(grid[goal_y], (list, str)):
+                    row = grid[goal_y]
+                    goal_cell = row[goal_x] if 0 <= goal_x < len(row) else '?'
+                    logger.error(f"🚫 Goal {goal} is STILL BLOCKED! Grid cell: '{goal_cell}', Is warp: {goal in warps}")
+            else:
+                logger.warning(f"Goal {goal} is STILL BLOCKED after unblocking attempts!")
         if goal_was_blocked:
             logger.info(f"Goal {goal} is on a blocked tile, finding nearest reachable position")
             # Temporarily add goal back to blocked for nearest search
