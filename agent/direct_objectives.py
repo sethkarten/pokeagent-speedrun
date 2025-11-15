@@ -187,7 +187,7 @@ class DirectObjectiveManager:
         self.sequence_name = "tutorial_to_rustboro_city"
         self.current_sequence = [
             # ========== TUTORIAL TO STARTER (Objectives 1-14) ==========
-            DirectObjective(
+            DirectObjective( # 0
                 id="tutorial_01_exit_truck",
                 description="Exit the moving truck and enter Littleroot Town",
                 action_type="navigate",
@@ -196,7 +196,7 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_littleroot",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 1
                 id="tutorial_02_go_to_bedroom",
                 description="Once you exit the truck, you're mom will immediately greet you and take you into your (Brendan) house. Press A to advance through the dialogue (this will take you to 1F of the house) and navigate to the stairs to go upstairs to the player's (your)bedroom",
                 action_type="navigate",
@@ -205,7 +205,7 @@ class DirectObjectiveManager:
                 completion_condition="player_bedroom_reached",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 2
                 id="tutorial_03_interact_with_clock",
                 description="Interact with the clock on the wall to set the time. Interacting with it will trigger a new screen with a clock that you have to navigate through.",
                 action_type="interact",
@@ -214,7 +214,7 @@ class DirectObjectiveManager:
                 completion_condition="clock_set",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 3
                 id="tutorial_04_exit_player_house",
                 description="Exit the player's house by walking down the stairs (S) and through the door (D)",
                 action_type="navigate",
@@ -223,7 +223,7 @@ class DirectObjectiveManager:
                 completion_condition="exited_player_house",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 4
                 id="tutorial_05_enter_rival_house",
                 description="Enter the rival's house (next door) by immediately navigating to the right and walking through the door (D).",
                 action_type="interact",
@@ -232,7 +232,7 @@ class DirectObjectiveManager:
                 completion_condition="rival_house_entered",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 5
                 id="tutorial_06_go_to_rival_bedroom",
                 description="Go upstairs to the rival's bedroom. Their mother will immediately greet you. After your interaction with her, walk north immediately to go up the stairs.",
                 action_type="navigate",
@@ -241,7 +241,7 @@ class DirectObjectiveManager:
                 completion_condition="rival_bedroom_reached",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 6
                 id="tutorial_07_talk_to_rival",
                 description="Once in your rival's room, interact with the pokeball next to her bed. This will trigger a conversation with her, after which she will walk over to her computer. ",
                 action_type="interact",
@@ -250,7 +250,7 @@ class DirectObjectiveManager:
                 completion_condition="rival_conversation_complete",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 7
                 id="tutorial_08_exit_rival_house",
                 description="Exit the rival's house by walking through the stairs (S) at (1,1) you entered your rival's room through and through the door (D) you entered her house through",
                 action_type="navigate",
@@ -259,7 +259,7 @@ class DirectObjectiveManager:
                 completion_condition="exited_rival_house",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 8
                 id="tutorial_09_north_to_route101",
                 description="Move north from Littleroot Town to Route 101",
                 action_type="navigate",
@@ -268,7 +268,7 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_route_101",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 9
                 id="tutorial_10_find_and_approach_birch",
                 description="Find Professor Birch on Route 101 and interact with the bag to pick your starter. Walk a few steps into route 101 to trigger the event with Professor Birch. Then approach the bag on the ground by the ledge (at position 7, 14) and interact with it to pick your starter (treeko, leftmost option). Once you pick treeko, it will trigger a battle with a zigzagoon. Make sure you see treeko in the visual frame before pressing A.",
                 action_type="navigate",
@@ -277,7 +277,7 @@ class DirectObjectiveManager:
                 completion_condition="birch_encounter_triggered",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 10
                 id="tutorial_11_select_treeko_and_battle_zigzagoon",
                 description="Select treeko as your starter and Battle the zigzagoon.",
                 action_type="battle",
@@ -286,7 +286,7 @@ class DirectObjectiveManager:
                 completion_condition="zigzagoon_battle_complete",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 11
                 id="tutorial_12_interact_with_professor_birch",
                 description="After battling the zigzagoon, professor birch will interact with you. Advance through the dialogue by pressing A to continue. After this interaction, he will transport you to the lab",
                 action_type="interact",
@@ -295,7 +295,7 @@ class DirectObjectiveManager:
                 completion_condition="professor_birch_interaction_complete",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective(  # 12
                 id="tutorial_13_talk_to_professor_birch_in_lab",
                 description="Talk to professor birch in the lab to receive the pokedex. Advance through the dialogue by pressing A to continue.",
                 action_type="navigate",
@@ -304,7 +304,7 @@ class DirectObjectiveManager:
                 completion_condition="dialogue_complete",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 13
                 id="tutorial_14_exit_professor_birch_lab",
                 description="Once dialogue is complete, exit the lab by walking immediately south through the door (D) to littleroot town",
                 action_type="interact",
@@ -314,7 +314,7 @@ class DirectObjectiveManager:
                 priority=1
             ),
             # ========== BIRCH_2 TO RIVAL (Objectives 15-20) ==========
-            DirectObjective(
+            DirectObjective( # 14
                 id="birch_2_01_north_route101",
                 description="Travel north to Route 101",
                 action_type="navigate",
@@ -323,7 +323,7 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_route_101",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 15
                 id="birch_2_02_route101_to_oldale",
                 description="Navigate route 101 to Oldale Town (to the north)",
                 action_type="navigate",
@@ -332,7 +332,16 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_oldale",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 16
+                id="birch_2_02b_heal_at_pokecenter_oldale",
+                description="Find and enter the Pokemon Center in Oldale Town to heal your Pokemon",
+                action_type="interact",
+                target_location="Oldale Town",
+                navigation_hint="The Pokemon Center has a red roof and is marked with a red 'P' symbol. Navigate to the building and walk through the door. Inside, talk to Nurse Joy (the NPC behind the counter) and press A to heal your Pokemon. Wait for the healing animation to complete.",
+                completion_condition="pokemon_healed_at_center",
+                priority=1
+            ),
+            DirectObjective( # 17
                 id="birch_2_03_oldale_to_route103",
                 description="Travel north through Oldale Town to Route 103",
                 action_type="navigate",
@@ -341,7 +350,7 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_route_103",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 18
                 id="birch_2_04_route103_rival",
                 description="Travel north through Route 103 to find and interact with your rival.",
                 action_type="navigate",
@@ -350,7 +359,7 @@ class DirectObjectiveManager:
                 completion_condition="passed_route103_first_grass",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 19
                 id="birch_2_05_battle_rival",
                 description="Interact with rival and battle them",
                 action_type="battle",
@@ -359,7 +368,7 @@ class DirectObjectiveManager:
                 completion_condition="battle_completed",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 20
                 id="birch_2_06_south_to_professor_birch_lab",
                 description="Travel back south to Professor Birch's lab to receive the pokedex",
                 action_type="navigate",
@@ -370,7 +379,7 @@ class DirectObjectiveManager:
             ),
 
             # ========== Rival to Petalburg (Objectives 21-24) ==========
-            DirectObjective(
+            DirectObjective( # 21
                 id="professor_birch_to_route_102",
                 description="Travel to route 102",
                 action_type="navigate",
@@ -379,7 +388,7 @@ class DirectObjectiveManager:
                 completion_condition="location_contains_route_102",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 22
                 id="route_102_to_petalburg",
                 description="Travel to petalburg city. You may have to encounter and battle trainers along the way",
                 action_type="navigate",
@@ -388,7 +397,7 @@ class DirectObjectiveManager:
                 completion_condition="reached_petalburg_city",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 23
                 id="petalburg_city_to_dad_first_meeting",
                 description="Travel to dad's first meeting with you",
                 action_type="navigate",
@@ -397,7 +406,7 @@ class DirectObjectiveManager:
                 completion_condition="reached_dad_first_meeting",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 24
                 id="help_wally_catch_ralts",
                 description="Help Wally catch a Ralts",
                 action_type="battle",
@@ -407,8 +416,18 @@ class DirectObjectiveManager:
                 priority=1
             ),
 
-            # ========== Petalburg to Rustboro City (Objectives 25-27) ==========
-            DirectObjective(
+            DirectObjective( # 25
+                id="petalburg_heal_at_pokecenter",
+                description="Find and enter the Pokemon Center in Petalburg City to heal your Pokemon",
+                action_type="interact",
+                target_location="Petalburg City",
+                navigation_hint="The Pokemon Center has a red roof and is marked with a red 'P' symbol. Navigate to the building and walk through the door. Inside, talk to Nurse Joy (the NPC behind the counter) and press A to heal your Pokemon. Wait for the healing animation to complete.",
+                completion_condition="pokemon_healed_at_petalburg_center",
+                priority=1
+            ),
+
+            # ========== Petalburg to Rustboro City (Objectives 25-28) ==========
+            DirectObjective( # 26
                 id="petalbug_to_route_104",
                 description="Travel to route 104",
                 action_type="navigate",
@@ -417,7 +436,7 @@ class DirectObjectiveManager:
                 completion_condition="reached_route_104",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 27
                 id="route_104_to_petalburg_woods",
                 description="Travel north to petalburg woods",
                 action_type="navigate",
@@ -426,19 +445,28 @@ class DirectObjectiveManager:
                 completion_condition="reached_petalburg_woods",
                 priority=1
             ),
-          
-            DirectObjective(
+            DirectObjective( # 28
+                id="petalburg_woods_to_route_104_north",
+                description="Travel north route_104_north",
+                action_type="navigate",
+                target_location="Route 104 North",
+                navigation_hint="Travel from petalburg woods to route 104 north at the very north of the woods. You will need to battle trainers, including team aquanut on the way.",
+                completion_condition="reached_route_104_north",
+                priority=1
+            ),
+
+            DirectObjective( # 29
                 id="route_104_north_to_rustboro_city",
                 description="Travel to rustboro city",
                 action_type="navigate",
                 target_location="Rustboro City",
-                navigation_hint="Travel from route 104 north -> rustboro city",
+                navigation_hint="Travel from route 104 north -> rustboro city. Follow the path east the get to the bridge north. northish but will need to first go east, then across the bridge north-west-north, then north. Avoid the flower shop",
                 completion_condition="reached_rustboro_city",
                 priority=1
             ),
 
-            # ========== Rustboro City to Rustboro Gym (Objectives 28-37) ==========
-            DirectObjective(
+            # ========== Rustboro City to Rustboro Gym (Objectives 28-38) ==========
+            DirectObjective( # 30
                 id="rustboro_pokemon_center",
                 description="Visit the pokemon center in rustboro city",
                 action_type="navigate",
@@ -447,7 +475,7 @@ class DirectObjectiveManager:
                 completion_condition="reached_rustboro_city_pokemon_center",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 31
                 id="heal_pokemon_at_rustboro_pokemon_center",
                 description="Heal your pokemon at the pokemon center in rustboro city",
                 action_type="interact",
@@ -456,7 +484,7 @@ class DirectObjectiveManager:
                 completion_condition="healed_pokemon_at_rustboro_pokemon_center",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 32
                 id="catch_first_pokemon_in_route_104",
                 description="Keep walking around the grass until you encounter and catch a pokemon. (once the opposing pokemon has < 50% health, use a pokeball). CRITICAL: The following are valid pokemon that can be caught in route 104: marill, poochyena, taillow, wingull. Any other pokemon can simply be defeated!",
                 action_type="navigate",
@@ -465,7 +493,7 @@ class DirectObjectiveManager:
                 completion_condition="caught_first_pokemon",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 33
                 id="catch_second_pokemon_in_route_104",
                 description="Keep walking around the grass until you encounter and catch a pokemon. (once the opposing pokemon has < 50% health, use a pokeball). CRITICAL: Dont catch wurmple or pokemon already in your party!",
                 action_type="navigate",
@@ -474,25 +502,25 @@ class DirectObjectiveManager:
                 completion_condition="caught_second_pokemon",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 34
                 id="rustboro_pokemon_center_2",
-                description="Visit the pokemon center in rustboro city again",
+                description="Visit the pokemon center in rustboro city again (east to bridge. Then north-west-north across bridge to rustboro.).",
                 action_type="navigate",
                 target_location="Rustboro City Pokemon Center",
-                navigation_hint="Travel from route 104 -> rustboro city -> rustboro city pokemon center",
+                navigation_hint="Travel from route 104 -> rustboro city -> rustboro city pokemon center. You will need to navigate east to the bridge. Then north, west, north across the bridge to get back to rustboro.",
                 completion_condition="reached_rustboro_city_pokemon_center",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 35
                 id="heal_pokemon_at_rustboro_pokemon_center_2",
                 description="Heal your pokemon at the pokemon center in rustboro city again",
                 action_type="interact",
                 target_location="Rustboro City Pokemon Center",
-                navigation_hint="Interact with the nurse in the rustboro city to heal your pokemon",
+                navigation_hint="Interact with the nurse (press A while facing nurse joy across the counter) in the rustboro city to heal your pokemon",
                 completion_condition="healed_pokemon_at_rustboro_pokemon_center",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 36
                 id="enter_rustboro_gym",
                 description="Enter the rustboro gym",
                 action_type="navigate",
@@ -501,25 +529,25 @@ class DirectObjectiveManager:
                 completion_condition="entered_rustboro_gym",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 37
                 id="navigate_to_rustboro_gym_leader",
                 description="Navigate to the rustboro gym leader. You will battle pokemon trainers along the way!",
                 action_type="navigate",
                 target_location="Rustboro City Gym",
-                navigation_hint="The gym leader (roxanne) is located in the north of the gym. Use navigate_to() to efficiently navigate towards the gym leader. If navigate_to() is failing, manually via PRESS_BUTTON a few steps away and try to pathfind from a different location.",
+                navigation_hint="The gym leader (roxanne) is located in the north of the gym. Use navigate_to() to efficiently navigate towards the gym leader. If navigate_to() is failing, manually via PRESS_BUTTON a few steps away and try to pathfind from a different location. You will need to navigate around the NPCs. If you get stuck, leave the gym and immediately go back inside.",
                 completion_condition="reached_rustboro_gym_leader",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective(  # 38
                 id="battle_rustboro_gym_leader",
-                description="Battle the rustboro gym leader. Prioritize using supereffective moves. If a pokemon faints make sure to use (LEFT/RIGHT/UP/DOWN) in the pokemon selection screen before pressing A to carefully select the next pokemon. Make sure the pokemon you are selecting is highligted with a red outline (this is how you know the pokemon is selected) before pressing A!",
+                description="Battle the rustboro gym leader by facing her and pressing UP+A. Prioritize using supereffective moves. If a pokemon faints make sure to use (LEFT/RIGHT/UP/DOWN) in the pokemon selection screen before pressing A to carefully select the next pokemon. Make sure the pokemon you are selecting is highligted with a red outline (this is how you know the pokemon is selected) before pressing A!",
                 action_type="battle",
                 target_location="Rustboro City Gym",
                 navigation_hint="Battle the rustboro gym leader. If you lose this battle, renavigate back to rustboro gym -> roxanne and try again.",
                 completion_condition="roxanne_defeated_and_received_badge",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 39
                 id="exit_rustboro_gym",
                 description="Exit the rustboro gym",
                 action_type="navigate",
@@ -528,13 +556,272 @@ class DirectObjectiveManager:
                 completion_condition="exited_rustboro_gym",
                 priority=1
             ),
-            DirectObjective(
+            DirectObjective( # 40
                 id="go_to_rustboro_city_pokemon_center_and_heal_pokemon",
                 description="Go to the rustboro city pokemon center and heal your pokemon",
                 action_type="navigate",
                 target_location="Rustboro City Pokemon Center",
-                navigation_hint="Travel to the rustboro city pokemon center and heal your pokemon",
+                navigation_hint="Travel to the rustboro city pokemon center and heal your pokemon. Interact with the nurse (press A while facing nurse joy across the counter).",
                 completion_condition="reached_rustboro_city_pokemon_center",
+                priority=1
+            ),
+            DirectObjective(  # 41
+                id="navigate_to_route_116",
+                description="Navigate to Route 116 to track down the Team Aqua grunt who stole the Devon Goods",
+                action_type="navigate",
+                target_location="Route 116",
+                navigation_hint="Exit Rustboro City from the northeast exit. Use navigate_to() to reach Route 116. The Devon researcher will mention seeing the thief heading this direction.",
+                completion_condition="reached_route_116",
+                priority=1
+            ),
+
+            DirectObjective(  # 42
+                id="navigate_to_rusturf_tunnel",
+                description="Navigate to Rusturf Tunnel entrance at the east end of Route 116",
+                action_type="navigate",
+                target_location="Rusturf Tunnel",
+                navigation_hint="Travel east through Route 116. You may encounter trainers along the way. The Rusturf Tunnel entrance is at the far east end of the route. Use navigate_to() to efficiently reach the tunnel entrance.",
+                completion_condition="reached_rusturf_tunnel_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 43
+                id="battle_team_aqua_grunt_rusturf_tunnel",
+                description="Battle the Team Aqua grunt inside Rusturf Tunnel to retrieve the Devon Goods. Walk all the way to the right and then press A to interact. Keep pressing RIGHT and DOWN and A until you find him. PRESS RIGHT. Use supereffective moves and carefully select pokemon if one faints.",
+                action_type="battle",
+                target_location="Rusturf Tunnel",
+                navigation_hint="Enter Rusturf Tunnel and battle the Team Aqua grunt. He has a level 11 Poochyena. After defeating him, you will automatically retrieve the Devon Goods. If you lose, renavigate back and try again.",
+                completion_condition="defeated_team_aqua_grunt_and_retrieved_devon_goods",
+                priority=1
+            ),
+
+            DirectObjective(  # 44
+                id="exit_rusturf_tunnel",
+                description="Exit Rusturf Tunnel back to Route 116",
+                action_type="navigate",
+                target_location="Rusturf Tunnel",
+                navigation_hint="Walk back (LEFT+DOWN) through Rusturf Tunnel to the exit. Use navigate_to() to reach the exit efficiently.",
+                completion_condition="exited_rusturf_tunnel_to_route_116",
+                priority=1
+            ),
+
+            DirectObjective(  # 45
+                id="navigate_to_rustboro_city_devon_corp",
+                description="Return to Rustboro City and navigate to the Devon Corporation building",
+                action_type="navigate",
+                target_location="Devon Corporation",
+                navigation_hint="Travel west through Route 116 back to Rustboro City. The Devon Corporation building is in the northwest corner of Rustboro City. The Devon researcher should be waiting outside. Use navigate_to() to efficiently navigate to Devon Corporation.",
+                completion_condition="reached_devon_corporation_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 46
+                id="enter_devon_corporation_and_meet_mr_stone",
+                description="Enter Devon Corporation and go to the third floor to meet Mr. Stone",
+                action_type="navigate",
+                target_location="Devon Corporation 3F",
+                navigation_hint="Enter the Devon Corporation building. The Devon researcher will escort you inside. Navigate to the third floor where Mr. Stone's office is located. Use navigate_to() or manually navigate up the stairs.",
+                completion_condition="reached_mr_stone_office",
+                priority=1
+            ),
+
+            DirectObjective(  # 47
+                id="receive_pokenav_and_letter_from_mr_stone",
+                description="Talk to Mr. Stone to receive the PokéNav and Letter for Steven",
+                action_type="interact",
+                target_location="Devon Corporation 3F",
+                navigation_hint="Face Mr. Stone and press A to talk to him. He will thank you for retrieving the Devon Goods and give you a PokéNav and a Letter to deliver to Steven in Dewford Town.",
+                completion_condition="received_pokenav_and_letter",
+                priority=1
+            ),
+
+            DirectObjective(  # 48
+                id="exit_devon_corporation",
+                description="Exit the Devon Corporation building",
+                action_type="navigate",
+                target_location="Devon Corporation",
+                navigation_hint="Navigate back down to the first floor and exit the Devon Corporation building. A scientist will add the Match Call function to your PokéNav when you leave.",
+                completion_condition="exited_devon_corporation",
+                priority=1
+            ),
+
+            DirectObjective(  # 49
+                id="navigate_to_route_104_north_mr_briney",
+                description="GO TO THE MAIN MENU TO EXIT THE POKEMON NAVIGATOR. Navigate to Route 104 north to find Mr. Briney at his cottage",
+                action_type="navigate",
+                target_location="Route 104 North - Mr. Briney's Cottage",
+                navigation_hint="Exit Rustboro City from the south exit. Travel through Petalburg Woods to reach Route 104 north. Mr. Briney's cottage is on the southern beach area of Route 104. You may need to navigate through Petalburg Woods first if approaching from Rustboro. Use navigate_to() efficiently.",
+                completion_condition="reached_mr_briney_cottage_route_104",
+                priority=1
+            ),
+
+            DirectObjective(  # 50
+                id="talk_to_mr_briney_and_sail_to_dewford",
+                description="Talk to Mr. Briney and sail to Dewford Town",
+                action_type="interact",
+                target_location="Route 104 South - Mr. Briney's Cottage",
+                navigation_hint="Enter Mr. Briney's cottage on Route 104 south (accessed from the beach area). Talk to Mr. Briney and he will offer to sail you to Dewford Town. Accept his offer to begin the sea voyage through Routes 105 and 106.",
+                completion_condition="sailing_to_dewford_town",
+                priority=1
+            ),
+
+            DirectObjective(  # 51
+                id="arrive_at_dewford_town",
+                description="Arrive at Dewford Town via Mr. Briney's boat",
+                action_type="cutscene",
+                target_location="Dewford Town",
+                navigation_hint="Wait for the sailing cutscene to complete. You will receive a call from your dad (Norman) during the voyage. The boat will automatically arrive at Dewford Town.",
+                completion_condition="arrived_at_dewford_town",
+                priority=1
+            ),
+
+            DirectObjective(  # 52
+                id="explore_dewford_town_and_get_old_rod",
+                description="Explore Dewford Town and obtain the Old Rod from the fisherman",
+                action_type="interact",
+                target_location="Dewford Town",
+                navigation_hint="Talk to the Fisherman standing outside the Dewford Gym (east side of town). Answer his question to receive the Old Rod, which allows you to fish for Pokemon in any body of water.",
+                completion_condition="received_old_rod",
+                priority=1
+            ),
+
+            DirectObjective(  # 53
+                id="navigate_to_dewford_gym_entrance",
+                description="Navigate to the Dewford Gym entrance",
+                action_type="navigate",
+                target_location="Dewford Gym",
+                navigation_hint="The Dewford Gym is located on the east side of Dewford Town. Use navigate_to() to reach the gym entrance efficiently.",
+                completion_condition="reached_dewford_gym_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 54
+                id="navigate_to_dewford_gym_leader",
+                description="Navigate to the Dewford Gym leader Brawly. The gym is dark initially and lights up as you defeat trainers.",
+                action_type="navigate",
+                target_location="Dewford Gym",
+                navigation_hint="The Dewford Gym specializes in Fighting-type Pokemon. The gym is dimly lit initially. Navigate through the gym, battling trainers to light up sections. Brawly is located at the back of the gym. Use navigate_to() to efficiently navigate towards Brawly. You can avoid some trainers if needed as the gym layout allows direct access to the leader.",
+                completion_condition="reached_dewford_gym_leader",
+                priority=1
+            ),
+
+            DirectObjective(  # 55
+                id="battle_dewford_gym_leader_brawly",
+                description="Battle Dewford Gym Leader Brawly. Use Flying-type and Psychic-type moves for advantage. His team has Machop (Lv16), Meditite (Lv16), and Makuhita (Lv19). Watch out for Bulk Up and Focus Punch.",
+                action_type="battle",
+                target_location="Dewford Gym",
+                navigation_hint="Battle Brawly using supereffective Flying or Psychic-type moves. His Machop and Makuhita have the Guts ability. His Meditite can use Light Screen, Reflect, and Focus Punch. Avoid using Normal, Rock, Steel, and Dark-type Pokemon. If you lose, heal at the Pokemon Center and return to battle again.",
+                completion_condition="defeated_brawly_and_received_knuckle_badge",
+                priority=1
+            ),
+
+            DirectObjective(  # 56
+                id="exit_dewford_gym",
+                description="Exit the Dewford Gym",
+                action_type="navigate",
+                target_location="Dewford Gym",
+                navigation_hint="After defeating Brawly and receiving the Knuckle Badge and TM08 (Bulk Up), navigate to the gym exit. The gym should now be fully lit. Use navigate_to() to reach the exit efficiently.",
+                completion_condition="exited_dewford_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 57
+                id="navigate_to_dewford_pokemon_center_and_heal",
+                description="Go to Dewford Town Pokemon Center and heal your Pokemon",
+                action_type="navigate",
+                target_location="Dewford Town Pokemon Center",
+                navigation_hint="Navigate to the Pokemon Center in Dewford Town and heal your Pokemon before exploring Granite Cave.",
+                completion_condition="reached_dewford_pokemon_center_and_healed",
+                priority=1
+            ),
+
+            DirectObjective(  # 58
+                id="navigate_to_route_106",
+                description="Navigate to Route 106 from Dewford Town",
+                action_type="navigate",
+                target_location="Route 106",
+                navigation_hint="Exit Dewford Town from the west exit to reach Route 106. You cannot fully explore the water areas yet without Surf. Battle the trainers on the beach.",
+                completion_condition="reached_route_106",
+                priority=1
+            ),
+
+            DirectObjective(  # 59
+                id="navigate_to_granite_cave_entrance",
+                description="Navigate to Granite Cave entrance on Route 106",
+                action_type="navigate",
+                target_location="Granite Cave",
+                navigation_hint="Granite Cave is located at the northwest area of Route 106. Navigate through Route 106 beach area to reach the cave entrance. Use navigate_to() to efficiently reach Granite Cave.",
+                completion_condition="reached_granite_cave_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 60
+                id="navigate_through_granite_cave_1f_to_find_hiker",
+                description="Enter Granite Cave and navigate to find the hiker on 1F who gives you HM05 Flash",
+                action_type="navigate",
+                target_location="Granite Cave 1F",
+                navigation_hint="Enter Granite Cave. Near the entrance on the first floor, there should be a hiker who will give you HM05 (Flash). Talk to him to receive Flash, which will help illuminate the dark cave. Use navigate_to() to find the hiker.",
+                completion_condition="received_hm05_flash_from_hiker",
+                priority=1
+            ),
+
+            DirectObjective(  # 61
+                id="navigate_to_granite_cave_basement_1f",
+                description="Navigate deeper into Granite Cave to basement level B1F",
+                action_type="navigate",
+                target_location="Granite Cave B1F",
+                navigation_hint="From Granite Cave 1F, find the stairs leading down to B1F. The basement level is dark, so you may want to use Flash (though not required). Navigate down the stairs using navigate_to() or manual movement.",
+                completion_condition="reached_granite_cave_b1f",
+                priority=1
+            ),
+
+            DirectObjective(  # 62
+                id="find_steven_in_granite_cave",
+                description="Navigate through Granite Cave to find Steven Stone and deliver the Letter from Mr. Stone",
+                action_type="navigate",
+                target_location="Granite Cave B2F",
+                navigation_hint="Steven is located in the deepest part of Granite Cave on floor B2F. Navigate from B1F down to B2F. Steven will be in the back area examining the rocks. The cave is dark so Flash helps but is not required. Use navigate_to() to efficiently navigate through the cave floors. You may encounter wild Pokemon and trainers along the way.",
+                completion_condition="found_steven_in_granite_cave",
+                priority=1
+            ),
+
+            DirectObjective(  # 63
+                id="deliver_letter_to_steven",
+                description="Talk to Steven Stone and deliver the Letter from Mr. Stone",
+                action_type="interact",
+                target_location="Granite Cave B2F",
+                navigation_hint="Face Steven and press A to talk to him. Deliver the Letter from Mr. Stone. Steven will thank you and give you TM47 (Steel Wing) as a reward.",
+                completion_condition="delivered_letter_to_steven",
+                priority=1
+            ),
+
+            DirectObjective(  # 64
+                id="exit_granite_cave",
+                description="Exit Granite Cave back to Route 106",
+                action_type="navigate",
+                target_location="Granite Cave",
+                navigation_hint="Navigate back through Granite Cave from B2F to B1F to 1F and finally exit to Route 106. Use navigate_to() to efficiently navigate back to the entrance. You can use an Escape Rope if you have one to exit instantly.",
+                completion_condition="exited_granite_cave_to_route_106",
+                priority=1
+            ),
+
+            DirectObjective(  # 65
+                id="return_to_dewford_town_from_route_106",
+                description="Return to Dewford Town from Route 106",
+                action_type="navigate",
+                target_location="Dewford Town",
+                navigation_hint="Navigate east through Route 106 back to Dewford Town. Use navigate_to() to efficiently return to Dewford Town.",
+                completion_condition="returned_to_dewford_town_from_route_106",
+                priority=1
+            ),
+
+            DirectObjective(  # 66
+                id="talk_to_mr_briney_to_sail_to_route_109",
+                description="Find Mr. Briney in Dewford Town and sail to Route 109 (Slateport City direction)",
+                action_type="interact",
+                target_location="Dewford Town",
+                navigation_hint="Talk to Mr. Briney at the pier in Dewford Town. Ask him to sail you to Route 109/Slateport City. He will take you through Routes 107 and 108 to Route 109.",
+                completion_condition="sailing_to_route_109",
                 priority=1
             ),
         ]
@@ -734,7 +1021,7 @@ class DirectObjectiveManager:
                 completion_condition="player_location_is_petalburg_city",
                 priority=1
             ),
-            
+
             DirectObjective(
                 id="petalburg_02_meet_norman",
                 description="Enter the Petalburg Gym and meet your father Norman, the Gym Leader",

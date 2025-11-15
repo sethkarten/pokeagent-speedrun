@@ -1150,13 +1150,16 @@ ROM_TO_PORYMAP_MAP = {
     
     # Buildings (common patterns)
     "PETALBURG WOODS": "PetalburgWoods",
-    
+    "RUSTURF TUNNEL": "RusturfTunnel",
+
     # Professor Birch's Lab
     "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
     "PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
-    
+
     # Raw map IDs (fallback when memory reader can't resolve location name)
     "Map_18_0B": "PetalburgWoods",  # Group 0x18 (Dungeons), Map 0x0B
+    "Map_18_04": "RusturfTunnel",  # Group 0x18 (Indoor Route 104), Map 0x04
+    "MAP_18_04": "RusturfTunnel",  # Alternate capitalization
 }
 
 def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None) -> List[str]:

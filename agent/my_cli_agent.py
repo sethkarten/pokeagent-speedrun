@@ -14,6 +14,7 @@ import logging
 import requests
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
+import numpy as np
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -573,7 +574,7 @@ class MyCLIAgent:
 
         entry = {
             "step": self.step_count,
-            "llm_response": response_stripped[:500],  # LLM thinking only, max 500 chars
+            "llm_response": response_stripped,  # LLM thinking only, max 500 chars
             "timestamp": time.time()
         }
 
@@ -719,12 +720,34 @@ class MyCLIAgent:
                     import PIL.Image as PILImage
                     import io
                     import base64
-                    
+
                     # Decode base64 to image
                     image_data = base64.b64decode(screenshot_b64)
                     image = PILImage.open(io.BytesIO(image_data))
-                    
-                    # Define function after image is created
+
+                    # CRITICAL: Validate frame before any VLM processing
+                    if image is None:
+                        logger.error("🚫 CRITICAL: run_step called with None image - cannot proceed")
+                        return False, "ERROR: No valid image provided"
+
+                    # Validate frame is a proper image
+                    if not (hasattr(image, 'save') or hasattr(image, 'shape')):
+                        logger.error(f"🚫 CRITICAL: run_step called with invalid image type {type(image)} - cannot proceed")
+                        return False, "ERROR: Invalid image type"
+
+                    # Additional PIL Image validation
+                    if hasattr(image, 'size'):
+                        width, height = image.size
+                        if width <= 0 or height <= 0:
+                            logger.error(f"🚫 CRITICAL: run_step called with invalid image size {width}x{height} - cannot proceed")
+                            return False, "ERROR: Invalid image dimensions"
+
+                    # Check for black frame (transition screen)
+                    if self._is_black_frame(image):
+                        logger.info("⏳ Black frame detected (likely a transition), waiting for next frame...")
+                        return True, "WAIT"  # Return success but with WAIT action
+
+                    # Define function after image is created and validated
                     def call_vlm_with_image():
                         return self.vlm.get_query(image, prompt, "CLI_Agent")
                     
@@ -888,17 +911,14 @@ class MyCLIAgent:
                         # Wait for actions to complete first, then get final position
                         self._wait_for_actions_complete()
                         final_pos = None
-                        try:
-                            # Get state to find final position after navigation completes
-                            final_state_result = self._execute_function_call_by_name("get_game_state", {})
-                            import json as json_module
-                            final_state_data = json_module.loads(final_state_result)
-                            if final_state_data.get("success"):
-                                player_pos = final_state_data.get("player_position", {})
-                                if player_pos:
-                                    final_pos = (player_pos.get("x"), player_pos.get("y"))
-                        except:
-                            pass
+                        # Get state to find final position after navigation completes
+                        final_state_result = self._execute_function_call_by_name("get_game_state", {})
+                        import json as json_module
+                        final_state_data = json_module.loads(final_state_result)
+                        if final_state_data.get("success"):
+                            player_pos = final_state_data.get("player_position", {})
+                            if player_pos:
+                                final_pos = (player_pos.get("x"), player_pos.get("y"))
                         
                         variance = last_tool_call.get('args', {}).get('variance', 'none')
                         if final_pos:
@@ -1250,16 +1270,26 @@ class MyCLIAgent:
         # Extract key information from game state
         state_text = game_state_data.get("state_text", "")
 
+        # Detect if in title sequence
+        is_title_sequence = self._is_title_sequence(game_state_data)
+        if is_title_sequence:
+            logger.info("🎬 Title sequence detected - map information will be hidden")
+
         # Extract player coordinates for stuck detection
         player_position = game_state_data.get("player_position", {})
         current_coords = None
         if player_position and "x" in player_position and "y" in player_position:
             current_coords = (player_position["x"], player_position["y"])
 
-        # Add stuck warning if detected (prepend to state_text)
-        stuck_warning = self._get_stuck_warning(current_coords)
-        if stuck_warning:
-            state_text = stuck_warning + state_text
+        # Add stuck warning if detected (but not during title sequence)
+        if not is_title_sequence:
+            stuck_warning = self._get_stuck_warning(current_coords)
+            if stuck_warning:
+                state_text = stuck_warning + state_text
+
+        # Strip map information during title sequence
+        if is_title_sequence:
+            state_text = self._strip_map_info(state_text)
 
         direct_objective = game_state_data.get("direct_objective", "")
         direct_objective_status = game_state_data.get("direct_objective_status", "")
@@ -1282,12 +1312,6 @@ class MyCLIAgent:
             current_idx = direct_objective_status.get("current_index", 0)
             completed = direct_objective_status.get("completed_count", 0)
             direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
-        
-        # Format objective context to highlight previous, current, and next
-        if direct_objective_context:
-            # The context is already formatted nicely by DirectObjectiveManager
-            # Just make it more prominent
-            pass  # Keep as-is
         
         # Build action history summary for better context
         action_history = self._format_action_history()
@@ -1366,7 +1390,7 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 
 🎮 **PRIMARY GAME TOOLS** :
 - get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
-- complete_direct_objective(reasoning) - Mark current direct objective as complete. (prioritize this before progressing through dialogue)
+- complete_direct_objective(reasoning) - Mark current direct objective as complete. Provide strict justification before completing the objective. (prioritize this before progressing through dialogue)
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
 - navigate_to(x, y, variance, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data. Make sure the coordinate you are requesting a path to is walkable. If it isnt, pathfinding will fail and you wont move. NOTE: the top-left corner of the map is (0, 0).
 
@@ -1508,6 +1532,82 @@ Step {step_count}"""
 
         return prompt
 
+
+    def _is_title_sequence(self, game_state_data: Dict[str, Any]) -> bool:
+        """Detect if in title sequence"""
+        # Check player location
+        player_location = game_state_data.get("location", "")
+        if player_location == "TITLE_SEQUENCE":
+            return True
+
+        # Check player name (empty or ???????? indicates title)
+        player_name = game_state_data.get("player_name", "").strip()
+        if not player_name or player_name == "????????":
+            return True
+
+        # Check game state value
+        game_state_value = game_state_data.get("game_state", "").lower()
+        if "title" in game_state_value or "intro" in game_state_value:
+            return True
+
+        return False
+
+    def _strip_map_info(self, state_text: str) -> str:
+        """Strip map/navigation information from state text during title sequence"""
+        lines = state_text.split('\n')
+        filtered_lines = []
+        skip_section = False
+
+        for line in lines:
+            # Skip sections that contain map information
+            if any(marker in line for marker in [
+                "🗺️ MAP:",
+                "CURRENT MAP:",
+                "PORYMAP ASCII:",
+                "PORYMAP GROUND TRUTH MAP:",
+                "🧭 MOVEMENT PREVIEW:",
+                "MOVEMENT MEMORY:",
+                "Player coordinates:",
+                "Map dimensions:",
+                "POSITION:",
+                "LOCATION:"
+            ]):
+                skip_section = True
+                continue
+
+            # Resume after finding a new section or empty line
+            if line.strip() == "" or (line.startswith("🎯") or line.startswith("📊") or line.startswith("⚠️")):
+                skip_section = False
+
+            if not skip_section:
+                filtered_lines.append(line)
+
+        return '\n'.join(filtered_lines)
+
+    def _is_black_frame(self, image) -> bool:
+        """Check if frame is a black screen (transition)"""
+        try:
+
+            # Convert PIL Image to numpy array if needed
+            if hasattr(image, 'save'):  # PIL Image
+                frame_array = np.array(image)
+            else:
+                frame_array = image
+
+            # Calculate mean brightness
+            mean_brightness = frame_array.mean()
+
+            # If mean brightness is very low, it's likely a black frame
+            threshold = 10  # Very dark threshold
+            is_black = mean_brightness < threshold
+
+            if is_black:
+                logger.debug(f"Black frame detected: mean brightness = {mean_brightness:.2f} < {threshold}")
+
+            return is_black
+        except Exception as e:
+            logger.warning(f"Error checking for black frame: {e}")
+            return False  # If we can't check, assume it's not black
 
     def _detect_stuck_pattern(self, current_coords: Optional[Tuple[int, int]]) -> bool:
         """Detect if agent is stuck (same position for multiple recent steps)"""
@@ -1706,10 +1806,13 @@ Step {step_count}"""
             
         content = candidate.content
         if not hasattr(content, 'parts'):
+            logger.warning("⚠️ Response content has no 'parts' attribute - cannot extract function calls")
             return False
-        
+
+        logger.debug(f"🔍 Checking {len(content.parts)} response parts for function calls")
         function_calls_found = False
-        for part in content.parts:
+        for i, part in enumerate(content.parts):
+            logger.debug(f"   Part {i}: has function_call={hasattr(part, 'function_call')}, has text={hasattr(part, 'text')}")
             if hasattr(part, 'function_call') and part.function_call:
                 function_call = part.function_call
                 tool_call_count += 1
@@ -1732,8 +1835,17 @@ Step {step_count}"""
                     self._wait_for_actions_complete()
                 
                 function_calls_found = True
-        
-        return function_calls_found and len(tool_calls_made) > 0
+            elif hasattr(part, 'text') and part.text:
+                logger.debug(f"   Part {i} is text: {part.text[:100]}...")
+
+        if not function_calls_found:
+            logger.warning(f"⚠️ No function calls found in response (parts checked: {len(content.parts)})")
+        elif len(tool_calls_made) == 0:
+            logger.error(f"🚫 Function calls found but none were executed (tool_calls_made is empty)")
+
+        result = function_calls_found and len(tool_calls_made) > 0
+        logger.debug(f"   Returning: function_calls_found={function_calls_found}, tool_calls_made={len(tool_calls_made)}, result={result}")
+        return result
     
     def _extract_text_from_response(self, response):
         """Extract text content from response (handles both string and GenerationResponse)
