@@ -28,7 +28,8 @@ class Agent:
         # Extract configuration
         backend = args.backend if args else "gemini"
         model_name = args.model_name if args else "gemini-2.5-flash"
-        
+        port = args.port if args and hasattr(args, 'port') else 8000
+
         # Handle scaffold selection (with backward compatibility for --simple)
         if args and hasattr(args, 'scaffold'):
             scaffold = args.scaffold
@@ -66,18 +67,26 @@ class Agent:
             print(f"   Scaffold: ClaudePlaysPokemon (tool-based with pathfinding)")
             
         elif scaffold == "geminiplays":
-            # Create GeminiPlaysPokemon agent
-            from agent.gemini_plays import create_gemini_plays_agent
-            vlm_client = VLM(backend=backend, model_name=model_name)
+            # Create GeminiPlaysPokemon agent with native tools
+            from agent.gemini_plays import create_gemini_plays_agent, _create_gemini_plays_tools
+            server_url = f"http://localhost:{port}"
+
+            # CRITICAL: Create tools first, then create VLM with tools for function calling
+            tools = _create_gemini_plays_tools()
+            vlm_client = VLM(backend=backend, model_name=model_name, tools=tools)
+            print(f"   VLM created with {len(tools)} tools for function calling")
+
             self.agent_impl = create_gemini_plays_agent(
                 vlm_client=vlm_client,
-                context_reset_interval=100,  # Reset context every 100 turns as per blog
+                server_url=server_url,  # MCP server URL
+                context_reset_interval=100,  # Reset context every 100 steps
                 enable_self_critique=True,
                 enable_exploration=True,
-                enable_meta_tools=True,
+                use_mcp_tools=True,  # Enable all 15 tools (3 MCP + 12 native)
                 verbose=True
             )
-            print(f"   Scaffold: GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)")
+            print(f"   Scaffold: GeminiPlaysPokemon (15 tools: goals, memory, navigation, self-critique)")
+            print(f"   Server: {server_url}")
             
         else:  # fourmodule (default)
             # Four-module agent context
@@ -125,8 +134,20 @@ class Agent:
                 
             elif self.scaffold == "geminiplays":
                 # GeminiPlaysPokemon agent expects state dict and screenshot separately
-                state = game_state.get('game_state', {})
-                screenshot = game_state.get('screenshot', None)
+                # Extract state from the structure sent by server/client.py
+                state = {
+                    'player': game_state.get('player', {}),
+                    'game': game_state.get('game', {}),
+                    'map': game_state.get('map', {}),
+                    'milestones': game_state.get('milestones', {}),
+                    'visual': game_state.get('visual', {}),
+                    'player_position': game_state.get('player', {}).get('position', {}),
+                    'location': game_state.get('map', {}).get('name', 'Unknown'),
+                    'team': game_state.get('player', {}).get('party', []),
+                    'badges': game_state.get('player', {}).get('badges', 0),
+                    'in_battle': game_state.get('game', {}).get('in_battle', False)
+                }
+                screenshot = game_state.get('frame', None)  # 'frame' not 'screenshot'
                 button = self.agent_impl.step(state, screenshot)
                 return {'action': button, 'reasoning': 'GeminiPlaysPokemon agent decision'}
                 

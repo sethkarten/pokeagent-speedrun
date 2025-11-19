@@ -1243,14 +1243,23 @@ class GeminiBackend(VLMBackend):
         
         # Configure the API
         genai.configure(api_key=self.api_key)
-        
-        # Initialize the model WITH system instructions if provided
+
+        # Initialize the model WITH tools and system instructions if provided
+        model_kwargs = {}
         if self.system_instruction:
-            self.model = genai.GenerativeModel(model_name, system_instruction=self.system_instruction)
-            logger.info(f"Gemini backend initialized with model: {model_name} and system instructions ({len(self.system_instruction)} chars)")
-        else:
-            self.model = genai.GenerativeModel(model_name)
-            logger.info(f"Gemini backend initialized with model: {model_name}")
+            model_kwargs['system_instruction'] = self.system_instruction
+        if self.tools:
+            model_kwargs['tools'] = self.tools
+
+        self.model = genai.GenerativeModel(model_name, **model_kwargs)
+
+        # Log initialization details
+        log_parts = [f"Gemini backend initialized with model: {model_name}"]
+        if self.tools:
+            log_parts.append(f"{len(self.tools)} tools")
+        if self.system_instruction:
+            log_parts.append(f"system instructions ({len(self.system_instruction)} chars)")
+        logger.info(", ".join(log_parts))
         
         self.genai = genai
     
@@ -1263,13 +1272,123 @@ class GeminiBackend(VLMBackend):
             return Image.fromarray(img)
         else:
             raise ValueError(f"Unsupported image type: {type(img)}")
-    
-    @retry_with_exponential_backoff
+
+    def _extract_text_from_response(self, response):
+        """Extract text from Gemini response, handling multiple parts
+
+        Args:
+            response: GenerationResponse object
+
+        Returns:
+            String containing all text parts concatenated, or empty string if no text found
+        """
+        text_parts = []
+
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                content = candidate.content
+                if hasattr(content, 'parts'):
+                    for part in content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            text_parts.append(part.text)
+
+        # Join all text parts, or return empty string if none found
+        return ' '.join(text_parts) if text_parts else ""
+
+    def _extract_thinking_from_response(self, response):
+        """Extract thinking/reasoning text from response for logging
+
+        Args:
+            response: GenerationResponse object
+
+        Returns:
+            String containing extracted reasoning or function call info
+        """
+        thinking_text = ""
+        function_name = None
+
+        # Try to extract reasoning from function calls
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                content = candidate.content
+                if hasattr(content, 'parts'):
+                    for part in content.parts:
+                        if hasattr(part, 'function_call') and part.function_call:
+                            function_call = part.function_call
+                            function_name = function_call.name  # Always capture the function name
+
+                            # Extract reasoning from common argument names
+                            try:
+                                args = dict(function_call.args) if hasattr(function_call, 'args') else {}
+                                reasoning = args.get('reasoning') or args.get('reason') or ''
+                                if reasoning:
+                                    thinking_text = f"[{function_call.name}] {reasoning}"
+                                else:
+                                    # Show function call with args if no reasoning
+                                    args_str = ', '.join(f'{k}={v}' for k, v in list(args.items())[:3])  # Limit to first 3 args
+                                    if len(args) > 3:
+                                        args_str += ', ...'
+                                    thinking_text = f"Calling {function_call.name}({args_str})"
+                            except Exception as e:
+                                # If we can't extract args, at least show the function name
+                                thinking_text = f"Calling {function_call.name}()"
+                        elif hasattr(part, 'text') and part.text:
+                            # If there's also text content, use that
+                            thinking_text = part.text
+
+        # If no thinking text found, use function name if available, otherwise generic message
+        if not thinking_text:
+            if function_name:
+                thinking_text = f"[Executing {function_name}]"
+            else:
+                thinking_text = "[Executing function call - unable to extract details]"
+
+        return thinking_text
+
     def _call_generate_content(self, content_parts):
-        """Calls the generate_content method with exponential backoff."""
-        response = self.model.generate_content(content_parts)
-        response.resolve()
-        return response
+        """Calls the generate_content method with exponential backoff for rate limits.
+
+        Handles 429 rate limit errors with exponential backoff.
+        Uses 180 second timeout for slow preview models like gemini-3-pro-preview.
+        """
+        import time
+        import random
+
+        # Use longer timeout for preview models which are much slower
+        timeout = 180 if 'preview' in self.model_name or '3-pro' in self.model_name else 60
+
+        max_retries = 5
+        base_delay = 2  # Start with 2 second delay
+
+        for attempt in range(max_retries):
+            try:
+                response = self.model.generate_content(
+                    content_parts,
+                    request_options={'timeout': timeout}
+                )
+                return response
+            except Exception as e:
+                error_str = str(e).lower()
+
+                # Check if it's a rate limit error (429 or quota exceeded)
+                if '429' in error_str or 'quota' in error_str or 'rate' in error_str:
+                    if attempt < max_retries - 1:
+                        # Exponential backoff: 2s, 4s, 8s, 16s, 32s
+                        delay = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                        logger.warning(f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})...")
+                        time.sleep(delay)
+                        continue
+                    else:
+                        logger.error(f"Rate limit exceeded after {max_retries} retries")
+                        raise
+                else:
+                    # Not a rate limit error, raise immediately
+                    logger.error(f"Error in generate_content: {e}")
+                    raise
+
+        raise Exception("Max retries exceeded")
     
     def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
         """Process an image and text prompt using Gemini API"""
@@ -1284,6 +1403,7 @@ class GeminiBackend(VLMBackend):
             prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
             logger.info(f"[{module_name}] GEMINI VLM IMAGE QUERY:")
             logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
+            print(text)
             
             # Generate response
             response = self._call_generate_content(content_parts)
@@ -1295,10 +1415,9 @@ class GeminiBackend(VLMBackend):
                     logger.warning(f"[{module_name}] Gemini safety filter triggered (finish_reason=12). Trying text-only fallback.")
                     # Fallback to text-only query
                     return self.get_text_query(text, module_name)
-            
-            result = response.text
+
             duration = time.time() - start_time
-            
+
             # Extract token usage if available
             token_usage = {}
             if hasattr(response, 'usage_metadata'):
@@ -1308,23 +1427,66 @@ class GeminiBackend(VLMBackend):
                     "completion_tokens": getattr(usage, 'candidates_token_count', 0),
                     "total_tokens": getattr(usage, 'total_token_count', 0)
                 }
-            
-            # Log the interaction
-            log_llm_interaction(
-                interaction_type=f"gemini_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={"model": self.model_name, "backend": "gemini", "has_image": True, "token_usage": token_usage},
-                model_info={"model": self.model_name, "backend": "gemini"}
-            )
-            
-            # Log the response
-            result_preview = result[:1000] + "..." if len(result) > 1000 else result
-            logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-            logger.info(f"[{module_name}] ---")
-            
-            return result
+
+            # DUAL MODE: Function calling vs Regular text response
+            if self.tools:
+                # Function calling mode: Extract reasoning for logging, return response object
+                thinking_text = self._extract_thinking_from_response(response)
+
+                # Log the interaction with extracted thinking
+                log_llm_interaction(
+                    interaction_type=f"gemini_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={"model": self.model_name, "backend": "gemini", "has_image": True, "token_usage": token_usage, "has_function_call": True},
+                    model_info={"model": self.model_name, "backend": "gemini"}
+                )
+
+                # Log the response preview
+                thinking_preview = thinking_text[:200] + "..." if len(thinking_text) > 200 else thinking_text
+                logger.info(f"[{module_name}] AGENT THINKING: {thinking_preview}")
+                logger.info(f"[{module_name}] ---")
+
+                # Debug logging for response structure
+                logger.debug(f"[{module_name}] Response type: {type(response)}")
+                logger.debug(f"[{module_name}] Has parts: {hasattr(response, 'parts')}")
+                if hasattr(response, 'parts'):
+                    logger.debug(f"[{module_name}] Parts count: {len(response.parts) if response.parts else 0}")
+                if hasattr(response, 'candidates'):
+                    logger.debug(f"[{module_name}] Candidates count: {len(response.candidates) if response.candidates else 0}")
+
+                # Return response object for function calling
+                return response
+            else:
+                # Regular text mode: Extract and return text response
+                # Use helper method to handle multiple parts
+                result = self._extract_text_from_response(response)
+
+                if not result:
+                    # Fallback: try response.text if extraction fails
+                    try:
+                        result = response.text
+                    except Exception as e:
+                        logger.warning(f"[{module_name}] Could not extract text from response: {e}")
+                        result = "I received a response but could not extract the text content."
+
+                # Log the interaction
+                log_llm_interaction(
+                    interaction_type=f"gemini_{module_name}",
+                    prompt=text,
+                    response=result,
+                    duration=duration,
+                    metadata={"model": self.model_name, "backend": "gemini", "has_image": True, "token_usage": token_usage},
+                    model_info={"model": self.model_name, "backend": "gemini"}
+                )
+
+                # Log the response
+                result_preview = result[:1000] + "..." if len(result) > 1000 else result
+                logger.info(f"[{module_name}] RESPONSE: {result_preview}")
+                logger.info(f"[{module_name}] ---")
+
+                return result
             
         except Exception as e:
             logger.error(f"Error in Gemini image query: {e}")
@@ -1354,10 +1516,9 @@ class GeminiBackend(VLMBackend):
                 if hasattr(candidate, 'finish_reason') and candidate.finish_reason == 12:
                     logger.warning(f"[{module_name}] Gemini safety filter triggered (finish_reason=12). Returning default response.")
                     return "I cannot analyze this content due to safety restrictions. I'll proceed with a basic action: press 'A' to continue."
-            
-            result = response.text
+
             duration = time.time() - start_time
-            
+
             # Extract token usage if available
             token_usage = {}
             if hasattr(response, 'usage_metadata'):
@@ -1367,23 +1528,58 @@ class GeminiBackend(VLMBackend):
                     "completion_tokens": getattr(usage, 'candidates_token_count', 0),
                     "total_tokens": getattr(usage, 'total_token_count', 0)
                 }
-            
-            # Log the interaction
-            log_llm_interaction(
-                interaction_type=f"gemini_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={"model": self.model_name, "backend": "gemini", "has_image": False, "token_usage": token_usage},
-                model_info={"model": self.model_name, "backend": "gemini"}
-            )
-            
-            # Log the response
-            result_preview = result[:1000] + "..." if len(result) > 1000 else result
-            logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-            logger.info(f"[{module_name}] ---")
-            
-            return result
+
+            # DUAL MODE: Function calling vs Regular text response
+            if self.tools:
+                # Function calling mode: Extract reasoning for logging, return response object
+                thinking_text = self._extract_thinking_from_response(response)
+
+                # Log the interaction with extracted thinking
+                log_llm_interaction(
+                    interaction_type=f"gemini_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={"model": self.model_name, "backend": "gemini", "has_image": False, "token_usage": token_usage, "has_function_call": True},
+                    model_info={"model": self.model_name, "backend": "gemini"}
+                )
+
+                # Log the response preview
+                thinking_preview = thinking_text
+                logger.info(f"[{module_name}] AGENT THINKING: {thinking_preview}")
+                logger.info(f"[{module_name}] ---")
+
+                # Return response object for function calling
+                return response
+            else:
+                # Regular text mode: Extract and return text response
+                # Use helper method to handle multiple parts
+                result = self._extract_text_from_response(response)
+
+                if not result:
+                    # Fallback: try response.text if extraction fails
+                    try:
+                        result = response.text
+                    except Exception as e:
+                        logger.warning(f"[{module_name}] Could not extract text from response: {e}")
+                        result = "I received a response but could not extract the text content."
+
+                # Log the interaction
+                log_llm_interaction(
+                    interaction_type=f"gemini_{module_name}",
+                    prompt=text,
+                    response=result,
+                    duration=duration,
+                    metadata={"model": self.model_name, "backend": "gemini", "has_image": False, "token_usage": token_usage},
+                    model_info={"model": self.model_name, "backend": "gemini"}
+                )
+
+                # Log the response
+                result_preview = result[:1000] + "..." if len(result) > 1000 else result
+                logger.info(f"[{module_name}] RESPONSE: {result_preview}")
+                logger.info(f"[{module_name}] ---")
+
+                return result
             
         except Exception as e:
             logger.error(f"Error in Gemini text query: {e}")

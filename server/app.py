@@ -1051,9 +1051,6 @@ async def get_comprehensive_state():
                             print(f"🗺️ SERVER: Added portal connections to state: {map_id_connections}")
                             print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
                             logger.debug(f"Loaded portal connections for {len(map_id_connections) if map_id_connections else 0} maps from persistent storage")
-                        else:
-                            print(f"🗺️ SERVER: No warp connections found in map data")
-                            logger.debug("No warp connections found in map stitcher data")
                 else:
                     print(f"🗺️ SERVER: Cache file not found at {cache_file}")
                     logger.debug(f"Map stitcher cache file not found: {cache_file}")
@@ -2674,6 +2671,111 @@ async def mcp_get_progress_summary():
         }
     except Exception as e:
         logger.error(f"Error getting progress summary: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/reflect")
+async def mcp_reflect(request: dict):
+    """MCP Tool: Return context data for agent to perform self-reflection using its own VLM"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        situation = request.get("situation", "Agent requested reflection")
+
+        # Load recent agent history
+        global current_run_dir
+        agent_history = []
+        if current_run_dir:
+            history_file = os.path.join(current_run_dir, "agent_history.json")
+            if os.path.exists(history_file):
+                import json
+                with open(history_file, 'r') as f:
+                    agent_history = json.load(f)
+
+        # Get last 15 steps for analysis
+        recent_steps = agent_history[-15:] if len(agent_history) > 15 else agent_history
+
+        # Get current objective status
+        global direct_objectives_manager
+        current_objective = None
+        objectives_complete = False
+        sequence_name = None
+        if direct_objectives_manager:
+            obj_status = direct_objectives_manager.get_sequence_status()
+            current_objective = obj_status.get("current_objective")
+            objectives_complete = obj_status.get("is_complete", False)
+            sequence_name = obj_status.get("sequence_name")
+
+        # Get current game state
+        from utils.state_formatter import format_state_for_llm, _format_porymap_info
+        from server.cli import pokemon_mcp_server
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        state_text = game_state_result.get("state_text", "")
+        player_pos = game_state_result.get("player_position", {})
+        location = game_state_result.get("raw_state", {}).get("player", {}).get("location", "Unknown")
+
+        # Get porymap ground truth data
+        porymap_text = ""
+        if location and location != "Unknown" and location != "TITLE_SEQUENCE":
+            try:
+                player_coords = (player_pos.get("x"), player_pos.get("y")) if player_pos else None
+                porymap_parts = _format_porymap_info(location, player_coords)
+                if porymap_parts:
+                    porymap_text = "\n".join(porymap_parts)
+            except Exception as e:
+                logger.warning(f"Could not get porymap info for reflection: {e}")
+
+        # Get progress summary
+        progress_result = await mcp_get_progress_summary()
+        progress_info = progress_result.get("progress", {}) if progress_result.get("success") else {}
+
+        # Format recent history
+        history_summary = []
+        for step in recent_steps[-10:]:  # Last 10 for brevity
+            action = step.get("action", "unknown")
+            action_details = step.get("action_details", "")
+            llm_response = step.get("llm_response", "")[:200]  # Truncate
+            coords = step.get("player_coords", "")
+
+            history_summary.append({
+                "step": step.get("step"),
+                "action": action,
+                "action_details": action_details,
+                "thinking": llm_response,
+                "coords": coords
+            })
+
+        # Return all context for agent to analyze
+        return {
+            "success": True,
+            "context": {
+                "situation": situation,
+                "current_state": {
+                    "location": location,
+                    "coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")},
+                    "state_text": state_text[:1000],  # Truncate for token efficiency
+                    "porymap_ground_truth": porymap_text  # Ground truth map with obstacles
+                },
+                "current_objective": {
+                    "sequence": sequence_name,
+                    "objective": current_objective,
+                    "status": "complete" if objectives_complete else "active",
+                    "is_complete": objectives_complete
+                },
+                "progress": {
+                    "milestones_completed": progress_info.get('total_milestones_completed', 0),
+                    "objectives_completed": progress_info.get('direct_objectives', {}).get('objectives_completed_in_current_sequence', 0),
+                    "total_objectives": progress_info.get('direct_objectives', {}).get('total_in_current_sequence', 0)
+                },
+                "recent_history": history_summary
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error in reflect tool: {e}")
         import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}

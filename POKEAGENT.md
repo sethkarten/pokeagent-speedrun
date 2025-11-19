@@ -33,6 +33,27 @@ DIRECT_OBJECTIVE: {
 - You have completed the required interaction (for interaction objectives)
 - You have won the battle (for battle objectives)
 
+**CRITICAL - When completing objectives:**
+1. **BEFORE calling complete_direct_objective**, write important discoveries to knowledge base using add_knowledge()
+2. Store key learnings like: NPCs met, items found, locations discovered, puzzle solutions, battle strategies
+3. Use importance=4 or 5 for critical information that will help in future gameplay
+4. Example: After completing "Talk to Professor Birch", store knowledge about what he said and where he is
+5. **THEN** call complete_direct_objective(reasoning="...") to advance
+
+**Example workflow:**
+```
+# Agent just completed talking to an important NPC
+add_knowledge(
+    category="npc",
+    title="Professor Birch - Pokemon Lab",
+    content="Professor Birch is in the Pokemon Lab in Littleroot Town. He gave me my first Pokemon and the Pokedex. He studies Pokemon habitats.",
+    location="Littleroot Town",
+    coordinates="15,10",
+    importance=5
+)
+# Now mark objective as complete
+complete_direct_objective(reasoning="Successfully talked to Professor Birch and received starter Pokemon")
+
 ## CRITICAL: Decision-Making Process
 
 **You MUST follow this process for EVERY step:**
@@ -178,12 +199,106 @@ The `pokemon-emerald` MCP server provides these tools:
 7. **get_knowledge_summary** - View your most important discoveries
    - Parameters: `min_importance` (default 3)
    - Use for: Quick overview of critical information
+   - **GROUND TRUTH**: The knowledge base is ALWAYS accurate - it represents what you've actually accomplished
+   - **NEVER** ignore or dismiss knowledge base as "outdated" - if objectives conflict with knowledge base, the OBJECTIVES are wrong
+   - **IMPORTANT**: Always call this BEFORE calling `get_walkthrough()` to determine which part is appropriate based on what you've already accomplished
+
+8. **get_walkthrough** - Get official walkthrough sections
+   - Parameters: `part` (integer 1-21)
+   - **CRITICAL**: ALWAYS call `get_knowledge_summary()` FIRST to see what you've done, then choose the appropriate walkthrough part
+   - Example workflow:
+     1. Call `get_knowledge_summary()` → See you've talked to Prof Birch, got starter Pokemon
+     2. Based on that, call `get_walkthrough(part=2)` for next steps
+     3. Use walkthrough to create objectives
+
+## HOW TO DETERMINE YOUR CURRENT WALKTHROUGH PART
+
+**CRITICAL REASONING PROCESS** - Follow these steps EVERY TIME you need to figure out which walkthrough part you're on:
+
+### Step 1: Gather Evidence
+1. Call `get_knowledge_summary()` to see what you've accomplished
+2. Check your current location from game state
+3. Look at your party Pokemon and badges
+
+### Step 2: Match Against Milestones
+Use this milestone map to find where you are (ACCURATE to Bulbapedia walkthrough):
+
+- **Part 1**: Littleroot Town, got starter Pokemon, Routes 101-103, Oldale Town, Petalburg City (met Norman)
+- **Part 2**: Route 104, Petalburg Woods, Rustboro City, **defeated Roxanne (Stone Badge - 1st gym)**, Route 116, Rusturf Tunnel
+- **Part 3**: Dewford Town, **defeated Brawly (Knuckle Badge - 2nd gym)**, Granite Cave, delivered letter to Steven, Route 109, Slateport City
+- **Part 4**: Slateport City, Oceanic Museum, dealt with Team Aqua, delivered Devon Goods to Captain Stern, Route 110, battled May/Brendan
+- **Part 5**: Mauville City, **defeated Wattson (Dynamo Badge - 3rd gym)**, Route 117, Verdanturf Town, Rusturf Tunnel
+- **Part 6**: Routes 111-114, Fiery Path, Fallarbor Town (NO gym battle)
+- **Part 7**: Meteor Falls, Mt. Chimney, Jagged Pass, Lavaridge Town, **defeated Flannery (Heat Badge - 4th gym)**
+- **Part 8-21**: Later gym leaders and story progression
+
+### Step 3: Determine Which Part You're On
+**Use the HIGHEST milestone you've completed**, then add 1 for next steps.
+
+**Examples:**
+```
+Knowledge base shows:
+- "Talked to Professor Birch in Littleroot Town"
+- "Received starter Pokemon Treecko"
+- "Met Norman at Petalburg Gym"
+- Current location: Route 104
+→ CONCLUSION: Completed Part 1, need Part 2 (Route 104, Petalburg Woods, Roxanne)
+
+Knowledge base shows:
+- "Defeated Gym Leader Roxanne"
+- "Obtained Stone Badge"
+- "Recovered Devon Goods from Team Aqua"
+- Current location: Rustboro City
+→ CONCLUSION: Completed Part 2, need Part 3 (Dewford Town, Brawly)
+
+Knowledge base shows:
+- "Defeated Gym Leader Brawly"
+- "Obtained Knuckle Badge"
+- "Delivered letter to Steven in Granite Cave"
+- Current location: Slateport City
+→ CONCLUSION: Completed Part 3, need Part 4 (Slateport Museum, Team Aqua)
+
+Knowledge base shows:
+- "Defeated Gym Leader Wattson"
+- "Obtained Dynamo Badge"
+- Current location: Route 111
+→ CONCLUSION: Completed Part 5, need Part 6 (Routes north of Mauville, Fallarbor)
+```
+
+### Step 4: Verify the Walkthrough Part is Correct
+After calling `get_walkthrough(part=X)`:
+1. **Read the walkthrough carefully**
+2. **Check if you already did what it describes** (compare to knowledge base)
+3. **If you already completed those steps**, increment part number and try again
+4. **If the walkthrough matches where you are**, use it to create objectives
+
+**CRITICAL ERROR DETECTION:**
+- ❌ If walkthrough says "Talk to Professor Birch" but knowledge base shows you already did this → WRONG PART, try next part
+- ❌ If walkthrough describes Roxanne battle but you already have Stone Badge → WRONG PART, try higher part
+- ✅ If walkthrough describes steps you HAVEN'T done yet but logically come next → CORRECT PART
+
+## Ground Truth Sources (Trust Hierarchy)
+
+When there's conflicting information, trust these sources in priority order:
+
+1. **PORYMAP** (map layout) - Definitive source for tile walkability, map structure, warp locations
+2. **KNOWLEDGE BASE** (your accomplishments) - **ALWAYS CORRECT**, never outdated. Represents what you've actually done.
+3. **WALKTHROUGH** (game progression) - Official guide for correct sequence of steps
+4. **Current objectives** - May be WRONG if they conflict with the above sources
+
+**CRITICAL**: If your current objectives conflict with the knowledge base, the **OBJECTIVES ARE WRONG**, not the knowledge base. Never dismiss the knowledge base as "outdated" or "stale" - it's ground truth of what you accomplished.
+
+**Example**:
+- Knowledge base says: "Defeated Gym Leader Roxanne, obtained Stone Badge"
+- Current objective says: "Battle Gym Leader Roxanne"
+- **Conclusion**: The objective is WRONG (already completed). Create new objectives for next steps.
 
 ## Gameplay Strategy
 
 - **Be strategic**: Consider type advantages in battles, manage Pokemon health
 - **Explore thoroughly**: Find items, talk to NPCs, explore new areas
 - **Use knowledge base**: Always store important information you discover
+- **Trust ground truth**: If objectives conflict with knowledge base, objectives are wrong
 - **Plan ahead**: Use pathfinding for efficient navigation
 - **Explain reasoning**: Before each action, briefly explain your thinking
 
