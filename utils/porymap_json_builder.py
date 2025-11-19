@@ -118,16 +118,23 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                     # Add more as needed
                 }
 
-                # For specific locations, add hardcoded object markers
-                # This ensures important interactive objects are visible on the map
-                if "BrendansHouse_2F" in map_name or "MaysHouse_2F" in map_name:
-                    # Clock is at (5, 1) - to the right of TV - coordinates x=5, y=1
-                    # In ASCII grid: ascii_grid[y][x] = ascii_grid[1][5]
-                    if height > 1 and width > 5:
-                        ascii_grid[1][5] = 'K'  # Clock marker at (5,1)
+                # Mark background events (clocks, PCs, etc.) on the ASCII map
+                for bg_event in map_data.get("bg_events", []):
+                    bg_x = bg_event.get("x", 0)
+                    bg_y = bg_event.get("y", 0)
+                    script = bg_event.get("script", "")
 
-                    # Note: TV at (4, 1) should already be rendered from the base map data
-                    # We don't need to override it here
+                    # Check if position is valid
+                    if 0 <= bg_y < height and 0 <= bg_x < width:
+                        # Clock events
+                        if "WallClock" in script or "Clock" in script:
+                            ascii_grid[bg_y][bg_x] = 'K'  # Clock marker
+                        # PC events
+                        elif "PC" in script and "TurnOnPC" in script:
+                            ascii_grid[bg_y][bg_x] = 'P'  # PC marker
+                        # TV/GameCube events (optional - might already be visible)
+                        elif "TV" in script or "GameCube" in script:
+                            ascii_grid[bg_y][bg_x] = 'V'  # TV marker
 
                 # Convert back to strings
                 ascii_lines = [''.join(row) for row in ascii_grid]
@@ -135,22 +142,53 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     
     # Extract warps
     warps = []
+    warp_positions = set()  # Track warp positions for grid overlay
+    needs_south_extension = False  # Track if we need to extend the grid south
+    needs_east_extension = False  # Track if we need to extend the grid east
+    needs_west_extension = False  # Track if we need to extend the grid west
+    max_warp_y = 0  # Track the maximum warp Y position
+    max_warp_x = 0  # Track the maximum warp X position
+    min_warp_x = float('inf')  # Track the minimum warp X position
+
     for warp in map_data.get("warp_events", []):
         warp_x = warp.get("x", 0)
         warp_y = warp.get("y", 0)
 
-        # Check if this warp is on a door tile in the south of the map
-        # If metatiles exist, check if the warp is on a 'D' (door) tile
+        # Adjust warps based on which edge they're closest to
+        # Players approach doors from outside, so the warp should be offset
+        # to represent where the player actually stands
         if layout_name and metatiles:
-            # Check if warp position is valid
-            if 0 <= warp_y < len(metatiles) and 0 <= warp_x < len(metatiles[0]):
-                tile = metatiles[warp_y][warp_x]
-                symbol = tile_to_symbol(tile, map_name)
+            height = len(metatiles)
+            width = len(metatiles[0]) if height > 0 else 0
 
-                # If it's a door tile (D) and in the southern half of the map
-                if (symbol == 'D' or symbol == 'S') and warp_y >= len(metatiles) // 2:
-                    # Move the warp 1 block down
-                    warp_y += 1
+            # Determine which edge the warp is closest to
+            dist_to_south = height - warp_y
+            dist_to_north = warp_y
+            dist_to_east = width - warp_x
+            dist_to_west = warp_x
+
+            min_dist = min(dist_to_south, dist_to_north, dist_to_east, dist_to_west)
+
+            # Adjust warp position based on closest edge
+            if min_dist == dist_to_south:
+                # South edge - move 1 tile south
+                warp_y += 1
+                if warp_y >= height:
+                    needs_south_extension = True
+            elif min_dist == dist_to_east:
+                # East edge - move 1 tile east
+                warp_x += 1
+                if warp_x >= width:
+                    needs_east_extension = True
+            elif min_dist == dist_to_west:
+                # West edge - move 1 tile west
+                warp_x -= 1
+                if warp_x < 0:
+                    needs_west_extension = True
+
+        max_warp_y = max(max_warp_y, warp_y)
+        max_warp_x = max(max_warp_x, warp_x)
+        min_warp_x = min(min_warp_x, warp_x)
 
         warps.append({
             "x": warp_x,
@@ -159,6 +197,118 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
             "dest_map": warp.get("dest_map", "?"),
             "dest_warp_id": warp.get("dest_warp_id", 0)
         })
+
+        # Track warp position for grid overlay
+        warp_positions.add((warp_x, warp_y))
+
+    # Extend grid and ASCII if warps go out of bounds
+    if layout_name and metatiles:
+        # South extension
+        if needs_south_extension:
+            extra_rows_needed = max_warp_y - len(metatiles) + 1
+
+            if include_grid and grid:
+                for _ in range(extra_rows_needed):
+                    grid.append(['#'] * len(grid[0]))
+
+            if include_ascii and ascii_map:
+                ascii_lines = ascii_map.split('\n')
+                for _ in range(extra_rows_needed):
+                    ascii_lines.append('#' * len(ascii_lines[0]))
+                ascii_map = '\n'.join(ascii_lines)
+
+            height = len(metatiles) + extra_rows_needed
+            dimensions["height"] = height
+
+        # East extension
+        if needs_east_extension:
+            extra_cols_needed = max_warp_x - len(metatiles[0]) + 1
+
+            if include_grid and grid:
+                for row in grid:
+                    row.extend(['#'] * extra_cols_needed)
+
+            if include_ascii and ascii_map:
+                ascii_lines = ascii_map.split('\n')
+                ascii_lines = [line + '#' * extra_cols_needed for line in ascii_lines]
+                ascii_map = '\n'.join(ascii_lines)
+
+            width = len(metatiles[0]) + extra_cols_needed
+            dimensions["width"] = width
+
+        # West extension (prepend columns)
+        if needs_west_extension:
+            extra_cols_needed = abs(min_warp_x)
+
+            if include_grid and grid:
+                for row in grid:
+                    # Prepend blocked tiles to the left
+                    for _ in range(extra_cols_needed):
+                        row.insert(0, '#')
+
+            if include_ascii and ascii_map:
+                ascii_lines = ascii_map.split('\n')
+                ascii_lines = ['#' * extra_cols_needed + line for line in ascii_lines]
+                ascii_map = '\n'.join(ascii_lines)
+
+            # Adjust all warp X positions to account for the prepended columns
+            for w in warps:
+                w["x"] += extra_cols_needed
+
+            # Also update warp_positions set with adjusted coordinates
+            warp_positions = {(x + extra_cols_needed, y) for x, y in warp_positions}
+
+            width = len(metatiles[0]) + extra_cols_needed
+            dimensions["width"] = width
+
+    # CRITICAL: Overlay warp symbols on grid and ASCII after extracting warp positions
+    # This ensures warps are always marked as walkable, even if the underlying tile
+    # is NORMAL with collision (like Petalburg Gym doors)
+    if layout_name and metatiles:
+        # Update grid (JSON format)
+        if include_grid and grid:
+            for warp_x, warp_y in warp_positions:
+                if 0 <= warp_y < len(grid) and 0 <= warp_x < len(grid[0]):
+                    # Get current symbol
+                    current_symbol = grid[warp_y][warp_x]
+                    # Only override if it's not already a door/stairs
+                    # Use 'D' for exit doors (to Petalburg City), 'S' for internal warps
+                    warp_dest = None
+                    for warp in warps:
+                        if warp['x'] == warp_x and warp['y'] == warp_y:
+                            warp_dest = warp.get('dest_map', '')
+                            break
+
+                    if current_symbol not in ['D', 'S']:
+                        # External doors (exits) use 'D', internal warps use 'S'
+                        if warp_dest and 'PETALBURG_CITY_GYM' not in warp_dest:
+                            grid[warp_y][warp_x] = 'D'
+                        else:
+                            grid[warp_y][warp_x] = 'S'
+
+        # Update ASCII representation
+        if include_ascii and ascii_map:
+            ascii_grid = [list(line) for line in ascii_map.split('\n')]
+            for warp_x, warp_y in warp_positions:
+                if 0 <= warp_y < len(ascii_grid) and 0 <= warp_x < len(ascii_grid[0]):
+                    current_symbol = ascii_grid[warp_y][warp_x]
+
+                    # Get warp destination
+                    warp_dest = None
+                    for warp in warps:
+                        if warp['x'] == warp_x and warp['y'] == warp_y:
+                            warp_dest = warp.get('dest_map', '')
+                            break
+
+                    if current_symbol not in ['D', 'S']:
+                        # External doors use 'D', internal warps use 'S'
+                        if warp_dest and 'PETALBURG_CITY_GYM' not in warp_dest:
+                            ascii_grid[warp_y][warp_x] = 'D'
+                        else:
+                            ascii_grid[warp_y][warp_x] = 'S'
+
+            # Rebuild ASCII map from grid
+            ascii_map = '\n'.join(''.join(row) for row in ascii_grid)
     
     # Extract objects
     objects = []

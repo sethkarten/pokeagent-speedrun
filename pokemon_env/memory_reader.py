@@ -1106,8 +1106,7 @@ class PokemonEmeraldReader:
             map_id = (map_bank << 8) | map_num
             
             # Log the raw map values for debugging location issues
-            if map_id in [0x1200, 0x1100]:  # Mr. Briney's House or Meteor Falls
-                logger.debug(f"Location debug: map_bank=0x{map_bank:02X}, map_num=0x{map_num:02X}, map_id=0x{map_id:04X}")
+            logger.debug(f"Location debug: map_bank=0x{map_bank:02X}, map_num=0x{map_num:02X}, map_id=0x{map_id:04X}")
             
             # Check if we're in title sequence (no valid map data)
             if self.is_in_title_sequence():
@@ -1127,9 +1126,13 @@ class PokemonEmeraldReader:
             
             try:
                 location = MapLocation(map_id)
-                return location.name.replace('_', ' ')
+                location_name = location.name.replace('_', ' ')
+                logger.info(f"Location resolved: map_id=0x{map_id:04X} → {location_name}")
+                return location_name
             except ValueError:
-                return f"Map_{map_bank:02X}_{map_num:02X}"
+                fallback_name = f"Map_{map_bank:02X}_{map_num:02X}"
+                logger.warning(f"Unknown map_id=0x{map_id:04X}, using fallback: {fallback_name}")
+                return fallback_name
         except Exception as e:
             logger.warning(f"Failed to read location: {e}")
             return "Unknown"
@@ -2100,7 +2103,7 @@ class PokemonEmeraldReader:
                     current_width > 1000 or current_height > 1000):
                     
                     # Use unified rate limiter for corruption warnings
-                    self._rate_limited_warning(f"Map buffer corruption detected: dimensions changed from {self._map_width}x{self._map_height} to {current_width}x{current_height}", "map_corruption")
+                    # self._rate_limited_warning(f"Map buffer corruption detected: dimensions changed from {self._map_width}x{self._map_height} to {current_width}x{current_height}", "map_corruption")
                     
                     self._map_buffer_addr = None
                     self._map_width = None
@@ -2108,10 +2111,10 @@ class PokemonEmeraldReader:
                     
                     # Try to recover by re-finding buffer
                     if self._find_map_buffer_addresses():
-                        logger.debug("Recovered from map buffer corruption")
+                        # logger.debug("Recovered from map buffer corruption")
                         map_data = self._read_map_data_internal(radius)
                     else:
-                        logger.error("Failed to recover from map buffer corruption")
+                        # logger.error("Failed to recover from map buffer corruption")
                         return []
             except Exception as e:
                 logger.debug(f"Error checking buffer validity: {e}")

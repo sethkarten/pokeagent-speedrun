@@ -110,8 +110,8 @@ def main():
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="fourmodule",
-                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli", "my_cli_agent"],
-                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), or my_cli_agent (custom CLI agent)")
+                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli", "my_cli_agent", "autonomous_cli"],
+                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), my_cli_agent (custom CLI agent), or autonomous_cli (autonomous agent with all tools)")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
@@ -144,7 +144,7 @@ def main():
     
     try:
         # Auto-start server if requested
-        if args.agent_auto or args.manual or args.scaffold == "cli":
+        if args.agent_auto or args.manual or args.scaffold in ["cli", "my_cli_agent", "autonomous_cli", "geminiplays"]:
             print("\n📡 Starting server process...")
             server_process = start_server(args)
             
@@ -178,7 +178,8 @@ def main():
             "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
             "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
             "cli": "Gemini API with MCP tools (native function calling)",
-            "my_cli_agent": "My Custom CLI Agent (customized Gemini API with MCP tools)"
+            "my_cli_agent": "My Custom CLI Agent (customized Gemini API with MCP tools)",
+            "autonomous_cli": "Autonomous CLI Agent (creates own objectives, all tools enabled)"
         }
         print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
@@ -234,6 +235,57 @@ def main():
             print("✅ Agent created", flush=True)
 
             return agent.run()
+        elif args.scaffold == "autonomous_cli":
+            print("\n🖥️  Autonomous CLI Agent Mode - Creates Own Objectives + All Tools")
+            print("=" * 60)
+            print("✅ Server is running")
+            print("🤖 Starting Autonomous CLI agent...")
+            print("   Using autonomous Gemini API implementation")
+            print("   ALL MCP tools enabled (23 tools total)")
+            print("   Agent creates its own objectives dynamically")
+            print("")
+
+            # Import and run Autonomous CLI agent
+            from agent.my_cli_agent_autonomous import AutonomousCLIAgent
+            print("📦 AutonomousCLIAgent imported successfully", flush=True)
+
+            print(f"🔧 Creating agent with model={args.model_name}", flush=True)
+            agent = AutonomousCLIAgent(
+                server_url=f"http://localhost:{args.port}",
+                model=args.model_name,
+                backend=args.backend,
+                max_steps=args.max_steps if hasattr(args, 'max_steps') else None
+            )
+            print("✅ Agent created", flush=True)
+
+            return agent.run()
+        elif args.scaffold == "geminiplays":
+            print("\n🖥️  GeminiPlaysAgent Mode - Native Tools with MCP Integration")
+            print("=" * 60)
+            print("✅ Server is running")
+            print("🤖 Starting GeminiPlaysAgent...")
+            print("   Using native function calling with 15 tools")
+            print("   MCP tools: press_buttons, navigate_to, get_game_state")
+            print("   Native tools: goals, memory, self-critique, meta")
+            print("")
+
+            # Import and run GeminiPlaysAgent
+            from agent.gemini_plays import GeminiPlaysAgent
+            from agent import Agent
+            print("📦 GeminiPlaysAgent imported successfully", flush=True)
+
+            print(f"🔧 Creating agent with scaffold=geminiplays", flush=True)
+            agent_wrapper = Agent(args)
+            agent = agent_wrapper.agent_impl  # Get the actual GeminiPlaysAgent instance
+
+            if not isinstance(agent, GeminiPlaysAgent):
+                print(f"❌ Error: Expected GeminiPlaysAgent but got {type(agent)}")
+                return 1
+
+            print("✅ Agent created", flush=True)
+
+            max_steps = args.max_steps if hasattr(args, 'max_steps') else None
+            return agent.run(max_steps=max_steps)
         else:
             print("\n🚀 Starting client...")
             print("-" * 60)

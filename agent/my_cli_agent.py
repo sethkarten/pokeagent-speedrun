@@ -141,41 +141,18 @@ class MyCLIAgent:
         # Initialize MCP tool adapter
         self.mcp_adapter = MCPToolAdapter(server_url)
 
-        # Initialize VLM or Gemini based on backend
-        if self.backend == "gemini":
-            # Use original Gemini API for backward compatibility
-            api_key = os.environ.get("GEMINI_API_KEY")
-            if not api_key:
-                raise ValueError("GEMINI_API_KEY environment variable not set")
-
-            genai.configure(api_key=api_key)
-
-            # Define MCP tools as Gemini function declarations
-            self.tools = self._create_tool_declarations()
-
-            # Create the model with tools
-            print(f"🔧 Creating Gemini model with {len(self.tools)} tools...")
-            self.gemini_model = genai.GenerativeModel(
-                model_name=self.model,
-                tools=self.tools,
-                system_instruction=self.system_instructions
-            )
-            print("✅ Gemini model created successfully")
-
-            # Start chat session
-            self.chat = self.gemini_model.start_chat(history=[])
-        else:
-            # Use VLM for other backends (like vertex)
-            # Create tool declarations for function calling
-            self.tools = self._create_tool_declarations()
-            self.vlm = VLM(
-                backend=self.backend,
-                model_name=self.model,
-                tools=self.tools,
-                system_instruction=self.system_instructions
-            )
-            print(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
-            print(f"✅ System instructions loaded ({len(self.system_instructions)} chars)")
+        # Initialize VLM for ALL backends (unified interface)
+        # Create tool declarations for function calling
+        self.tools = self._create_tool_declarations()
+        self.vlm = VLM(
+            backend=self.backend,
+            model_name=self.model,
+            tools=self.tools,
+            system_instruction=self.system_instructions
+        )
+        print(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
+        print(f"✅ {len(self.tools)} tools available")
+        print(f"✅ System instructions loaded ({len(self.system_instructions)} chars)")
 
         # Initialize LLM logger
         from utils.llm_logger import get_llm_logger
@@ -752,8 +729,10 @@ class MyCLIAgent:
                         return self.vlm.get_query(image, prompt, "CLI_Agent")
                     
                     # Use VLM with image - log start time for timeout detection
+                    # Use longer timeout for preview models which are much slower
+                    timeout = 180 if 'preview' in self.model or '3-pro' in self.model else 60
                     logger.info(f"📡 Calling VLM API with image (prompt: {len(prompt)} chars, image: {len(screenshot_b64)} bytes)")
-                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 30s...")
+                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to {timeout}s...")
 
                     # Retry loop for timeouts
                     max_retries = 3
@@ -761,12 +740,12 @@ class MyCLIAgent:
                     response = None
 
                     while retry_count < max_retries:
-                        # Execute with timeout (30 seconds for VertexAI with function calling)
+                        # Execute with timeout (60s for fast models, 180s for preview models)
                         executor = ThreadPoolExecutor(max_workers=1)
                         future = None
                         try:
                             future = executor.submit(call_vlm_with_image)
-                            response = future.result(timeout=30)  # 30 second timeout
+                            response = future.result(timeout=timeout)
                             vlm_duration = time.time() - vlm_call_start
                             logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
                             break  # Success - exit retry loop
@@ -788,8 +767,10 @@ class MyCLIAgent:
                         return self.vlm.get_text_query(prompt, "CLI_Agent")
                     
                     # Use VLM with text only
+                    # Use longer timeout for preview models which are much slower
+                    timeout = 180 if 'preview' in self.model or '3-pro' in self.model else 60
                     logger.info(f"📡 Calling VLM API with text only (prompt: {len(prompt)} chars)")
-                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 30s...")
+                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to {timeout}s...")
 
                     # Retry loop for timeouts
                     max_retries = 3
@@ -797,12 +778,12 @@ class MyCLIAgent:
                     response = None
 
                     while retry_count < max_retries:
-                        # Execute with timeout (30 seconds for VertexAI with function calling)
+                        # Execute with timeout (60s for fast models, 180s for preview models)
                         executor = ThreadPoolExecutor(max_workers=1)
                         future = None
                         try:
                             future = executor.submit(call_vlm_with_text)
-                            response = future.result(timeout=30)  # 30 second timeout
+                            response = future.result(timeout=timeout)
                             vlm_duration = time.time() - vlm_call_start
                             logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
                             break  # Success - exit retry loop
@@ -965,243 +946,231 @@ class MyCLIAgent:
                 part = None  # Initialize to avoid UnboundLocalError
                 function_call = None  # Initialize to avoid UnboundLocalError
                 function_result = None  # Initialize to avoid UnboundLocalError
-                while response.parts and tool_call_count < max_tool_calls:
+
+                # Extract parts from Gemini response structure
+                parts = None
+                if hasattr(response, 'candidates') and response.candidates:
+                    candidate = response.candidates[0]
+                    if hasattr(candidate, 'content') and candidate.content:
+                        if hasattr(candidate.content, 'parts'):
+                            parts = candidate.content.parts
+
+                logger.info(f"🔍 Gemini response has {len(parts) if parts else 0} parts")
+
+                if not parts:
+                    logger.error("❌ No parts found in Gemini response - cannot extract function call")
+                    logger.error(f"   Response type: {type(response)}")
+                    logger.error(f"   Has candidates: {hasattr(response, 'candidates')}")
+                    if hasattr(response, 'candidates') and response.candidates:
+                        logger.error(f"   Candidate has content: {hasattr(response.candidates[0], 'content')}")
+
+                # Process function calls from parts
+                if parts and tool_call_count < max_tool_calls:
                     # First, extract any text parts for reasoning
-                    for part in response.parts:
+                    for part in parts:
                         if hasattr(part, 'text') and part.text:
                             reasoning_text += part.text + "\n"
 
-                    part = response.parts[0]
+                    # Check each part for function calls
+                    for part in parts:
+                        if hasattr(part, 'function_call') and part.function_call:
+                            function_call = part.function_call
+                            tool_call_count += 1
+                            logger.info(f"🔧 Gemini wants to call: {function_call.name} ({tool_call_count}/{max_tool_calls})")
 
-                    # Check if it's a function call
-                    if hasattr(part, 'function_call') and part.function_call:
-                        function_call = part.function_call
-                        tool_call_count += 1
-                        logger.info(f"🔧 Gemini wants to call: {function_call.name} ({tool_call_count}/{max_tool_calls})")
+                            # Execute the function
+                            function_result = self._execute_function_call(function_call)
+                            logger.info(f"📥 Function result: {function_result[:200]}...")
 
-                        # Execute the function
-                        function_result = self._execute_function_call(function_call)
-                        logger.info(f"📥 Function result: {function_result[:200]}...")
+                            # Track tool call with result (convert protobuf args to JSON-serializable types)
+                            tool_calls_made.append({
+                                "name": function_call.name,
+                                "args": self._convert_protobuf_args(function_call.args),
+                                "result": function_result
+                            })
 
-                        # Track tool call with result (convert protobuf args to JSON-serializable types)
-                        tool_calls_made.append({
-                            "name": function_call.name,
-                            "args": self._convert_protobuf_args(function_call.args),
-                            "result": function_result
-                        })
+                            # Wait for action queue to complete if this was a button press or navigation
+                            # Note: Function results are already being tracked in conversation_history,
+                            # so no need to send them back to a chat session (VLM is stateless)
 
-                        # Wait for action queue to complete if this was a button press or navigation
-                        if function_call.name in ["press_buttons", "navigate_to"]:
-                            # Send the function response back to Gemini to maintain chat state
-                            # This is important to keep the conversation flowing
-                            self.chat.send_message(
-                                genai.protos.Content(
-                                    parts=[genai.protos.Part(
-                                        function_response=genai.protos.FunctionResponse(
-                                            name=function_call.name,
-                                            response={"result": function_result}
-                                        )
-                                    )]
-                                )
-                            )
+                            # Now wait for actions to complete
+                            self._wait_for_actions_complete()
 
-                        # Now wait for actions to complete
-                        self._wait_for_actions_complete()
+                            # END THE STEP IMMEDIATELY after action execution
+                            # Calculate duration
+                            duration = time.time() - start_time
 
-                        # END THE STEP IMMEDIATELY after action execution
-                        # Calculate duration
-                        duration = time.time() - start_time
+                            # Extract reasoning from function arguments
+                            tool_reasoning = ""
+                            final_position = None
+                            try:
+                                # Get args from the tool call that was made
+                                if tool_calls_made:
+                                    last_call = tool_calls_made[-1]
+                                    if function_call.name == "navigate_to" and "reason" in last_call["args"]:
+                                        tool_reasoning = last_call["args"]["reason"]
+                                        # Get final position after navigation
+                                        try:
+                                            final_state = self._execute_function_call_by_name("get_game_state", {})
+                                            import json as json_module
+                                            final_state_data = json_module.loads(final_state)
+                                            if final_state_data.get("success"):
+                                                player_pos = final_state_data.get("player_position", {})
+                                                if player_pos:
+                                                    final_position = (player_pos.get("x"), player_pos.get("y"))
+                                        except Exception as e:
+                                            logger.debug(f"Could not get final position after navigate_to: {e}")
+                                    elif function_call.name == "press_buttons" and "reasoning" in last_call["args"]:
+                                        tool_reasoning = last_call["args"]["reasoning"]
+                            except Exception as e:
+                                logger.debug(f"Could not extract tool reasoning: {e}")
 
-                        # Extract reasoning from function arguments
-                        tool_reasoning = ""
-                        final_position = None
-                        try:
-                            # Get args from the tool call that was made
-                            if tool_calls_made:
-                                last_call = tool_calls_made[-1]
-                                if function_call.name == "navigate_to" and "reason" in last_call["args"]:
-                                    tool_reasoning = last_call["args"]["reason"]
-                                    # Get final position after navigation
-                                    try:
-                                        final_state = self._execute_function_call_by_name("get_game_state", {})
-                                        import json as json_module
-                                        final_state_data = json_module.loads(final_state)
-                                        if final_state_data.get("success"):
-                                            player_pos = final_state_data.get("player_position", {})
-                                            if player_pos:
-                                                final_position = (player_pos.get("x"), player_pos.get("y"))
-                                    except Exception as e:
-                                        logger.debug(f"Could not get final position after navigate_to: {e}")
-                                elif function_call.name == "press_buttons" and "reasoning" in last_call["args"]:
-                                    tool_reasoning = last_call["args"]["reasoning"]
-                        except Exception as e:
-                            logger.debug(f"Could not extract tool reasoning: {e}")
-
-                        # Build full response including reasoning + action summary
-                        full_response = reasoning_text.strip()
-                        if tool_reasoning:
-                            if full_response:
-                                full_response += f"\n\n{tool_reasoning}"
-                            else:
-                                full_response = tool_reasoning
-
-                        if full_response:
-                            full_response += f"\n\nAction executed: {function_call.name}"
-                        else:
-                            full_response = f"Executed {function_call.name}"
-
-                        # Display the reasoning to user
-                        display_text = reasoning_text.strip()
-                        if tool_reasoning:
-                            if display_text:
-                                display_text += f"\n\n{tool_reasoning}"
-                            else:
-                                display_text = tool_reasoning
-
-                        if display_text:
-                            logger.info("📥 Gemini reasoning:")
-                            print("\n" + "="*70)
-                            print(display_text)
-                            print("="*70 + "\n")
-
-                        # Build action_details for navigate_to showing final position
-                        action_details_str = None
-                        if function_call.name == "navigate_to" and tool_calls_made:
-                            last_call = tool_calls_made[-1]
-                            if "x" in last_call["args"] and "y" in last_call["args"]:
-                                target_x = last_call["args"]["x"]
-                                target_y = last_call["args"]["y"]
-                                variance = last_call["args"].get("variance", "none")
-                                if final_position:
-                                    final_x, final_y = final_position
-                                    action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_x}, {final_y})"
+                            # Build full response including reasoning + action summary
+                            full_response = reasoning_text.strip()
+                            if tool_reasoning:
+                                if full_response:
+                                    full_response += f"\n\n{tool_reasoning}"
                                 else:
-                                    action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance})"
-                        
-                        # Extract player coordinates from final position or game state
-                        player_coords = final_position if final_position else None
+                                    full_response = tool_reasoning
 
-                        # Add to history with action details and coordinates
-                        self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str, player_coords=player_coords)
+                            if full_response:
+                                full_response += f"\n\nAction executed: {function_call.name}"
+                            else:
+                                full_response = f"Executed {function_call.name}"
 
-                        # Log to LLM logger
-                        self._log_thinking(prompt, full_response, duration, tool_calls_made)
+                            # Display the reasoning to user
+                            display_text = reasoning_text.strip()
+                            if tool_reasoning:
+                                if display_text:
+                                    display_text += f"\n\n{tool_reasoning}"
+                                else:
+                                    display_text = tool_reasoning
 
-                        # Send reasoning to server for display in stream
-                        thinking_to_send = display_text if display_text else full_response
-                        self._send_thinking_to_server(thinking_to_send, self.step_count + 1)
+                            if display_text:
+                                logger.info("📥 Gemini reasoning:")
+                                print("\n" + "="*70)
+                                print(display_text)
+                                print("="*70 + "\n")
 
-                        logger.info(f"✅ Step ended after {function_call.name} - will observe results in next step")
-                        return True, full_response
+                            # Build action_details for navigate_to showing final position
+                            action_details_str = None
+                            if function_call.name == "navigate_to" and tool_calls_made:
+                                last_call = tool_calls_made[-1]
+                                if "x" in last_call["args"] and "y" in last_call["args"]:
+                                    target_x = last_call["args"]["x"]
+                                    target_y = last_call["args"]["y"]
+                                    variance = last_call["args"].get("variance", "none")
+                                    if final_position:
+                                        final_x, final_y = final_position
+                                        action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_x}, {final_y})"
+                                    else:
+                                        action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance})"
+                            
+                            # Extract player coordinates from final position or game state
+                            player_coords = final_position if final_position else None
+
+                            # Add to history with action details and coordinates
+                            self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str, player_coords=player_coords)
+
+                            # Log to LLM logger
+                            # self._log_thinking(prompt, full_response, duration, tool_calls_made)
+
+                            # Send reasoning to server for display in stream
+                            thinking_to_send = display_text if display_text else full_response
+                            self._send_thinking_to_server(thinking_to_send, self.step_count + 1)
+
+                            logger.info(f"✅ Step ended after {function_call.name} - will observe results in next step")
+                            return True, full_response
 
                     # Check if we've hit the limit
-                    # Note: This code is currently unreachable due to early return at line 1031
-                    # but kept for safety. It requires function_call and function_result to be defined.
+                    # Note: This code is currently unreachable due to early return above
+                    # Commenting out chat.send_message() calls as VLM doesn't support stateful chat
                     if function_call is not None and function_result is not None:
                         if tool_call_count >= max_tool_calls:
-                            logger.warning(f"⚠️ Reached max tool calls ({max_tool_calls}). Forcing text response.")
-                            # Send function result with a prompt to respond with text
-                            response = self.chat.send_message(
-                                genai.protos.Content(
-                                    parts=[genai.protos.Part(
-                                        function_response=genai.protos.FunctionResponse(
-                                            name=function_call.name,
-                                            response={"result": function_result}
-                                        )
-                                    ), genai.protos.Part(
-                                        text="You have reached the maximum number of tool calls for this step. Please provide a brief text response summarizing what you accomplished and what you plan to do next."
-                                    )]
-                                )
-                            )
+                            logger.warning(f"⚠️ Reached max tool calls ({max_tool_calls}).")
+                            # TODO: Implement for VLM if needed (currently unreachable)
+                            pass
                         else:
-                            # Send function result back to Gemini
-                            response = self.chat.send_message(
-                                genai.protos.Content(
-                                    parts=[genai.protos.Part(
-                                        function_response=genai.protos.FunctionResponse(
-                                            name=function_call.name,
-                                            response={"result": function_result}
-                                        )
-                                    )]
-                                )
-                            )
+                            # TODO: Implement multi-turn function calling for VLM if needed
+                            pass
 
                 # Check if we got a text response instead of function call
                 if part is not None and (not hasattr(part, 'function_call') or not part.function_call):
                     # Check if any part has text
-                    for part in response.parts:
-                        if hasattr(part, 'text') and part.text:
-                            # Got text response
-                            text_response = part.text
-                            logger.info("📥 Received response from Gemini:")
-                            print("\n" + "="*70)
-                            print(text_response)
-                            print("="*70 + "\n")
+                    if parts:
+                        for part in parts:
+                            if hasattr(part, 'text') and part.text:
+                                # Got text response
+                                text_response = part.text
+                                logger.info("📥 Received response from Gemini:")
+                                print("\n" + "="*70)
+                                print(text_response)
+                                print("="*70 + "\n")
 
-                            # Check if this is a text-only response without action tools
-                            has_action_tool = any(
-                                call["name"] == "press_buttons"
-                                for call in tool_calls_made
-                            )
+                                # Check if this is a text-only response without action tools
+                                has_action_tool = any(
+                                    call["name"] == "press_buttons"
+                                    for call in tool_calls_made
+                                )
 
-                            if not has_action_tool:
-                                enforcement_retry_count += 1
+                                if not has_action_tool:
+                                    enforcement_retry_count += 1
 
-                                if enforcement_retry_count > max_enforcement_retries:
-                                    logger.error(f"❌ Gemini failed to call action tool after {max_enforcement_retries} retries!")
-                                    logger.error(f"   Reasoning provided: {reasoning_text[:200]}...")
-                                    logger.error(f"   Falling back to WAIT action")
+                                    if enforcement_retry_count > max_enforcement_retries:
+                                        logger.error(f"❌ Gemini failed to call action tool after {max_enforcement_retries} retries!")
+                                        logger.error(f"   Reasoning provided: {reasoning_text[:200]}...")
+                                        logger.error(f"   Falling back to WAIT action")
 
-                                    # Force a WAIT action to avoid getting stuck
-                                    tool_calls_made.append({
-                                        "name": "press_buttons",
-                                        "args": {"buttons": ["WAIT"], "reasoning": "Fallback: Agent stuck in text loop"},
-                                        "result": "Forced WAIT action due to agent text loop"
-                                    })
+                                        # Force a WAIT action to avoid getting stuck
+                                        tool_calls_made.append({
+                                            "name": "press_buttons",
+                                            "args": {"buttons": ["WAIT"], "reasoning": "Fallback: Agent stuck in text loop"},
+                                            "result": "Forced WAIT action due to agent text loop"
+                                        })
 
-                                    # Don't continue the loop - break out and return
-                                    break
+                                        # Don't continue the loop - break out and return
+                                        break
 
-                                logger.warning(f"⚠️ Gemini provided text but no action tool! (Retry {enforcement_retry_count}/{max_enforcement_retries})")
+                                    logger.warning(f"⚠️ Gemini provided text but no action tool! (Retry {enforcement_retry_count}/{max_enforcement_retries})")
 
-                                # Send a message that DEMANDS a function call with increasingly forceful language
-                                if enforcement_retry_count == 1:
-                                    enforcement_msg = "You MUST call press_buttons now. No more text analysis. Just call the tool based on your plan. Use press_buttons(['WAIT']) if unsure."
-                                elif enforcement_retry_count == 2:
-                                    enforcement_msg = "CRITICAL: Call press_buttons([...]) RIGHT NOW. Do not write any text. Only make the function call."
-                                else:
-                                    enforcement_msg = "EMERGENCY: You are stuck in a loop. Call press_buttons(['WAIT'], 'observing') immediately. This is your final chance."
+                                    # Send a message that DEMANDS a function call with increasingly forceful language
+                                    if enforcement_retry_count == 1:
+                                        enforcement_msg = "You MUST call press_buttons now. No more text analysis. Just call the tool based on your plan. Use press_buttons(['WAIT']) if unsure."
+                                    elif enforcement_retry_count == 2:
+                                        enforcement_msg = "CRITICAL: Call press_buttons([...]) RIGHT NOW. Do not write any text. Only make the function call."
+                                    else:
+                                        enforcement_msg = "EMERGENCY: You are stuck in a loop. Call press_buttons(['WAIT'], 'observing') immediately. This is your final chance."
 
-                                try:
-                                    response = self.chat.send_message(enforcement_msg)
-                                    # Loop back to process the action tool call
-                                    continue
-                                except Exception as e:
-                                    # Handle malformed function calls or other errors during enforcement
-                                    logger.error(f"❌ Enforcement failed with error: {e}")
-                                    logger.error(f"   Gemini attempted malformed function call")
+                                    try:
+                                        # TODO: Implement enforcement for VLM (currently using early return so this is unreachable)
+                                        logger.warning("Enforcement retry not implemented for VLM - breaking out of loop")
+                                        break
+                                    except Exception as e:
+                                        # Handle malformed function calls or other errors during enforcement
+                                        logger.error(f"❌ Enforcement failed with error: {e}")
+                                        logger.error(f"   Gemini attempted malformed function call")
 
-                                    # Force WAIT action and break out
-                                    tool_calls_made.append({
-                                        "name": "press_buttons",
-                                        "args": {"buttons": ["WAIT"], "reasoning": f"Fallback: Enforcement failed - {str(e)[:50]}"},
-                                        "result": "Forced WAIT due to enforcement error"
-                                    })
-                                    break
+                                        # Force WAIT action and break out
+                                        tool_calls_made.append({
+                                            "name": "press_buttons",
+                                            "args": {"buttons": ["WAIT"], "reasoning": f"Fallback: Enforcement failed - {str(e)[:50]}"},
+                                            "result": "Forced WAIT due to enforcement error"
+                                        })
+                                        break
 
-                            # Calculate duration
-                            duration = time.time() - start_time
+                                # Calculate duration
+                                duration = time.time() - start_time
 
-                            # Add to history
-                            self._add_to_history(prompt, text_response, tool_calls_made)
+                                # Add to history
+                                self._add_to_history(prompt, text_response, tool_calls_made)
 
-                            # Log to LLM logger with duration and tool calls
-                            self._log_thinking(prompt, text_response, duration, tool_calls_made)
+                                # Log to LLM logger with duration and tool calls
+                                # self._log_thinking(prompt, text_response, duration, tool_calls_made)
 
-                            # Send thinking to server for display in stream
-                            self._send_thinking_to_server(text_response, self.step_count + 1)
+                                # Send thinking to server for display in stream
+                                self._send_thinking_to_server(text_response, self.step_count + 1)
 
-                            return True, text_response
+                                return True, text_response
 
             # If we get here, no text response was generated
             logger.warning("⚠️ No text response from Gemini")
