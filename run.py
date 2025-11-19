@@ -132,6 +132,8 @@ def main():
                        help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival')")
     parser.add_argument("--direct-objectives-start", type=int, default=0,
                        help="Start index for direct objectives (for resuming from checkpoints)")
+    parser.add_argument("--clear-knowledge-base", action="store_true",
+                       help="Clear the knowledge_base.json file before starting the run")
     
     args = parser.parse_args()
     
@@ -143,6 +145,23 @@ def main():
     frame_server_process = None
     
     try:
+        # Clear knowledge base if requested
+        if args.clear_knowledge_base:
+            knowledge_base_file = os.path.join(".pokeagent_cache", "knowledge_base.json")
+            if os.path.exists(knowledge_base_file):
+                # Clear the file by writing empty JSON structure
+                import json
+                empty_data = {
+                    "next_id": 1,
+                    "entries": {}
+                }
+                os.makedirs(".pokeagent_cache", exist_ok=True)
+                with open(knowledge_base_file, 'w') as f:
+                    json.dump(empty_data, f, indent=2)
+                print(f"🧹 Cleared knowledge base: {knowledge_base_file}")
+            else:
+                print(f"ℹ️  Knowledge base file does not exist yet: {knowledge_base_file}")
+        
         # Auto-start server if requested
         if args.agent_auto or args.manual or args.scaffold in ["cli", "my_cli_agent", "autonomous_cli", "geminiplays"]:
             print("\n📡 Starting server process...")
