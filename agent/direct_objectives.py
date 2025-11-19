@@ -1111,6 +1111,75 @@ class DirectObjectiveManager:
         
         logger.info(f"Loaded part_1_walkthrough_claude_4_5 sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
         
+    def load_autonomous_objective_creation_sequence(self, start_index: int = 0, run_dir: Optional[str] = None):
+        """Load a dummy sequence with one objective that prompts the autonomous agent to create new objectives.
+        
+        This sequence is designed for the autonomous CLI agent. It contains a single objective
+        that guides the agent through the autonomous objective creation pipeline:
+        1. Call get_progress_summary() to review accomplishments
+        2. Call get_knowledge_summary() to see what's been learned
+        3. Use get_walkthrough(part=X) to find the next relevant walkthrough part
+        4. Create the next 3 direct objectives using create_direct_objectives()
+        
+        When this objective is completed, the agent will have created new objectives and can
+        proceed with those objectives.
+        
+        Args:
+            start_index: Index to start from (0 = start from beginning)
+            run_dir: Optional run directory for saving completed objectives
+        """
+        self.sequence_name = "autonomous_objective_creation"
+        self.current_sequence = [
+            DirectObjective(
+                id="autonomous_01_create_next_objectives",
+                description="Follow the autonomous objective creation pipeline to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_knowledge_summary() to see what you've learned. Step 3: Analyze your progress to determine which walkthrough part you're on (use highest milestone completed + 1). Step 4: Call get_walkthrough(part=X) with the appropriate part number. Step 5: Verify the walkthrough matches your current progress. Step 6: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
+                action_type="interact",
+                target_location=None,
+                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_knowledge_summary() (result appears next step). Step 3: Analyze both to determine walkthrough part. Step 4: Call get_walkthrough(part=X). Step 5: Verify and create objectives with create_direct_objectives(). Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step.",
+                completion_condition="dynamic_objectives_created",
+                priority=1
+            )
+        ]
+        self.current_index = min(start_index, len(self.current_sequence))
+        
+        # Mark objectives before start_index as completed if needed
+        initial_completed = []
+        for i in range(start_index):
+            if i < len(self.current_sequence):
+                obj = self.current_sequence[i]
+                obj.completed = True
+                obj.completed_at = datetime.now()
+                initial_completed.append({
+                    "id": obj.id,
+                    "description": obj.description,
+                    "target_location": obj.target_location,
+                    "action_type": obj.action_type,
+                    "completed_at": obj.completed_at.isoformat(),
+                    "completed_at_load": True
+                })
+        
+        # Save initial completed objectives if provided
+        if run_dir and start_index > 0 and initial_completed:
+            try:
+                filename = os.path.join(run_dir, "completed_objectives.json")
+                initial_data = {
+                    "sequence_name": self.sequence_name,
+                    "completed_at": datetime.now().isoformat(),
+                    "completed_objectives": initial_completed,
+                    "total_objectives_completed": len(initial_completed),
+                    "total_objectives": len(self.current_sequence),
+                    "start_index": start_index,
+                    "note": f"Initial completed objectives (loaded at index {start_index})"
+                }
+                history = {"sequences": [initial_data], "last_updated": datetime.now().isoformat()}
+                with open(filename, 'w') as f:
+                    json.dump(history, f, indent=2)
+                logger.info(f"💾 Saved {len(initial_completed)} initial completed objectives to {filename}")
+            except Exception as e:
+                logger.warning(f"Failed to save initial completed objectives: {e}")
+        
+        logger.info(f"Loaded autonomous_objective_creation sequence with {len(self.current_sequence)} objective, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
+        
     def get_current_objective(self) -> Optional[DirectObjective]:
         """Get the current objective in the sequence"""
         if self.current_index < len(self.current_sequence):
