@@ -98,6 +98,9 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                         grid_row.append(symbol)
                     grid.append(grid_row)
             
+            # Store raw tiles with elevation for pathfinding
+            raw_tiles = metatiles  # Already in format (tile_id, behavior, collision, elevation)
+            
             # Build ASCII representation
             if include_ascii:
                 ascii_lines = []
@@ -360,6 +363,10 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     
     if include_ascii and ascii_map:
         json_map["ascii"] = ascii_map
+    
+    # Include raw tiles with elevation for pathfinding elevation checks
+    if metatiles:
+        json_map["raw_tiles"] = metatiles
     
     return json_map
 

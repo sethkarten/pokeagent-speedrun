@@ -140,7 +140,7 @@ def is_tile_walkable(tile) -> bool:
     return collision == 0
 
 
-def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=None, stairs_pos=None):
+def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=None, stairs_pos=None, raw_tiles=None):
     """
     Convert a single tile to its display symbol.
     
@@ -151,12 +151,13 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         location_name: Optional location name for context-specific symbols
         player_pos: Optional player position tuple (px, py) for relative positioning
         stairs_pos: Optional stairs position tuple (sx, sy) for relative positioning
+        raw_tiles: Optional 2D array of all tiles for elevation connector detection
         
     Returns:
         str: Single character symbol representing the tile
     """
     if len(tile) >= 4:
-        tile_id, behavior, collision, _ = tile  # elevation not used
+        tile_id, behavior, collision, elevation = tile
     elif len(tile) >= 2:
         tile_id, behavior = tile[:2]
         collision = 0
@@ -258,6 +259,18 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
             return "↙"
         else:
             return "J"
+    elif "SLIDE" in behavior_name:
+        # Slides are directional like jumps, but allow movement in one direction
+        if "SOUTH" in behavior_name:
+            return "↓"  # Slide down (south)
+        elif "EAST" in behavior_name:
+            return "→"  # Slide east
+        elif "WEST" in behavior_name:
+            return "←"  # Slide west
+        elif "NORTH" in behavior_name:
+            return "↑"  # Slide up (north)
+        else:
+            return "S"  # Generic slide/stairs symbol
     elif "BRIDGE" in behavior_name:
         return "&"  # Bridge tiles are walkable
     elif "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
