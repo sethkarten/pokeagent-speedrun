@@ -23,6 +23,123 @@ except ImportError:  # Allow usage in builder scripts without mgba
     MetatileBehavior = type("MetatileBehavior", (), {"NORMAL": _FallbackEnum(0)})
 
 
+def is_tile_walkable(tile) -> bool:
+    """
+    Determine if a tile is walkable based on its behavior and collision.
+    This is the SINGLE SOURCE OF TRUTH for walkability logic.
+    
+    Used by both pathfinding and map display to ensure consistency.
+    
+    Args:
+        tile: Tile tuple (tile_id, behavior, collision, elevation) or similar format
+        
+    Returns:
+        True if walkable, False if blocked
+    """
+    if not tile or len(tile) < 2:
+        return False
+    
+    # Extract tile components
+    tile_id = tile[0] if len(tile) > 0 else 0
+    behavior = tile[1] if len(tile) > 1 else 0
+    collision = tile[2] if len(tile) > 2 else 0
+    
+    # Always block invalid tiles
+    if tile_id == 1023:  # Invalid/out-of-bounds tile
+        return False
+    
+    # NPC markers are blocked
+    if behavior == 999:
+        return False
+    
+    # Get behavior name for matching
+    behavior_name = "UNKNOWN"
+    if hasattr(behavior, 'name'):
+        behavior_name = behavior.name
+    else:
+        # Handle both int and numpy integer types
+        try:
+            import numpy as np
+            if isinstance(behavior, (int, np.integer)):
+                behavior_int = int(behavior)
+                behavior_enum = MetatileBehavior(behavior_int)
+                behavior_name = behavior_enum.name
+        except (ValueError, TypeError, AttributeError):
+            # MetatileBehavior might be fallback that doesn't accept args
+            if hasattr(MetatileBehavior, 'NORMAL'):
+                behavior_name = "UNKNOWN"
+            else:
+                behavior_name = "UNKNOWN"
+    
+    # Special case for Brendan's House - stairs and doors are reversed
+    # NON_ANIMATED_DOOR (96) appears at top and should be stairs (walkable)
+    # SOUTH_ARROW_WARP (101) appears at bottom and should be door (walkable)
+    if behavior == 96 or "NON_ANIMATED_DOOR" in behavior_name:
+        return True  # Stairs are walkable
+    elif behavior == 101 or "SOUTH_ARROW_WARP" in behavior_name:
+        return True  # Door is walkable
+    
+    # Doors, stairs, and warps are walkable
+    if ("DOOR" in behavior_name or 
+        "STAIRS" in behavior_name or 
+        "WARP" in behavior_name or
+        "LADDER" in behavior_name or
+        "ESCALATOR" in behavior_name):
+        return True
+    
+    # Bridges are walkable
+    if "BRIDGE" in behavior_name:
+        return True
+    
+    # Normal tiles - check collision (collision 0 = passable)
+    if behavior_name == "NORMAL":
+        return collision == 0
+    
+    # Walkable behaviors
+    if behavior_name in ["INDOOR", "DECORATION", "HOLDS", "CAVE"]:
+        return True
+    
+    # Blocked behaviors
+    if "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
+        return False
+    
+    # Water (need surf) - blocked for now
+    if "WATER" in behavior_name and "SHALLOW" not in behavior_name:
+        return False
+    
+    # Waterfall (need waterfall) - blocked for now
+    if "WATERFALL" in behavior_name:
+        return False
+    
+    # WALL behaviors are blocked
+    if "WALL" in behavior_name:
+        return False
+    
+    # Walkable terrain types
+    walkable_terrain = [
+        "TALL_GRASS", "LONG_GRASS", "SHORT_GRASS", "ASHGRASS",
+        "SAND", "DEEP_SAND", "ICE", "THIN_ICE", "CRACKED_ICE",
+        "PUDDLE", "SHALLOW_WATER", "FOOTPRINTS", "HOT_SPRINGS",
+        "MUDDY_SLOPE", "BUMPY_SLOPE", "CRACKED_FLOOR",
+        "VERTICAL_RAIL", "HORIZONTAL_RAIL",
+        "ISOLATED_VERTICAL_RAIL", "ISOLATED_HORIZONTAL_RAIL",
+        "INDOOR_ENCOUNTER", "MOUNTAIN_TOP", "SHOAL_CAVE_ENTRANCE",
+        "REFLECTION_UNDER_BRIDGE", "SEAWEED", "SEAWEED_NO_SURFACING"
+    ]
+    if any(terrain in behavior_name for terrain in walkable_terrain):
+        return True
+    
+    # Directional behaviors (JUMP_*, WALK_*, SLIDE_*) are walkable
+    # but need special handling in neighbor checking
+    if ("JUMP" in behavior_name or 
+        "WALK" in behavior_name or 
+        "SLIDE" in behavior_name):
+        return True
+    
+    # Default: use collision data (collision 0 = passable, >0 = blocked)
+    return collision == 0
+
+
 def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=None, stairs_pos=None):
     """
     Convert a single tile to its display symbol.
@@ -51,14 +168,17 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
     # Convert behavior to symbol using unified logic
     if hasattr(behavior, 'name'):
         behavior_name = behavior.name
-    elif isinstance(behavior, int):
-        try:
-            behavior_enum = MetatileBehavior(behavior)
-            behavior_name = behavior_enum.name
-        except ValueError:
-            behavior_name = "UNKNOWN"
     else:
-        behavior_name = "UNKNOWN"
+        # Handle both int and numpy integer types
+        try:
+            import numpy as np
+            if isinstance(behavior, (int, np.integer)):
+                behavior_int = int(behavior)
+                behavior_enum = MetatileBehavior(behavior_int)
+                behavior_name = behavior_enum.name
+        except (ValueError, TypeError, AttributeError):
+            # MetatileBehavior might be fallback that doesn't accept args
+            behavior_name = "UNKNOWN"
     
     # Special handling for Brendan's House 2F wall clock
     # The clock is a wall tile with no special behavior, just tile ID 1023
@@ -87,8 +207,10 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         return "D"  # Other doors remain as doors
     elif "STAIRS" in behavior_name or "WARP" in behavior_name:
         return "S"  # Other stairs/warps remain as stairs
+    elif "SHALLOW_WATER" in behavior_name:
+        return "."  # Shallow water is walkable
     elif "WATER" in behavior_name:
-        return "W"
+        return "W"  # Deep water requires Surf
     elif "TALL_GRASS" in behavior_name:
         return "~"
     elif "COMPUTER" in behavior_name or "PC" in behavior_name:
@@ -140,6 +262,8 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         return "&"  # Bridge tiles are walkable
     elif "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
         return "#"  # Blocked
+    elif "WALL" in behavior_name:
+        return "#"  # Walls are blocked
     elif "INDOOR" in behavior_name:
         return "."  # Indoor tiles are walkable
     elif "CAVE" in behavior_name:
@@ -149,8 +273,9 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
     elif behavior == 999:
         return "N"  # NPC marker (visually detected)
     else:
-        # For unknown behavior, mark as blocked for safety
-        return "#"
+        # For all other tiles, use shared walkability function to determine symbol
+        # This ensures consistency between map display and pathfinding
+        return "." if is_tile_walkable(tile) else "#"
 
 
 def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=None, trim_padding=True, location_name=None):
