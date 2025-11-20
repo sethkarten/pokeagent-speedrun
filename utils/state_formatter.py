@@ -673,6 +673,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
             map_info['porymap']['grid'] = porymap_data.get('grid')
             map_info['porymap']['objects'] = porymap_data.get('objects', [])
             map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
+            map_info['porymap']['raw_tiles'] = porymap_data.get('raw_tiles')  # Include raw tiles with elevation
     elif porymap_result:
         context_parts.extend(porymap_result)
     

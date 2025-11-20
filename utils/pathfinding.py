@@ -331,7 +331,7 @@ class Pathfinder:
             porymap = map_data['porymap']
             if porymap.get('grid'):
                 # Return porymap data structure for pathfinding
-                return {
+                result = {
                     'type': 'porymap',
                     'grid': porymap['grid'],  # ASCII grid: [['.', '#', ...], ...]
                     'objects': porymap.get('objects', []),
@@ -339,6 +339,16 @@ class Pathfinder:
                     'height': porymap.get('dimensions', {}).get('height', 0),
                     'warps': porymap.get('warps', [])  # Include warps for pathfinding
                 }
+                
+                # Include raw tiles with elevation if available
+                # Raw tiles are needed for elevation checking
+                if 'raw_tiles' in porymap:
+                    result['raw_tiles'] = porymap['raw_tiles']
+                elif 'tiles' in map_data:
+                    # Fallback: check if tiles are in map_data directly
+                    result['raw_tiles'] = map_data['tiles']
+                
+                return result
         
         # No porymap data available - return None (no fallback)
         return None
@@ -515,11 +525,18 @@ class Pathfinder:
         """
         Check if movement from from_pos to to_pos is valid.
 
-        Handles one-way ledges: can only move in the direction of the ledge.
-        - JUMP_EAST: can only jump TO this tile by moving EAST (from x-1)
-        - JUMP_WEST: can only jump TO this tile by moving WEST (from x+1)
-        - JUMP_NORTH: can only jump TO this tile by moving NORTH (from y+1)
-        - JUMP_SOUTH: can only jump TO this tile by moving SOUTH (from y-1)
+        Handles:
+        1. One-way ledges: can only move in the direction of the ledge
+        2. Elevation differences: cannot move between tiles at different elevations
+           unless there's a special behavior (ledge, slide, stairs, etc.) connecting them
+        
+        Args:
+            from_pos: Source position (x, y)
+            to_pos: Destination position (x, y)
+            map_data: Map data dictionary with grid and optionally raw_tiles
+            
+        Returns:
+            True if movement is valid, False otherwise
         """
         if 'grid' not in map_data:
             return True
@@ -528,17 +545,90 @@ class Pathfinder:
         
         # Check bounds
         to_y, to_x = to_pos[1], to_pos[0]  # grid is [y][x]
+        from_y, from_x = from_pos[1], from_pos[0]
+        
         if to_y < 0 or to_y >= len(grid) or to_x < 0 or to_x >= len(grid[0]):
+            return False
+        if from_y < 0 or from_y >= len(grid) or from_x < 0 or from_x >= len(grid[0]):
             return False
         
         # Get symbol at destination
         dest_symbol = grid[to_y][to_x]
+        from_symbol = grid[from_y][from_x]
         
-        # Check if destination is a ledge - if so, validate direction
         # Calculate movement direction
         dx = to_pos[0] - from_pos[0]  # positive = moving east, negative = moving west
         dy = to_pos[1] - from_pos[1]  # positive = moving south, negative = moving north
         
+        # Check elevation differences if raw tile data is available
+        if 'raw_tiles' in map_data:
+            raw_tiles = map_data['raw_tiles']
+            try:
+                # Get elevation from raw tiles
+                # Raw tiles format: (tile_id, behavior, collision, elevation, ...)
+                from_tile = raw_tiles[from_y][from_x] if from_y < len(raw_tiles) and from_x < len(raw_tiles[from_y]) else None
+                to_tile = raw_tiles[to_y][to_x] if to_y < len(raw_tiles) and to_x < len(raw_tiles[to_y]) else None
+                
+                if from_tile and to_tile and len(from_tile) >= 4 and len(to_tile) >= 4:
+                    from_elevation = from_tile[3] if len(from_tile) > 3 else 0
+                    to_elevation = to_tile[3] if len(to_tile) > 3 else 0
+                    
+                    # If elevations differ, check if movement is allowed
+                    if from_elevation != to_elevation:
+                        # Movement between different elevations is ONLY allowed if:
+                        # 1. There's a ledge/slide behavior (one-way jump)
+                        # 2. There's stairs/ladder/escalator (two-way connection)
+                        # 3. There's a bridge (connects elevations)
+                        
+                        # Check destination tile behavior
+                        to_behavior = to_tile[1] if len(to_tile) > 1 else 0
+                        from_behavior = from_tile[1] if len(from_tile) > 1 else 0
+                        
+                        # Get behavior names
+                        from_behavior_name = "UNKNOWN"
+                        to_behavior_name = "UNKNOWN"
+                        
+                        try:
+                            from pokemon_env.enums import MetatileBehavior
+                            if isinstance(from_behavior, (int, type(from_behavior).__name__ == 'int64' if hasattr(type(from_behavior), '__name__') else False)):
+                                import numpy as np
+                                if isinstance(from_behavior, (int, np.integer)):
+                                    from_behavior_enum = MetatileBehavior(int(from_behavior))
+                                    from_behavior_name = from_behavior_enum.name
+                            if isinstance(to_behavior, (int, type(to_behavior).__name__ == 'int64' if hasattr(type(to_behavior), '__name__') else False)):
+                                import numpy as np
+                                if isinstance(to_behavior, (int, np.integer)):
+                                    to_behavior_enum = MetatileBehavior(int(to_behavior))
+                                    to_behavior_name = to_behavior_enum.name
+                        except (ValueError, TypeError, AttributeError, ImportError):
+                            pass
+                        
+                        # Check if either tile has elevation-connecting behavior
+                        elevation_connectors = [
+                            "JUMP", "SLIDE", "WALK",  # One-way movement
+                            "STAIRS", "LADDER", "ESCALATOR",  # Two-way movement
+                            "BRIDGE"  # Connects elevations
+                        ]
+                        
+                        has_elevation_connector = False
+                        for connector in elevation_connectors:
+                            if connector in from_behavior_name or connector in to_behavior_name:
+                                has_elevation_connector = True
+                                break
+                        
+                        # Also check if symbols indicate elevation connectors
+                        if dest_symbol in ['→', '←', '↑', '↓', '↗', '↖', '↘', '↙', 'S', 'D', '&']:
+                            has_elevation_connector = True
+                        
+                        # Block movement if no explicit elevation connector
+                        if not has_elevation_connector:
+                            logger.debug(f"Blocking movement from ({from_x}, {from_y}) elev {from_elevation} to ({to_x}, {to_y}) elev {to_elevation}: no elevation connector")
+                            return False
+            except (IndexError, TypeError, AttributeError) as e:
+                # If we can't get elevation data, fall through to symbol-based checks
+                logger.debug(f"Could not check elevation: {e}")
+        
+        # Check if destination is a ledge - if so, validate direction
         # Ledge direction rules:
         # - Can ONLY move TO a ledge from the correct direction
         # - Moving away from a ledge is always OK
