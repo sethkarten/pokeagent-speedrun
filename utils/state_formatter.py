@@ -1160,6 +1160,320 @@ ROM_TO_PORYMAP_MAP = {
     "Map_18_0B": "PetalburgWoods",  # Group 0x18 (Dungeons), Map 0x0B
     "Map_18_04": "RusturfTunnel",  # Group 0x18 (Indoor Route 104), Map 0x04
     "MAP_18_04": "RusturfTunnel",  # Alternate capitalization
+
+        # The folloing mappings were generated via cursor and verified
+    "ABANDONED SHIP CAPTAINS OFFICE": "AbandonedShip_CaptainsOffice",  # 100.0% match, verified
+    "ABANDONED SHIP CORRIDORS 1F": "AbandonedShip_Corridors_1F",  # 100.0% match, verified
+    "ABANDONED SHIP CORRIDORS B1F": "AbandonedShip_Corridors_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP DECK": "AbandonedShip_Deck",  # 100.0% match, verified
+    "ABANDONED SHIP HIDDEN FLOOR CORRIDORS": "AbandonedShip_HiddenFloorCorridors",  # 100.0% match, verified
+    "ABANDONED SHIP HIDDEN FLOOR ROOMS": "AbandonedShip_HiddenFloorRooms",  # 100.0% match, verified
+    "ABANDONED SHIP ROOM B1F": "AbandonedShip_Room_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS 1F": "AbandonedShip_Rooms_1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS B1F": "AbandonedShip_Rooms_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS2 1F": "AbandonedShip_Rooms2_1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS2 B1F": "AbandonedShip_Rooms2_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP UNDERWATER1": "AbandonedShip_Underwater1",  # 100.0% match, verified
+    "ABANDONED SHIP UNDERWATER2": "AbandonedShip_Underwater2",  # 100.0% match, verified
+    "ALTERING CAVE": "AlteringCave",  # 100.0% match, verified
+    "ANCIENT TOMB": "AncientTomb",  # 100.0% match, verified
+    "AQUA HIDEOUT 1F": "AquaHideout_1F",  # 100.0% match, verified
+    "AQUA HIDEOUT B1F": "AquaHideout_B1F",  # 100.0% match, verified
+    "AQUA HIDEOUT B2F": "AquaHideout_B2F",  # 100.0% match, verified
+    "AQUA HIDEOUT UNUSED RUBY MAP1": "AquaHideout_UnusedRubyMap1",  # 100.0% match, verified
+    "AQUA HIDEOUT UNUSED RUBY MAP2": "AquaHideout_UnusedRubyMap2",  # 100.0% match, verified
+    "AQUA HIDEOUT UNUSED RUBY MAP3": "AquaHideout_UnusedRubyMap3",  # 100.0% match, verified
+    "ARTISAN CAVE 1F": "ArtisanCave_1F",  # 100.0% match, verified
+    "ARTISAN CAVE B1F": "ArtisanCave_B1F",  # 100.0% match, verified
+    "CAVE OF ORIGIN 1F": "CaveOfOrigin_1F",  # 100.0% match, verified
+    "CAVE OF ORIGIN B1F": "CaveOfOrigin_B1F",  # 100.0% match, verified
+    "CAVE OF ORIGIN ENTRANCE": "CaveOfOrigin_Entrance",  # 100.0% match, verified
+    "CAVE OF ORIGIN UNUSED RUBY SAPPHIRE MAP1": "CaveOfOrigin_UnusedRubySapphireMap1",  # 100.0% match, verified
+    "CAVE OF ORIGIN UNUSED RUBY SAPPHIRE MAP2": "CaveOfOrigin_UnusedRubySapphireMap2",  # 100.0% match, verified
+    "CAVE OF ORIGIN UNUSED RUBY SAPPHIRE MAP3": "CaveOfOrigin_UnusedRubySapphireMap3",  # 100.0% match, verified
+    "DESERT RUINS": "DesertRuins",  # 100.0% match, verified
+    "DESERT UNDERPASS": "DesertUnderpass",  # 100.0% match, verified
+    "DEWFORD TOWN GYM": "DewfordTown_Gym",  # 100.0% match, verified
+    "DEWFORD TOWN HALL": "DewfordTown_Hall",  # 100.0% match, verified
+    "DEWFORD TOWN HOUSE1": "DewfordTown_House1",  # 100.0% match, verified
+    "DEWFORD TOWN HOUSE2": "DewfordTown_House2",  # 100.0% match, verified
+    "DEWFORD TOWN POKEMON CENTER 1F": "DewfordTown_PokemonCenter_1F",  # 100.0% match, verified
+    "DEWFORD TOWN POKEMON CENTER 2F": "DewfordTown_PokemonCenter_2F",  # 100.0% match, verified
+    "EVER GRANDE CITY CHAMPIONS ROOM": "EverGrandeCity_ChampionsRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY DRAKES ROOM": "EverGrandeCity_DrakesRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY GLACIAS ROOM": "EverGrandeCity_GlaciasRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL OF FAME": "EverGrandeCity_HallOfFame",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL1": "EverGrandeCity_Hall1",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL2": "EverGrandeCity_Hall2",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL3": "EverGrandeCity_Hall3",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL4": "EverGrandeCity_Hall4",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL5": "EverGrandeCity_Hall5",  # 100.0% match, verified
+    "EVER GRANDE CITY PHOEBES ROOM": "EverGrandeCity_PhoebesRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON CENTER 1F": "EverGrandeCity_PokemonCenter_1F",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON CENTER 2F": "EverGrandeCity_PokemonCenter_2F",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON LEAGUE 1F": "EverGrandeCity_PokemonLeague_1F",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON LEAGUE 2F": "EverGrandeCity_PokemonLeague_2F",  # 100.0% match, verified
+    "EVER GRANDE CITY SIDNEYS ROOM": "EverGrandeCity_SidneysRoom",  # 100.0% match, verified
+    "FALLARBOR TOWN BATTLE TENT BATTLE ROOM": "FallarborTown_BattleTentBattleRoom",  # 100.0% match, verified
+    "FALLARBOR TOWN BATTLE TENT CORRIDOR": "FallarborTown_BattleTentCorridor",  # 100.0% match, verified
+    "FALLARBOR TOWN BATTLE TENT LOBBY": "FallarborTown_BattleTentLobby",  # 100.0% match, verified
+    "FALLARBOR TOWN COZMOS HOUSE": "FallarborTown_CozmosHouse",  # 100.0% match, verified
+    "FALLARBOR TOWN MART": "FallarborTown_Mart",  # 100.0% match, verified
+    "FALLARBOR TOWN MOVE RELEARNERS HOUSE": "FallarborTown_MoveRelearnersHouse",  # 100.0% match, verified
+    "FALLARBOR TOWN POKEMON CENTER 1F": "FallarborTown_PokemonCenter_1F",  # 100.0% match, verified
+    "FALLARBOR TOWN POKEMON CENTER 2F": "FallarborTown_PokemonCenter_2F",  # 100.0% match, verified
+    "FIERY PATH": "FieryPath",  # 100.0% match, verified
+    "FORTREE CITY DECORATION SHOP": "FortreeCity_DecorationShop",  # 100.0% match, verified
+    "FORTREE CITY GYM": "FortreeCity_Gym",  # 100.0% match, verified
+    "FORTREE CITY HOUSE1": "FortreeCity_House1",  # 100.0% match, verified
+    "FORTREE CITY HOUSE2": "FortreeCity_House2",  # 100.0% match, verified
+    "FORTREE CITY HOUSE3": "FortreeCity_House3",  # 100.0% match, verified
+    "FORTREE CITY HOUSE4": "FortreeCity_House4",  # 100.0% match, verified
+    "FORTREE CITY HOUSE5": "FortreeCity_House5",  # 100.0% match, verified
+    "FORTREE CITY MART": "FortreeCity_Mart",  # 100.0% match, verified
+    "FORTREE CITY POKEMON CENTER 1F": "FortreeCity_PokemonCenter_1F",  # 100.0% match, verified
+    "FORTREE CITY POKEMON CENTER 2F": "FortreeCity_PokemonCenter_2F",  # 100.0% match, verified
+    "GRANITE CAVE 1F": "GraniteCave_1F",  # 100.0% match, verified
+    "GRANITE CAVE B1F": "GraniteCave_B1F",  # 100.0% match, verified
+    "GRANITE CAVE B2F": "GraniteCave_B2F",  # 100.0% match, verified
+    "GRANITE CAVE STEVENS ROOM": "GraniteCave_StevensRoom",  # 100.0% match, verified
+    "ISLAND CAVE": "IslandCave",  # 100.0% match, verified
+    "JAGGED PASS": "JaggedPass",  # 100.0% match, verified
+    "LAVARIDGE TOWN GYM 1F": "LavaridgeTown_Gym_1F",  # 100.0% match, verified
+    "LAVARIDGE TOWN GYM B1F": "LavaridgeTown_Gym_B1F",  # 100.0% match, verified
+    "LAVARIDGE TOWN HERB SHOP": "LavaridgeTown_HerbShop",  # 100.0% match, verified
+    "LAVARIDGE TOWN HOUSE": "LavaridgeTown_House",  # 100.0% match, verified
+    "LAVARIDGE TOWN MART": "LavaridgeTown_Mart",  # 100.0% match, verified
+    "LAVARIDGE TOWN POKEMON CENTER 1F": "LavaridgeTown_PokemonCenter_1F",  # 100.0% match, verified
+    "LAVARIDGE TOWN POKEMON CENTER 2F": "LavaridgeTown_PokemonCenter_2F",  # 100.0% match, verified
+    "LILYCOVE CITY CONTEST HALL": "LilycoveCity_ContestHall",  # 100.0% match, verified
+    "LILYCOVE CITY CONTEST LOBBY": "LilycoveCity_ContestLobby",  # 100.0% match, verified
+    "LILYCOVE CITY COVE LILY MOTEL 1F": "LilycoveCity_CoveLilyMotel_1F",  # 100.0% match, verified
+    "LILYCOVE CITY COVE LILY MOTEL 2F": "LilycoveCity_CoveLilyMotel_2F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 1F": "LilycoveCity_DepartmentStore_1F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 2F": "LilycoveCity_DepartmentStore_2F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 3F": "LilycoveCity_DepartmentStore_3F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 4F": "LilycoveCity_DepartmentStore_4F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 5F": "LilycoveCity_DepartmentStore_5F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE ELEVATOR": "LilycoveCity_DepartmentStoreElevator",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE ROOFTOP": "LilycoveCity_DepartmentStoreRooftop",  # 100.0% match, verified
+    "LILYCOVE CITY HARBOR": "LilycoveCity_Harbor",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE1": "LilycoveCity_House1",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE2": "LilycoveCity_House2",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE3": "LilycoveCity_House3",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE4": "LilycoveCity_House4",  # 100.0% match, verified
+    "LILYCOVE CITY LILYCOVE MUSEUM 1F": "LilycoveCity_LilycoveMuseum_1F",  # 100.0% match, verified
+    "LILYCOVE CITY LILYCOVE MUSEUM 2F": "LilycoveCity_LilycoveMuseum_2F",  # 100.0% match, verified
+    "LILYCOVE CITY MOVE DELETERS HOUSE": "LilycoveCity_MoveDeletersHouse",  # 100.0% match, verified
+    "LILYCOVE CITY POKEMON CENTER 1F": "LilycoveCity_PokemonCenter_1F",  # 100.0% match, verified
+    "LILYCOVE CITY POKEMON CENTER 2F": "LilycoveCity_PokemonCenter_2F",  # 100.0% match, verified
+    "LILYCOVE CITY POKEMON TRAINER FAN CLUB": "LilycoveCity_PokemonTrainerFanClub",  # 100.0% match, verified
+    "LILYCOVE CITY UNUSED MART": "LilycoveCity_UnusedMart",  # 100.0% match, verified
+    "LITTLEROOT TOWN BRENDANS HOUSE 1F": "LittlerootTown_BrendansHouse_1F",  # 100.0% match, verified
+    "LITTLEROOT TOWN BRENDANS HOUSE 2F": "LittlerootTown_BrendansHouse_2F",  # 100.0% match, verified
+    "LITTLEROOT TOWN MAYS HOUSE 1F": "LittlerootTown_MaysHouse_1F",  # 100.0% match, verified
+    "LITTLEROOT TOWN MAYS HOUSE 2F": "LittlerootTown_MaysHouse_2F",  # 100.0% match, verified
+    "MAGMA HIDEOUT 1F": "MagmaHideout_1F",  # 100.0% match, verified
+    "MAGMA HIDEOUT 2F 1R": "MagmaHideout_2F_1R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 2F 2R": "MagmaHideout_2F_2R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 2F 3R": "MagmaHideout_2F_3R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 3F 1R": "MagmaHideout_3F_1R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 3F 2R": "MagmaHideout_3F_2R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 3F 3R": "MagmaHideout_3F_3R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 4F": "MagmaHideout_4F",  # 100.0% match, verified
+    "MAP RUSTURF TUNNEL": "RusturfTunnel",  # 89.7% match, verified
+    "MARINE CAVE END": "MarineCave_End",  # 100.0% match, verified
+    "MARINE CAVE ENTRANCE": "MarineCave_Entrance",  # 100.0% match, verified
+    "MAUVILLE CITY BIKE SHOP": "MauvilleCity_BikeShop",  # 100.0% match, verified
+    "MAUVILLE CITY GAME CORNER": "MauvilleCity_GameCorner",  # 100.0% match, verified
+    "MAUVILLE CITY GYM": "MauvilleCity_Gym",  # 100.0% match, verified
+    "MAUVILLE CITY HOUSE1": "MauvilleCity_House1",  # 100.0% match, verified
+    "MAUVILLE CITY HOUSE2": "MauvilleCity_House2",  # 100.0% match, verified
+    "MAUVILLE CITY MART": "MauvilleCity_Mart",  # 100.0% match, verified
+    "MAUVILLE CITY POKEMON CENTER 1F": "MauvilleCity_PokemonCenter_1F",  # 100.0% match, verified
+    "MAUVILLE CITY POKEMON CENTER 2F": "MauvilleCity_PokemonCenter_2F",  # 100.0% match, verified
+    "METEOR FALLS 1F 1R": "MeteorFalls_1F_1R",  # 100.0% match, verified
+    "METEOR FALLS 1F 2R": "MeteorFalls_1F_2R",  # 100.0% match, verified
+    "METEOR FALLS B1F 1R": "MeteorFalls_B1F_1R",  # 100.0% match, verified
+    "METEOR FALLS B1F 2R": "MeteorFalls_B1F_2R",  # 100.0% match, verified
+    "METEOR FALLS STEVENS CAVE": "MeteorFalls_StevensCave",  # 100.0% match, verified
+    "MIRAGE TOWER 1F": "MirageTower_1F",  # 100.0% match, verified
+    "MIRAGE TOWER 2F": "MirageTower_2F",  # 100.0% match, verified
+    "MIRAGE TOWER 3F": "MirageTower_3F",  # 100.0% match, verified
+    "MIRAGE TOWER 4F": "MirageTower_4F",  # 100.0% match, verified
+    "MOSSDEEP CITY GAME CORNER 1F": "MossdeepCity_GameCorner_1F",  # 100.0% match, verified
+    "MOSSDEEP CITY GAME CORNER B1F": "MossdeepCity_GameCorner_B1F",  # 100.0% match, verified
+    "MOSSDEEP CITY GYM": "MossdeepCity_Gym",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE1": "MossdeepCity_House1",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE2": "MossdeepCity_House2",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE3": "MossdeepCity_House3",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE4": "MossdeepCity_House4",  # 100.0% match, verified
+    "MOSSDEEP CITY MART": "MossdeepCity_Mart",  # 100.0% match, verified
+    "MOSSDEEP CITY POKEMON CENTER 1F": "MossdeepCity_PokemonCenter_1F",  # 100.0% match, verified
+    "MOSSDEEP CITY POKEMON CENTER 2F": "MossdeepCity_PokemonCenter_2F",  # 100.0% match, verified
+    "MOSSDEEP CITY SPACE CENTER 1F": "MossdeepCity_SpaceCenter_1F",  # 100.0% match, verified
+    "MOSSDEEP CITY SPACE CENTER 2F": "MossdeepCity_SpaceCenter_2F",  # 100.0% match, verified
+    "MOSSDEEP CITY STEVENS HOUSE": "MossdeepCity_StevensHouse",  # 100.0% match, verified
+    "MT CHIMNEY": "MtChimney",  # 100.0% match, verified
+    "MT CHIMNEY CABLE CAR STATION": "MtChimney_CableCarStation",  # 100.0% match, verified
+    "MT PYRE 1F": "MtPyre_1F",  # 100.0% match, verified
+    "MT PYRE 2F": "MtPyre_2F",  # 100.0% match, verified
+    "MT PYRE 3F": "MtPyre_3F",  # 100.0% match, verified
+    "MT PYRE 4F": "MtPyre_4F",  # 100.0% match, verified
+    "MT PYRE 5F": "MtPyre_5F",  # 100.0% match, verified
+    "MT PYRE 6F": "MtPyre_6F",  # 100.0% match, verified
+    "MT PYRE EXTERIOR": "MtPyre_Exterior",  # 100.0% match, verified
+    "MT PYRE SUMMIT": "MtPyre_Summit",  # 100.0% match, verified
+    "NEW MAUVILLE ENTRANCE": "NewMauville_Entrance",  # 100.0% match, verified
+    "NEW MAUVILLE INSIDE": "NewMauville_Inside",  # 100.0% match, verified
+    "OLDALE TOWN HOUSE1": "OldaleTown_House1",  # 100.0% match, verified
+    "OLDALE TOWN HOUSE2": "OldaleTown_House2",  # 100.0% match, verified
+    "OLDALE TOWN MART": "OldaleTown_Mart",  # 100.0% match, verified
+    "OLDALE TOWN POKEMON CENTER 1F": "OldaleTown_PokemonCenter_1F",  # 100.0% match, verified
+    "OLDALE TOWN POKEMON CENTER 2F": "OldaleTown_PokemonCenter_2F",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE1": "PacifidlogTown_House1",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE2": "PacifidlogTown_House2",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE3": "PacifidlogTown_House3",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE4": "PacifidlogTown_House4",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE5": "PacifidlogTown_House5",  # 100.0% match, verified
+    "PACIFIDLOG TOWN POKEMON CENTER 1F": "PacifidlogTown_PokemonCenter_1F",  # 100.0% match, verified
+    "PACIFIDLOG TOWN POKEMON CENTER 2F": "PacifidlogTown_PokemonCenter_2F",  # 100.0% match, verified
+    "PETALBURG CITY GYM": "PetalburgCity_Gym",  # 100.0% match, verified
+    "PETALBURG CITY HOUSE1": "PetalburgCity_House1",  # 100.0% match, verified
+    "PETALBURG CITY HOUSE2": "PetalburgCity_House2",  # 100.0% match, verified
+    "PETALBURG CITY MART": "PetalburgCity_Mart",  # 100.0% match, verified
+    "PETALBURG CITY POKEMON CENTER 1F": "PetalburgCity_PokemonCenter_1F",  # 100.0% match, verified
+    "PETALBURG CITY POKEMON CENTER 2F": "PetalburgCity_PokemonCenter_2F",  # 100.0% match, verified
+    "PETALBURG CITY WALLYS HOUSE": "PetalburgCity_WallysHouse",  # 100.0% match, verified
+    "ROUTE 104 MR BRINEYS HOUSE": "Route104_MrBrineysHouse",  # 100.0% match, verified
+    "ROUTE 104 MR BRINEYS HOUSE ALT": "Route104_MrBrineysHouse",  # 91.9% match, verified
+    "ROUTE 104 PRETTY PETAL FLOWER SHOP": "Route104_PrettyPetalFlowerShop",  # 100.0% match, verified
+    "ROUTE 109 SEASHORE HOUSE": "Route109_SeashoreHouse",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE CORRIDOR": "Route110_TrickHouseCorridor",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE END": "Route110_TrickHouseEnd",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE ENTRANCE": "Route110_TrickHouseEntrance",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE1": "Route110_TrickHousePuzzle1",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE2": "Route110_TrickHousePuzzle2",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE3": "Route110_TrickHousePuzzle3",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE4": "Route110_TrickHousePuzzle4",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE5": "Route110_TrickHousePuzzle5",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE6": "Route110_TrickHousePuzzle6",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE7": "Route110_TrickHousePuzzle7",  # 100.0% match, verified
+    "ROUTE 111 OLD LADYS REST STOP": "Route111_OldLadysRestStop",  # 100.0% match, verified
+    "ROUTE 111 WINSTRATE FAMILYS HOUSE": "Route111_WinstrateFamilysHouse",  # 100.0% match, verified
+    "ROUTE 112 CABLE CAR STATION": "Route112_CableCarStation",  # 100.0% match, verified
+    "ROUTE 113 GLASS WORKSHOP": "Route113_GlassWorkshop",  # 100.0% match, verified
+    "ROUTE 114 FOSSIL MANIACS HOUSE": "Route114_FossilManiacsHouse",  # 100.0% match, verified
+    "ROUTE 114 FOSSIL MANIACS TUNNEL": "Route114_FossilManiacsTunnel",  # 100.0% match, verified
+    "ROUTE 114 LANETTES HOUSE": "Route114_LanettesHouse",  # 100.0% match, verified
+    "ROUTE 116 TUNNELERS REST HOUSE": "Route116_TunnelersRestHouse",  # 100.0% match, verified
+    "ROUTE 117 POKEMON DAY CARE": "Route117_PokemonDayCare",  # 100.0% match, verified
+    "ROUTE 119 HOUSE": "Route119_House",  # 100.0% match, verified
+    "ROUTE 119 WEATHER INSTITUTE 1F": "Route119_WeatherInstitute_1F",  # 100.0% match, verified
+    "ROUTE 119 WEATHER INSTITUTE 2F": "Route119_WeatherInstitute_2F",  # 100.0% match, verified
+    "ROUTE 121 SAFARI ZONE ENTRANCE": "Route121_SafariZoneEntrance",  # 100.0% match, verified
+    "ROUTE 123 BERRY MASTERS HOUSE": "Route123_BerryMastersHouse",  # 100.0% match, verified
+    "ROUTE 124 DIVING TREASURE HUNTERS HOUSE": "Route124_DivingTreasureHuntersHouse",  # 100.0% match, verified
+    "RUSTBORO CITY CUTTERS HOUSE": "RustboroCity_CuttersHouse",  # 100.0% match, verified
+    "RUSTBORO CITY DEVON CORP 1F": "RustboroCity_DevonCorp_1F",  # 100.0% match, verified
+    "RUSTBORO CITY DEVON CORP 2F": "RustboroCity_DevonCorp_2F",  # 100.0% match, verified
+    "RUSTBORO CITY DEVON CORP 3F": "RustboroCity_DevonCorp_3F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT1 1F": "RustboroCity_Flat1_1F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT1 2F": "RustboroCity_Flat1_2F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT2 1F": "RustboroCity_Flat2_1F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT2 2F": "RustboroCity_Flat2_2F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT2 3F": "RustboroCity_Flat2_3F",  # 100.0% match, verified
+    "RUSTBORO CITY GYM": "RustboroCity_Gym",  # 100.0% match, verified
+    "RUSTBORO CITY HOUSE1": "RustboroCity_House1",  # 100.0% match, verified
+    "RUSTBORO CITY HOUSE2": "RustboroCity_House2",  # 100.0% match, verified
+    "RUSTBORO CITY HOUSE3": "RustboroCity_House3",  # 100.0% match, verified
+    "RUSTBORO CITY MART": "RustboroCity_Mart",  # 100.0% match, verified
+    "RUSTBORO CITY POKEMON CENTER 1F": "RustboroCity_PokemonCenter_1F",  # 100.0% match, verified
+    "RUSTBORO CITY POKEMON CENTER 2F": "RustboroCity_PokemonCenter_2F",  # 100.0% match, verified
+    "RUSTBORO CITY POKEMON SCHOOL": "RustboroCity_PokemonSchool",  # 100.0% match, verified
+    "SCORCHED SLAB": "ScorchedSlab",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ENTRANCE": "SeafloorCavern_Entrance",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM1": "SeafloorCavern_Room1",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM2": "SeafloorCavern_Room2",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM3": "SeafloorCavern_Room3",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM4": "SeafloorCavern_Room4",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM5": "SeafloorCavern_Room5",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM6": "SeafloorCavern_Room6",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM7": "SeafloorCavern_Room7",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM8": "SeafloorCavern_Room8",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM9": "SeafloorCavern_Room9",  # 100.0% match, verified
+    "SEALED CHAMBER INNER ROOM": "SealedChamber_InnerRoom",  # 100.0% match, verified
+    "SEALED CHAMBER OUTER ROOM": "SealedChamber_OuterRoom",  # 100.0% match, verified
+    "SHOAL CAVE HIGH TIDE ENTRANCE ROOM": "ShoalCave_HighTideEntranceRoom",  # 100.0% match, verified
+    "SHOAL CAVE HIGH TIDE INNER ROOM": "ShoalCave_HighTideInnerRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE ENTRANCE ROOM": "ShoalCave_LowTideEntranceRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE ICE ROOM": "ShoalCave_LowTideIceRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE INNER ROOM": "ShoalCave_LowTideInnerRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE LOWER ROOM": "ShoalCave_LowTideLowerRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE STAIRS ROOM": "ShoalCave_LowTideStairsRoom",  # 100.0% match, verified
+    "SKY PILLAR 1F": "SkyPillar_1F",  # 100.0% match, verified
+    "SKY PILLAR 2F": "SkyPillar_2F",  # 100.0% match, verified
+    "SKY PILLAR 3F": "SkyPillar_3F",  # 100.0% match, verified
+    "SKY PILLAR 4F": "SkyPillar_4F",  # 100.0% match, verified
+    "SKY PILLAR 5F": "SkyPillar_5F",  # 100.0% match, verified
+    "SKY PILLAR ENTRANCE": "SkyPillar_Entrance",  # 100.0% match, verified
+    "SKY PILLAR OUTSIDE": "SkyPillar_Outside",  # 100.0% match, verified
+    "SKY PILLAR TOP": "SkyPillar_Top",  # 100.0% match, verified
+    "SLATEPORT CITY BATTLE TENT BATTLE ROOM": "SlateportCity_BattleTentBattleRoom",  # 100.0% match, verified
+    "SLATEPORT CITY BATTLE TENT CORRIDOR": "SlateportCity_BattleTentCorridor",  # 100.0% match, verified
+    "SLATEPORT CITY BATTLE TENT LOBBY": "SlateportCity_BattleTentLobby",  # 100.0% match, verified
+    "SLATEPORT CITY HARBOR": "SlateportCity_Harbor",  # 100.0% match, verified
+    "SLATEPORT CITY HOUSE": "SlateportCity_House",  # 100.0% match, verified
+    "SLATEPORT CITY MART": "SlateportCity_Mart",  # 100.0% match, verified
+    "SLATEPORT CITY NAME RATERS HOUSE": "SlateportCity_NameRatersHouse",  # 100.0% match, verified
+    "SLATEPORT CITY OCEANIC MUSEUM 1F": "SlateportCity_OceanicMuseum_1F",  # 100.0% match, verified
+    "SLATEPORT CITY OCEANIC MUSEUM 2F": "SlateportCity_OceanicMuseum_2F",  # 100.0% match, verified
+    "SLATEPORT CITY POKEMON CENTER 1F": "SlateportCity_PokemonCenter_1F",  # 100.0% match, verified
+    "SLATEPORT CITY POKEMON CENTER 2F": "SlateportCity_PokemonCenter_2F",  # 100.0% match, verified
+    "SLATEPORT CITY POKEMON FAN CLUB": "SlateportCity_PokemonFanClub",  # 100.0% match, verified
+    "SLATEPORT CITY STERNS SHIPYARD 1F": "SlateportCity_SternsShipyard_1F",  # 100.0% match, verified
+    "SLATEPORT CITY STERNS SHIPYARD 2F": "SlateportCity_SternsShipyard_2F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY GYM 1F": "SootopolisCity_Gym_1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY GYM B1F": "SootopolisCity_Gym_B1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE1": "SootopolisCity_House1",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE2": "SootopolisCity_House2",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE3": "SootopolisCity_House3",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE4": "SootopolisCity_House4",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE5": "SootopolisCity_House5",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE6": "SootopolisCity_House6",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE7": "SootopolisCity_House7",  # 100.0% match, verified
+    "SOOTOPOLIS CITY LOTAD AND SEEDOT HOUSE": "SootopolisCity_LotadAndSeedotHouse",  # 100.0% match, verified
+    "SOOTOPOLIS CITY MART": "SootopolisCity_Mart",  # 100.0% match, verified
+    "SOOTOPOLIS CITY MYSTERY EVENTS HOUSE 1F": "SootopolisCity_MysteryEventsHouse_1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY MYSTERY EVENTS HOUSE B1F": "SootopolisCity_MysteryEventsHouse_B1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY POKEMON CENTER 1F": "SootopolisCity_PokemonCenter_1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY POKEMON CENTER 2F": "SootopolisCity_PokemonCenter_2F",  # 100.0% match, verified
+    "TERRA CAVE END": "TerraCave_End",  # 100.0% match, verified
+    "TERRA CAVE ENTRANCE": "TerraCave_Entrance",  # 100.0% match, verified
+    "UNDERWATER MARINE CAVE": "Underwater_MarineCave",  # 100.0% match, verified
+    "UNDERWATER ROUTE 105": "Underwater_Route105",  # 100.0% match, verified
+    "UNDERWATER ROUTE 124": "Underwater_Route124",  # 100.0% match, verified
+    "UNDERWATER ROUTE 125": "Underwater_Route125",  # 100.0% match, verified
+    "UNDERWATER ROUTE 126": "Underwater_Route126",  # 100.0% match, verified
+    "UNDERWATER ROUTE 127": "Underwater_Route127",  # 100.0% match, verified
+    "UNDERWATER ROUTE 128": "Underwater_Route128",  # 100.0% match, verified
+    "UNDERWATER ROUTE 129": "Underwater_Route129",  # 100.0% match, verified
+    "UNDERWATER ROUTE134": "Underwater_Route134",  # 100.0% match, verified
+    "UNDERWATER SEAFLOOR CAVERN": "Underwater_SeafloorCavern",  # 100.0% match, verified
+    "UNDERWATER SEALED CHAMBER": "Underwater_SealedChamber",  # 100.0% match, verified
+    "UNDERWATER SOOTOPOLIS CITY": "Underwater_SootopolisCity",  # 100.0% match, verified
+    "VERDANTURF TOWN BATTLE TENT BATTLE ROOM": "VerdanturfTown_BattleTentBattleRoom",  # 100.0% match, verified
+    "VERDANTURF TOWN BATTLE TENT CORRIDOR": "VerdanturfTown_BattleTentCorridor",  # 100.0% match, verified
+    "VERDANTURF TOWN BATTLE TENT LOBBY": "VerdanturfTown_BattleTentLobby",  # 100.0% match, verified
+    "VERDANTURF TOWN FRIENDSHIP RATERS HOUSE": "VerdanturfTown_FriendshipRatersHouse",  # 100.0% match, verified
+    "VERDANTURF TOWN HOUSE": "VerdanturfTown_House",  # 100.0% match, verified
+    "VERDANTURF TOWN MART": "VerdanturfTown_Mart",  # 100.0% match, verified
+    "VERDANTURF TOWN POKEMON CENTER 1F": "VerdanturfTown_PokemonCenter_1F",  # 100.0% match, verified
+    "VERDANTURF TOWN POKEMON CENTER 2F": "VerdanturfTown_PokemonCenter_2F",  # 100.0% match, verified
+    "VERDANTURF TOWN WANDAS HOUSE": "VerdanturfTown_WandasHouse",  # 100.0% match, verified
+    "VICTORY ROAD 1F": "VictoryRoad_1F",  # 100.0% match, verified
+    "VICTORY ROAD B1F": "VictoryRoad_B1F",  # 100.0% match, verified
+    "VICTORY ROAD B2F": "VictoryRoad_B2F",  # 100.0% match, verified
 }
 
 def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None) -> List[str]:
