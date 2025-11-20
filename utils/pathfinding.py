@@ -441,90 +441,18 @@ class Pathfinder:
     def _is_tile_blocked(self, tile) -> bool:
         """
         Check if a tile is blocked based on its properties.
-        Uses the same logic as MapStitcher and map_formatter for consistency.
+        Uses the shared walkability function from map_formatter for consistency.
 
         Note: Ledges (JUMP_*) are NOT blocked here - they are handled
         via directional validation in _can_move_to().
         """
-        if isinstance(tile, tuple) and len(tile) >= 3:
-            # Format: (tile_id, behavior, collision, elevation)
-            tile_id = tile[0]
-            behavior = tile[1] if len(tile) > 1 else 0
-            collision = tile[2] if len(tile) > 2 else 0
-
-            # Handle both enum and integer behavior values
-            behavior_value = behavior
-            if hasattr(behavior, 'value'):
-                behavior_value = behavior.value
-            elif hasattr(behavior, 'name'):
-                behavior_name = behavior.name
-            else:
-                behavior_name = str(behavior)
-
-            # Use the same logic as map_formatter.py for consistency
-            # This ensures pathfinding sees the same tiles as walkable that the map display shows
-            
-            # Always block invalid tiles
-            if tile_id == 1023:  # Invalid/out-of-bounds tile
-                return True
-            
-            # Handle behavior-based blocking using same logic as map_formatter
-            if hasattr(behavior, 'name'):
-                behavior_name = behavior.name
-            elif isinstance(behavior, int) and MetatileBehavior is not None:
-                try:
-                    behavior_enum = MetatileBehavior(behavior)
-                    behavior_name = behavior_enum.name
-                except ValueError:
-                    behavior_name = "UNKNOWN"
-            else:
-                behavior_name = "UNKNOWN"
-
-            # Special case for Brendan's House - stairs and doors are reversed
-            # NON_ANIMATED_DOOR (96) appears at top and should be stairs (walkable)
-            # SOUTH_ARROW_WARP (101) appears at bottom and should be door (walkable)
-            if behavior == 96 or "NON_ANIMATED_DOOR" in behavior_name:
-                return False  # Stairs are walkable
-            elif behavior == 101 or "SOUTH_ARROW_WARP" in behavior_name:
-                return False  # Door is walkable
-            
-            # Other doors and stairs are walkable
-            elif "DOOR" in behavior_name or "STAIRS" in behavior_name or "WARP" in behavior_name:
-                return False
-            
-            # Normal tiles - check collision
-            elif behavior_name == "NORMAL":
-                return collision > 0
-            
-            # Walkable behaviors (same as map_formatter)
-            elif behavior_name in ["INDOOR", "DECORATION", "HOLDS"]:
-                return False
-            
-            # Blocked behaviors
-            elif "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
-                return True
-            
-            # Water (need surf) - blocked for now
-            elif "WATER" in behavior_name and "SHALLOW" not in behavior_name:
-                return True
-            
-            # Waterfall (need waterfall) - blocked for now
-            elif "WATERFALL" in behavior_name:
-                return True
-            
-            # NPC markers are blocked
-            elif behavior == 999:
-                return True
-            
-            # Default: use collision data
-            else:
-                return collision > 0
-
-        elif isinstance(tile, str):
+        if isinstance(tile, str):
             # String representation - check for wall symbols
             return tile in ['#', 'X', '█', '▓']
-
-        return False
+        
+        # Use shared walkability function (inverted)
+        from utils.map_formatter import is_tile_walkable
+        return not is_tile_walkable(tile)
     
     def _get_npc_positions(self, game_state: Dict) -> Set[Tuple[int, int]]:
         """Get positions of all NPCs on the current map."""

@@ -187,3 +187,5 @@ cython_debug/
 
 *.mp4
 .pokeagent_cache/*
+*scripts/*
+test_gemini.py

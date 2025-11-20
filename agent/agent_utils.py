@@ -12,7 +12,14 @@ from PIL import Image
 from typing import List, Dict, Any, Optional, Tuple, Union
 from dataclasses import dataclass
 from utils.vlm import VLM
+from utils.map_formatter import is_tile_walkable
 import heapq
+
+# Try to import MetatileBehavior for behavior checking
+try:
+    from pokemon_env.enums import MetatileBehavior
+except ImportError:
+    MetatileBehavior = None
 
 logger = logging.getLogger(__name__)
 
@@ -656,7 +663,7 @@ class PathfinderUtility:
         except Exception as e:
             logger.error(f"Error in pathfinding: {e}")
             return None
-    
+        
     def _build_passability_grid(self, game_state: Dict[str, Any]) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """
         Convert map tiles + NPCs into binary passability grid and behavior grid.
@@ -707,27 +714,42 @@ class PathfinderUtility:
                     behavior = tile[1]
                     behavior_grid[y, x] = behavior  # Store behavior for directional checking
                     
-                    # Mark tile as blocked based on behavior
-                    # Using same logic as format_tile_to_symbol from map_formatter
-                    if behavior == 999:
-                        # Visual NPC detection marker - BLOCKED
-                        grid[y, x] = 1
-                        blocked_behaviors.append(f"NPC_marker_{behavior}")
-                    elif behavior in [0, 2, 3, 5, 7, 11, 12, 13, 17, 18, 28, 34, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 52, 60, 66, 67, 68]:
-                        # Walkable behaviors (including grass types that trigger encounters)
-                        # 2=TALL_GRASS, 3=LONG_GRASS, 7=SHORT_GRASS - these are passable but trigger encounters
-                        # Note: Directional behaviors (56-71) are included but need special handling in neighbor checking
-                        grid[y, x] = 0
-                        walkable_behaviors.append(behavior)
+                    # Use comprehensive walkability check instead of hardcoded list
+                    is_walkable = is_tile_walkable(tile)
+                    
+                    if is_walkable:
+                        grid[y, x] = 0  # Walkable
+                        # Get behavior name for logging
+                        behavior_name = "UNKNOWN"
+                        if hasattr(behavior, 'name'):
+                            behavior_name = behavior.name
+                        elif isinstance(behavior, int) and MetatileBehavior is not None:
+                            try:
+                                behavior_enum = MetatileBehavior(behavior)
+                                behavior_name = behavior_enum.name
+                            except ValueError:
+                                behavior_name = f"UNKNOWN_{behavior}"
+                        walkable_behaviors.append(f"{behavior_name}({behavior})")
                     else:
-                        # Everything else is blocked by default
-                        grid[y, x] = 1
-                        blocked_behaviors.append(f"behavior_{behavior}")
+                        grid[y, x] = 1  # Blocked
+                        # Get behavior name for logging
+                        behavior_name = "UNKNOWN"
+                        if hasattr(behavior, 'name'):
+                            behavior_name = behavior.name
+                        elif isinstance(behavior, int) and MetatileBehavior is not None:
+                            try:
+                                behavior_enum = MetatileBehavior(behavior)
+                                behavior_name = behavior_enum.name
+                            except ValueError:
+                                behavior_name = f"UNKNOWN_{behavior}"
+                        blocked_behaviors.append(f"{behavior_name}({behavior})")
             
             # Debug: Log tile behavior analysis
             logger.info(f"🗺️ Pathfinder: Tile analysis - Walkable: {len(set(walkable_behaviors))}, Blocked: {len(set(blocked_behaviors))}")
             if blocked_behaviors:
-                logger.info(f"🗺️ Pathfinder: Sample blocked behaviors: {list(set(blocked_behaviors))[:5]}")
+                logger.info(f"🗺️ Pathfinder: Sample blocked behaviors: {list(set(blocked_behaviors))[:10]}")
+            if walkable_behaviors:
+                logger.debug(f"🗺️ Pathfinder: Sample walkable behaviors: {list(set(walkable_behaviors))[:10]}")
             
             # Also mark NPC positions from object_events
             npcs = map_info.get('object_events', [])
@@ -914,8 +936,46 @@ class PathfinderUtility:
         if behavior < 0:
             return True  # Allow movement from unknown tiles (fallback)
         
+        # Get behavior name for matching
+        behavior_name = "UNKNOWN"
+        # Handle both int and numpy integer types
+        import numpy as np
+        if isinstance(behavior, (int, np.integer)) and MetatileBehavior is not None:
+            try:
+                behavior_enum = MetatileBehavior(int(behavior))  # Convert to int for enum
+                behavior_name = behavior_enum.name
+            except ValueError:
+                behavior_name = f"UNKNOWN_{behavior}"
+        
         # Normal walkable tiles allow movement in all directions
-        if behavior in [0, 2, 3, 5, 7, 11, 12, 13, 17, 18, 28, 34, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 52]:
+        # Check if this is a non-directional walkable behavior
+        # (doors, stairs, warps, indoor, decorations, normal terrain, etc.)
+        if ("DOOR" in behavior_name or 
+            "STAIRS" in behavior_name or 
+            "WARP" in behavior_name or
+            "LADDER" in behavior_name or
+            "ESCALATOR" in behavior_name or
+            "BRIDGE" in behavior_name or
+            behavior_name in ["NORMAL", "INDOOR", "DECORATION", "HOLDS", "CAVE"] or
+            "TALL_GRASS" in behavior_name or
+            "LONG_GRASS" in behavior_name or
+            "SHORT_GRASS" in behavior_name or
+            "ASHGRASS" in behavior_name or
+            "SAND" in behavior_name or
+            "ICE" in behavior_name or
+            "PUDDLE" in behavior_name or
+            "SHALLOW_WATER" in behavior_name or
+            "FOOTPRINTS" in behavior_name or
+            "HOT_SPRINGS" in behavior_name or
+            "MUDDY_SLOPE" in behavior_name or
+            "BUMPY_SLOPE" in behavior_name or
+            "CRACKED_FLOOR" in behavior_name or
+            "RAIL" in behavior_name or
+            "INDOOR_ENCOUNTER" in behavior_name or
+            "MOUNTAIN_TOP" in behavior_name or
+            "SHOAL_CAVE_ENTRANCE" in behavior_name or
+            "REFLECTION_UNDER_BRIDGE" in behavior_name or
+            "SEAWEED" in behavior_name):
             return True
         
         # Directional jump behaviors (56-63)
