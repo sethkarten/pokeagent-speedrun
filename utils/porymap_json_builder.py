@@ -151,40 +151,71 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     min_warp_x = float('inf')  # Track the minimum warp X position
 
     for warp in map_data.get("warp_events", []):
-        warp_x = warp.get("x", 0)
-        warp_y = warp.get("y", 0)
+        original_warp_x = warp.get("x", 0)
+        original_warp_y = warp.get("y", 0)
+        warp_x = original_warp_x
+        warp_y = original_warp_y
 
-        # Adjust warps based on which edge they're closest to
-        # Players approach doors from outside, so the warp should be offset
-        # to represent where the player actually stands
-        if layout_name and metatiles:
-            height = len(metatiles)
-            width = len(metatiles[0]) if height > 0 else 0
+        # Adjust warps that are AT map edges (detected by blocked tiles beyond them)
+        # Map edge warps need offset since players transition from adjacent maps
+        if layout_name and metatiles and include_grid and grid:
+            height = len(grid)
+            width = len(grid[0]) if height > 0 else 0
 
-            # Determine which edge the warp is closest to
-            dist_to_south = height - warp_y
-            dist_to_north = warp_y
-            dist_to_east = width - warp_x
-            dist_to_west = warp_x
+            # Check if south of warp is blocked (edge warp going south)
+            if warp_y + 1 >= height or grid[warp_y + 1][warp_x] == '#':
+                # Check if entire row south is blocked
+                is_south_edge = True
+                if warp_y + 1 < height:
+                    # Check surrounding tiles to confirm it's a map edge
+                    for check_x in range(max(0, warp_x - 2), min(width, warp_x + 3)):
+                        if warp_y + 1 < height and grid[warp_y + 1][check_x] != '#':
+                            is_south_edge = False
+                            break
 
-            min_dist = min(dist_to_south, dist_to_north, dist_to_east, dist_to_west)
+                if is_south_edge:
+                    warp_y += 1
+                    if warp_y >= height:
+                        needs_south_extension = True
 
-            # Adjust warp position based on closest edge
-            if min_dist == dist_to_south:
-                # South edge - move 1 tile south
-                warp_y += 1
-                if warp_y >= height:
-                    needs_south_extension = True
-            elif min_dist == dist_to_east:
-                # East edge - move 1 tile east
-                warp_x += 1
-                if warp_x >= width:
-                    needs_east_extension = True
-            elif min_dist == dist_to_west:
-                # West edge - move 1 tile west
-                warp_x -= 1
-                if warp_x < 0:
-                    needs_west_extension = True
+            # Check if east of warp is blocked (edge warp going east)
+            elif warp_x + 1 >= width or grid[warp_y][warp_x + 1] == '#':
+                # Check if entire column east is blocked
+                is_east_edge = True
+                if warp_x + 1 < width:
+                    for check_y in range(max(0, warp_y - 2), min(height, warp_y + 3)):
+                        if warp_x + 1 < width and grid[check_y][warp_x + 1] != '#':
+                            is_east_edge = False
+                            break
+
+                if is_east_edge:
+                    warp_x += 1
+                    if warp_x >= width:
+                        needs_east_extension = True
+
+            # Check if west of warp is blocked (edge warp going west)
+            elif warp_x - 1 < 0 or grid[warp_y][warp_x - 1] == '#':
+                # Check if entire column west is blocked
+                is_west_edge = True
+                if warp_x - 1 >= 0:
+                    for check_y in range(max(0, warp_y - 2), min(height, warp_y + 3)):
+                        if warp_x - 1 >= 0 and grid[check_y][warp_x - 1] != '#':
+                            is_west_edge = False
+                            break
+
+                if is_west_edge:
+                    warp_x -= 1
+                    if warp_x < 0:
+                        needs_west_extension = True
+
+            # Clear the original door marker if we adjusted the position
+            if (warp_x != original_warp_x or warp_y != original_warp_y) and include_ascii and ascii_map:
+                ascii_lines = ascii_map.split('\n')
+                if 0 <= original_warp_y < len(ascii_lines) and 0 <= original_warp_x < len(ascii_lines[0]):
+                    ascii_grid = [list(line) for line in ascii_lines]
+                    if ascii_grid[original_warp_y][original_warp_x] in ['D', 'S']:
+                        ascii_grid[original_warp_y][original_warp_x] = '.'
+                    ascii_map = '\n'.join([''.join(row) for row in ascii_grid])
 
         max_warp_y = max(max_warp_y, warp_y)
         max_warp_x = max(max_warp_x, warp_x)
