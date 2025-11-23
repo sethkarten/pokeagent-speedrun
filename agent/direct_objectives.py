@@ -824,6 +824,1662 @@ class DirectObjectiveManager:
                 completion_condition="sailing_to_route_109",
                 priority=1
             ),
+
+            # ========== Route 109 & Seashore House (Objectives 67-71) ==========
+            DirectObjective(  # 67
+                id="arrive_at_route_109",
+                description="Arrive at Route 109 via Mr. Briney's boat and disembark",
+                action_type="cutscene",
+                target_location="Route 109",
+                navigation_hint="Wait for the sailing cutscene to complete. The boat will automatically arrive at Route 109 beach. You will receive a PokéNav call from your dad (Norman) during the voyage.",
+                completion_condition="arrived_at_route_109",
+                priority=1
+            ),
+
+            DirectObjective(  # 68
+                id="explore_route_109_beach",
+                description="Explore Route 109 beach area and collect any visible items",
+                action_type="navigate",
+                target_location="Route 109",
+                navigation_hint="Route 109 is a beach area with trainers and hidden items. Navigate the beach and battle trainers if desired. Use navigate_to() to efficiently explore the area.",
+                completion_condition="explored_route_109_beach",
+                priority=1
+            ),
+
+            DirectObjective(  # 69
+                id="enter_seashore_house",
+                description="Enter the Seashore House on Route 109 beach",
+                action_type="navigate",
+                target_location="Seashore House",
+                navigation_hint="The Seashore House is a small building on Route 109 beach. Navigate to it and enter through the door.",
+                completion_condition="entered_seashore_house",
+                priority=1
+            ),
+
+            DirectObjective(  # 70
+                id="battle_trainers_seashore_house",
+                description="Battle the three trainers in Seashore House to receive six Soda Pops as reward",
+                action_type="battle",
+                target_location="Seashore House",
+                navigation_hint="Inside the Seashore House, defeat all three trainers in sequence. They will have Water-type Pokémon. After defeating all three, talk to the house owner to receive six Soda Pops (healing items that restore 60 HP).",
+                completion_condition="defeated_all_seashore_house_trainers",
+                priority=1
+            ),
+
+            DirectObjective(  # 71 - OPTIONAL
+                id="optional_return_to_rustboro_for_exp_share",
+                description="OPTIONAL: Return to Rustboro City via Mr. Briney to receive Exp. Share from Mr. Stone",
+                action_type="navigate",
+                target_location="Devon Corporation",
+                navigation_hint="This is optional but recommended. Talk to Mr. Briney to sail back to Route 104, then navigate through Petalburg Woods to Rustboro City. Visit Mr. Stone on the third floor of Devon Corporation. He will give you the Exp. Share, which allows non-battling Pokémon to gain experience. After receiving it, return to Route 109 via Mr. Briney.",
+                completion_condition="received_exp_share_from_mr_stone",
+                priority=2
+            ),
+
+            # ========== Slateport City (Objectives 72-77) ==========
+            DirectObjective(  # 72
+                id="navigate_to_slateport_city",
+                description="Navigate north from Route 109 to Slateport City",
+                action_type="navigate",
+                target_location="Slateport City",
+                navigation_hint="From Route 109, head north to reach Slateport City. Use navigate_to() for efficient navigation.",
+                completion_condition="reached_slateport_city",
+                priority=1
+            ),
+
+            DirectObjective(  # 73
+                id="heal_at_slateport_pokemon_center",
+                description="Find and enter the Pokémon Center in Slateport City to heal your Pokémon",
+                action_type="interact",
+                target_location="Slateport City Pokémon Center",
+                navigation_hint="The Pokémon Center has a red roof and is marked with a red 'P' symbol. Navigate to the building and walk through the door. Inside, talk to Nurse Joy (the NPC behind the counter) and press A to heal your Pokémon.",
+                completion_condition="healed_pokemon_at_slateport_center",
+                priority=1
+            ),
+
+            DirectObjective(  # 74 - OPTIONAL
+                id="optional_explore_slateport_market",
+                description="OPTIONAL: Explore Slateport Market and Pokémon Fan Club for items",
+                action_type="navigate",
+                target_location="Slateport City",
+                navigation_hint="The Slateport Market is located in the northern part of the city. You can purchase vitamins, obtain a Powder Jar, and visit the Pokémon Fan Club for a Soothe Bell (requires high friendship). The Name Rater is also available to change Pokémon nicknames.",
+                completion_condition="explored_slateport_market",
+                priority=2
+            ),
+
+            DirectObjective(  # 75
+                id="navigate_to_oceanic_museum",
+                description="Navigate to the Oceanic Museum in Slateport City",
+                action_type="navigate",
+                target_location="Oceanic Museum",
+                navigation_hint="The Oceanic Museum is a large building in Slateport City. Look for a building with a distinctive appearance. Use navigate_to() to reach the museum entrance. Pay $50 to enter.",
+                completion_condition="reached_oceanic_museum_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 76
+                id="battle_team_aqua_in_oceanic_museum",
+                description="Enter the Oceanic Museum, pay $50 entry fee, and battle two Team Aqua Grunts on the second floor to protect the Devon Goods",
+                action_type="battle",
+                target_location="Oceanic Museum 2F",
+                navigation_hint="After paying the $50 entry fee, go to the second floor. You'll encounter two Team Aqua Grunts threatening Captain Stern. Battle both grunts to protect the Devon Goods. After defeating them, you'll meet Team Aqua's leader, Archie, who will leave peacefully. Use supereffective moves and heal between battles if needed.",
+                completion_condition="defeated_team_aqua_grunts_in_museum",
+                priority=1
+            ),
+
+            DirectObjective(  # 77
+                id="deliver_devon_goods_to_captain_stern",
+                description="Talk to Captain Stern to deliver the Devon Goods and receive TM46 (Thief) as reward",
+                action_type="interact",
+                target_location="Oceanic Museum 2F",
+                navigation_hint="After defeating the Team Aqua Grunts, talk to Captain Stern. Deliver the Devon Goods to him. He will thank you and give you TM46 (Thief) as a reward.",
+                completion_condition="delivered_devon_goods_to_stern",
+                priority=1
+            ),
+
+            # ========== Route 110 (Objectives 78-84) ==========
+            DirectObjective(  # 78
+                id="navigate_to_route_110",
+                description="Exit Slateport City and navigate north to Route 110",
+                action_type="navigate",
+                target_location="Route 110",
+                navigation_hint="Exit Slateport City from the north exit to reach Route 110. Use navigate_to() for efficient navigation.",
+                completion_condition="reached_route_110",
+                priority=1
+            ),
+
+            DirectObjective(  # 79
+                id="meet_professor_birch_on_route_110",
+                description="Meet Professor Birch on Route 110 who will register you for PokéNav features",
+                action_type="interact",
+                target_location="Route 110",
+                navigation_hint="Professor Birch should be on Route 110 near the entrance from Slateport. Talk to him and he will register you for additional PokéNav features.",
+                completion_condition="met_birch_on_route_110",
+                priority=1
+            ),
+
+            DirectObjective(  # 80 - OPTIONAL
+                id="optional_trick_house_first_puzzle",
+                description="OPTIONAL: Complete the first Trick House puzzle for Rare Candy reward",
+                action_type="navigate",
+                target_location="Trick House",
+                navigation_hint="The Trick House is a small building on Route 110. Enter and talk to the Trick Master. Find the hidden password (use Itemfinder or search carefully), then navigate through the maze while battling trainers. Complete the puzzle to receive a Rare Candy. This is the first of eight progressively unlocking puzzles.",
+                completion_condition="completed_trick_house_first_puzzle",
+                priority=2
+            ),
+
+            DirectObjective(  # 81
+                id="navigate_through_route_110",
+                description="Navigate north through Route 110 toward Mauville City",
+                action_type="navigate",
+                target_location="Route 110",
+                navigation_hint="Travel north through Route 110. You may encounter trainers and wild Pokémon. Continue navigating north using navigate_to() until you encounter your rival.",
+                completion_condition="navigated_through_route_110",
+                priority=1
+            ),
+
+            DirectObjective(  # 82
+                id="battle_rival_route_110",
+                description="Battle your rival May/Brendan on Route 110. Their team includes Wingull (Lv.18), Lombre (Lv.18), and their starter evolution (Lv.20)",
+                action_type="battle",
+                target_location="Route 110",
+                navigation_hint="Your rival will challenge you to a battle. Their team has evolved and grown stronger: Wingull (Water/Flying, Lv.18), Lombre (Water/Grass, Lv.18), and their starter's second evolution (Lv.20) which has type advantage over yours. Use supereffective moves and heal between Pokémon if needed. Reward: $900.",
+                completion_condition="defeated_rival_on_route_110",
+                priority=1
+            ),
+
+            DirectObjective(  # 83
+                id="receive_itemfinder_from_rival",
+                description="After defeating your rival, they will give you the Itemfinder",
+                action_type="interact",
+                target_location="Route 110",
+                navigation_hint="Talk to your rival after the battle. They will give you the Itemfinder, a device that helps locate hidden items on the ground.",
+                completion_condition="received_itemfinder",
+                priority=1
+            ),
+
+            DirectObjective(  # 84
+                id="heal_at_route_110_pokemon_center",
+                description="Heal your Pokémon at the Pokémon Center on Route 110 before continuing",
+                action_type="interact",
+                target_location="Route 110 Pokémon Center",
+                navigation_hint="There may be a Pokémon Center on Route 110 or nearby. Navigate to it and heal your Pokémon before continuing to Mauville City.",
+                completion_condition="healed_pokemon_at_route_110_center",
+                priority=1
+            ),
+
+            # ========== Route 118 to Mauville City (Objectives 85-93) ==========
+            DirectObjective(  # 85
+                id="navigate_to_mauville_city",
+                description="Continue north from Route 110 to reach Mauville City",
+                action_type="navigate",
+                target_location="Mauville City",
+                navigation_hint="From Route 110, continue north to reach Mauville City. You may need to navigate through some grass and trainer areas. Use navigate_to() for efficient navigation.",
+                completion_condition="reached_mauville_city",
+                priority=1
+            ),
+
+            DirectObjective(  # 86
+                id="obtain_bicycle_from_rydels_cycles",
+                description="Visit Rydel's Cycles in Mauville City to receive a free bicycle (choose between Mach Bike or Acro Bike)",
+                action_type="interact",
+                target_location="Rydel's Cycles",
+                navigation_hint="Rydel's Cycles is located in Mauville City. Enter the shop and talk to Rydel. He will give you a free bicycle. You can choose between the Mach Bike (faster, can ride up sandy slopes) or Acro Bike (can perform tricks, cross narrow bridges). Choose based on your preference - you can exchange it later.",
+                completion_condition="received_bicycle_from_rydel",
+                priority=1
+            ),
+
+            DirectObjective(  # 87
+                id="heal_at_mauville_pokemon_center",
+                description="Heal your Pokémon at the Mauville City Pokémon Center before challenging the gym",
+                action_type="interact",
+                target_location="Mauville City Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center in Mauville City. Talk to Nurse Joy to heal your Pokémon before the upcoming gym battle and Wally encounter.",
+                completion_condition="healed_pokemon_at_mauville_center",
+                priority=1
+            ),
+
+            DirectObjective(  # 88
+                id="battle_wally_outside_mauville_gym",
+                description="Battle Wally outside Mauville Gym. He has a Ralts (Lv.16)",
+                action_type="battle",
+                target_location="Mauville City",
+                navigation_hint="Navigate to the Mauville Gym entrance. Wally will be waiting outside and will challenge you to a battle. He has a single Ralts at Level 16 (Psychic-type, weak to Bug, Ghost, and Dark-type moves). This should be an easy battle.",
+                completion_condition="defeated_wally_outside_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 89
+                id="enter_mauville_gym",
+                description="Enter the Mauville Gym to challenge Gym Leader Wattson",
+                action_type="navigate",
+                target_location="Mauville Gym",
+                navigation_hint="After defeating Wally, enter the Mauville Gym through the front door. The gym specializes in Electric-type Pokémon.",
+                completion_condition="entered_mauville_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 90
+                id="navigate_to_gym_leader_wattson",
+                description="Navigate through the Mauville Gym puzzle to reach Gym Leader Wattson",
+                action_type="navigate",
+                target_location="Mauville Gym",
+                navigation_hint="The Mauville Gym has an electric barrier puzzle. You need to battle trainers in the correct sequence to deactivate barriers blocking your path to Wattson. Navigate through the gym using navigate_to() or manually. Battle trainers as needed to progress. Wattson is in the back of the gym.",
+                completion_condition="reached_gym_leader_wattson",
+                priority=1
+            ),
+
+            DirectObjective(  # 91
+                id="battle_gym_leader_wattson",
+                description="Battle Gym Leader Wattson. His team: Voltorb (Lv.20), Electrike (Lv.20), Magneton (Lv.22), Manectric (Lv.24). Use Ground-type moves for advantage.",
+                action_type="battle",
+                target_location="Mauville Gym",
+                navigation_hint="Battle Wattson using Ground-type moves for maximum effectiveness (Electric attacks don't affect Ground-types). His Pokémon: Voltorb (Lv.20 - can use Self-Destruct), Electrike (Lv.20), Magneton (Lv.22 - Steel/Electric, weak to Fire and Fighting), Manectric (Lv.24 - his strongest). Avoid using Water or Flying-types. Reward: Dynamo Badge, TM34 (Shock Wave), ability to use Rock Smash outside battle. If you lose, heal at the Pokémon Center and return.",
+                completion_condition="defeated_wattson_and_received_dynamo_badge",
+                priority=1
+            ),
+
+            DirectObjective(  # 92
+                id="exit_mauville_gym",
+                description="Exit the Mauville Gym after defeating Wattson",
+                action_type="navigate",
+                target_location="Mauville Gym",
+                navigation_hint="After receiving the Dynamo Badge and TM34, navigate back through the gym to the exit. Use navigate_to() to reach the exit efficiently.",
+                completion_condition="exited_mauville_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 93
+                id="heal_at_mauville_pokemon_center_after_gym",
+                description="Return to Mauville Pokémon Center to heal your Pokémon after the gym battle",
+                action_type="interact",
+                target_location="Mauville City Pokémon Center",
+                navigation_hint="Navigate back to the Pokémon Center in Mauville City and heal your Pokémon. You're now ready to continue your journey.",
+                completion_condition="healed_pokemon_after_mauville_gym",
+                priority=1
+            ),
+
+            # ========== Route 111 to Fallarbor Town (Objectives 94-105) ==========
+            DirectObjective(  # 94
+                id="navigate_to_route_111_south",
+                description="Navigate north from Mauville City to Route 111 (south section)",
+                action_type="navigate",
+                target_location="Route 111",
+                navigation_hint="Exit Mauville City from the north to reach Route 111. Note that a desert with sandstorm blocks the direct path north, so you'll navigate around it.",
+                completion_condition="reached_route_111_south",
+                priority=1
+            ),
+
+            DirectObjective(  # 95 - OPTIONAL
+                id="optional_winstrate_family_challenge",
+                description="OPTIONAL: Complete the Winstrate family challenge (4 consecutive battles) to receive Macho Brace",
+                action_type="battle",
+                target_location="Route 111 - Winstrate House",
+                navigation_hint="The Winstrate family home is at the water's edge on Route 111. Battle Victor, Victoria, Vivi, and Vicky in sequence without healing between battles. Reward: Macho Brace item.",
+                completion_condition="defeated_winstrate_family",
+                priority=2
+            ),
+
+            DirectObjective(  # 96
+                id="navigate_to_route_112_south",
+                description="Navigate west from Route 111 to Route 112 (south section)",
+                action_type="navigate",
+                target_location="Route 112",
+                navigation_hint="From Route 111, head west to Route 112. You'll encounter Team Magma grunts blocking the cable car to Mt. Chimney summit, forcing you to take an alternate route through Fiery Path.",
+                completion_condition="reached_route_112_south",
+                priority=1
+            ),
+
+            DirectObjective(  # 97
+                id="navigate_through_fiery_path",
+                description="Navigate through Fiery Path cave to reach the northern section of Route 112",
+                action_type="navigate",
+                target_location="Fiery Path",
+                navigation_hint="Enter Fiery Path, a sweltering passage through the mountain base. Navigate through the cave to the northern exit. Boulders block side tunnels (require Strength move later). Battle trainers if encountered.",
+                completion_condition="exited_fiery_path_north",
+                priority=1
+            ),
+
+            DirectObjective(  # 98
+                id="navigate_to_route_113",
+                description="Navigate through Route 112 north to Route 113",
+                action_type="navigate",
+                target_location="Route 113",
+                navigation_hint="From the northern exit of Fiery Path, continue through Route 112 north to reach Route 113. This route is constantly covered in volcanic ash from Mt. Chimney.",
+                completion_condition="reached_route_113",
+                priority=1
+            ),
+
+            DirectObjective(  # 99
+                id="obtain_soot_sack_from_glass_workshop",
+                description="Visit the Glass Workshop on Route 113 to receive the Soot Sack",
+                action_type="interact",
+                target_location="Glass Workshop - Route 113",
+                navigation_hint="Enter the Glass Workshop on Route 113. Talk to the owner to receive the Soot Sack, which collects volcanic ash as you walk. Ash can be traded for flutes and decorations.",
+                completion_condition="received_soot_sack",
+                priority=1
+            ),
+
+            DirectObjective(  # 100
+                id="navigate_to_fallarbor_town",
+                description="Continue west through Route 113 to reach Fallarbor Town",
+                action_type="navigate",
+                target_location="Fallarbor Town",
+                navigation_hint="Navigate west through Route 113 to reach Fallarbor Town. Battle trainers along the route if desired. Collect items like TM32 (Double Team) if visible.",
+                completion_condition="reached_fallarbor_town",
+                priority=1
+            ),
+
+            DirectObjective(  # 101
+                id="heal_at_fallarbor_pokemon_center",
+                description="Heal your Pokémon at Fallarbor Town Pokémon Center",
+                action_type="interact",
+                target_location="Fallarbor Town Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center in Fallarbor Town and heal your Pokémon.",
+                completion_condition="healed_at_fallarbor_center",
+                priority=1
+            ),
+
+            DirectObjective(  # 102 - OPTIONAL
+                id="optional_meet_lanette_and_move_tutors",
+                description="OPTIONAL: Talk to Lanette to upgrade PC system and visit Move Tutors in Fallarbor Town",
+                action_type="interact",
+                target_location="Fallarbor Town",
+                navigation_hint="Visit Lanette in Fallarbor Town who will upgrade your PC system. The Move Tutor girl teaches Metronome (one-time). The Move Maniac teaches forgotten moves for Heart Scales.",
+                completion_condition="met_lanette_and_tutors",
+                priority=2
+            ),
+
+            DirectObjective(  # 103
+                id="navigate_to_route_114",
+                description="Navigate east from Fallarbor Town to Route 114",
+                action_type="navigate",
+                target_location="Route 114",
+                navigation_hint="Exit Fallarbor Town heading east to reach Route 114. This route is pockmarked by fallen meteorites and leads to Meteor Falls.",
+                completion_condition="reached_route_114",
+                priority=1
+            ),
+
+            DirectObjective(  # 104
+                id="navigate_to_meteor_falls",
+                description="Navigate through Route 114 to reach Meteor Falls entrance",
+                action_type="navigate",
+                target_location="Meteor Falls",
+                navigation_hint="Travel through Route 114 to reach Meteor Falls. Battle trainers along the way if encountered. Use navigate_to() for efficient navigation.",
+                completion_condition="reached_meteor_falls_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 105
+                id="witness_team_magma_steal_meteorite",
+                description="Enter Meteor Falls and witness Team Magma stealing Professor Cozmo's Meteorite",
+                action_type="cutscene",
+                target_location="Meteor Falls",
+                navigation_hint="Enter Meteor Falls. You'll witness Team Magma stealing Professor Cozmo's Meteorite. Team Aqua leader Archie will arrive to oppose them, but Team Magma escapes. Collect the Full Heal and Moon Stone if desired.",
+                completion_condition="witnessed_meteorite_theft",
+                priority=1
+            ),
+
+            # ========== Mt. Chimney to Lavaridge Town (Objectives 106-120) ==========
+            DirectObjective(  # 106
+                id="navigate_to_mt_chimney_cable_car",
+                description="Return to Route 112 and take the cable car to Mt. Chimney summit",
+                action_type="navigate",
+                target_location="Mt. Chimney",
+                navigation_hint="Navigate back through Route 114 to Route 112. The Team Magma grunts are now gone, so you can access the cable car. Take the cable car to Mt. Chimney summit.",
+                completion_condition="reached_mt_chimney_summit",
+                priority=1
+            ),
+
+            DirectObjective(  # 107
+                id="battle_team_magma_on_mt_chimney",
+                description="Battle Team Magma grunts and admins on Mt. Chimney to stop their evil plan",
+                action_type="battle",
+                target_location="Mt. Chimney",
+                navigation_hint="On Mt. Chimney, defeat two Team Magma Grunts, then battle Admin Tabitha (Numel, Poochyena, Zubat). Finally, confront Leader Maxie (Mightyena, Zubat, Camerupt). Use Water and Ground-type moves effectively. Recover the Meteorite upon victory.",
+                completion_condition="defeated_team_magma_mt_chimney",
+                priority=1
+            ),
+
+            DirectObjective(  # 108
+                id="navigate_down_jagged_pass",
+                description="Navigate down Jagged Pass using ledge jumps to reach Lavaridge Town",
+                action_type="navigate",
+                target_location="Jagged Pass",
+                navigation_hint="From Mt. Chimney summit, navigate down Jagged Pass by jumping off ledges. Battle trainers along the way. Collect items like Full Heal, Burn Heal, and Great Ball if desired.",
+                completion_condition="descended_jagged_pass",
+                priority=1
+            ),
+
+            DirectObjective(  # 109
+                id="arrive_at_lavaridge_town",
+                description="Arrive at Lavaridge Town at the base of Jagged Pass",
+                action_type="navigate",
+                target_location="Lavaridge Town",
+                navigation_hint="Continue down Jagged Pass until you reach Lavaridge Town, a town known for its hot springs and Pokémon Gym.",
+                completion_condition="reached_lavaridge_town",
+                priority=1
+            ),
+
+            DirectObjective(  # 110
+                id="heal_at_lavaridge_pokemon_center",
+                description="Heal your Pokémon at Lavaridge Town Pokémon Center",
+                action_type="interact",
+                target_location="Lavaridge Town Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center and heal your team before challenging the gym. You can also collect a hidden Ice Heal from the hot springs and receive a Wynaut egg from an NPC.",
+                completion_condition="healed_at_lavaridge_center",
+                priority=1
+            ),
+
+            DirectObjective(  # 111 - OPTIONAL
+                id="optional_obtain_items_in_lavaridge",
+                description="OPTIONAL: Collect Charcoal item and visit Herb Shop in Lavaridge Town",
+                action_type="interact",
+                target_location="Lavaridge Town",
+                navigation_hint="Talk to the old man to receive Charcoal. Visit the Herb Shop to purchase herbal medicines. Learn Mimic move from the Move Tutor.",
+                completion_condition="obtained_lavaridge_items",
+                priority=2
+            ),
+
+            DirectObjective(  # 112
+                id="enter_lavaridge_gym",
+                description="Enter the Lavaridge Gym to challenge Gym Leader Flannery",
+                action_type="navigate",
+                target_location="Lavaridge Gym",
+                navigation_hint="Navigate to the Lavaridge Gym. The gym specializes in Fire-type Pokémon.",
+                completion_condition="entered_lavaridge_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 113
+                id="navigate_to_gym_leader_flannery",
+                description="Navigate through the Lavaridge Gym to reach Gym Leader Flannery",
+                action_type="navigate",
+                target_location="Lavaridge Gym",
+                navigation_hint="The gym has a puzzle with holes in the floor. Navigate carefully to reach Flannery. Battle gym trainers if needed.",
+                completion_condition="reached_gym_leader_flannery",
+                priority=1
+            ),
+
+            DirectObjective(  # 114
+                id="battle_gym_leader_flannery",
+                description="Battle Gym Leader Flannery. Her team: Numel (Lv.26), Slugma (Lv.26), Camerupt (Lv.28), Torkoal (Lv.29). Use Water or Ground-type moves.",
+                action_type="battle",
+                target_location="Lavaridge Gym",
+                navigation_hint="Battle Flannery using Water, Ground, or Rock-type moves for super-effective damage. Her Torkoal is her strongest Pokémon with high defense. Reward: Heat Badge, TM50 (Overheat). If you lose, heal and return.",
+                completion_condition="defeated_flannery_and_received_heat_badge",
+                priority=1
+            ),
+
+            DirectObjective(  # 115
+                id="exit_lavaridge_gym",
+                description="Exit the Lavaridge Gym after defeating Flannery",
+                action_type="navigate",
+                target_location="Lavaridge Gym",
+                navigation_hint="After receiving the Heat Badge and TM50, navigate back through the gym to the exit.",
+                completion_condition="exited_lavaridge_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 116
+                id="receive_go_goggles_from_rival",
+                description="Meet your rival May/Brendan outside the gym who will give you the Go-Goggles",
+                action_type="interact",
+                target_location="Lavaridge Town",
+                navigation_hint="After exiting the gym, your rival will meet you and give you the Go-Goggles. These allow you to navigate through sandstorms on Route 111's desert.",
+                completion_condition="received_go_goggles",
+                priority=1
+            ),
+
+            DirectObjective(  # 117
+                id="heal_at_lavaridge_center_after_gym",
+                description="Return to Lavaridge Pokémon Center to heal after the gym battle",
+                action_type="interact",
+                target_location="Lavaridge Town Pokémon Center",
+                navigation_hint="Heal your Pokémon at the Pokémon Center before continuing your journey.",
+                completion_condition="healed_after_lavaridge_gym",
+                priority=1
+            ),
+
+            # ========== Route 111 Desert to Petalburg Gym (Objectives 118-130) ==========
+            DirectObjective(  # 118
+                id="navigate_to_route_111_desert",
+                description="Navigate to Route 111's desert area using the Go-Goggles",
+                action_type="navigate",
+                target_location="Route 111 Desert",
+                navigation_hint="From Lavaridge Town, navigate back through Jagged Pass and Mt. Chimney cable car to Route 111. With the Go-Goggles, you can now explore the desert area that was previously blocked by sandstorm.",
+                completion_condition="reached_route_111_desert",
+                priority=1
+            ),
+
+            DirectObjective(  # 119 - OPTIONAL
+                id="optional_explore_mirage_tower_for_fossil",
+                description="OPTIONAL: Explore Mirage Tower in the desert and obtain either Root Fossil or Claw Fossil",
+                action_type="navigate",
+                target_location="Mirage Tower",
+                navigation_hint="Mirage Tower is a four-floor structure in the desert with unstable floors. Requires Mach Bike and Rock Smash. Navigate to the top floor and choose between Root Fossil (Lileep) or Claw Fossil (Anorith). You can only take one! The tower disappears after taking a fossil.",
+                completion_condition="obtained_fossil_from_mirage_tower",
+                priority=2
+            ),
+
+            DirectObjective(  # 120 - OPTIONAL
+                id="optional_collect_desert_items",
+                description="OPTIONAL: Collect items in Route 111 desert (Stardust, Protein, Rare Candy, TM37)",
+                action_type="navigate",
+                target_location="Route 111 Desert",
+                navigation_hint="Explore the desert to find Stardust, Protein, Rare Candy, and TM37 (Sandstorm). Battle trainers for experience.",
+                completion_condition="collected_desert_items",
+                priority=2
+            ),
+
+            DirectObjective(  # 121
+                id="navigate_to_petalburg_city_for_norman",
+                description="Navigate to Petalburg City to challenge your father Norman at the Gym",
+                action_type="navigate",
+                target_location="Petalburg City",
+                navigation_hint="With four badges earned, you can now challenge Norman at Petalburg Gym. Navigate from Route 111 through Route 101/102 to Petalburg City, or use Fly if you've taught it to a Pokémon.",
+                completion_condition="reached_petalburg_for_norman_battle",
+                priority=1
+            ),
+
+            DirectObjective(  # 122
+                id="heal_at_petalburg_pokemon_center",
+                description="Heal your Pokémon at Petalburg City Pokémon Center before the gym",
+                action_type="interact",
+                target_location="Petalburg City Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center and heal your team. Norman's gym is challenging, so ensure you're well-prepared.",
+                completion_condition="healed_at_petalburg_for_norman",
+                priority=1
+            ),
+
+            DirectObjective(  # 123
+                id="enter_petalburg_gym",
+                description="Enter the Petalburg Gym to challenge your father Norman",
+                action_type="navigate",
+                target_location="Petalburg Gym",
+                navigation_hint="Navigate to the Petalburg Gym. The gym has eight trainer rooms, each focusing on different battle strategies. You must defeat at least three trainers to reach Norman.",
+                completion_condition="entered_petalburg_gym_for_norman",
+                priority=1
+            ),
+
+            DirectObjective(  # 124
+                id="navigate_to_gym_leader_norman",
+                description="Battle at least three gym trainers and navigate to Gym Leader Norman",
+                action_type="navigate",
+                target_location="Petalburg Gym",
+                navigation_hint="The gym has themed rooms: Speed, Accuracy, Confusion, Defense, Recovery, Strength, and One-Hit KO. Choose at least three rooms to battle trainers and unlock the path to Norman.",
+                completion_condition="reached_gym_leader_norman",
+                priority=1
+            ),
+
+            DirectObjective(  # 125
+                id="battle_gym_leader_norman",
+                description="Battle Gym Leader Norman (your father). His team: Spinda (Lv.27), Vigoroth (Lv.27), Linoone (Lv.29), Slaking (Lv.31). Use Fighting-type moves.",
+                action_type="battle",
+                target_location="Petalburg Gym",
+                navigation_hint="Battle Norman using Fighting-type moves for super-effective damage against Normal-types. Exploit Slaking's Truant ability (it can only attack every other turn). All his Pokémon know Facade. Reward: Balance Badge, TM42 (Facade), enables use of Surf. If you lose, heal and return.",
+                completion_condition="defeated_norman_and_received_balance_badge",
+                priority=1
+            ),
+
+            DirectObjective(  # 126
+                id="exit_petalburg_gym",
+                description="Exit the Petalburg Gym after defeating Norman",
+                action_type="navigate",
+                target_location="Petalburg Gym",
+                navigation_hint="After receiving the Balance Badge and TM42, navigate back through the gym to the exit.",
+                completion_condition="exited_petalburg_gym_after_norman",
+                priority=1
+            ),
+
+            DirectObjective(  # 127
+                id="receive_hm03_surf_from_wallys_father",
+                description="Receive HM03 (Surf) from Wally's father outside the gym",
+                action_type="interact",
+                target_location="Petalburg City",
+                navigation_hint="After exiting the gym, Wally's father will meet you and give you HM03 (Surf). This allows you to travel across water and access many new areas.",
+                completion_condition="received_hm03_surf",
+                priority=1
+            ),
+
+            DirectObjective(  # 128
+                id="visit_mom_for_amulet_coin",
+                description="Visit your mom in Littleroot Town to receive the Amulet Coin",
+                action_type="interact",
+                target_location="Littleroot Town",
+                navigation_hint="Travel south to Littleroot Town and visit your mom in your house. She will give you the Amulet Coin, which doubles prize money from battles when held by a Pokémon.",
+                completion_condition="received_amulet_coin_from_mom",
+                priority=1
+            ),
+
+            DirectObjective(  # 129
+                id="heal_after_norman_and_surf",
+                description="Heal your Pokémon at a Pokémon Center after obtaining Surf",
+                action_type="interact",
+                target_location="Pokémon Center",
+                navigation_hint="Heal your Pokémon at any nearby Pokémon Center. You're now ready to explore water routes with Surf.",
+                completion_condition="healed_after_receiving_surf",
+                priority=1
+            ),
+
+            # ========== Route 118 to Fortree City (Objectives 130-145) ==========
+            DirectObjective(  # 130
+                id="navigate_to_route_118",
+                description="Navigate to Route 118 east of Mauville City using Surf",
+                action_type="navigate",
+                target_location="Route 118",
+                navigation_hint="From Mauville City, head east to Route 118. You'll need Surf to fully explore this route. Battle trainers and collect items along the way.",
+                completion_condition="reached_route_118",
+                priority=1
+            ),
+
+            DirectObjective(  # 131
+                id="obtain_good_rod_from_fisherman",
+                description="Talk to the Fisherman on Route 118 to receive the Good Rod",
+                action_type="interact",
+                target_location="Route 118",
+                navigation_hint="Find the Fisherman on Route 118 and talk to him. He will give you the Good Rod, which allows you to catch better Pokémon when fishing.",
+                completion_condition="received_good_rod",
+                priority=1
+            ),
+
+            DirectObjective(  # 132 - OPTIONAL
+                id="optional_new_mauville_quest",
+                description="OPTIONAL: Complete the New Mauville quest for Wattson to receive TM24 (Thunderbolt)",
+                action_type="navigate",
+                target_location="New Mauville",
+                navigation_hint="Return to Mauville City and talk to Wattson. He'll request assistance shutting down New Mauville's generator and give you the Basement Key. Access New Mauville by surfing east beneath Seaside Cycling Road on Route 110. Navigate using colored floor switches and shut down the generator. Reward: Thunder Stone and TM24 (Thunderbolt).",
+                completion_condition="completed_new_mauville_quest",
+                priority=2
+            ),
+
+            DirectObjective(  # 133
+                id="navigate_to_route_119",
+                description="Navigate from Route 118 to Route 119 heading north",
+                action_type="navigate",
+                target_location="Route 119",
+                navigation_hint="From Route 118, travel north to reach Route 119, a tropical rainforest route with extreme weather. Use Surf to cross water areas.",
+                completion_condition="reached_route_119",
+                priority=1
+            ),
+
+            DirectObjective(  # 134
+                id="navigate_to_weather_institute",
+                description="Navigate through Route 119 to reach the Weather Institute",
+                action_type="navigate",
+                target_location="Weather Institute",
+                navigation_hint="The Weather Institute is located at the northern end of Route 119. Navigate through the route, battling trainers if encountered. Team Aqua has infiltrated the facility.",
+                completion_condition="reached_weather_institute",
+                priority=1
+            ),
+
+            DirectObjective(  # 135
+                id="battle_team_aqua_at_weather_institute",
+                description="Battle Team Aqua Grunts and Admin Shelly at the Weather Institute to save the scientists",
+                action_type="battle",
+                target_location="Weather Institute",
+                navigation_hint="Enter the Weather Institute and battle Team Aqua Grunts on the first floor. Then face Admin Shelly (Carvanha Lv.28, Mightyena Lv.28) on the second floor. Reward: Castform (Lv.25) holding Mystic Water.",
+                completion_condition="defeated_team_aqua_weather_institute",
+                priority=1
+            ),
+
+            DirectObjective(  # 136
+                id="battle_rival_route_119_receive_fly",
+                description="Battle your rival May/Brendan on Route 119 and receive HM02 (Fly)",
+                action_type="battle",
+                target_location="Route 119",
+                navigation_hint="After exiting the Weather Institute, your rival will challenge you to a battle. Their team: Pelipper/Lombre/Slugma and their starter evolution (Lv.29-31). Use type advantages. Reward: HM02 (Fly) and $1,860.",
+                completion_condition="defeated_rival_route_119_received_fly",
+                priority=1
+            ),
+
+            DirectObjective(  # 137
+                id="navigate_to_fortree_city",
+                description="Continue north through Route 119 to reach Fortree City",
+                action_type="navigate",
+                target_location="Fortree City",
+                navigation_hint="From Route 119, continue north to reach Fortree City, a settlement built among ancient trees. The gym entrance will be blocked by something invisible initially.",
+                completion_condition="reached_fortree_city",
+                priority=1
+            ),
+
+            DirectObjective(  # 138
+                id="heal_at_fortree_pokemon_center",
+                description="Heal your Pokémon at Fortree City Pokémon Center",
+                action_type="interact",
+                target_location="Fortree City Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center in Fortree City and heal your team.",
+                completion_condition="healed_at_fortree_center",
+                priority=1
+            ),
+
+            DirectObjective(  # 139 - OPTIONAL
+                id="optional_fortree_city_activities",
+                description="OPTIONAL: Complete activities in Fortree City (TM10 Hidden Power quiz, Pokémon trade, Secret Base shop)",
+                action_type="interact",
+                target_location="Fortree City",
+                navigation_hint="Visit the northwest house for TM10 (Hidden Power) quiz. Trade Volbeat for Plusle in another house. Access Secret Base Shop via ladder near Poké Mart. Interact with Pokémon Breeder's Wingull.",
+                completion_condition="completed_fortree_activities",
+                priority=2
+            ),
+
+            DirectObjective(  # 140
+                id="navigate_to_route_120",
+                description="Navigate east from Fortree City to Route 120",
+                action_type="navigate",
+                target_location="Route 120",
+                navigation_hint="Head east from Fortree City to reach Route 120, a lengthy route with many trainers. You need to progress here to get the Devon Scope.",
+                completion_condition="reached_route_120",
+                priority=1
+            ),
+
+            DirectObjective(  # 141
+                id="meet_steven_and_receive_devon_scope",
+                description="Meet Steven on the northern bridge of Route 120 who will give you the Devon Scope",
+                action_type="interact",
+                target_location="Route 120",
+                navigation_hint="Navigate through Route 120 until you reach the northern bridge. Steven will be waiting and will give you the Devon Scope, which reveals invisible Kecleon.",
+                completion_condition="received_devon_scope_from_steven",
+                priority=1
+            ),
+
+            DirectObjective(  # 142
+                id="return_to_fortree_and_reveal_kecleon",
+                description="Return to Fortree City and use the Devon Scope to reveal and catch/defeat the Kecleon blocking the gym",
+                action_type="battle",
+                target_location="Fortree City",
+                navigation_hint="Navigate back to Fortree City. Use the Devon Scope on the invisible obstacle blocking the gym entrance. A Kecleon (Lv.30) will be revealed. You can catch it or defeat it.",
+                completion_condition="removed_kecleon_from_gym_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 143
+                id="enter_fortree_gym",
+                description="Enter the Fortree Gym to challenge Gym Leader Winona",
+                action_type="navigate",
+                target_location="Fortree Gym",
+                navigation_hint="With the Kecleon removed, enter the Fortree Gym. The gym specializes in Flying-type Pokémon.",
+                completion_condition="entered_fortree_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 144
+                id="navigate_to_gym_leader_winona",
+                description="Navigate through the Fortree Gym turnstile puzzle to reach Gym Leader Winona",
+                action_type="navigate",
+                target_location="Fortree Gym",
+                navigation_hint="The gym has a turnstile puzzle. Navigate through the rotating gates to reach Winona. Battle gym trainers if needed.",
+                completion_condition="reached_gym_leader_winona",
+                priority=1
+            ),
+
+            DirectObjective(  # 145
+                id="battle_gym_leader_winona",
+                description="Battle Gym Leader Winona. Her team: Swablu (Lv.29), Tropius (Lv.29), Pelipper (Lv.30), Skarmory (Lv.31), Altaria (Lv.33). Use Electric, Ice, or Rock-type moves.",
+                action_type="battle",
+                target_location="Fortree Gym",
+                navigation_hint="Battle Winona using Electric, Ice, or Rock-type moves for super-effective damage against Flying-types. Her Altaria is Dragon/Flying, so Ice is 4x effective. Reward: Feather Badge, TM40 (Aerial Ace), enables Fly field move, Pokémon obey up to level 70. If you lose, heal and return.",
+                completion_condition="defeated_winona_and_received_feather_badge",
+                priority=1
+            ),
+
+            DirectObjective(  # 146
+                id="exit_fortree_gym",
+                description="Exit the Fortree Gym after defeating Winona",
+                action_type="navigate",
+                target_location="Fortree Gym",
+                navigation_hint="After receiving the Feather Badge and TM40, navigate back through the gym to the exit.",
+                completion_condition="exited_fortree_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 147
+                id="heal_after_fortree_gym",
+                description="Heal your Pokémon at Fortree City Pokémon Center after the gym battle",
+                action_type="interact",
+                target_location="Fortree City Pokémon Center",
+                navigation_hint="Return to the Pokémon Center and heal your team before continuing.",
+                completion_condition="healed_after_fortree_gym",
+                priority=1
+            ),
+
+            # ========== Route 121 to Mt. Pyre (Objectives 148-160) ==========
+            DirectObjective(  # 148
+                id="navigate_to_route_121",
+                description="Navigate from Route 120 to Route 121 heading toward Lilycove City",
+                action_type="navigate",
+                target_location="Route 121",
+                navigation_hint="From Route 120, head east to Route 121. This is a shorter route leading to Lilycove City with the Safari Zone nearby.",
+                completion_condition="reached_route_121",
+                priority=1
+            ),
+
+            DirectObjective(  # 149
+                id="navigate_to_lilycove_city",
+                description="Navigate through Route 121 to reach Lilycove City",
+                action_type="navigate",
+                target_location="Lilycove City",
+                navigation_hint="Continue through Route 121 to reach Lilycove City. Battle trainers and collect items along the way.",
+                completion_condition="reached_lilycove_city_first_time",
+                priority=1
+            ),
+
+            DirectObjective(  # 150
+                id="heal_at_lilycove_pokemon_center",
+                description="Heal your Pokémon at Lilycove City Pokémon Center",
+                action_type="interact",
+                target_location="Lilycove City Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center in Lilycove City and heal your team.",
+                completion_condition="healed_at_lilycove_center",
+                priority=1
+            ),
+
+            DirectObjective(  # 151
+                id="navigate_to_route_122",
+                description="Navigate south from Lilycove City to Route 122 (ocean route)",
+                action_type="navigate",
+                target_location="Route 122",
+                navigation_hint="From Lilycove City, use Surf to head south to Route 122, a short ocean route.",
+                completion_condition="reached_route_122",
+                priority=1
+            ),
+
+            DirectObjective(  # 152
+                id="navigate_to_mt_pyre",
+                description="Navigate to Mt. Pyre from Route 122",
+                action_type="navigate",
+                target_location="Mt. Pyre",
+                navigation_hint="From Route 122, navigate to Mt. Pyre, a sacred mountain where you'll catch up with Team Aqua.",
+                completion_condition="reached_mt_pyre",
+                priority=1
+            ),
+
+            DirectObjective(  # 153
+                id="climb_mt_pyre_to_summit",
+                description="Climb Mt. Pyre through 6 floors to reach the summit",
+                action_type="navigate",
+                target_location="Mt. Pyre Summit",
+                navigation_hint="Enter Mt. Pyre and speak with the old woman on 1F to receive Cleanse Tag. Navigate through 6 floors, battling trainers (Poké Maniacs, Hex Maniacs, etc.). Collect TM30 (Shadow Ball) on 6F. Watch for holes that cause you to fall.",
+                completion_condition="reached_mt_pyre_summit",
+                priority=1
+            ),
+
+            DirectObjective(  # 154
+                id="witness_team_aqua_steal_red_orb",
+                description="Witness Team Aqua's Archie steal the Red Orb from Mt. Pyre summit",
+                action_type="cutscene",
+                target_location="Mt. Pyre Summit",
+                navigation_hint="At the summit, you'll witness Archie steal the Red Orb from the altar. After he flees, an elderly caretaker will give you the Magma Emblem.",
+                completion_condition="received_magma_emblem_from_caretaker",
+                priority=1
+            ),
+
+            DirectObjective(  # 155
+                id="navigate_to_jagged_pass_for_magma_hideout",
+                description="Navigate to Jagged Pass to use the Magma Emblem and access Magma Hideout",
+                action_type="navigate",
+                target_location="Jagged Pass",
+                navigation_hint="Use Fly to return to Lavaridge Town, then navigate to Jagged Pass. At the mountain's midway point, use the Magma Emblem to open a hidden entrance to Magma Hideout.",
+                completion_condition="opened_magma_hideout_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 156
+                id="navigate_through_magma_hideout",
+                description="Navigate through Team Magma's hideout (B1F-B4F) battling grunts along the way",
+                action_type="navigate",
+                target_location="Magma Hideout",
+                navigation_hint="Enter the Magma Hideout. Use Strength to move boulders on the entrance floor. Navigate through B1F-B4F, battling Team Magma Grunts. Collect Full Restore, Max Elixir, Nugget, and PP Max along the way.",
+                completion_condition="navigated_to_magma_hideout_leaders",
+                priority=1
+            ),
+
+            DirectObjective(  # 157
+                id="battle_tabitha_in_magma_hideout",
+                description="Battle Magma Admin Tabitha on B4F. His team: Numel (Lv.26), Mightyena (Lv.28), Zubat (Lv.30), Camerupt (Lv.33)",
+                action_type="battle",
+                target_location="Magma Hideout B4F",
+                navigation_hint="Battle Tabitha using Water and Ground-type moves against his Fire-type Pokémon. Reward: $1,320.",
+                completion_condition="defeated_tabitha_in_magma_hideout",
+                priority=1
+            ),
+
+            DirectObjective(  # 158
+                id="battle_maxie_in_magma_hideout",
+                description="Battle Magma Leader Maxie on B4F. His team: Mightyena (Lv.37), Crobat (Lv.37), Camerupt (Lv.41)",
+                action_type="battle",
+                target_location="Magma Hideout B4F",
+                navigation_hint="After defeating Tabitha, battle Maxie. Use Water and Ground-type moves effectively. Reward: $3,120.",
+                completion_condition="defeated_maxie_in_magma_hideout",
+                priority=1
+            ),
+
+            DirectObjective(  # 159
+                id="witness_groudon_awakening_and_escape",
+                description="Witness Maxie awaken Groudon with the Blue Orb, only for it to escape immediately",
+                action_type="cutscene",
+                target_location="Magma Hideout B4F",
+                navigation_hint="After defeating Maxie, watch the cutscene where he awakens Groudon with the Blue Orb. The legendary Pokémon immediately escapes before battle.",
+                completion_condition="witnessed_groudon_awakening",
+                priority=1
+            ),
+
+            DirectObjective(  # 160
+                id="exit_magma_hideout",
+                description="Exit the Magma Hideout and heal your Pokémon",
+                action_type="navigate",
+                target_location="Magma Hideout",
+                navigation_hint="Navigate back through the hideout to the exit. Fly to a nearby town and heal at a Pokémon Center.",
+                completion_condition="exited_magma_hideout_and_healed",
+                priority=1
+            ),
+
+            # ========== Slateport to Team Aqua Hideout (Objectives 161-175) ==========
+            DirectObjective(  # 161
+                id="navigate_to_slateport_harbor",
+                description="Navigate to Slateport City harbor to witness Captain Stern and Archie's submarine theft",
+                action_type="navigate",
+                target_location="Slateport City Harbor",
+                navigation_hint="Use Fly to reach Slateport City. Navigate to the harbor area northeast of town to witness a TV interview scene with Captain Stern. Archie will announce his plans and escape with the submarine.",
+                completion_condition="witnessed_submarine_theft_slateport",
+                priority=1
+            ),
+
+            DirectObjective(  # 162 - OPTIONAL
+                id="optional_explore_lilycove_department_store",
+                description="OPTIONAL: Visit Lilycove Department Store for items, TMs, and daily lottery",
+                action_type="navigate",
+                target_location="Lilycove Department Store",
+                navigation_hint="The Lilycove Department Store has 6 floors with Poké Balls, healing items, vitamins, TMs (Fire Blast, Thunder, Blizzard, etc.), Secret Base decorations, and a daily lottery on 1F. On the rooftop, an NPC teaches Substitute move (one-time).",
+                completion_condition="explored_lilycove_department_store",
+                priority=2
+            ),
+
+            DirectObjective(  # 163 - OPTIONAL
+                id="optional_battle_rival_at_department_store",
+                description="OPTIONAL: Battle your rival May/Brendan outside Lilycove Department Store",
+                action_type="battle",
+                target_location="Lilycove City",
+                navigation_hint="Your rival may challenge you outside the Department Store entrance. Their team varies based on your starter choice. Reward: $2,040.",
+                completion_condition="defeated_rival_at_lilycove",
+                priority=2
+            ),
+
+            DirectObjective(  # 164
+                id="navigate_to_lilycove_cove_lily_motel",
+                description="Navigate to Cove Lily Motel in Lilycove City and talk to Scott",
+                action_type="interact",
+                target_location="Cove Lily Motel",
+                navigation_hint="Visit the Cove Lily Motel and talk to Scott for potential bonus Battle Points.",
+                completion_condition="talked_to_scott_at_motel",
+                priority=1
+            ),
+
+            DirectObjective(  # 165
+                id="navigate_to_team_aqua_hideout",
+                description="Navigate to Team Aqua Hideout northeast of Lilycove City",
+                action_type="navigate",
+                target_location="Team Aqua Hideout",
+                navigation_hint="From Lilycove City, use Surf to navigate northeast to find the Team Aqua Hideout entrance. Your goal is to stop Archie and retrieve the submarine.",
+                completion_condition="reached_team_aqua_hideout_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 166
+                id="navigate_through_team_aqua_hideout",
+                description="Navigate through Team Aqua Hideout using warp panels to reach Archie's office",
+                action_type="navigate",
+                target_location="Team Aqua Hideout",
+                navigation_hint="Battle the Grunt with Poochyena on 1F. Navigate B1F using warp puzzle sequence. In Archie's office, collect Master Ball, Nugget, Max Elixir, and Nest Ball (two items are Electrode disguises - be careful!).",
+                completion_condition="navigated_to_aqua_hideout_submarine_room",
+                priority=1
+            ),
+
+            DirectObjective(  # 167
+                id="battle_aqua_admin_matt",
+                description="Battle Aqua Admin Matt before the submarine room. His team: Mightyena (Lv.34), Golbat (Lv.34)",
+                action_type="battle",
+                target_location="Team Aqua Hideout",
+                navigation_hint="Navigate through warp panels to reach the submarine room. Before entering, battle Admin Matt. Use Fighting and Electric-type moves. Reward: $1,360.",
+                completion_condition="defeated_matt_in_aqua_hideout",
+                priority=1
+            ),
+
+            DirectObjective(  # 168
+                id="witness_archie_escape_in_submarine",
+                description="Witness Archie escape in the submarine before you can stop him",
+                action_type="cutscene",
+                target_location="Team Aqua Hideout",
+                navigation_hint="After defeating Matt, you'll witness Archie escape in the submarine. You must pursue him to Seafloor Cavern by ocean route.",
+                completion_condition="witnessed_archie_submarine_escape",
+                priority=1
+            ),
+
+            DirectObjective(  # 169
+                id="exit_team_aqua_hideout",
+                description="Exit Team Aqua Hideout and heal your Pokémon",
+                action_type="navigate",
+                target_location="Team Aqua Hideout",
+                navigation_hint="Navigate back through the hideout to the exit. Fly to a nearby city and heal at a Pokémon Center.",
+                completion_condition="exited_aqua_hideout_and_healed",
+                priority=1
+            ),
+
+            # ========== Route 124 to Mossdeep Gym (Objectives 170-185) ==========
+            DirectObjective(  # 170
+                id="navigate_to_route_124",
+                description="Navigate to Route 124 east from Lilycove City using Surf",
+                action_type="navigate",
+                target_location="Route 124",
+                navigation_hint="From Lilycove City, use Surf to head east to Route 124, a water route with multiple trainers. You can trade colored shards for evolution stones at the Treasure Hunter's House.",
+                completion_condition="reached_route_124",
+                priority=1
+            ),
+
+            DirectObjective(  # 171 - OPTIONAL
+                id="optional_visit_treasure_hunter_for_stones",
+                description="OPTIONAL: Trade colored shards for evolution stones at Treasure Hunter's House on Route 124",
+                action_type="interact",
+                target_location="Route 124 - Treasure Hunter's House",
+                navigation_hint="Trade Red Shard for Fire Stone, Yellow Shard for Thunder Stone, Blue Shard for Water Stone, or Green Shard for Leaf Stone.",
+                completion_condition="visited_treasure_hunter",
+                priority=2
+            ),
+
+            DirectObjective(  # 172
+                id="navigate_to_mossdeep_city",
+                description="Navigate from Route 124 to Mossdeep City",
+                action_type="navigate",
+                target_location="Mossdeep City",
+                navigation_hint="From Route 124, head east to Mossdeep City, an island location with mild winds. Home to the Space Center and seventh Gym.",
+                completion_condition="reached_mossdeep_city",
+                priority=1
+            ),
+
+            DirectObjective(  # 173
+                id="heal_at_mossdeep_pokemon_center",
+                description="Heal your Pokémon at Mossdeep City Pokémon Center",
+                action_type="interact",
+                target_location="Mossdeep City Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center and heal your team before challenging the gym.",
+                completion_condition="healed_at_mossdeep_center",
+                priority=1
+            ),
+
+            DirectObjective(  # 174 - OPTIONAL
+                id="optional_obtain_super_rod_and_items",
+                description="OPTIONAL: Obtain Super Rod and collect items in Mossdeep City",
+                action_type="interact",
+                target_location="Mossdeep City",
+                navigation_hint="Get Super Rod from fisherman east of Gym. Collect Net Ball (southeast corner), King's Rock (from boy near Steven's house), Sun Stone (sailor at Space Center). Black Belt teaches DynamicPunch (one-time). Complete Wingull errand for Mental Herb.",
+                completion_condition="obtained_mossdeep_items",
+                priority=2
+            ),
+
+            DirectObjective(  # 175
+                id="enter_mossdeep_gym",
+                description="Enter the Mossdeep Gym to challenge Gym Leaders Liza & Tate",
+                action_type="navigate",
+                target_location="Mossdeep Gym",
+                navigation_hint="Navigate to the Mossdeep Gym. The gym specializes in Psychic-type Pokémon and features dual Gym Leaders.",
+                completion_condition="entered_mossdeep_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 176
+                id="navigate_to_gym_leaders_liza_and_tate",
+                description="Navigate through the Mossdeep Gym puzzle (warp panels and spin tiles) to reach Liza & Tate",
+                action_type="navigate",
+                target_location="Mossdeep Gym",
+                navigation_hint="The gym has interconnected rooms with warp panels and spin tiles. Defeat Psychic and Gentleman trainers along the way to reach the Gym Leaders.",
+                completion_condition="reached_gym_leaders_liza_and_tate",
+                priority=1
+            ),
+
+            DirectObjective(  # 177
+                id="battle_gym_leaders_liza_and_tate",
+                description="Battle Gym Leaders Liza & Tate in a Double Battle. Their team: Claydol (Lv.41), Xatu (Lv.41), Lunatone (Lv.42), Solrock (Lv.42). Use Dark or Ghost-type moves.",
+                action_type="battle",
+                target_location="Mossdeep Gym",
+                navigation_hint="This is a Double Battle against two leaders simultaneously. Use Dark and Ghost-type moves for super-effective damage against Psychic-types. Water moves can hit multiple targets. Reward: Mind Badge, TM04 (Calm Mind). If you lose, heal and return.",
+                completion_condition="defeated_liza_and_tate_received_mind_badge",
+                priority=1
+            ),
+
+            DirectObjective(  # 178
+                id="exit_mossdeep_gym",
+                description="Exit the Mossdeep Gym after defeating Liza & Tate",
+                action_type="navigate",
+                target_location="Mossdeep Gym",
+                navigation_hint="After receiving the Mind Badge and TM04, navigate back through the gym to the exit.",
+                completion_condition="exited_mossdeep_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 179
+                id="navigate_to_mossdeep_space_center",
+                description="Navigate to the Mossdeep Space Center for the Team Magma event",
+                action_type="navigate",
+                target_location="Mossdeep Space Center",
+                navigation_hint="After the gym victory, navigate to the Space Center. Team Magma is attempting to steal rocket fuel.",
+                completion_condition="reached_space_center_for_team_magma",
+                priority=1
+            ),
+
+            DirectObjective(  # 180
+                id="battle_team_magma_at_space_center",
+                description="Battle Team Magma Grunts at the Space Center (7 grunts total - 4 on first floor, 3 upstairs)",
+                action_type="battle",
+                target_location="Mossdeep Space Center",
+                navigation_hint="Defeat four grunts on the first floor, then three more upstairs. These are consecutive battles with no breaks, so use healing items as needed.",
+                completion_condition="defeated_space_center_grunts",
+                priority=1
+            ),
+
+            DirectObjective(  # 181
+                id="double_battle_maxie_and_tabitha_with_steven",
+                description="Team up with Steven in a Double Battle against Maxie and Tabitha",
+                action_type="battle",
+                target_location="Mossdeep Space Center",
+                navigation_hint="Steven will team with you in a Double Battle. Steven uses Metang (Lv.42), Skarmory (Lv.43), and Aggron (Lv.44). Focus on Maxie and Tabitha's Pokémon. Maxie will abandon his plans after defeat.",
+                completion_condition="defeated_maxie_and_tabitha_with_steven",
+                priority=1
+            ),
+
+            DirectObjective(  # 182
+                id="receive_hm08_dive_from_steven",
+                description="Receive HM08 (Dive) from Steven after defeating Team Magma",
+                action_type="interact",
+                target_location="Mossdeep Space Center",
+                navigation_hint="After the battle, Steven will reward you with HM08 (Dive), which enables exploration of underwater areas.",
+                completion_condition="received_hm08_dive",
+                priority=1
+            ),
+
+            DirectObjective(  # 183
+                id="heal_after_space_center_battles",
+                description="Heal your Pokémon at Mossdeep City Pokémon Center after the Space Center battles",
+                action_type="interact",
+                target_location="Mossdeep City Pokémon Center",
+                navigation_hint="Return to the Pokémon Center and heal your team. You're now ready to explore underwater areas with Dive.",
+                completion_condition="healed_after_space_center",
+                priority=1
+            ),
+
+            # ========== Route 127 to Seafloor Cavern (Objectives 184-200) ==========
+            DirectObjective(  # 184
+                id="navigate_to_route_127",
+                description="Navigate from Mossdeep City to Route 127 using Surf",
+                action_type="navigate",
+                target_location="Route 127",
+                navigation_hint="From Mossdeep City, use Surf to navigate to Route 127. Battle trainers and collect items (Zinc, Rare Candy, Carbos on surface; underwater items with Dive).",
+                completion_condition="reached_route_127",
+                priority=1
+            ),
+
+            DirectObjective(  # 185
+                id="navigate_to_route_128",
+                description="Navigate from Route 127 to Route 128",
+                action_type="navigate",
+                target_location="Route 128",
+                navigation_hint="Continue navigating to Route 128, a coastal region with trainers and underwater treasures (Heart Scales, Protein, Pearl).",
+                completion_condition="reached_route_128",
+                priority=1
+            ),
+
+            DirectObjective(  # 186
+                id="navigate_to_seafloor_cavern_entrance",
+                description="Navigate to the underwater cavern entrance beneath Route 128 using Dive",
+                action_type="navigate",
+                target_location="Seafloor Cavern Entrance",
+                navigation_hint="Use Dive to descend underwater on Route 128. Find the cavern entrance that leads to Seafloor Cavern. This is where Team Aqua is attempting to awaken Kyogre.",
+                completion_condition="reached_seafloor_cavern_entrance",
+                priority=1
+            ),
+
+            DirectObjective(  # 187
+                id="navigate_through_seafloor_cavern",
+                description="Navigate through Seafloor Cavern using Rock Smash, Strength, and Surf",
+                action_type="navigate",
+                target_location="Seafloor Cavern",
+                navigation_hint="Room 1: Clear boulders with Rock Smash and Strength. Rooms 5-6: Navigate water currents while surfing. Room 8: Solve boulder puzzle to advance. Battle Team Aqua Grunts along the way.",
+                completion_condition="navigated_to_seafloor_cavern_depths",
+                priority=1
+            ),
+
+            DirectObjective(  # 188
+                id="battle_aqua_admin_shelly_seafloor",
+                description="Battle Aqua Admin Shelly in Room 7. Her team: Sharpedo (Lv.37), Mightyena (Lv.37)",
+                action_type="battle",
+                target_location="Seafloor Cavern",
+                navigation_hint="Battle Shelly using Electric and Grass-type moves against her Water and Dark-type Pokémon.",
+                completion_condition="defeated_shelly_in_seafloor_cavern",
+                priority=1
+            ),
+
+            DirectObjective(  # 189
+                id="battle_archie_at_seafloor_cavern",
+                description="Battle Team Aqua Leader Archie in the deepest chamber. His team: Mightyena (Lv.41), Crobat (Lv.41), Sharpedo (Lv.43)",
+                action_type="battle",
+                target_location="Seafloor Cavern",
+                navigation_hint="Battle Archie using Electric, Grass, and Fighting-type moves. His Sharpedo is Water/Dark type. Reward: TM26 (Earthquake) from the deepest chamber.",
+                completion_condition="defeated_archie_at_seafloor_cavern",
+                priority=1
+            ),
+
+            DirectObjective(  # 190
+                id="witness_kyogre_awakening_and_escape",
+                description="Witness Kyogre awaken and flee, causing extreme weather across eastern Hoenn",
+                action_type="cutscene",
+                target_location="Seafloor Cavern",
+                navigation_hint="After defeating Archie, Kyogre awakens and flees, causing extreme weather. Maxie and Team Magma arrive to discuss intervention. Steven appears and directs you toward Sootopolis City.",
+                completion_condition="witnessed_kyogre_awakening",
+                priority=1
+            ),
+
+            DirectObjective(  # 191
+                id="exit_seafloor_cavern",
+                description="Exit Seafloor Cavern and heal your Pokémon",
+                action_type="navigate",
+                target_location="Seafloor Cavern",
+                navigation_hint="Navigate back through Seafloor Cavern to the exit. Use Dive to surface, then Fly to a nearby city to heal.",
+                completion_condition="exited_seafloor_cavern_and_healed",
+                priority=1
+            ),
+
+            # ========== Sootopolis City to Sky Pillar (Objectives 192-210) ==========
+            DirectObjective(  # 192
+                id="navigate_to_route_126_and_sootopolis",
+                description="Navigate to Route 126 and find Sootopolis City in the volcanic crater",
+                action_type="navigate",
+                target_location="Sootopolis City",
+                navigation_hint="Navigate to Route 126, an underwater route surrounding a volcanic crater. Use Dive to descend, then find the entrance to Sootopolis City. The city is only accessible by sea or air.",
+                completion_condition="reached_sootopolis_city_first_visit",
+                priority=1
+            ),
+
+            DirectObjective(  # 193
+                id="witness_groudon_kyogre_battle",
+                description="Witness Groudon and Kyogre locked in battle at Sootopolis City",
+                action_type="cutscene",
+                target_location="Sootopolis City",
+                navigation_hint="Upon arriving at Sootopolis, you'll witness the climactic battle between Groudon and Kyogre. The weather emergency must be resolved before challenging the gym.",
+                completion_condition="witnessed_groudon_kyogre_battle",
+                priority=1
+            ),
+
+            DirectObjective(  # 194
+                id="navigate_to_cave_of_origin",
+                description="Navigate to the Cave of Origin in Sootopolis City",
+                action_type="navigate",
+                target_location="Cave of Origin",
+                navigation_hint="Navigate through Sootopolis City to find the Cave of Origin entrance. Steven should guide you there.",
+                completion_condition="reached_cave_of_origin",
+                priority=1
+            ),
+
+            DirectObjective(  # 195
+                id="find_wallace_in_cave_of_origin",
+                description="Navigate through Cave of Origin's three levels to find Wallace on B1F",
+                action_type="navigate",
+                target_location="Cave of Origin B1F",
+                navigation_hint="Navigate through the Cave of Origin dungeon to the lowest floor (B1F) where Wallace is waiting. Talk to him to learn about Rayquaza.",
+                completion_condition="found_wallace_in_cave_of_origin",
+                priority=1
+            ),
+
+            DirectObjective(  # 196
+                id="learn_about_rayquaza_from_wallace",
+                description="Talk to Wallace to learn about Rayquaza at Sky Pillar",
+                action_type="interact",
+                target_location="Cave of Origin B1F",
+                navigation_hint="Wallace will tell you about a third super-ancient Pokémon named Rayquaza located at Sky Pillar that can stop the conflict.",
+                completion_condition="learned_about_rayquaza_from_wallace",
+                priority=1
+            ),
+
+            DirectObjective(  # 197
+                id="navigate_to_route_129",
+                description="Navigate to Route 129 heading toward Pacifidlog Town",
+                action_type="navigate",
+                target_location="Route 129",
+                navigation_hint="Exit Cave of Origin and Sootopolis City. Navigate west to Route 129, battling trainers along the way.",
+                completion_condition="reached_route_129",
+                priority=1
+            ),
+
+            DirectObjective(  # 198
+                id="navigate_through_routes_130_and_131",
+                description="Navigate through Routes 130 and 131 toward Sky Pillar",
+                action_type="navigate",
+                target_location="Route 131",
+                navigation_hint="Continue through Route 130 (which occasionally displays Mirage Island) and Route 131. Battle trainers and collect items along the way.",
+                completion_condition="reached_route_131",
+                priority=1
+            ),
+
+            DirectObjective(  # 199 - OPTIONAL
+                id="optional_visit_pacifidlog_town",
+                description="OPTIONAL: Visit Pacifidlog Town for trades, move tutoring, and friendship evaluations",
+                action_type="navigate",
+                target_location="Pacifidlog Town",
+                navigation_hint="Pacifidlog Town is a floating village on Route 131. Visit for side activities, NPC trades, and move tutors.",
+                completion_condition="visited_pacifidlog_town",
+                priority=2
+            ),
+
+            DirectObjective(  # 200
+                id="navigate_to_sky_pillar",
+                description="Navigate to Sky Pillar on northern Route 131",
+                action_type="navigate",
+                target_location="Sky Pillar",
+                navigation_hint="From Route 131, navigate north to find Sky Pillar, a 5-floor tower with cracked tiles on 4F.",
+                completion_condition="reached_sky_pillar",
+                priority=1
+            ),
+
+            DirectObjective(  # 201
+                id="climb_sky_pillar_to_awaken_rayquaza",
+                description="Climb Sky Pillar to the rooftop and awaken Rayquaza",
+                action_type="navigate",
+                target_location="Sky Pillar Rooftop",
+                navigation_hint="Navigate through 5 floors of Sky Pillar. Watch for cracked tiles on 4F that cause falls to 3F. Wild Pokémon include Golbat, Sableye, Claydol, Banette, and Altaria. Climb to the rooftop to find Rayquaza.",
+                completion_condition="reached_sky_pillar_rooftop",
+                priority=1
+            ),
+
+            DirectObjective(  # 202
+                id="awaken_rayquaza",
+                description="Interact with Rayquaza to awaken it. It will fly away to Sootopolis City.",
+                action_type="interact",
+                target_location="Sky Pillar Rooftop",
+                navigation_hint="Approach Rayquaza on the rooftop and interact with it. The legendary dragon will awaken and fly away to Sootopolis City to stop the battle.",
+                completion_condition="awakened_rayquaza",
+                priority=1
+            ),
+
+            DirectObjective(  # 203
+                id="return_to_sootopolis_after_rayquaza",
+                description="Return to Sootopolis City to witness Rayquaza stop the Groudon/Kyogre battle",
+                action_type="navigate",
+                target_location="Sootopolis City",
+                navigation_hint="Use Fly or navigate back to Sootopolis City. Witness Rayquaza descend and stop the Groudon/Kyogre battle. The weather normalizes.",
+                completion_condition="witnessed_rayquaza_stop_battle",
+                priority=1
+            ),
+
+            DirectObjective(  # 204
+                id="receive_hm07_waterfall_from_wallace",
+                description="Receive HM07 (Waterfall) from Wallace near Sootopolis Gym",
+                action_type="interact",
+                target_location="Sootopolis City",
+                navigation_hint="After the legendary Pokémon event, talk to Wallace near the Gym. He will give you HM07 (Waterfall).",
+                completion_condition="received_hm07_waterfall",
+                priority=1
+            ),
+
+            DirectObjective(  # 205
+                id="heal_at_sootopolis_pokemon_center",
+                description="Heal your Pokémon at Sootopolis City Pokémon Center before the gym",
+                action_type="interact",
+                target_location="Sootopolis City Pokémon Center",
+                navigation_hint="Navigate to the Pokémon Center and heal your team before challenging the final gym.",
+                completion_condition="healed_at_sootopolis_center",
+                priority=1
+            ),
+
+            # ========== Sootopolis Gym (Objectives 206-215) ==========
+            DirectObjective(  # 206 - OPTIONAL
+                id="optional_collect_sootopolis_items",
+                description="OPTIONAL: Collect items in Sootopolis City (TM31, Wailmer Doll, Elixirs, berries)",
+                action_type="interact",
+                target_location="Sootopolis City",
+                navigation_hint="Collect TM31 (Brick Break) from Black Belt in northwest house, Wailmer Doll from girl east of Pokémon Center, Elixir ×2 from competitive brothers (show large Seedot or Lotad). Pokémon Center girl teaches Double-Edge (one-time).",
+                completion_condition="collected_sootopolis_items",
+                priority=2
+            ),
+
+            DirectObjective(  # 207
+                id="enter_sootopolis_gym",
+                description="Enter the Sootopolis Gym to challenge Gym Leader Juan",
+                action_type="navigate",
+                target_location="Sootopolis Gym",
+                navigation_hint="Navigate to the Sootopolis Gym. The gym specializes in Water-type Pokémon and features an ice puzzle.",
+                completion_condition="entered_sootopolis_gym",
+                priority=1
+            ),
+
+            DirectObjective(  # 208
+                id="navigate_ice_puzzle_to_juan",
+                description="Navigate through the Sootopolis Gym ice-tile puzzle to reach Gym Leader Juan",
+                action_type="navigate",
+                target_location="Sootopolis Gym",
+                navigation_hint="The gym has three separate ice-tile grids with specific movement patterns. Navigate carefully across the slippery tiles. Battle Beauty, Lass, Lady, and Pokéfan trainers with Water-type Pokémon along the way.",
+                completion_condition="reached_gym_leader_juan",
+                priority=1
+            ),
+
+            DirectObjective(  # 209
+                id="battle_gym_leader_juan",
+                description="Battle Gym Leader Juan. His team: Luvdisc (Lv.41), Whiscash (Lv.41), Sealeo (Lv.43), Crawdaunt (Lv.43), Kingdra (Lv.46). Use Grass and Electric-type moves.",
+                action_type="battle",
+                target_location="Sootopolis Gym",
+                navigation_hint="Battle Juan using Grass and Electric-type moves. His Kingdra (Water/Dragon, Lv.46) is the final threat with no Electric weakness. Whiscash is Water/Ground (weak only to Grass). Crawdaunt is Water/Dark. Reward: Rain Badge, TM03 (Water Pulse), PokéNav registration, enables Waterfall field move. If you lose, heal and return.",
+                completion_condition="defeated_juan_and_received_rain_badge",
+                priority=1
+            ),
+
+            DirectObjective(  # 210
+                id="exit_sootopolis_gym",
+                description="Exit the Sootopolis Gym after defeating Juan and obtaining all eight badges",
+                action_type="navigate",
+                target_location="Sootopolis Gym",
+                navigation_hint="After receiving the Rain Badge and TM03, navigate back through the gym to the exit. You now have all eight Gym Badges!",
+                completion_condition="exited_sootopolis_gym_with_all_badges",
+                priority=1
+            ),
+
+            DirectObjective(  # 211
+                id="heal_after_sootopolis_gym",
+                description="Heal your Pokémon after obtaining all eight badges",
+                action_type="interact",
+                target_location="Sootopolis City Pokémon Center",
+                navigation_hint="Return to the Pokémon Center and heal your team. You're now ready to head to the Pokémon League!",
+                completion_condition="healed_after_all_eight_badges",
+                priority=1
+            ),
+
+            # ========== Victory Road (Objectives 212-225) ==========
+            DirectObjective(  # 212 - OPTIONAL
+                id="optional_catch_rayquaza_at_sky_pillar",
+                description="OPTIONAL: Return to Sky Pillar to catch Rayquaza (Level 70) with Mach Bike",
+                action_type="battle",
+                target_location="Sky Pillar",
+                navigation_hint="With the Mach Bike, navigate floors 1F-5F crossing unstable floor patches. On 4F, intentionally fall through cracked tiles to access previously unreachable areas. Climb to 6F where Rayquaza awaits at level 70. Consider using Master Ball. Ice-type moves are super-effective.",
+                completion_condition="caught_rayquaza_at_sky_pillar",
+                priority=2
+            ),
+
+            DirectObjective(  # 213 - OPTIONAL
+                id="optional_catch_legendary_golems",
+                description="OPTIONAL: Catch Regirock, Regice, and Registeel using the Sealed Chamber puzzle",
+                action_type="navigate",
+                target_location="Sealed Chamber",
+                navigation_hint="Navigate to Sealed Chamber on Route 134 (underwater, use Dive). Use Dig on north wall in first chamber. Arrange Wailord (first) and Relicanth (last) in party and examine back room wall to unlock three ruins: Desert Ruins/Route 111 (Regirock Lv.40), Island Cave/Route 105 (Regice Lv.40), Ancient Tomb/Route 120 (Registeel Lv.40).",
+                completion_condition="completed_regi_quest",
+                priority=2
+            ),
+
+            DirectObjective(  # 214
+                id="navigate_to_ever_grande_city_south",
+                description="Navigate to Ever Grande City (south) from Mossdeep City",
+                action_type="navigate",
+                target_location="Ever Grande City",
+                navigation_hint="Use Fly to Mossdeep City or Surf/Waterfall. Sail southward from Mossdeep, then eastward through Route 128's narrow channel to reach Ever Grande City with all eight badges.",
+                completion_condition="reached_ever_grande_city_south",
+                priority=1
+            ),
+
+            DirectObjective(  # 215
+                id="heal_and_stock_up_at_ever_grande",
+                description="Visit Pokémon Center and Poké Mart at Ever Grande City to prepare for Victory Road and Pokémon League",
+                action_type="interact",
+                target_location="Ever Grande City Pokémon Center",
+                navigation_hint="Heal your Pokémon at the Center. Stock up on healing items (Hyper Potions, Full Restores, Full Heals, Revives) and Poké Balls at the Mart. Talk to Scott before continuing.",
+                completion_condition="prepared_at_ever_grande_city",
+                priority=1
+            ),
+
+            DirectObjective(  # 216
+                id="enter_victory_road",
+                description="Enter Victory Road, the final challenge before the Pokémon League",
+                action_type="navigate",
+                target_location="Victory Road",
+                navigation_hint="From Ever Grande City south, navigate to Victory Road entrance. You'll need Surf, Strength, Rock Smash, and Waterfall to navigate through.",
+                completion_condition="entered_victory_road",
+                priority=1
+            ),
+
+            DirectObjective(  # 217
+                id="navigate_victory_road_1f",
+                description="Navigate Victory Road 1F, battling Cooltrainers and encountering Wally",
+                action_type="navigate",
+                target_location="Victory Road 1F",
+                navigation_hint="Battle Cooltrainer Albert on 1F. You'll encounter Wally here who challenges you to a battle.",
+                completion_condition="navigated_victory_road_1f",
+                priority=1
+            ),
+
+            DirectObjective(  # 218
+                id="battle_wally_in_victory_road",
+                description="Battle your rival Wally. His team: Altaria (Lv.44), Delcatty (Lv.43), Roselia (Lv.44), Magneton (Lv.41), Gardevoir (Lv.45). Use Ice and Dark-type moves.",
+                action_type="battle",
+                target_location="Victory Road 1F",
+                navigation_hint="Wally's team has grown significantly stronger. His Gardevoir (Psychic/Fairy, Lv.45) is his ace. Ice-type moves work well against Altaria. Dark-type moves effective against Gardevoir. Use Electric against Altaria.",
+                completion_condition="defeated_wally_in_victory_road",
+                priority=1
+            ),
+
+            DirectObjective(  # 219
+                id="navigate_victory_road_b1f",
+                description="Navigate Victory Road B1F using Strength to move boulders",
+                action_type="navigate",
+                target_location="Victory Road B1F",
+                navigation_hint="Use Strength to move boulders and create paths. Battle Cooltrainers Shannon and Samuel. Collect items along the way.",
+                completion_condition="navigated_victory_road_b1f",
+                priority=1
+            ),
+
+            DirectObjective(  # 220
+                id="navigate_victory_road_b2f",
+                description="Navigate Victory Road B2F with waterfalls and bridges",
+                action_type="navigate",
+                target_location="Victory Road B2F",
+                navigation_hint="Navigate multiple bridges and waterfalls. Face Cooltrainers Julie, Owen, Caroline, and Vito. Use Waterfall to climb waterfalls. Collect Max Elixir, PP Up, Ultra Ball, Full Restore, TM29 (Psychic), Max Repel, Full Heal, Elixir.",
+                completion_condition="navigated_victory_road_b2f",
+                priority=1
+            ),
+
+            DirectObjective(  # 221
+                id="exit_victory_road_to_ever_grande_north",
+                description="Exit Victory Road to reach Ever Grande City (north)",
+                action_type="navigate",
+                target_location="Ever Grande City North",
+                navigation_hint="Complete the final sections of Victory Road (battle Cooltrainer Edgar) and exit to the northern part of Ever Grande City. Follow the stone walkway to the Pokémon League entrance.",
+                completion_condition="reached_ever_grande_city_north",
+                priority=1
+            ),
+
+            DirectObjective(  # 222
+                id="heal_before_elite_four",
+                description="Heal your Pokémon at the Pokémon League Pokémon Center before challenging the Elite Four",
+                action_type="interact",
+                target_location="Pokémon League Pokémon Center",
+                navigation_hint="This is your last chance to heal before the Elite Four gauntlet. Visit the Pokémon Center in the lobby. Stock up on healing items at the Poké Mart (Hyper Potions, Full Restores, Full Heals). Consider purchasing stat-boosting battle items from Lilycove Department Store if you haven't already.",
+                completion_condition="healed_before_elite_four",
+                priority=1
+            ),
+
+            # ========== Elite Four and Champion (Objectives 223-232) ==========
+            DirectObjective(  # 223
+                id="battle_elite_four_sidney",
+                description="Battle Elite Four Sidney (Dark-type Master). His team: Mightyena (Lv.46), Shiftry (Lv.48), Cacturne (Lv.46), Crawdaunt (Lv.48), Absol (Lv.49). Use Bug and Fighting-type moves.",
+                action_type="battle",
+                target_location="Elite Four - Sidney's Chamber",
+                navigation_hint="Enter the first chamber and battle Sidney. Use Bug and Fighting-type moves for super-effective damage. Psychic attacks won't work on Dark-types. Reward: $4,900. You cannot leave or heal between Elite Four battles!",
+                completion_condition="defeated_elite_four_sidney",
+                priority=1
+            ),
+
+            DirectObjective(  # 224
+                id="battle_elite_four_phoebe",
+                description="Battle Elite Four Phoebe (Ghost-type Master). Her team: Dusclops (Lv.48), Banette (Lv.49), Sableye (Lv.50), Banette (Lv.49), Dusclops (Lv.51). Use Ghost and Dark-type moves.",
+                action_type="battle",
+                target_location="Elite Four - Phoebe's Chamber",
+                navigation_hint="Battle Phoebe using Ghost and Dark-type attacks for super-effective damage. Normal and Fighting-type moves won't work. Reward: $5,100.",
+                completion_condition="defeated_elite_four_phoebe",
+                priority=1
+            ),
+
+            DirectObjective(  # 225
+                id="battle_elite_four_glacia",
+                description="Battle Elite Four Glacia (Ice-type Master). Her team: Sealeo (Lv.50), Glalie (Lv.50), Sealeo (Lv.52), Glalie (Lv.52), Walrein (Lv.53). Use Fire, Fighting, Rock, or Steel-type moves.",
+                action_type="battle",
+                target_location="Elite Four - Glacia's Chamber",
+                navigation_hint="Battle Glacia using Fire, Fighting, Rock, or Steel-type moves. Electric and Grass-type moves are also effective. Reward: $5,300.",
+                completion_condition="defeated_elite_four_glacia",
+                priority=1
+            ),
+
+            DirectObjective(  # 226
+                id="battle_elite_four_drake",
+                description="Battle Elite Four Drake (Dragon-type Master). His team: Shelgon (Lv.52), Altaria (Lv.54), Kingdra (Lv.53), Flygon (Lv.53), Salamence (Lv.55). Use Dragon and Ice-type moves.",
+                action_type="battle",
+                target_location="Elite Four - Drake's Chamber",
+                navigation_hint="Battle Drake using Dragon-type moves (work against all his Pokémon) or Ice-type moves (super-effective against most). Be careful with Kingdra (Water/Dragon) which resists Ice. Reward: $5,500.",
+                completion_condition="defeated_elite_four_drake",
+                priority=1
+            ),
+
+            DirectObjective(  # 227
+                id="save_before_champion_wallace",
+                description="Save your game before entering the Champion's chamber",
+                action_type="interact",
+                target_location="Before Champion Chamber",
+                navigation_hint="After defeating all four Elite Four members, you're at the entrance to the Champion's chamber. SAVE YOUR GAME before proceeding. This is a crucial save point!",
+                completion_condition="saved_before_champion",
+                priority=1
+            ),
+
+            DirectObjective(  # 228
+                id="battle_champion_wallace",
+                description="Battle Champion Wallace (Water-type focus). His team: Wailord (Lv.57), Tentacruel (Lv.55), Ludicolo (Lv.56), Whiscash (Lv.56), Gyarados (Lv.56), Milotic (Lv.58). Use Grass and Electric-type moves.",
+                action_type="battle",
+                target_location="Champion Chamber",
+                navigation_hint="Battle Wallace, the final opponent. Use Grass/Electric vs Wailord. Electric/Ground/Psychic vs Tentacruel. Flying/Poison/Bug vs Ludicolo. Grass (4x) vs Whiscash. Electric/Rock vs Gyarados. Electric/Grass vs Milotic (his ace with high defenses and healing). Reward: $11,600 and Champion title!",
+                completion_condition="defeated_champion_wallace",
+                priority=1
+            ),
+
+            DirectObjective(  # 229
+                id="enter_hall_of_fame",
+                description="Follow Wallace to the Hall of Fame and record your champions",
+                action_type="cutscene",
+                target_location="Hall of Fame",
+                navigation_hint="After victory, Wallace leads you to the Hall of Fame. Place your Poké Balls in the machine to save your champions' data for posterity. The game automatically saves upon completion. Congratulations, Champion!",
+                completion_condition="entered_hall_of_fame",
+                priority=1
+            ),
+
+            DirectObjective(  # 230
+                id="watch_credits_and_complete_game",
+                description="Watch the ending credits and complete the main story of Pokémon Emerald",
+                action_type="cutscene",
+                target_location="Credits",
+                navigation_hint="Enjoy the ending credits. The main story of Pokémon Emerald is complete! Post-game content and Battle Frontier will become available after the credits.",
+                completion_condition="completed_main_story",
+                priority=1
+            ),
         ]
         self.current_index = min(start_index, len(self.current_sequence))
         # Mark all objectives before start_index as completed
