@@ -380,8 +380,8 @@ class PokemonEmeraldReader:
                 logger.info(f"Read player name: '{decoded_name}'")
                 return decoded_name
             
-            logger.warning("Could not read valid player name")
-            return "Player"
+            # logger.warning("Could not read valid player name")
+            return ""
             
         except Exception as e:
             logger.warning(f"Failed to read player name: {e}")
