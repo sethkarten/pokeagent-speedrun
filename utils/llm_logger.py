@@ -43,13 +43,21 @@ class LLMLogger:
             "total_llm_calls": 0
         }
         
-        # Model pricing (per 1K tokens) - can be updated based on actual pricing
+        # Model pricing (per 1K tokens) - Updated January 2025
         self.pricing = {
+            # OpenAI models
             "gpt-4o": {"prompt": 0.01, "completion": 0.03},
             "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
             "o3-mini": {"prompt": 0.0012, "completion": 0.0048},
-            "gemini-2.5-flash": {"prompt": 0.000315, "completion": 0.00126},
-            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.005},
+
+            # Gemini 2.5 models (standard pricing, not thinking mode)
+            "gemini-2.5-flash": {"prompt": 0.0003, "completion": 0.0006},  # $0.30/$0.60 per 1M
+            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01},      # $1.25/$10 per 1M
+
+            # Gemini 3 models (≤200K context)
+            "gemini-3-pro-preview": {"prompt": 0.002, "completion": 0.012},  # $2/$12 per 1M
+            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012},          # $2/$12 per 1M
+
             "default": {"prompt": 0.001, "completion": 0.002}  # Default pricing
         }
         
