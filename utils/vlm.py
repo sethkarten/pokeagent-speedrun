@@ -841,7 +841,7 @@ class VertexBackend(VLMBackend):
         }
 
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
-        """Prepare image for Gemini API with 4x upscaling"""
+        """Prepare image for Gemini API - upscale to 4x resolution (HD)"""
         # Handle both PIL Images and numpy arrays
         if hasattr(img, 'convert'):  # It's a PIL Image
             image = img
@@ -850,12 +850,26 @@ class VertexBackend(VLMBackend):
         else:
             raise ValueError(f"Unsupported image type: {type(img)}")
 
-        # # Upscale by 4x using high-quality resampling
-        # new_width = image.width * 4
-        # new_height = image.height * 4
-        # image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        # Upscale to 4x resolution for better detail
+        original_size = image.size  # (width, height)
+        upscaled_size = (original_size[0] * 4, original_size[1] * 4)
 
-        return image
+        # Use LANCZOS for high-quality upscaling
+        upscaled_image = image.resize(upscaled_size, Image.Resampling.LANCZOS)
+
+        # Save debug copy to see what it looks like
+        try:
+            from pathlib import Path
+            debug_dir = Path(".pokeagent_cache")
+            debug_dir.mkdir(exist_ok=True)
+            debug_path = debug_dir / "debug_upscaled_frame.png"
+            upscaled_image.save(debug_path)
+            logger.debug(f"Image upscaled: {original_size} → {upscaled_size} (4x) [saved to {debug_path}]")
+        except Exception as e:
+            logger.debug(f"Could not save debug image: {e}")
+            logger.debug(f"Image upscaled: {original_size} → {upscaled_size} (4x)")
+
+        return upscaled_image
 
     def _extract_thinking_from_response(self, response):
         """Extract thinking/reasoning text from response for logging
@@ -1264,14 +1278,23 @@ class GeminiBackend(VLMBackend):
         self.genai = genai
     
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
-        """Prepare image for Gemini API"""
+        """Prepare image for Gemini API - upscale to 4x resolution (HD)"""
         # Handle both PIL Images and numpy arrays
         if hasattr(img, 'convert'):  # It's a PIL Image
-            return img
+            image = img
         elif hasattr(img, 'shape'):  # It's a numpy array
-            return Image.fromarray(img)
+            image = Image.fromarray(img)
         else:
             raise ValueError(f"Unsupported image type: {type(img)}")
+
+        # Upscale to 4x resolution for better detail
+        original_size = image.size  # (width, height)
+        upscaled_size = (original_size[0] * 4, original_size[1] * 4)
+
+        # Use LANCZOS for high-quality upscaling
+        image = image.resize(upscaled_size, Image.Resampling.LANCZOS)
+
+        return image
 
     def _extract_text_from_response(self, response):
         """Extract text from Gemini response, handling multiple parts
@@ -1364,9 +1387,21 @@ class GeminiBackend(VLMBackend):
 
         for attempt in range(max_retries):
             try:
+                # Configure tool calling to require function calls when tools are available
+                generation_kwargs = {'request_options': {'timeout': timeout}}
+
+                if self.tools:
+                    # Force function calling mode - require the model to call a function
+                    # Use dict format compatible with both Gemini API and VertexAI
+                    generation_kwargs['tool_config'] = {
+                        'function_calling_config': {
+                            'mode': 'ANY'  # Require function call (ANY, AUTO, or NONE)
+                        }
+                    }
+
                 response = self.model.generate_content(
                     content_parts,
-                    request_options={'timeout': timeout}
+                    **generation_kwargs
                 )
                 return response
             except Exception as e:
