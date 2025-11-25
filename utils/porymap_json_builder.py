@@ -146,12 +146,14 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     # Extract warps
     warps = []
     warp_positions = set()  # Track warp positions for grid overlay
+    needs_north_extension = False  # Track if we need to extend the grid north
     needs_south_extension = False  # Track if we need to extend the grid south
     needs_east_extension = False  # Track if we need to extend the grid east
     needs_west_extension = False  # Track if we need to extend the grid west
     max_warp_y = 0  # Track the maximum warp Y position
     max_warp_x = 0  # Track the maximum warp X position
     min_warp_x = float('inf')  # Track the minimum warp X position
+    min_warp_y = float('inf')  # Track the minimum warp Y position
 
     for warp in map_data.get("warp_events", []):
         original_warp_x = warp.get("x", 0)
@@ -164,6 +166,22 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
         if layout_name and metatiles and include_grid and grid:
             height = len(grid)
             width = len(grid[0]) if height > 0 else 0
+
+            # Check if north of warp is blocked (edge warp going north)
+            if warp_y - 1 < 0 or grid[warp_y - 1][warp_x] == '#':
+                # Check if entire row north is blocked
+                is_north_edge = True
+                if warp_y - 1 >= 0:
+                    # Check surrounding tiles to confirm it's a map edge
+                    for check_x in range(max(0, warp_x - 2), min(width, warp_x + 3)):
+                        if warp_y - 1 >= 0 and grid[warp_y - 1][check_x] != '#':
+                            is_north_edge = False
+                            break
+
+                if is_north_edge:
+                    warp_y -= 1
+                    if warp_y < 0:
+                        needs_north_extension = True
 
             # Check if south of warp is blocked (edge warp going south)
             if warp_y + 1 >= height or grid[warp_y + 1][warp_x] == '#':
@@ -223,6 +241,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
         max_warp_y = max(max_warp_y, warp_y)
         max_warp_x = max(max_warp_x, warp_x)
         min_warp_x = min(min_warp_x, warp_x)
+        min_warp_y = min(min_warp_y, warp_y)
 
         warps.append({
             "x": warp_x,
@@ -237,6 +256,32 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
 
     # Extend grid and ASCII if warps go out of bounds
     if layout_name and metatiles:
+        # North extension (prepend rows)
+        if needs_north_extension:
+            extra_rows_needed = abs(min_warp_y)
+
+            if include_grid and grid:
+                # Prepend blocked rows at the top
+                for _ in range(extra_rows_needed):
+                    grid.insert(0, ['#'] * len(grid[0]))
+
+            if include_ascii and ascii_map:
+                ascii_lines = ascii_map.split('\n')
+                # Prepend blocked rows at the top
+                for _ in range(extra_rows_needed):
+                    ascii_lines.insert(0, '#' * len(ascii_lines[0]))
+                ascii_map = '\n'.join(ascii_lines)
+
+            # Adjust all warp Y positions to account for the prepended rows
+            for w in warps:
+                w["y"] += extra_rows_needed
+
+            # Also update warp_positions set with adjusted coordinates
+            warp_positions = {(x, y + extra_rows_needed) for x, y in warp_positions}
+
+            height = len(metatiles) + extra_rows_needed
+            dimensions["height"] = height
+
         # South extension
         if needs_south_extension:
             extra_rows_needed = max_warp_y - len(metatiles) + 1

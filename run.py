@@ -104,6 +104,61 @@ def start_frame_server(port):
         return None
 
 
+def start_cli_agent(agent_config, args):
+    """Generic helper to start any CLI-based agent
+
+    Args:
+        agent_config: Dict with keys: 'name', 'description', 'details' (list), 'module', 'class'
+        args: Command line arguments
+
+    Returns:
+        Exit code from agent.run()
+    """
+    print(f"\n🖥️  {agent_config['name']}")
+    print("=" * 60)
+    print("✅ Server is running")
+    print(f"🤖 Starting {agent_config['name']}...")
+    for detail in agent_config.get('details', []):
+        print(f"   {detail}")
+    print("")
+
+    # Dynamic import
+    module = __import__(agent_config['module'], fromlist=[agent_config['class']])
+    agent_class = getattr(module, agent_config['class'])
+    print(f"📦 {agent_config['class']} imported successfully", flush=True)
+
+    print(f"🔧 Creating agent with model={args.model_name}", flush=True)
+
+    # Build agent kwargs based on config
+    agent_kwargs = {
+        "server_url": f"http://localhost:{args.port}",
+        "model": args.model_name,
+        "max_steps": args.max_steps if hasattr(args, 'max_steps') else None
+    }
+
+    # Add backend if specified in config
+    if agent_config.get('use_backend', False):
+        agent_kwargs["backend"] = args.backend
+
+    # Add allow_walkthrough if specified in config
+    if agent_config.get('supports_walkthrough', False):
+        agent_kwargs["allow_walkthrough"] = args.allow_walkthrough if hasattr(args, 'allow_walkthrough') else False
+
+    # Add allow_slam if specified in config
+    if agent_config.get('supports_slam', False):
+        agent_kwargs["allow_slam"] = args.allow_slam if hasattr(args, 'allow_slam') else False
+
+    # Add prompt optimization if specified in config
+    if agent_config.get('supports_prompt_optimization', False):
+        agent_kwargs["enable_prompt_optimization"] = args.enable_prompt_optimization if hasattr(args, 'enable_prompt_optimization') else False
+        agent_kwargs["optimization_frequency"] = args.optimization_frequency if hasattr(args, 'optimization_frequency') else 10
+
+    agent = agent_class(**agent_kwargs)
+    print("✅ Agent created", flush=True)
+
+    return agent.run()
+
+
 def main():
     """Main entry point for the Pokemon Agent"""
     parser = argparse.ArgumentParser(description="Pokemon Emerald AI Agent")
@@ -126,8 +181,8 @@ def main():
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="fourmodule",
-                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli", "my_cli_agent", "autonomous_cli"],
-                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), my_cli_agent (custom CLI agent), or autonomous_cli (autonomous agent with all tools)")
+                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli", "my_cli_agent", "autonomous_cli", "vision_only"],
+                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), my_cli_agent (custom CLI agent), autonomous_cli (autonomous agent with all tools), or vision_only (vision-only agent without map/pathfinding)")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
@@ -156,7 +211,11 @@ def main():
                        help="Enable reflective prompt optimization based on trajectory analysis")
     parser.add_argument("--optimization-frequency", type=int, default=10,
                        help="How often to run prompt optimization (default: every 10 steps)")
-    
+    parser.add_argument("--allow-walkthrough", action="store_true",
+                       help="Enable get_walkthrough tool for vision_only agent")
+    parser.add_argument("--allow-slam", action="store_true",
+                       help="Enable SLAM (map building) for vision_only agent")
+
     args = parser.parse_args()
     
     print("=" * 60)
@@ -213,7 +272,7 @@ def main():
                 print(f"ℹ️  Knowledge base file does not exist yet: {knowledge_base_file}")
         
         # Auto-start server if requested
-        if args.agent_auto or args.manual or args.scaffold in ["cli", "my_cli_agent", "autonomous_cli", "geminiplays"]:
+        if args.agent_auto or args.manual or args.scaffold in ["cli", "my_cli_agent", "autonomous_cli", "geminiplays", "vision_only"]:
             print("\n📡 Starting server process...")
             server_process = start_server(args)
             
@@ -248,7 +307,8 @@ def main():
             "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
             "cli": "Gemini API with MCP tools (native function calling)",
             "my_cli_agent": "My Custom CLI Agent (customized Gemini API with MCP tools)",
-            "autonomous_cli": "Autonomous CLI Agent (creates own objectives, all tools enabled)"
+            "autonomous_cli": "Autonomous CLI Agent (creates own objectives, all tools enabled)",
+            "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)"
         }
         print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
@@ -258,80 +318,59 @@ def main():
         
         print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream")
 
-        # Check if this is CLI scaffold mode
-        if args.scaffold == "cli":
-            print("\n🖥️  CLI Scaffold Mode - Gemini API with MCP Tools")
-            print("=" * 60)
-            print("✅ Server is running")
-            print("🤖 Starting CLI agent...")
-            print("   Using Gemini API directly (no gemini-cli dependency)")
-            print("   MCP tools exposed via HTTP endpoints")
-            print("")
+        # Configuration for CLI-based agents
+        cli_agent_configs = {
+            "cli": {
+                "name": "CLI Scaffold Mode - Gemini API with MCP Tools",
+                "details": [
+                    "Using Gemini API directly (no gemini-cli dependency)",
+                    "MCP tools exposed via HTTP endpoints"
+                ],
+                "module": "agent.cli_agent",
+                "class": "CLIAgent",
+                "use_backend": False
+            },
+            "my_cli_agent": {
+                "name": "My Custom CLI Agent Mode - Customized Gemini API with MCP Tools",
+                "details": [
+                    "Using customized Gemini API implementation",
+                    "MCP tools exposed via HTTP endpoints"
+                ],
+                "module": "agent.my_cli_agent",
+                "class": "MyCLIAgent",
+                "use_backend": True,
+                "supports_prompt_optimization": True
+            },
+            "autonomous_cli": {
+                "name": "Autonomous CLI Agent Mode - Creates Own Objectives + All Tools",
+                "details": [
+                    "Using autonomous Gemini API implementation",
+                    "ALL MCP tools enabled (23 tools total)",
+                    "Agent creates its own objectives dynamically"
+                ],
+                "module": "agent.my_cli_agent_autonomous",
+                "class": "AutonomousCLIAgent",
+                "use_backend": True,
+                "supports_prompt_optimization": True
+            },
+            "vision_only": {
+                "name": "Vision-Only Agent Mode - No Map Info, No Pathfinding",
+                "details": [
+                    "Relies purely on visual input (screenshots)",
+                    "No map information or pathfinding assistance",
+                    "Navigates using directional buttons only"
+                ],
+                "module": "agent.vision_only_agent",
+                "class": "VisionOnlyAgent",
+                "use_backend": True,
+                "supports_walkthrough": True,
+                "supports_slam": True
+            }
+        }
 
-            # Import and run CLI agent (native Gemini API)
-            from agent.cli_agent import CLIAgent
-            print("📦 CLIAgent imported successfully", flush=True)
-
-            print(f"🔧 Creating agent with model={args.model_name}", flush=True)
-            agent = CLIAgent(
-                server_url=f"http://localhost:{args.port}",
-                model=args.model_name,
-                max_steps=args.max_steps if hasattr(args, 'max_steps') else None
-            )
-            print("✅ Agent created", flush=True)
-
-            return agent.run()
-        elif args.scaffold == "my_cli_agent":
-            print("\n🖥️  My Custom CLI Agent Mode - Customized Gemini API with MCP Tools")
-            print("=" * 60)
-            print("✅ Server is running")
-            print("🤖 Starting My Custom CLI agent...")
-            print("   Using customized Gemini API implementation")
-            print("   MCP tools exposed via HTTP endpoints")
-            print("")
-
-            # Import and run My Custom CLI agent
-            from agent.my_cli_agent import MyCLIAgent
-            print("📦 MyCLIAgent imported successfully", flush=True)
-
-            print(f"🔧 Creating agent with model={args.model_name}", flush=True)
-            agent = MyCLIAgent(
-                server_url=f"http://localhost:{args.port}",
-                model=args.model_name,
-                backend=args.backend,
-                max_steps=args.max_steps if hasattr(args, 'max_steps') else None,
-                enable_prompt_optimization=args.enable_prompt_optimization,
-                optimization_frequency=args.optimization_frequency
-            )
-            print("✅ Agent created", flush=True)
-
-            return agent.run()
-        elif args.scaffold == "autonomous_cli":
-            print("\n🖥️  Autonomous CLI Agent Mode - Creates Own Objectives + All Tools")
-            print("=" * 60)
-            print("✅ Server is running")
-            print("🤖 Starting Autonomous CLI agent...")
-            print("   Using autonomous Gemini API implementation")
-            print("   ALL MCP tools enabled (23 tools total)")
-            print("   Agent creates its own objectives dynamically")
-            print("")
-
-            # Import and run Autonomous CLI agent
-            from agent.my_cli_agent_autonomous import AutonomousCLIAgent
-            print("📦 AutonomousCLIAgent imported successfully", flush=True)
-
-            print(f"🔧 Creating agent with model={args.model_name}", flush=True)
-            agent = AutonomousCLIAgent(
-                server_url=f"http://localhost:{args.port}",
-                model=args.model_name,
-                backend=args.backend,
-                max_steps=args.max_steps if hasattr(args, 'max_steps') else None,
-                enable_prompt_optimization=args.enable_prompt_optimization,
-                optimization_frequency=args.optimization_frequency
-            )
-            print("✅ Agent created", flush=True)
-
-            return agent.run()
+        # Check if this is a CLI-based agent
+        if args.scaffold in cli_agent_configs:
+            return start_cli_agent(cli_agent_configs[args.scaffold], args)
         elif args.scaffold == "geminiplays":
             print("\n🖥️  GeminiPlaysAgent Mode - Native Tools with MCP Integration")
             print("=" * 60)
