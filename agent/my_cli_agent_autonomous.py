@@ -881,6 +881,50 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             Tuple of (success: bool, response: str)
         """
         try:
+            # Capture pre-state for trajectory logging
+            from utils.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            
+            # DEBUG: Log run_manager availability
+            if not run_manager:
+                logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None - trajectory logging will be skipped")
+                # Try to initialize if not available
+                import os
+                run_id = os.environ.get("RUN_DATA_ID")
+                if run_id:
+                    logger.info(f"🔍 [DEBUG] Attempting to initialize run_manager with run_id: {run_id}")
+                    from utils.run_data_manager import initialize_run_data_manager
+                    run_manager = initialize_run_data_manager(run_id=run_id)
+                    if run_manager:
+                        logger.info(f"🔍 [DEBUG] Successfully initialized run_manager")
+                    else:
+                        logger.error(f"🔍 [DEBUG] Failed to initialize run_manager")
+                else:
+                    logger.warning(f"🔍 [DEBUG] RUN_DATA_ID environment variable not set")
+            else:
+                logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager available: {run_manager.run_id}")
+            
+            pre_state = None
+            if run_manager:
+                # Get current game state for pre-state snapshot
+                try:
+                    game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
+                    if isinstance(game_state_result, str):
+                        import json
+                        game_state_result = json.loads(game_state_result)
+                    if game_state_result.get("success"):
+                        raw_state = game_state_result.get("raw_state", {})
+                        pre_state = run_manager.create_state_snapshot(raw_state)
+                        logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: pre_state captured: {pre_state.get('location', 'Unknown')}")
+                    else:
+                        logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: get_game_state returned success=False")
+                except Exception as e:
+                    logger.error(f"🔍 [DEBUG] Step {self.step_count + 1}: Could not capture pre-state: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+            else:
+                logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None, skipping pre_state capture")
+            
             logger.info(f"📤 Sending prompt to {self.backend}...")
             logger.info(f"   Model: {self.model}")
             logger.info(f"   Prompt length: {len(prompt)} chars")
@@ -1085,6 +1129,21 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                     self._store_function_result_for_context(last_call['name'], last_call['result'])
 
                 self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details)
+                
+                # Log trajectory for this step
+                if run_manager and pre_state:
+                    logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: Attempting to log trajectory (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
+                    self._log_trajectory_for_step(
+                        run_manager=run_manager,
+                        step_num=self.step_count + 1,  # Use step_count + 1 since we increment after
+                        pre_state=pre_state,
+                        prompt=prompt,
+                        reasoning=tool_reasoning or full_response,
+                        tool_calls=tool_calls_made,
+                        response=full_response
+                    )
+                else:
+                    logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
 
                 return True, full_response
             else:
@@ -1100,6 +1159,21 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                 logger.info(f"✅ Step completed in {duration:.2f}s")
 
                 self._add_to_history(prompt, text_content, tool_calls=[])
+                
+                # Log trajectory for this step (text response, no tool calls)
+                if run_manager and pre_state:
+                    logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: Attempting to log trajectory (text response)")
+                    self._log_trajectory_for_step(
+                        run_manager=run_manager,
+                        step_num=self.step_count + 1,  # Use step_count + 1 since we increment after
+                        pre_state=pre_state,
+                        prompt=prompt,
+                        reasoning=text_content,
+                        tool_calls=[],
+                        response=text_content
+                    )
+                else:
+                    logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (text response, run_manager={run_manager is not None}, pre_state={pre_state is not None})")
 
                 return True, text_content
 
@@ -1626,6 +1700,80 @@ Step {step_count}"""
             return "\n⚠️ WARNING: You appear to be stuck at this location. Try a different approach!\n" \
                    "💡 TIP: If you try an action like RIGHT but coordinates don't change from (X,Y) to (X+1,Y), there's likely an obstacle.\n"
         return ""
+    
+    def _log_trajectory_for_step(self, run_manager, step_num: int, pre_state: dict, 
+                                  prompt: str, reasoning: str, tool_calls: list, response: str):
+        """Log trajectory for a CLI agent step
+        
+        Args:
+            run_manager: RunDataManager instance
+            step_num: Step number
+            pre_state: Pre-state snapshot
+            prompt: Prompt sent to LLM
+            reasoning: Reasoning from LLM
+            tool_calls: List of tool calls made
+            response: Full response from LLM
+        """
+        try:
+            # Get post-state after tool calls
+            try:
+                game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
+                if isinstance(game_state_result, str):
+                    import json
+                    game_state_result = json.loads(game_state_result)
+                if game_state_result.get("success"):
+                    raw_state = game_state_result.get("raw_state", {})
+                    post_state = run_manager.create_state_snapshot(raw_state)
+                else:
+                    post_state = pre_state  # Fallback to pre-state
+            except Exception as e:
+                logger.debug(f"Could not capture post-state: {e}")
+                post_state = pre_state  # Fallback to pre-state
+            
+            # Build action dict from tool calls
+            action = {
+                "type": "tool_calls",
+                "tool_calls": [
+                    {
+                        "name": tc.get("name"),
+                        "args": {k: v for k, v in tc.get("args", {}).items() 
+                                if k not in ["screenshot_base64"]}  # Exclude large base64 data
+                    }
+                    for tc in tool_calls
+                ],
+                "total_tool_calls": len(tool_calls)
+            }
+            
+            # Determine outcome
+            outcome = {
+                "success": True,
+                "objectives_completed": []
+            }
+            
+            # Check if location/coordinates changed
+            if pre_state.get("location") != post_state.get("location"):
+                outcome["observations"] = f"Moved from {pre_state.get('location')} to {post_state.get('location')}"
+            elif pre_state.get("player_coords") != post_state.get("player_coords"):
+                outcome["observations"] = f"Position changed from {pre_state.get('player_coords')} to {post_state.get('player_coords')}"
+            else:
+                outcome["observations"] = "No significant state change"
+            
+            # Log trajectory
+            logger.debug(f"🔍 [DEBUG] Calling run_manager.log_trajectory for step {step_num}")
+            run_manager.log_trajectory(
+                step=step_num,
+                reasoning=reasoning,
+                action=action,
+                pre_state=pre_state,
+                post_state=post_state,
+                outcome=outcome,
+                llm_prompt=prompt
+            )
+            logger.info(f"🔍 [DEBUG] Successfully logged trajectory for step {step_num}")
+        except Exception as e:
+            logger.error(f"🔍 [DEBUG] Failed to log trajectory at step {step_num}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     def _format_action_history(self) -> str:
         """Format action history - shows only LLM thinking and actions taken."""

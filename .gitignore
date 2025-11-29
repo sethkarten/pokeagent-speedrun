@@ -189,3 +189,5 @@ cython_debug/
 .pokeagent_cache/*
 *scripts/*
 test_gemini.py
+run_data/*
+out.txt
