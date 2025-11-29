@@ -2911,15 +2911,33 @@ class DirectObjectiveManager:
         logger.info(f"Added {len(objectives_data)} dynamic objectives to sequence")
     
     def save_completed_objectives(self, run_dir: Optional[str] = None):
-        """Save completed objectives history to file in timestamped run directory
+        """Save completed objectives history to file in run_data agent_scratch_space
         
         Args:
-            run_dir: Optional run directory path. If None, uses timestamped directory.
+            run_dir: Optional run directory path. If None, tries to use run_data manager.
+                     DEPRECATED: No longer falls back to .pokeagent_cache.
+        
+        Raises:
+            RuntimeError: If run_dir is not provided and run_data_manager is not available.
         """
         if not run_dir:
-            # Create timestamped directory similar to video recordings
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_dir = os.path.join(".pokeagent_cache", f"run_{timestamp}")
+            # Try to use run_data manager if available
+            try:
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    run_dir = str(run_manager.get_scratch_space_dir())
+                else:
+                    raise RuntimeError(
+                        "Cannot save completed_objectives: run_data_manager not initialized. "
+                        "Please ensure run_data_manager is initialized before saving objectives. "
+                        "Saving to .pokeagent_cache is deprecated."
+                    )
+            except ImportError:
+                raise RuntimeError(
+                    "Cannot save completed_objectives: run_data_manager module not available. "
+                    "Saving to .pokeagent_cache is deprecated."
+                )
         
         os.makedirs(run_dir, exist_ok=True)
         

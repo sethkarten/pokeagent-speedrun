@@ -19,14 +19,26 @@ logger = logging.getLogger(__name__)
 class LLMLogger:
     """Logger for all LLM interactions"""
     
-    def __init__(self, log_dir: str = "llm_logs"):
+    def __init__(self, log_dir: str = "llm_logs", session_id: Optional[str] = None):
         """Initialize the LLM logger
         
         Args:
             log_dir: Directory to store log files
+            session_id: Optional session ID. If None, checks environment variable LLM_SESSION_ID.
+                        If still None, generates one from current time.
+                        This ensures consistent logging across processes.
         """
         self.log_dir = log_dir
-        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Check for session_id from environment variable (for multiprocess consistency)
+        if session_id is None:
+            session_id = os.environ.get("LLM_SESSION_ID")
+        
+        # Generate new session_id if still None
+        if session_id is None:
+            session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        self.session_id = session_id
         self.log_file = os.path.join(log_dir, f"llm_log_{self.session_id}.jsonl")
         
         # Ensure log directory exists
@@ -467,7 +479,9 @@ def get_llm_logger() -> LLMLogger:
     """
     global _llm_logger
     if _llm_logger is None:
-        _llm_logger = LLMLogger()
+        # Check for session_id from environment (set by client for multiprocess consistency)
+        session_id = os.environ.get("LLM_SESSION_ID")
+        _llm_logger = LLMLogger(session_id=session_id)
     return _llm_logger
 
 def setup_map_stitcher_checkpoint_integration(memory_reader):

@@ -16,11 +16,26 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from server.client import run_multiprocess_client
 
 
-def start_server(args):
-    """Start the server process with appropriate arguments"""
+def start_server(args, run_id=None):
+    """Start the server process with appropriate arguments
+    
+    Args:
+        args: Command line arguments
+        run_id: Optional run_id to pass to server via environment variable
+    """
     # Use the same Python executable that's running this script
     python_exe = sys.executable
     server_cmd = [python_exe, "-m", "server.app", "--port", str(args.port)]
+    
+    # Pass run_id and llm_session_id to server via environment variable if provided
+    server_env = os.environ.copy()
+    if run_id:
+        server_env["RUN_DATA_ID"] = run_id
+    
+    # Pass LLM session_id if available (for consistent logging across processes)
+    llm_session_id = os.environ.get("LLM_SESSION_ID")
+    if llm_session_id:
+        server_env["LLM_SESSION_ID"] = llm_session_id
     
     # Pass through server-relevant arguments
     if args.record:
@@ -32,7 +47,7 @@ def start_server(args):
         if os.path.exists(checkpoint_state):
             server_cmd.extend(["--load-state", checkpoint_state])
             # Set environment variable to enable LLM checkpoint loading
-            os.environ["LOAD_CHECKPOINT_MODE"] = "true"
+            server_env["LOAD_CHECKPOINT_MODE"] = "true"
             print(f"🔄 Server will load checkpoint: {checkpoint_state}")
             print(f"🔄 LLM metrics will be restored from .pokeagent_cache/checkpoint_llm.txt")
         else:
@@ -58,6 +73,7 @@ def start_server(args):
         print(f"📋 Server command: {' '.join(server_cmd)}")
         server_process = subprocess.Popen(
             server_cmd,
+            env=server_env,
             universal_newlines=True,
             bufsize=1
         )
@@ -140,6 +156,32 @@ def main():
     print("=" * 60)
     print("🎮 Pokemon Emerald AI Agent")
     print("=" * 60)
+    
+    # Initialize run data manager for this run (client creates the run_id)
+    from utils.run_data_manager import initialize_run_data_manager
+    
+    run_manager = initialize_run_data_manager()
+    run_id = run_manager.run_id
+    print(f"📁 Run data directory: {run_manager.get_run_directory()}")
+    
+    # Generate LLM session_id for consistent logging across processes
+    from datetime import datetime
+    llm_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.environ["LLM_SESSION_ID"] = llm_session_id
+    print(f"📝 LLM session ID: {llm_session_id}")
+    
+    # Pass run_id to server via environment variable to avoid conflicts
+    os.environ["RUN_DATA_ID"] = run_id
+    
+    # Save metadata with command line information
+    run_manager.save_metadata(
+        command_args=vars(args),
+        sys_argv=sys.argv,
+        additional_info={
+            "entry_point": "run.py",
+            "mode": "multiprocess_client"
+        }
+    )
     
     server_process = None
     frame_server_process = None

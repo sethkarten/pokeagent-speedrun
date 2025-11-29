@@ -315,13 +315,94 @@ def periodic_milestone_updater():
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully"""
-    global running, state_update_running
+    global running, state_update_running, video_recording, video_filename
+    
+    # Prevent multiple signal handlers from running simultaneously
+    if not running:
+        return
+    
     print(f"\nReceived signal {signum}, shutting down gracefully...")
     running = False
     state_update_running = False
+    
+    # IMPORTANT: Finalize run data BEFORE cleanup
+    # Check video_recording flag BEFORE cleanup_video_recording() resets it
+    was_recording = video_recording
+    
+    try:
+        from utils.run_data_manager import get_run_data_manager
+        from utils.llm_logger import get_llm_logger
+        
+        run_manager = get_run_data_manager()
+        if run_manager:
+            print("📦 Finalizing run data...")
+            
+            # Get final metrics from LLM logger
+            llm_logger = get_llm_logger()
+            final_metrics = llm_logger.get_cumulative_metrics() if llm_logger else None
+            
+            # Save end-state snapshot (ensures all data is saved)
+            run_manager.save_end_state_snapshot()
+            
+            # Copy all data to run_data
+            logger.info(f"🔍 [DEBUG] Finalizing run data - run_manager: {run_manager is not None}")
+            if llm_logger:
+                logger.info(f"🔍 [DEBUG] LLM logger available, log_file: {llm_logger.log_file}")
+                # Verify LLM log file exists before copying
+                if os.path.exists(llm_logger.log_file):
+                    logger.info(f"🔍 [DEBUG] LLM log file exists, copying...")
+                    run_manager.copy_llm_traces(llm_logger.log_file)
+                    logger.info(f"🔍 [DEBUG] Copied LLM traces from: {llm_logger.log_file}")
+                else:
+                    logger.warning(f"🔍 [DEBUG] LLM log file not found: {llm_logger.log_file}")
+                    logger.warning(f"🔍 [DEBUG] Current working directory: {os.getcwd()}")
+                    # Try to find the log file by pattern
+                    import glob
+                    log_pattern = f"llm_logs/llm_log_{run_manager.run_id.split('_', 1)[1] if '_' in run_manager.run_id else '*'}*.jsonl"
+                    logger.info(f"🔍 [DEBUG] Searching for log files with pattern: {log_pattern}")
+                    log_files = glob.glob(log_pattern)
+                    logger.info(f"🔍 [DEBUG] Found {len(log_files)} log files: {log_files}")
+                    if log_files:
+                        # Use the most recent one
+                        log_file = max(log_files, key=os.path.getmtime)
+                        logger.info(f"🔍 [DEBUG] Using most recent log file: {log_file}")
+                        run_manager.copy_llm_traces(log_file)
+                        logger.info(f"🔍 [DEBUG] Found and copied LLM traces from: {log_file}")
+            else:
+                logger.warning(f"🔍 [DEBUG] LLM logger is None - cannot copy LLM traces")
+            
+            run_manager.copy_objectives()
+            
+            # Copy knowledge_base to agent_scratch_space (agent writes to it)
+            run_manager.copy_knowledge_base()
+            
+            # Copy frame_cache to end_state
+            run_manager.copy_frame_cache()
+            
+            # Copy video if recording was enabled (check flag BEFORE cleanup)
+            logger.info(f"🔍 [DEBUG] Video recording flag: {was_recording}, video_filename: {video_filename}")
+            run_manager.copy_video_recording(record_enabled=was_recording)
+            
+            # Finalize with metrics
+            run_manager.finalize_run(final_metrics=final_metrics)
+            print(f"✅ Run data finalized: {run_manager.get_run_directory()}")
+            
+            # Clean up deprecated run directories
+            from utils.run_data_manager import cleanup_old_cache_runs
+            try:
+                cleanup_old_cache_runs()
+                print("🧹 Cleaned up deprecated run directories")
+            except Exception as e:
+                logger.debug(f"Could not clean up old runs: {e}")
+    except Exception as e:
+        logger.error(f"❌ Error during run data finalization: {e}", exc_info=True)
+    
+    # Cleanup video recording AFTER copying (so file is still available)
     cleanup_video_recording()
+    
     if env:
         env.stop()
+    
     sys.exit(0)
 
 def setup_environment(skip_initial_state=False):
@@ -1558,6 +1639,17 @@ async def update_agent_step(request: Request = None):
     # Default increment behavior
     with step_lock:
         agent_step_count += 1
+        
+        # Save end-state snapshot every 20 steps
+        if agent_step_count % 20 == 0:
+            try:
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    run_manager.save_end_state_snapshot()
+                    logger.info(f"💾 Saved end-state snapshot at step {agent_step_count}")
+            except Exception as e:
+                logger.debug(f"Could not save end-state snapshot: {e}")
     
     return {"status": "updated", "agent_step": agent_step_count}
 
@@ -1792,12 +1884,19 @@ async def mcp_get_game_state():
             # Load direct objectives sequence if specified
             if direct_objectives_sequence:
                 if not direct_objectives_manager.is_sequence_active():
+                    # Use run_data agent_scratch_space for objectives
+                    from utils.run_data_manager import get_run_data_manager
+                    run_manager = get_run_data_manager()
+                    objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
+                    
                     if direct_objectives_sequence == "tutorial_to_rival":
-                        direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                        direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                     elif direct_objectives_sequence == "tutorial_to_rustboro_city":
-                        direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                        direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                     elif direct_objectives_sequence == "part_1_walkthrough_claude_4_5":
-                        direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                        direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                    elif direct_objectives_sequence == "autonomous_objective_creation":
+                        direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
             
@@ -1923,14 +2022,19 @@ async def mcp_complete_direct_objective(request: dict):
         # Load direct objectives sequence if specified
         if direct_objectives_sequence:
             if not direct_objectives_manager.is_sequence_active():
+                # Use run_data agent_scratch_space for objectives
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
+                
                 if direct_objectives_sequence == "tutorial_to_rival":
-                    direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                    direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 elif direct_objectives_sequence == "tutorial_to_rustboro_city":
-                    direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                    direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 elif direct_objectives_sequence == "part_1_walkthrough_claude_4_5":
-                    direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                    direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 elif direct_objectives_sequence == "autonomous_objective_creation":
-                    direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=current_run_dir)
+                    direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
         
@@ -1964,7 +2068,14 @@ async def mcp_complete_direct_objective(request: dict):
             # Sequence complete - save to history in timestamped run directory
             if current_run_dir:
                 try:
-                    saved_file = direct_objectives_manager.save_completed_objectives(current_run_dir)
+                    # Save to agent_scratch_space in run_data
+                    from utils.run_data_manager import get_run_data_manager
+                    run_manager = get_run_data_manager()
+                    if not run_manager:
+                        logger.error("Cannot save completed_objectives: run_data_manager not initialized")
+                        raise RuntimeError("run_data_manager must be initialized to save completed_objectives")
+                    scratch_space_dir = str(run_manager.get_scratch_space_dir())
+                    saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
                     logger.info(f"💾 Saved completed objectives to {saved_file}")
                 except Exception as e:
                     logger.warning(f"Failed to save completed objectives: {e}")
@@ -2637,7 +2748,14 @@ async def mcp_get_progress_summary():
             # Load completed objectives history from current run directory
             global current_run_dir
             if current_run_dir:
-                completed_obj_file = os.path.join(current_run_dir, "completed_objectives.json")
+                # Use agent_scratch_space in run_data
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if not run_manager:
+                    logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
+                    completed_obj_file = None
+                else:
+                    completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
                 if os.path.exists(completed_obj_file):
                     import json
                     with open(completed_obj_file, 'r') as f:
@@ -2966,7 +3084,7 @@ def main():
     """Main function"""
     import argparse
     
-    global state_update_running, state_update_thread
+    global running, state_update_running, state_update_thread
     
     # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -3043,13 +3161,49 @@ def main():
         print("🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
-    # Initialize run directory for this execution
+    # Initialize run data manager for structured data collection
+    # Use run_id from environment if provided (set by client), otherwise create new one
+    from utils.run_data_manager import initialize_run_data_manager
+    
+    run_id = os.environ.get("RUN_DATA_ID")
+    run_manager = initialize_run_data_manager(run_id=run_id)
+    print(f"📁 Run data directory: {run_manager.get_run_directory()}")
+    
+    # Only save metadata if this is a new run (not set by client)
+    # If run_id was provided, metadata was already saved by client
+    if run_id is None:
+        command_args = vars(args)
+        run_manager.save_metadata(
+            command_args=command_args,
+            sys_argv=sys.argv,
+            additional_info={
+                "server_mode": True,
+                "checkpoint_loading_enabled": checkpoint_loading_enabled
+            }
+        )
+    else:
+        # Update metadata with server-specific info without overwriting
+        metadata_file = run_manager.run_dir / "metadata.json"
+        if metadata_file.exists():
+            import json
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            metadata["server_info"] = {
+                "server_mode": True,
+                "checkpoint_loading_enabled": checkpoint_loading_enabled,
+                "server_start_time": datetime.now().isoformat()
+            }
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            logger.info(f"Updated metadata with server info")
+    
+    # Initialize run directory for this execution (deprecated, will be moved)
     global current_run_dir
     if current_run_dir is None:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         current_run_dir = os.path.join(CACHE_DIR, f"run_{timestamp}")
         os.makedirs(current_run_dir, exist_ok=True)
-        print(f"📁 Run directory: {current_run_dir}")
+        print(f"📁 Legacy run directory (deprecated): {current_run_dir}")
     
     # Initialize video recording if requested
     init_video_recording(args.record)
@@ -3185,10 +3339,27 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        # Cleanup
-        global running
+        # Backup cleanup (in case signal handler didn't run or failed)
+        # The signal handler should handle most finalization, but this is a safety net
+        # Note: running and state_update_running are already declared as global at start of main()
+        was_running = running  # Read value before modifying
         running = False
         state_update_running = False
+        
+        # Only run backup if we weren't already shutting down
+        # (signal handler should have handled it, but check if it actually did)
+        if was_running:
+            print("📦 Running backup finalization in finally block...")
+            try:
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    # Quick finalization - just save end state snapshot
+                    run_manager.save_end_state_snapshot()
+                    print("✅ Backup finalization completed")
+            except Exception as e:
+                logger.error(f"❌ Error in backup finalization: {e}", exc_info=True)
+        
         if env:
             env.stop()
         print("Server stopped")
