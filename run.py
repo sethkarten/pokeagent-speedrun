@@ -150,6 +150,8 @@ def main():
                        help="Start index for direct objectives (for resuming from checkpoints)")
     parser.add_argument("--clear-knowledge-base", action="store_true",
                        help="Clear the knowledge_base.json file before starting the run")
+    parser.add_argument("--run-name", type=str, default=None,
+                       help="Optional name to append to run directory (e.g., 'test_run' -> 'run_20251129_191503_test_run')")
     
     args = parser.parse_args()
     
@@ -160,7 +162,7 @@ def main():
     # Initialize run data manager for this run (client creates the run_id)
     from utils.run_data_manager import initialize_run_data_manager
     
-    run_manager = initialize_run_data_manager()
+    run_manager = initialize_run_data_manager(run_name=args.run_name)
     run_id = run_manager.run_id
     print(f"📁 Run data directory: {run_manager.get_run_directory()}")
     
@@ -172,6 +174,8 @@ def main():
     
     # Pass run_id to server via environment variable to avoid conflicts
     os.environ["RUN_DATA_ID"] = run_id
+    if args.run_name:
+        os.environ["RUN_NAME"] = args.run_name
     
     # Save metadata with command line information
     run_manager.save_metadata(
