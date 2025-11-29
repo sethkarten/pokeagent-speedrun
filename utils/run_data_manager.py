@@ -22,12 +22,13 @@ logger = logging.getLogger(__name__)
 class RunDataManager:
     """Manages structured data collection for a single run"""
     
-    def __init__(self, run_id: Optional[str] = None, base_dir: str = "run_data"):
+    def __init__(self, run_id: Optional[str] = None, base_dir: str = "run_data", run_name: Optional[str] = None):
         """Initialize run data manager
         
         Args:
             run_id: Optional run identifier. If None, creates timestamped ID.
             base_dir: Base directory for all runs (default: run_data)
+            run_name: Optional name to append to run_id (e.g., "test_run" -> "run_20251129_191503_test_run")
         """
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(exist_ok=True)
@@ -35,6 +36,12 @@ class RunDataManager:
         if run_id is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             run_id = f"run_{timestamp}"
+            # Append run_name if provided
+            if run_name:
+                # Sanitize run_name (remove invalid characters for filesystem)
+                import re
+                sanitized_name = re.sub(r'[^\w\-_]', '_', run_name)
+                run_id = f"{run_id}_{sanitized_name}"
         
         self.run_id = run_id
         self.run_dir = self.base_dir / run_id
@@ -547,17 +554,18 @@ def get_run_data_manager() -> Optional[RunDataManager]:
     return _run_data_manager
 
 
-def initialize_run_data_manager(run_id: Optional[str] = None) -> RunDataManager:
+def initialize_run_data_manager(run_id: Optional[str] = None, run_name: Optional[str] = None) -> RunDataManager:
     """Initialize the global run data manager
     
     Args:
         run_id: Optional run identifier
+        run_name: Optional name to append to run_id
     
     Returns:
         RunDataManager instance
     """
     global _run_data_manager
-    _run_data_manager = RunDataManager(run_id=run_id)
+    _run_data_manager = RunDataManager(run_id=run_id, run_name=run_name)
     return _run_data_manager
 
 

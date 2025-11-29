@@ -3166,7 +3166,8 @@ def main():
     from utils.run_data_manager import initialize_run_data_manager
     
     run_id = os.environ.get("RUN_DATA_ID")
-    run_manager = initialize_run_data_manager(run_id=run_id)
+    run_name = os.environ.get("RUN_NAME")
+    run_manager = initialize_run_data_manager(run_id=run_id, run_name=run_name)
     print(f"📁 Run data directory: {run_manager.get_run_directory()}")
     
     # Only save metadata if this is a new run (not set by client)
