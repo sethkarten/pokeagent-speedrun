@@ -18,16 +18,36 @@ logger = logging.getLogger(__name__)
 class PromptOptimizer:
     """Optimizes agent base prompt based on trajectory analysis."""
     
-    def __init__(self, vlm, run_data_manager, base_prompt_path: str = "base_prompt.md"):
+    def __init__(self, vlm, run_data_manager, base_prompt_path: str = "base_prompt.md", system_prompt_path: str = "system_prompt.md"):
         """
         Initialize the prompt optimizer.
         
         Args:
-            vlm: VLM instance for calling LLM
+            vlm: VLM instance for calling LLM (used to get backend/model info)
             run_data_manager: RunDataManager for accessing trajectories
             base_prompt_path: Path to base prompt file
+            system_prompt_path: Path to system prompt file (contains tool definitions)
         """
-        self.vlm = vlm
+        # Load system prompt so optimizer knows what tools the agent has access to
+        # We'll include this in the optimization prompt (not as system instruction)
+        system_prompt_file = Path(__file__).parent.parent / system_prompt_path
+        self.system_prompt_content = None
+        if system_prompt_file.exists():
+            with open(system_prompt_file, 'r') as f:
+                self.system_prompt_content = f.read()
+            logger.info(f"📋 Loaded system prompt for optimizer: {system_prompt_path} ({len(self.system_prompt_content)} chars)")
+        else:
+            logger.warning(f"System prompt not found at {system_prompt_path}, optimizer will not know available tools")
+        
+        # Create a separate VLM instance WITHOUT tools for text-only optimization calls
+        # This ensures get_text_query returns a string, not a GenerateContentResponse object
+        from utils.vlm import VLM
+        self.vlm = VLM(
+            backend=vlm.backend_type,
+            model_name=vlm.model_name,
+            tools=None,  # No tools - text-only mode
+            system_instruction=None  # No system instruction - we'll include system prompt in the optimization prompt instead
+        )
         self.run_manager = run_data_manager
         self.base_prompt_path = Path(base_prompt_path)
         
@@ -121,10 +141,23 @@ class PromptOptimizer:
         # Format trajectories for LLM analysis
         trajectory_summary = self._format_trajectories_for_analysis(recent_trajectories)
         
+        # Build optimization prompt with system prompt context
+        system_prompt_section = ""
+        if self.system_prompt_content:
+            system_prompt_section = f"""
+## Main Agent's System Prompt (FIXED - Cannot Be Changed):
+The following is the system prompt that the main agent sees at every step. This is FIXED and cannot be modified. It defines the agent's core directive, available tools, and their parameters. You are provided this information so you understand what capabilities the main agent has when editing the base_prompt to improve game progress.
+
+{self.system_prompt_content}
+
+---
+"""
+        
         # Create optimization prompt
         optimization_prompt = f"""You are a prompt optimization expert. Your task is to improve an AI agent's strategic guidance prompt based on its recent performance in playing Pokemon Emerald.
+{system_prompt_section}## Current Base Prompt (Strategic Guidance):
+This is the optimizable strategic guidance that gets combined with runtime context (action history, objectives, game state) and sent to the main agent. You can modify this to improve the agent's decision-making.
 
-## Current Base Prompt (Strategic Guidance):
 {self.current_base_prompt}
 
 ## Recent Agent Trajectories (Last {len(recent_trajectories)} steps):
@@ -205,7 +238,20 @@ IMPROVED BASE PROMPT:
         for i, traj in enumerate(trajectories, 1):
             step_text = f"\n### Step {traj.get('step', i)}\n"
             step_text += f"**Reasoning:** {traj.get('reasoning', 'N/A')}\n"
-            step_text += f"**Action:** {traj.get('action', 'N/A')}\n"
+            
+            # Format action (can be dict or string)
+            action = traj.get('action', 'N/A')
+            if isinstance(action, dict):
+                # Extract tool call names from action dict
+                tool_calls = action.get('tool_calls', [])
+                if tool_calls:
+                    action_names = [tc.get('name', 'unknown') for tc in tool_calls]
+                    action_str = ', '.join(action_names)
+                    step_text += f"**Action:** {action_str}\n"
+                else:
+                    step_text += f"**Action:** {action.get('type', 'N/A')}\n"
+            else:
+                step_text += f"**Action:** {action}\n"
             
             # Include relevant state info
             pre_state = traj.get('pre_state', {})
@@ -220,9 +266,24 @@ IMPROVED BASE PROMPT:
                 step_text += f"**Post-State:** Location: {post_state.get('location', 'Unknown')}, "
                 step_text += f"Coords: {post_state.get('player_coords', 'Unknown')}\n"
             
-            # Check for issues
+            # Check for issues (movement attempted but coordinates unchanged)
             if pre_state.get('player_coords') == post_state.get('player_coords'):
-                if 'navigate_to' in traj.get('action', '').lower() or any(btn in traj.get('action', '').upper() for btn in ['UP', 'DOWN', 'LEFT', 'RIGHT']):
+                # Extract action names for checking
+                action_names = []
+                if isinstance(action, dict):
+                    tool_calls = action.get('tool_calls', [])
+                    action_names = [tc.get('name', '').lower() for tc in tool_calls]
+                elif isinstance(action, str):
+                    action_names = [action.lower()]
+                
+                # Check if movement was attempted
+                movement_attempted = (
+                    'navigate_to' in action_names or
+                    any(btn in action_names for btn in ['press_buttons']) or
+                    (isinstance(action, str) and any(btn in action.upper() for btn in ['UP', 'DOWN', 'LEFT', 'RIGHT']))
+                )
+                
+                if movement_attempted:
                     step_text += "⚠️ **Issue:** Movement attempted but coordinates unchanged (possibly blocked)\n"
             
             # Check for repeated locations
@@ -266,7 +327,7 @@ IMPROVED BASE PROMPT:
         return self.current_base_prompt
 
 
-def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = "base_prompt.md") -> PromptOptimizer:
+def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = "base_prompt.md", system_prompt_path: str = "system_prompt.md") -> PromptOptimizer:
     """Factory function to create a PromptOptimizer instance."""
-    return PromptOptimizer(vlm, run_data_manager, base_prompt_path)
+    return PromptOptimizer(vlm, run_data_manager, base_prompt_path, system_prompt_path)
 
