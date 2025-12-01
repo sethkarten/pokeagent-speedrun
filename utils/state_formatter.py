@@ -1093,6 +1093,9 @@ def _get_pokeemerald_root() -> Optional[Path]:
 
 # ROM location name to Porymap map name mapping
 ROM_TO_PORYMAP_MAP = {
+    # Intro/Cutscene locations
+    "MOVING_VAN": "InsideOfTruck",  # Intro cutscene (moving van)
+    
     # Towns
     "LITTLEROOT TOWN": "LittlerootTown",
     "OLDALE TOWN": "OldaleTown",

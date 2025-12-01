@@ -139,6 +139,10 @@ class MyCLIAgent:
         # Conversation history for tracking and compaction
         self.conversation_history = []
 
+        # Recent function call results to add to next step's context
+        # Format: [(function_name, result_json_string, timestamp), ...]
+        self.recent_function_results = []
+
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.optimization_enabled:
@@ -1147,6 +1151,9 @@ class MyCLIAgent:
                                 "result": function_result
                             })
 
+                            # Store function result for next step's context
+                            self._store_function_result_for_context(function_call.name, function_result)
+
                             # Wait for action queue to complete if this was a button press or navigation
                             # Note: Function results are already being tracked in conversation_history,
                             # so no need to send them back to a chat session (VLM is stateless)
@@ -1384,6 +1391,49 @@ class MyCLIAgent:
         except Exception as e:
             logger.debug(f"Could not log to LLM logger: {e}")
 
+    def _store_function_result_for_context(self, function_name: str, result_json: str):
+        """Store function result to include in next step's context."""
+        import time
+        self.recent_function_results.append({
+            "function_name": function_name,
+            "result": result_json,
+            "timestamp": time.time()
+        })
+
+        # Keep only last 3 function results to avoid context explosion
+        if len(self.recent_function_results) > 3:
+            self.recent_function_results = self.recent_function_results[-3:]
+
+        logger.info(f"📝 Stored {function_name} result for next step's context")
+
+    def _get_function_results_context(self) -> str:
+        """Format recent function results for inclusion in prompt."""
+        if not self.recent_function_results:
+            return ""
+
+        lines = ["\n" + "="*70, "📋 RESULTS FROM PREVIOUS STEP:", "="*70]
+
+        for entry in self.recent_function_results:
+            func_name = entry["function_name"]
+            result = entry["result"]
+
+            lines.append(f"\n🔧 Function: {func_name}")
+            lines.append(f"Result:")
+
+            # Truncate very long results
+            if len(result) > 10000:
+                lines.append(result[:10000] + "\n... (truncated)")
+            else:
+                lines.append(result)
+            lines.append("")
+
+        lines.append("="*70)
+
+        # Clear the results after formatting (they've been used)
+        self.recent_function_results = []
+
+        return "\n".join(lines)
+
     def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build optimized prompt by combining base_prompt.md with current game context.
         
@@ -1450,6 +1500,9 @@ class MyCLIAgent:
         # Build action history summary for better context
         action_history = self._format_action_history()
 
+        # Get function results from previous step
+        function_results_context = self._get_function_results_context()
+
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
 
@@ -1458,6 +1511,7 @@ class MyCLIAgent:
         logger.info(f"   base_prompt: {len(base_prompt):,} chars")
         logger.info(f"   state_text: {len(state_text):,} chars")
         logger.info(f"   action_history: {len(action_history):,} chars")
+        logger.info(f"   function_results: {len(function_results_context):,} chars")
         logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
@@ -1471,6 +1525,7 @@ class MyCLIAgent:
 
 ### ACTION HISTORY (Recent Steps):
 {action_history}
+{function_results_context}
 
 ### CURRENT DIRECT OBJECTIVE:
 {direct_objective_context}
@@ -1491,12 +1546,13 @@ Step {step_count}"""
         prompt_size = len(prompt)
         state_size = len(state_text)
         history_size = len(action_history)
+        function_results_size = len(function_results_context)
         context_size = len(direct_objective_context)
         objective_size = len(str(direct_objective))
         status_size = len(direct_objective_status)
 
         # Calculate static instruction size (approximate)
-        dynamic_total = state_size + history_size + context_size + objective_size + status_size
+        dynamic_total = state_size + history_size + function_results_size + context_size + objective_size + status_size
         static_instructions = prompt_size - dynamic_total
 
         logger.info(f"📏 Final prompt size breakdown:")
@@ -1506,6 +1562,7 @@ Step {step_count}"""
         logger.info(f"   Dynamic content:")
         logger.info(f"     - State text: {state_size:,} chars")
         logger.info(f"     - Action history: {history_size:,} chars")
+        logger.info(f"     - Function results: {function_results_size:,} chars")
         logger.info(f"     - Objective context: {context_size:,} chars")
         logger.info(f"     - Objective: {objective_size:,} chars")
         logger.info(f"     - Status: {status_size:,} chars")
@@ -2170,6 +2227,9 @@ Step {step_count}"""
                     "args": self._convert_protobuf_args(function_call.args),
                     "result": function_result
                 })
+                
+                # Store function result for next step's context
+                self._store_function_result_for_context(function_call.name, function_result)
                 
                 # Wait for action queue to complete if this was a button press
                 if function_call.name == "press_buttons":

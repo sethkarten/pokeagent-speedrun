@@ -191,3 +191,4 @@ cython_debug/
 test_gemini.py
 run_data/*
 out.txt
+*.sh

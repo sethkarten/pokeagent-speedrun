@@ -2788,10 +2788,10 @@ class DirectObjectiveManager:
         self.current_sequence = [
             DirectObjective(
                 id="autonomous_01_create_next_objectives",
-                description="Follow the autonomous objective creation pipeline to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_knowledge_summary() to see what you've learned. Step 3: Analyze your progress to determine which walkthrough part you're on (use highest milestone completed + 1). Step 4: Call get_walkthrough(part=X) with the appropriate part number. Step 5: Verify the walkthrough matches your current progress. Step 6: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
+                description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
                 action_type="interact",
                 target_location=None,
-                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_knowledge_summary() (result appears next step). Step 3: Analyze both to determine walkthrough part. Step 4: Call get_walkthrough(part=X). Step 5: Verify and create objectives with create_direct_objectives(). Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step.",
+                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Verify and create objectives with create_direct_objectives(). Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step.",
                 completion_condition="dynamic_objectives_created",
                 priority=1
             )

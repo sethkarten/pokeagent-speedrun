@@ -180,8 +180,6 @@ def main():
     os.environ["RUN_DATA_ID"] = run_id
     if args.run_name:
         os.environ["RUN_NAME"] = args.run_name
-    if args.run_name:
-        os.environ["RUN_NAME"] = args.run_name
     
     # Save metadata with command line information
     run_manager.save_metadata(
