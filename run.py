@@ -152,6 +152,10 @@ def main():
                        help="Clear the knowledge_base.json file before starting the run")
     parser.add_argument("--run-name", type=str, default=None,
                        help="Optional name to append to run directory (e.g., 'test_run' -> 'run_20251129_191503_test_run')")
+    parser.add_argument("--enable-prompt-optimization", action="store_true",
+                       help="Enable reflective prompt optimization based on trajectory analysis")
+    parser.add_argument("--optimization-frequency", type=int, default=10,
+                       help="How often to run prompt optimization (default: every 10 steps)")
     
     args = parser.parse_args()
     
@@ -174,6 +178,8 @@ def main():
     
     # Pass run_id to server via environment variable to avoid conflicts
     os.environ["RUN_DATA_ID"] = run_id
+    if args.run_name:
+        os.environ["RUN_NAME"] = args.run_name
     if args.run_name:
         os.environ["RUN_NAME"] = args.run_name
     
@@ -295,7 +301,9 @@ def main():
                 server_url=f"http://localhost:{args.port}",
                 model=args.model_name,
                 backend=args.backend,
-                max_steps=args.max_steps if hasattr(args, 'max_steps') else None
+                max_steps=args.max_steps if hasattr(args, 'max_steps') else None,
+                enable_prompt_optimization=args.enable_prompt_optimization,
+                optimization_frequency=args.optimization_frequency
             )
             print("✅ Agent created", flush=True)
 
@@ -319,7 +327,9 @@ def main():
                 server_url=f"http://localhost:{args.port}",
                 model=args.model_name,
                 backend=args.backend,
-                max_steps=args.max_steps if hasattr(args, 'max_steps') else None
+                max_steps=args.max_steps if hasattr(args, 'max_steps') else None,
+                enable_prompt_optimization=args.enable_prompt_optimization,
+                optimization_frequency=args.optimization_frequency
             )
             print("✅ Agent created", flush=True)
 
