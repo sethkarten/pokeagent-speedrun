@@ -2682,14 +2682,16 @@ async def mcp_create_direct_objectives(request: dict):
         if current_obj and current_obj.id == "sequence_complete_create_next_objectives":
             should_complete_auto_obj = True
         
-        # Add dynamic objectives
-        direct_objectives_manager.add_dynamic_objectives(objectives_data)
+        # Add dynamic objectives (this will automatically set current_index to the first new objective)
+        direct_objectives_manager.add_dynamic_objectives(objectives_data, set_as_current=True)
         
         # If we just created the auto-objective to create new objectives, mark it as completed
+        # Note: add_dynamic_objectives already set current_index to the first new objective,
+        # so we don't need to increment it again here
         if should_complete_auto_obj:
             direct_objectives_manager._mark_objective_completed(current_obj)
-            direct_objectives_manager.current_index += 1
             logger.info(f"✅ Marked sequence_complete_create_next_objectives as completed after creating {len(objectives_data)} new objectives")
+            logger.info(f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)")
         
         # Get current game state for context
         from utils.state_formatter import format_state_for_llm

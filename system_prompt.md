@@ -87,7 +87,7 @@ The `pokemon-emerald` MCP server provides these tools:
 
 ### Objective Management Tools
 
-11. **create_direct_objectives** - Create new direct objectives
+11. **create_direct_objectives** - Create new direct objectives and increment the objective index to the first new objective created
     - Parameters: `objectives` (array of objective dicts), `reasoning` (string)
     - Use for: Creating guided objectives when the current sequence is complete
 

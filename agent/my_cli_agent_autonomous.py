@@ -212,8 +212,16 @@ class AutonomousCLIAgent:
         # Check if we have an optimizer with a current prompt
         if hasattr(self, 'prompt_optimizer') and self.prompt_optimizer:
             prompt = self.prompt_optimizer.get_current_prompt()
-            logger.debug(f"📋 Loaded base prompt from optimizer ({len(prompt)} chars)")
+            logger.info(f"📋 Loaded base prompt from optimizer ({len(prompt)} chars)")
+            # Log first 200 chars to verify it's the optimized version
+            preview = prompt[:200].replace('\n', ' ')
+            logger.info(f"   Preview: {preview}...")
             return prompt
+        else:
+            if hasattr(self, 'prompt_optimizer'):
+                logger.warning(f"⚠️ prompt_optimizer exists but is {self.prompt_optimizer}")
+            else:
+                logger.info(f"📋 No prompt_optimizer attribute found")
         
         # Otherwise load from file
         filepath = Path(__file__).parent.parent / "base_prompt.md"
@@ -229,7 +237,7 @@ class AutonomousCLIAgent:
         with open(filepath, 'r') as f:
             content = f.read()
         
-        logger.debug(f"📋 Loaded base prompt from file ({len(content)} chars)")
+        logger.info(f"📋 Loaded base prompt from file ({len(content)} chars)")
         return content
 
     def _create_tool_declarations(self):
@@ -410,7 +418,7 @@ class AutonomousCLIAgent:
             },
             {
                 "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
+                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition. This function will also increment the objective index to the first new objective created.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -1532,14 +1540,27 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         direct_objective_status = game_state_data.get("direct_objective_status", "")
         direct_objective_context = game_state_data.get("direct_objective_context", "")
         
-        # Format direct objective nicely if it's a dict
+        # Format direct objective nicely if it's a dict - show ALL fields
         if isinstance(direct_objective, dict):
             obj_id = direct_objective.get("id", "")
             desc = direct_objective.get("description", "")
+            action_type = direct_objective.get("action_type", "")
+            target_location = direct_objective.get("target_location")
+            target_coords = direct_objective.get("target_coords")
             hint = direct_objective.get("navigation_hint", "")
+            completion_condition = direct_objective.get("completion_condition", "")
+            
             formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+            if action_type:
+                formatted_obj += f"\n  Action Type: {action_type}"
+            if target_location:
+                formatted_obj += f"\n  Target Location: {target_location}"
+            if target_coords:
+                formatted_obj += f"\n  Target Coordinates: {target_coords}"
             if hint:
-                formatted_obj += f"\n  Hint: {hint}"
+                formatted_obj += f"\n  Navigation Hint: {hint}"
+            if completion_condition:
+                formatted_obj += f"\n  Completion Condition: {completion_condition}"
             direct_objective = formatted_obj
         
         # Format status nicely if it's a dict
@@ -1662,17 +1683,30 @@ Step {step_count}"""
         direct_objective = game_state_data.get("direct_objective", "")
         direct_objective_status = game_state_data.get("direct_objective_status", "")
         direct_objective_context = game_state_data.get("direct_objective_context", "")
-
-        # Format direct objective nicely if it's a dict
+        
+        # Format direct objective nicely if it's a dict - show ALL fields
         if isinstance(direct_objective, dict):
             obj_id = direct_objective.get("id", "")
             desc = direct_objective.get("description", "")
+            action_type = direct_objective.get("action_type", "")
+            target_location = direct_objective.get("target_location")
+            target_coords = direct_objective.get("target_coords")
             hint = direct_objective.get("navigation_hint", "")
+            completion_condition = direct_objective.get("completion_condition", "")
+            
             formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+            if action_type:
+                formatted_obj += f"\n  Action Type: {action_type}"
+            if target_location:
+                formatted_obj += f"\n  Target Location: {target_location}"
+            if target_coords:
+                formatted_obj += f"\n  Target Coordinates: {target_coords}"
             if hint:
-                formatted_obj += f"\n  Hint: {hint}"
+                formatted_obj += f"\n  Navigation Hint: {hint}"
+            if completion_condition:
+                formatted_obj += f"\n  Completion Condition: {completion_condition}"
             direct_objective = formatted_obj
-
+        
         # Format status nicely if it's a dict
         if isinstance(direct_objective_status, dict):
             seq = direct_objective_status.get("sequence_name", "")
@@ -1680,7 +1714,7 @@ Step {step_count}"""
             current_idx = direct_objective_status.get("current_index", 0)
             completed = direct_objective_status.get("completed_count", 0)
             direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
-
+        
         # Build action history summary
         action_history = self._format_action_history()
 
@@ -1744,37 +1778,15 @@ When you see "All objectives completed!" or sequence_complete=True OR when you s
 2. Call get_progress_summary() to see milestones, badges, and current location
    → Result appears in "RESULTS FROM PREVIOUS STEP" in next step
 
-**STEP 2: FIGURE OUT WHICH WALKTHROUGH PART YOU'RE ON**
-Analyze your accomplishments against these milestones (ACCURATE to Bulbapedia):
-- Part 1: Got starter Pokemon, Routes 101-103, Oldale, Petalburg (met Norman)
-- Part 2: Route 104, Petalburg Woods, Rustboro, **Roxanne (Stone Badge - 1st gym)**, Route 116
-- Part 3: Dewford Town, **Brawly (Knuckle Badge - 2nd gym)**, Granite Cave, Slateport City
-- Part 4: Slateport Museum, Team Aqua, Devon Goods to Captain Stern, Route 110
-- Part 5: Mauville City, **Wattson (Dynamo Badge - 3rd gym)**, Route 117, Verdanturf
-- Part 6: Routes 111-114, Fallarbor Town (NO gym)
-- Part 7: Meteor Falls, Mt. Chimney, Lavaridge, **Flannery (Heat Badge - 4th gym)**
-- Part 8+: Later gym leaders
-
-**Use the HIGHEST milestone you've completed, then add 1 for next steps.**
-
-Example: If knowledge shows "Defeated Roxanne, got Stone Badge" → You're past Part 2, need Part 3
-
-**STEP 3: GET THE RIGHT WALKTHROUGH PART**
-3. Call get_walkthrough(part=X) where X is determined from Step 2
+**STEP 2: GET THE RIGHT WALKTHROUGH PART**
+2. Call get_walkthrough(part=X) where X is determined from Step 2
    → Result appears in next step's context
 
-**STEP 4: VERIFY IT'S THE RIGHT PART**
-4. READ the walkthrough carefully
-   - Compare it to your knowledge base
-   - If walkthrough describes things you ALREADY did → INCREMENT part number and try again
-   - If walkthrough describes things you HAVEN'T done yet → CORRECT, proceed
-
-**STEP 5: CREATE OBJECTIVES**
-5. Create the next 3 logical objectives using create_direct_objectives()
+**STEP 3 CREATE OBJECTIVES**
+3. Create the next 3 logical objectives using create_direct_objectives()
    → Base objectives on the walkthrough steps you haven't completed
    → Confirm success in next step
 
-6. Once objectives are created, proceed with the first new objective
 
 ⭐ IMPORTANT: Function call results appear in the NEXT step!
    - Call ONE function per step (e.g., get_walkthrough)
