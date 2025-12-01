@@ -1479,14 +1479,27 @@ class MyCLIAgent:
         direct_objective_status = game_state_data.get("direct_objective_status", "")
         direct_objective_context = game_state_data.get("direct_objective_context", "")
         
-        # Format direct objective nicely if it's a dict
+        # Format direct objective nicely if it's a dict - show ALL fields
         if isinstance(direct_objective, dict):
             obj_id = direct_objective.get("id", "")
             desc = direct_objective.get("description", "")
+            action_type = direct_objective.get("action_type", "")
+            target_location = direct_objective.get("target_location")
+            target_coords = direct_objective.get("target_coords")
             hint = direct_objective.get("navigation_hint", "")
+            completion_condition = direct_objective.get("completion_condition", "")
+            
             formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+            if action_type:
+                formatted_obj += f"\n  Action Type: {action_type}"
+            if target_location:
+                formatted_obj += f"\n  Target Location: {target_location}"
+            if target_coords:
+                formatted_obj += f"\n  Target Coordinates: {target_coords}"
             if hint:
-                formatted_obj += f"\n  Hint: {hint}"
+                formatted_obj += f"\n  Navigation Hint: {hint}"
+            if completion_condition:
+                formatted_obj += f"\n  Completion Condition: {completion_condition}"
             direct_objective = formatted_obj
         
         # Format status nicely if it's a dict
@@ -1616,14 +1629,27 @@ Step {step_count}"""
         direct_objective_status = game_state_data.get("direct_objective_status", "")
         direct_objective_context = game_state_data.get("direct_objective_context", "")
         
-        # Format direct objective nicely if it's a dict
+        # Format direct objective nicely if it's a dict - show ALL fields
         if isinstance(direct_objective, dict):
             obj_id = direct_objective.get("id", "")
             desc = direct_objective.get("description", "")
+            action_type = direct_objective.get("action_type", "")
+            target_location = direct_objective.get("target_location")
+            target_coords = direct_objective.get("target_coords")
             hint = direct_objective.get("navigation_hint", "")
+            completion_condition = direct_objective.get("completion_condition", "")
+            
             formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+            if action_type:
+                formatted_obj += f"\n  Action Type: {action_type}"
+            if target_location:
+                formatted_obj += f"\n  Target Location: {target_location}"
+            if target_coords:
+                formatted_obj += f"\n  Target Coordinates: {target_coords}"
             if hint:
-                formatted_obj += f"\n  Hint: {hint}"
+                formatted_obj += f"\n  Navigation Hint: {hint}"
+            if completion_condition:
+                formatted_obj += f"\n  Completion Condition: {completion_condition}"
             direct_objective = formatted_obj
         
         # Format status nicely if it's a dict
