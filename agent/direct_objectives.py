@@ -2791,7 +2791,7 @@ class DirectObjectiveManager:
                 description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
                 action_type="interact",
                 target_location=None,
-                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Verify and create objectives with create_direct_objectives(). Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step.",
+                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Verify and create objectives with create_direct_objectives(). Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), the new objectives will be added to the sequence and the current_index will be incremented to the first new objective.",
                 completion_condition="dynamic_objectives_created",
                 priority=1
             )
@@ -2890,12 +2890,16 @@ class DirectObjectiveManager:
         objective.completed = True
         objective.completed_at = datetime.now()
     
-    def add_dynamic_objectives(self, objectives_data: List[Dict[str, Any]]):
+    def add_dynamic_objectives(self, objectives_data: List[Dict[str, Any]], set_as_current: bool = True):
         """Add dynamically created objectives to the current sequence
         
         Args:
             objectives_data: List of dicts with objective properties (id, description, action_type, etc.)
+            set_as_current: If True, automatically set current_index to the first newly created objective
         """
+        # Store the index where we'll start adding objectives
+        start_index = len(self.current_sequence)
+        
         for obj_data in objectives_data:
             obj = DirectObjective(
                 id=obj_data.get("id", f"dynamic_{len(self.current_sequence) + 1}"),
@@ -2908,7 +2912,13 @@ class DirectObjectiveManager:
                 priority=1
             )
             self.current_sequence.append(obj)
-        logger.info(f"Added {len(objectives_data)} dynamic objectives to sequence")
+        
+        # Automatically set current_index to the first newly created objective
+        if set_as_current and objectives_data:
+            self.current_index = start_index
+            logger.info(f"Added {len(objectives_data)} dynamic objectives to sequence and set current_index to {self.current_index} (first new objective)")
+        else:
+            logger.info(f"Added {len(objectives_data)} dynamic objectives to sequence")
     
     def save_completed_objectives(self, run_dir: Optional[str] = None):
         """Save completed objectives history to file in run_data agent_scratch_space
