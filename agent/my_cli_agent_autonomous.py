@@ -746,53 +746,128 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
         # Check if it's a protobuf type
         if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
+            value_type = value.__class__.__name__
+            logger.debug(f"      Converting protobuf value: type={value_type}, module={value.__class__.__module__}")
+            
             # First try to convert as dict (for MapComposite objects)
             # This must be checked BEFORE checking for __iter__ because MapComposite has both
             try:
                 dict_value = dict(value)
+                logger.debug(f"      ✅ Converted to dict with {len(dict_value)} keys")
                 # Successfully converted to dict - recursively convert values
                 return {k: self._convert_protobuf_value(v) for k, v in dict_value.items()}
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as e:
+                logger.debug(f"      Not dict-like: {e}")
                 # Not a dict-like type, check if it's a list
                 pass
 
             # Check if it's a list-like type (RepeatedComposite, RepeatedScalar)
             if hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
+                logger.debug(f"      Detected iterable (likely list/array)")
                 # It's a list/array - recursively convert each item
                 try:
-                    return [self._convert_protobuf_value(item) for item in value]
-                except:
-                    return list(value)
+                    items = list(value)
+                    logger.debug(f"      ✅ Converted to list with {len(items)} items")
+                    converted = [self._convert_protobuf_value(item) for item in items]
+                    logger.debug(f"      ✅ Recursively converted all {len(converted)} items")
+                    return converted
+                except Exception as e:
+                    logger.warning(f"      ⚠️ Error converting list items: {e}")
+                    try:
+                        fallback = list(value)
+                        logger.debug(f"      Using fallback list conversion: {len(fallback)} items")
+                        return fallback
+                    except Exception as e2:
+                        logger.error(f"      ❌ Fallback also failed: {e2}")
+                        return value
 
             # Fallback: return as-is
+            logger.debug(f"      Returning protobuf value as-is (type: {value_type})")
             return value
 
         # Check if it's a regular dict (might contain nested protobuf values)
         elif isinstance(value, dict):
+            logger.debug(f"      Converting regular dict with {len(value)} keys")
             return {k: self._convert_protobuf_value(v) for k, v in value.items()}
         # Check if it's a regular list (might contain nested protobuf values)
         elif isinstance(value, list):
+            logger.debug(f"      Converting regular list with {len(value)} items")
             return [self._convert_protobuf_value(item) for item in value]
         # Otherwise return as-is (native Python type)
         else:
+            logger.debug(f"      Returning native Python value: type={type(value).__name__}")
             return value
 
     def _convert_protobuf_args(self, proto_args) -> dict:
         """Convert protobuf arguments to JSON-serializable Python types."""
+        logger.debug(f"   Converting protobuf args: {len(proto_args)} keys")
         arguments = {}
         for key, value in proto_args.items():
-            arguments[key] = self._convert_protobuf_value(value)
+            logger.debug(f"   Converting key '{key}': type={type(value).__name__}")
+            try:
+                converted = self._convert_protobuf_value(value)
+                arguments[key] = converted
+                logger.debug(f"   ✅ Key '{key}' converted successfully: type={type(converted).__name__}")
+            except Exception as e:
+                logger.error(f"   ❌ Error converting key '{key}': {e}")
+                import traceback
+                logger.error(f"   Traceback: {traceback.format_exc()}")
+                # Try to include the raw value as fallback
+                arguments[key] = str(value)
+        logger.debug(f"   ✅ Converted {len(arguments)} arguments")
         return arguments
 
     def _execute_function_call(self, function_call) -> str:
         """Execute a function call and return the result as JSON string."""
         function_name = function_call.name
+        logger.info(f"🔧 Executing function: {function_name}")
 
         # Parse arguments - convert protobuf types to native Python types
         try:
+            logger.debug(f"   Converting protobuf args...")
             arguments = self._convert_protobuf_args(function_call.args)
+            logger.info(f"   ✅ Successfully parsed arguments: {list(arguments.keys())}")
+            
+            # Special validation for create_direct_objectives
+            if function_name == "create_direct_objectives":
+                logger.info(f"   🎯 Validating create_direct_objectives arguments...")
+                if "objectives" not in arguments:
+                    logger.error(f"   ❌ Missing 'objectives' key in arguments!")
+                    logger.error(f"   Available keys: {list(arguments.keys())}")
+                    return json.dumps({"success": False, "error": "Missing 'objectives' parameter"})
+                
+                obj_list = arguments["objectives"]
+                if not isinstance(obj_list, list):
+                    logger.error(f"   ❌ 'objectives' is not a list! Type: {type(obj_list)}")
+                    logger.error(f"   Value: {str(obj_list)[:500]}")
+                    return json.dumps({"success": False, "error": f"'objectives' must be a list, got {type(obj_list)}"})
+                
+                if len(obj_list) != 3:
+                    logger.warning(f"   ⚠️ Expected 3 objectives, got {len(obj_list)}")
+                
+                for i, obj in enumerate(obj_list):
+                    if not isinstance(obj, dict):
+                        logger.error(f"   ❌ Objective {i} is not a dict! Type: {type(obj)}")
+                        logger.error(f"   Value: {str(obj)[:200]}")
+                        return json.dumps({"success": False, "error": f"Objective {i} must be a dict, got {type(obj)}"})
+                    
+                    required_fields = ["id", "description", "action_type"]
+                    missing = [f for f in required_fields if f not in obj]
+                    if missing:
+                        logger.error(f"   ❌ Objective {i} missing required fields: {missing}")
+                        logger.error(f"   Available fields: {list(obj.keys())}")
+                        return json.dumps({"success": False, "error": f"Objective {i} missing required fields: {missing}"})
+                    
+                    logger.info(f"   ✅ Objective {i} valid: id={obj.get('id')}, action_type={obj.get('action_type')}")
+                
+                logger.info(f"   ✅ All objectives validated successfully")
+                
         except Exception as e:
-            logger.error(f"Failed to parse function arguments: {e}")
+            logger.error(f"❌ Failed to parse function arguments: {e}")
+            logger.error(f"   Function: {function_name}")
+            logger.error(f"   Args type: {type(function_call.args) if hasattr(function_call, 'args') else 'NO ARGS'}")
+            import traceback
+            logger.error(f"   Traceback: {traceback.format_exc()}")
             return json.dumps({"success": False, "error": f"Invalid arguments: {e}"})
 
         # Special handling for reflect tool - use agent's own VLM
@@ -1090,6 +1165,60 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                             executor.shutdown(wait=False)
 
                 is_function_calling = hasattr(response, 'candidates')
+                
+                # Log detailed response information for debugging
+                logger.info(f"🔍 Response analysis:")
+                logger.info(f"   Response received: {type(response).__name__}")
+                logger.info(f"   Response type: {type(response).__name__}")
+                if hasattr(response, 'candidates') and response.candidates:
+                    candidate = response.candidates[0]
+                    logger.info(f"   Candidates: {len(response.candidates)}")
+                    logger.info(f"   Candidate type: {type(candidate).__name__}")
+                    
+                    # Check for finish_reason (this is where MALFORMED_FUNCTION_CALL appears)
+                    if hasattr(candidate, 'finish_reason'):
+                        finish_reason = candidate.finish_reason
+                        logger.warning(f"   ⚠️ FINISH_REASON: {finish_reason}")
+                        if finish_reason and finish_reason != 1:  # 1 = STOP, other values indicate issues
+                            logger.error(f"   🚨 NON-STOP FINISH REASON DETECTED: {finish_reason}")
+                            logger.error(f"   This may indicate a malformed function call or other issue")
+                    
+                    # Log content structure
+                    if hasattr(candidate, 'content') and candidate.content:
+                        content = candidate.content
+                        logger.info(f"   Content type: {type(content).__name__}")
+                        if hasattr(content, 'parts'):
+                            logger.info(f"   Content parts: {len(content.parts)}")
+                            for i, part in enumerate(content.parts):
+                                part_info = []
+                                if hasattr(part, 'text') and part.text:
+                                    part_info.append(f"text({len(part.text)} chars)")
+                                if hasattr(part, 'function_call') and part.function_call:
+                                    fc = part.function_call
+                                    part_info.append(f"function_call(name={fc.name})")
+                                    # Try to log function call args (may fail if malformed)
+                                    try:
+                                        if hasattr(fc, 'args'):
+                                            args_dict = dict(fc.args) if hasattr(fc.args, '__iter__') else {}
+                                            logger.info(f"      Function call args keys: {list(args_dict.keys())}")
+                                            # For create_direct_objectives, log objectives structure
+                                            if fc.name == "create_direct_objectives" and "objectives" in args_dict:
+                                                obj_list = args_dict.get("objectives", [])
+                                                logger.info(f"      Objectives array length: {len(obj_list) if isinstance(obj_list, list) else 'NOT A LIST'}")
+                                                if isinstance(obj_list, list) and len(obj_list) > 0:
+                                                    logger.info(f"      First objective keys: {list(obj_list[0].keys()) if isinstance(obj_list[0], dict) else type(obj_list[0])}")
+                                    except Exception as e:
+                                        logger.error(f"      ⚠️ Could not parse function call args: {e}")
+                                        logger.error(f"      Args type: {type(fc.args) if hasattr(fc, 'args') else 'NO ARGS ATTR'}")
+                                        import traceback
+                                        logger.error(f"      Traceback: {traceback.format_exc()}")
+                                logger.info(f"   Part {i}: {', '.join(part_info) if part_info else 'empty'}")
+                        else:
+                            logger.warning(f"   Content has no 'parts' attribute")
+                    else:
+                        logger.warning(f"   Candidate has no 'content' attribute")
+                else:
+                    logger.warning(f"   Response has no candidates")
 
             except KeyboardInterrupt:
                 vlm_duration = time.time() - vlm_call_start
@@ -1424,6 +1553,9 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         # Build action history summary for better context
         action_history = self._format_action_history()
 
+        # Get function results from previous step
+        function_results_context = self._get_function_results_context()
+
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
 
@@ -1432,6 +1564,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         logger.info(f"   base_prompt: {len(base_prompt):,} chars")
         logger.info(f"   state_text: {len(state_text):,} chars")
         logger.info(f"   action_history: {len(action_history):,} chars")
+        logger.info(f"   function_results: {len(function_results_context):,} chars")
         logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
@@ -1445,6 +1578,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
 ### ACTION HISTORY (Recent Steps):
 {action_history}
+{function_results_context}
 
 ### CURRENT DIRECT OBJECTIVE:
 {direct_objective_context}
@@ -1465,12 +1599,13 @@ Step {step_count}"""
         prompt_size = len(prompt)
         state_size = len(state_text)
         history_size = len(action_history)
+        function_results_size = len(function_results_context)
         context_size = len(direct_objective_context)
         objective_size = len(str(direct_objective))
         status_size = len(direct_objective_status)
 
         # Calculate static instruction size (approximate)
-        dynamic_total = state_size + history_size + context_size + objective_size + status_size
+        dynamic_total = state_size + history_size + function_results_size + context_size + objective_size + status_size
         static_instructions = prompt_size - dynamic_total
 
         logger.info(f"📏 Final prompt size breakdown:")
@@ -1480,6 +1615,7 @@ Step {step_count}"""
         logger.info(f"   Dynamic content:")
         logger.info(f"     - State text: {state_size:,} chars")
         logger.info(f"     - Action history: {history_size:,} chars")
+        logger.info(f"     - Function results: {function_results_size:,} chars")
         logger.info(f"     - Objective context: {context_size:,} chars")
         logger.info(f"     - Objective: {objective_size:,} chars")
         logger.info(f"     - Status: {status_size:,} chars")
@@ -2147,10 +2283,28 @@ Step {step_count}"""
         allowing the agent to see and use the results in subsequent decisions.
         """
         if not hasattr(response, 'candidates') or not response.candidates:
+            logger.warning("⚠️ Response has no candidates")
             return False
 
         candidate = response.candidates[0]
+        
+        # Check finish_reason first - this tells us if there was a problem
+        if hasattr(candidate, 'finish_reason'):
+            finish_reason = candidate.finish_reason
+            if finish_reason and finish_reason != 1:  # 1 = STOP (normal)
+                logger.error(f"🚨 FINISH_REASON indicates problem: {finish_reason}")
+                logger.error(f"   finish_reason value: {finish_reason}")
+                logger.error(f"   finish_reason type: {type(finish_reason)}")
+                # Try to get more info about the finish reason
+                try:
+                    import google.generativeai.types as genai_types
+                    if hasattr(genai_types, 'FinishReason'):
+                        logger.error(f"   FinishReason enum values: {[e.name for e in genai_types.FinishReason]}")
+                except:
+                    pass
+        
         if not hasattr(candidate, 'content') or not candidate.content:
+            logger.warning("⚠️ Candidate has no content")
             return False
 
         content = candidate.content
@@ -2158,7 +2312,7 @@ Step {step_count}"""
             logger.warning("⚠️ Response content has no 'parts' attribute")
             return False
 
-        logger.debug(f"🔍 Checking {len(content.parts)} response parts for function calls")
+        logger.info(f"🔍 Checking {len(content.parts)} response parts for function calls")
         function_calls_found = False
         for i, part in enumerate(content.parts):
             logger.debug(f"   Part {i}: has function_call={hasattr(part, 'function_call')}, has text={hasattr(part, 'text')}")
@@ -2166,11 +2320,74 @@ Step {step_count}"""
                 function_call = part.function_call
                 tool_call_count += 1
                 logger.info(f"🔧 VLM wants to call: {function_call.name} ({tool_call_count}/{max_tool_calls})")
+                
+                # Log detailed function call information
+                logger.info(f"   📋 Function call details:")
+                logger.info(f"      Name: {function_call.name}")
+                logger.info(f"      Args attribute exists: {hasattr(function_call, 'args')}")
+                
+                # Try to extract and log arguments
+                try:
+                    if hasattr(function_call, 'args'):
+                        logger.info(f"      Args type: {type(function_call.args)}")
+                        # Try to convert to dict
+                        try:
+                            args_dict = self._convert_protobuf_args(function_call.args)
+                            logger.info(f"      ✅ Successfully converted args to dict")
+                            logger.info(f"      Args keys: {list(args_dict.keys())}")
+                            
+                            # Special logging for create_direct_objectives
+                            if function_call.name == "create_direct_objectives":
+                                logger.info(f"      🎯 create_direct_objectives args analysis:")
+                                if "objectives" in args_dict:
+                                    obj_list = args_dict["objectives"]
+                                    logger.info(f"         objectives type: {type(obj_list)}")
+                                    logger.info(f"         objectives is list: {isinstance(obj_list, list)}")
+                                    if isinstance(obj_list, list):
+                                        logger.info(f"         objectives length: {len(obj_list)}")
+                                        for j, obj in enumerate(obj_list[:3]):  # Log first 3
+                                            logger.info(f"         Objective {j}: type={type(obj)}, keys={list(obj.keys()) if isinstance(obj, dict) else 'NOT DICT'}")
+                                    else:
+                                        logger.error(f"         ⚠️ objectives is NOT a list! Type: {type(obj_list)}")
+                                        logger.error(f"         Value: {str(obj_list)[:500]}")
+                                else:
+                                    logger.error(f"         ⚠️ 'objectives' key not found in args!")
+                                    logger.error(f"         Available keys: {list(args_dict.keys())}")
+                                if "reasoning" in args_dict:
+                                    reasoning = args_dict["reasoning"]
+                                    logger.info(f"         reasoning length: {len(str(reasoning))} chars")
+                        except Exception as e:
+                            logger.error(f"      ❌ Failed to convert args: {e}")
+                            logger.error(f"      Args raw value: {str(function_call.args)[:500]}")
+                            import traceback
+                            logger.error(f"      Traceback: {traceback.format_exc()}")
+                    else:
+                        logger.warning(f"      ⚠️ Function call has no 'args' attribute")
+                except Exception as e:
+                    logger.error(f"      ❌ Error examining function call: {e}")
+                    import traceback
+                    logger.error(f"      Traceback: {traceback.format_exc()}")
 
                 # Execute the function
-                function_result = self._execute_function_call(function_call)
-                result_str = str(function_result)
-                logger.info(f"📥 Function result: {result_str[:200]}...")
+                try:
+                    function_result = self._execute_function_call(function_call)
+                    result_str = str(function_result)
+                    logger.info(f"📥 Function result: {result_str[:200]}...")
+                except Exception as e:
+                    logger.error(f"❌ Error executing function call: {e}")
+                    import traceback
+                    logger.error(f"   Traceback: {traceback.format_exc()}")
+                    # Still try to track the failed call
+                    try:
+                        tool_calls_made.append({
+                            "name": function_call.name,
+                            "args": self._convert_protobuf_args(function_call.args) if hasattr(function_call, 'args') else {},
+                            "result": json.dumps({"success": False, "error": str(e)}),
+                            "error": str(e)
+                        })
+                    except:
+                        pass
+                    raise
 
                 # Track tool call
                 tool_calls_made.append({
