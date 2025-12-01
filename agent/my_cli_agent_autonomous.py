@@ -118,9 +118,11 @@ class AutonomousCLIAgent:
         model: str = "gemini-2.5-flash",
         backend: str = "gemini",
         max_steps: Optional[int] = None,
-        system_instructions_file: str = "POKEAGENT.md",
+        system_instructions_file: str = None,  # Will be set based on optimization flag
         max_context_chars: int = 100000,
-        target_context_chars: int = 50000
+        target_context_chars: int = 50000,
+        enable_prompt_optimization: bool = False,
+        optimization_frequency: int = 10
     ):
         print(f"🚀 Initializing AutonomousCLIAgent with backend={backend}, model={model}, server={server_url}")
         self.server_url = server_url
@@ -130,6 +132,8 @@ class AutonomousCLIAgent:
         self.step_count = 0
         self.max_context_chars = max_context_chars
         self.target_context_chars = target_context_chars
+        self.optimization_enabled = enable_prompt_optimization
+        self.optimization_frequency = optimization_frequency
 
         # Conversation history for tracking and compaction
         self.conversation_history = []
@@ -137,6 +141,13 @@ class AutonomousCLIAgent:
         # Recent function call results to add to next step's context
         # Format: [(function_name, result_json_string, timestamp), ...]
         self.recent_function_results = []
+
+        # Determine which system instructions file to use
+        if system_instructions_file is None:
+            if self.optimization_enabled:
+                system_instructions_file = "system_prompt.md"  # Lean: just tools + core objective
+            else:
+                system_instructions_file = "POKEAGENT.md"  # Full: everything included
 
         # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
@@ -160,6 +171,24 @@ class AutonomousCLIAgent:
         # Initialize LLM logger
         from utils.llm_logger import get_llm_logger
         self.llm_logger = get_llm_logger()
+        
+        # Initialize prompt optimizer if enabled
+        self.prompt_optimizer = None
+        if self.optimization_enabled:
+            from utils.run_data_manager import get_run_data_manager
+            from utils.prompt_optimizer import create_prompt_optimizer
+            
+            run_manager = get_run_data_manager()
+            if run_manager:
+                self.prompt_optimizer = create_prompt_optimizer(
+                    vlm=self.vlm,
+                    run_data_manager=run_manager,
+                    base_prompt_path="base_prompt.md"
+                )
+                print(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
+            else:
+                logger.warning("⚠️ Prompt optimization requested but run_data_manager not available")
+                self.optimization_enabled = False
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
@@ -172,6 +201,35 @@ class AutonomousCLIAgent:
             content = f.read()
 
         logger.info(f"✅ Loaded system instructions from {filename} ({len(content)} chars)")
+        return content
+    
+    def _load_base_prompt(self) -> str:
+        """Load base prompt (strategic guidance) from file.
+        
+        This prompt can be optimized by the prompt optimizer.
+        If prompt optimization is enabled, this will load the optimized version.
+        """
+        # Check if we have an optimizer with a current prompt
+        if hasattr(self, 'prompt_optimizer') and self.prompt_optimizer:
+            prompt = self.prompt_optimizer.get_current_prompt()
+            logger.debug(f"📋 Loaded base prompt from optimizer ({len(prompt)} chars)")
+            return prompt
+        
+        # Otherwise load from file
+        filepath = Path(__file__).parent.parent / "base_prompt.md"
+        if not filepath.exists():
+            logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
+            return """# Strategic Guidance
+## Make intelligent decisions to progress through Pokemon Emerald.
+- Think step-by-step
+- Use tools effectively
+- Store knowledge
+- Complete objectives"""
+        
+        with open(filepath, 'r') as f:
+            content = f.read()
+        
+        logger.debug(f"📋 Loaded base prompt from file ({len(content)} chars)")
         return content
 
     def _create_tool_declarations(self):
@@ -1145,6 +1203,19 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                 else:
                     logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
 
+                # Check if prompt optimization should run
+                if self.optimization_enabled and self.prompt_optimizer:
+                    if self.prompt_optimizer.should_optimize(self.step_count + 1, self.optimization_frequency):
+                        logger.info(f"🔄 Triggering prompt optimization at step {self.step_count + 1}")
+                        try:
+                            new_base_prompt = self.prompt_optimizer.optimize_prompt(
+                                current_step=self.step_count + 1,
+                                num_trajectory_steps=self.optimization_frequency
+                            )
+                            logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
+                        except Exception as e:
+                            logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
+
                 return True, full_response
             else:
                 text_content = self._extract_text_from_response(response)
@@ -1174,6 +1245,19 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                     )
                 else:
                     logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (text response, run_manager={run_manager is not None}, pre_state={pre_state is not None})")
+
+                # Check if prompt optimization should run
+                if self.optimization_enabled and self.prompt_optimizer:
+                    if self.prompt_optimizer.should_optimize(self.step_count + 1, self.optimization_frequency):
+                        logger.info(f"🔄 Triggering prompt optimization at step {self.step_count + 1}")
+                        try:
+                            new_base_prompt = self.prompt_optimizer.optimize_prompt(
+                                current_step=self.step_count + 1,
+                                num_trajectory_steps=self.optimization_frequency
+                            )
+                            logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
+                        except Exception as e:
+                            logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
 
                 return True, text_content
 
@@ -1273,6 +1357,138 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         self.recent_function_results = []
 
         return "\n".join(lines)
+        
+    def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
+        """Build optimized prompt by combining base_prompt.md with current game context.
+        
+        Used when prompt optimization is enabled.
+        This function:
+        1. Loads the base_prompt.md (strategic guidance - can be optimized)
+        2. Extracts current game context (state, objectives, history)
+        3. Combines them into a complete prompt for the VLM
+        """
+        
+        # Parse game state to extract relevant information
+        import json as json_module
+        try:
+            game_state_data = json_module.loads(game_state_result)
+        except:
+            game_state_data = {}
+        
+        # Extract key information from game state
+        state_text = game_state_data.get("state_text", "")
+
+        # Detect if in title sequence
+        is_title_sequence = self._is_title_sequence(game_state_data)
+        if is_title_sequence:
+            logger.info("🎬 Title sequence detected - map information will be hidden")
+
+        # Extract player coordinates for stuck detection
+        player_position = game_state_data.get("player_position", {})
+        current_coords = None
+        if player_position and "x" in player_position and "y" in player_position:
+            current_coords = (player_position["x"], player_position["y"])
+
+        # Add stuck warning if detected (but not during title sequence)
+        if not is_title_sequence:
+            stuck_warning = self._get_stuck_warning(current_coords)
+            if stuck_warning:
+                state_text = stuck_warning + state_text
+
+        # Strip map information during title sequence
+        if is_title_sequence:
+            state_text = self._strip_map_info(state_text)
+
+        direct_objective = game_state_data.get("direct_objective", "")
+        direct_objective_status = game_state_data.get("direct_objective_status", "")
+        direct_objective_context = game_state_data.get("direct_objective_context", "")
+        
+        # Format direct objective nicely if it's a dict
+        if isinstance(direct_objective, dict):
+            obj_id = direct_objective.get("id", "")
+            desc = direct_objective.get("description", "")
+            hint = direct_objective.get("navigation_hint", "")
+            formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+            if hint:
+                formatted_obj += f"\n  Hint: {hint}"
+            direct_objective = formatted_obj
+        
+        # Format status nicely if it's a dict
+        if isinstance(direct_objective_status, dict):
+            seq = direct_objective_status.get("sequence_name", "")
+            total = direct_objective_status.get("total_objectives", 0)
+            current_idx = direct_objective_status.get("current_index", 0)
+            completed = direct_objective_status.get("completed_count", 0)
+            direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
+        
+        # Build action history summary for better context
+        action_history = self._format_action_history()
+
+        # Load base prompt (strategic guidance - can be optimized)
+        base_prompt = self._load_base_prompt()
+
+        # Log component sizes BEFORE building prompt
+        logger.info(f"📏 Pre-prompt component sizes:")
+        logger.info(f"   base_prompt: {len(base_prompt):,} chars")
+        logger.info(f"   state_text: {len(state_text):,} chars")
+        logger.info(f"   action_history: {len(action_history):,} chars")
+        logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
+        logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
+        logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
+
+        # Build complete prompt by combining base prompt with context
+        prompt = f"""# Current Step: {step_count}
+
+{base_prompt}
+
+## CONTEXT FOR THIS STEP
+
+### ACTION HISTORY (Recent Steps):
+{action_history}
+
+### CURRENT DIRECT OBJECTIVE:
+{direct_objective_context}
+
+{direct_objective}
+
+{direct_objective_status}
+
+⚠️ **CRITICAL**: When you complete the objective, IMMEDIATELY call:
+   complete_direct_objective(reasoning="<explain why it's complete>")
+
+### CURRENT GAME STATE:
+{state_text}
+
+Step {step_count}"""
+
+        # Log prompt size breakdown to debug token issues
+        prompt_size = len(prompt)
+        state_size = len(state_text)
+        history_size = len(action_history)
+        context_size = len(direct_objective_context)
+        objective_size = len(str(direct_objective))
+        status_size = len(direct_objective_status)
+
+        # Calculate static instruction size (approximate)
+        dynamic_total = state_size + history_size + context_size + objective_size + status_size
+        static_instructions = prompt_size - dynamic_total
+
+        logger.info(f"📏 Final prompt size breakdown:")
+        logger.info(f"   ═══════════════════════════════════════")
+        logger.info(f"   TOTAL PROMPT: {prompt_size:,} chars (~{prompt_size//4:,} tokens)")
+        logger.info(f"   ═══════════════════════════════════════")
+        logger.info(f"   Dynamic content:")
+        logger.info(f"     - State text: {state_size:,} chars")
+        logger.info(f"     - Action history: {history_size:,} chars")
+        logger.info(f"     - Objective context: {context_size:,} chars")
+        logger.info(f"     - Objective: {objective_size:,} chars")
+        logger.info(f"     - Status: {status_size:,} chars")
+        logger.info(f"     DYNAMIC TOTAL: {dynamic_total:,} chars")
+        logger.info(f"   ───────────────────────────────────────")
+        logger.info(f"   Static instructions: {static_instructions:,} chars")
+        logger.info(f"   ═══════════════════════════════════════")
+
+        return prompt
 
     def _build_structured_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build an autonomous prompt that emphasizes creating your own objectives."""
@@ -1860,8 +2076,11 @@ Step {step_count}"""
                 except:
                     screenshot_b64 = None
 
-                # Build prompt
-                prompt = self._build_structured_prompt(game_state_result, self.step_count)
+                # Build prompt (conditional based on optimization mode)
+                if self.optimization_enabled:
+                    prompt = self._build_optimized_prompt(game_state_result, self.step_count)
+                else:
+                    prompt = self._build_structured_prompt(game_state_result, self.step_count)
 
                 # Run step
                 success, output = self.run_step(prompt, screenshot_b64=screenshot_b64)
