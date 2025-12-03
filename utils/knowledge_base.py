@@ -318,6 +318,11 @@ class KnowledgeBase:
             return
 
         try:
+            # Check if file is empty
+            if os.path.getsize(self.knowledge_file) == 0:
+                logger.info("Knowledge base file is empty, starting fresh")
+                return
+
             with open(self.knowledge_file, 'r') as f:
                 data = json.load(f)
 
@@ -332,6 +337,11 @@ class KnowledgeBase:
                 self.entries[entry_id] = entry
 
             logger.info(f"Loaded {len(self.entries)} knowledge entries")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Knowledge base file contains invalid JSON: {e}. Starting fresh.")
+            # Initialize with empty structure
+            self.next_id = 1
+            self.entries = {}
         except Exception as e:
             logger.error(f"Failed to load knowledge base: {e}")
 

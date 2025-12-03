@@ -1771,12 +1771,10 @@ This ensures your discoveries are remembered for future gameplay!
 When you see "All objectives completed!" or sequence_complete=True OR when you start fresh:
 
 **STEP 1: DETERMINE YOUR PROGRESS**
-1. Call get_knowledge_summary() to see what you've already accomplished
-   → Review all entries to understand what you've done
+1. Call get_progress_summary() to see milestones, completed objectives, current location, AND knowledge base summary
+   → This gives you a complete picture of what you've accomplished
    → Result appears in "RESULTS FROM PREVIOUS STEP" in next step
-
-2. Call get_progress_summary() to see milestones, badges, and current location
-   → Result appears in "RESULTS FROM PREVIOUS STEP" in next step
+   → NOTE: get_progress_summary() includes knowledge base info, so you don't need to call get_knowledge_summary() separately
 
 **STEP 2: GET THE RIGHT WALKTHROUGH PART**
 2. Call get_walkthrough(part=X) where X is determined from Step 2
