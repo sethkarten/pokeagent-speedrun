@@ -390,7 +390,7 @@ class MyCLIAgent:
             },
             {
                 "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when a sequence completes. Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
+                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() and get_progress_summary() to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition at a medium level of granularity (not too specific like "walk_left_to_oldale_town" but not too vague either like "complete_route_102"). This function will also increment the objective index to the first new objective created.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
