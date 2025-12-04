@@ -1932,6 +1932,20 @@ async def mcp_press_buttons(request: dict):
         metadata = request.get("metadata")
         metadata_dict = metadata if isinstance(metadata, dict) else {}
 
+        # Normalize buttons to always be a list
+        if isinstance(buttons, str):
+            buttons = [buttons]
+        elif isinstance(buttons, dict):
+            # Handle dict like {'U': 'P'} -> reconstruct "UP"
+            if len(buttons) == 1:
+                key, value = next(iter(buttons.items()))
+                if isinstance(value, str) and len(value) == 1:
+                    buttons = [key + value]  # Reconstruct "UP" from {'U': 'P'}
+                else:
+                    buttons = list(buttons.keys())
+            else:
+                buttons = list(buttons.keys())
+
         if not buttons:
             return {"success": False, "error": "No buttons specified"}
 
