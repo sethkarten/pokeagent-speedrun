@@ -560,73 +560,97 @@ class Pathfinder:
         dx = to_pos[0] - from_pos[0]  # positive = moving east, negative = moving west
         dy = to_pos[1] - from_pos[1]  # positive = moving south, negative = moving north
         
-        # Check elevation differences if raw tile data is available
-        if 'raw_tiles' in map_data:
-            raw_tiles = map_data['raw_tiles']
-            try:
-                # Get elevation from raw tiles
-                # Raw tiles format: (tile_id, behavior, collision, elevation, ...)
-                from_tile = raw_tiles[from_y][from_x] if from_y < len(raw_tiles) and from_x < len(raw_tiles[from_y]) else None
-                to_tile = raw_tiles[to_y][to_x] if to_y < len(raw_tiles) and to_x < len(raw_tiles[to_y]) else None
-                
-                if from_tile and to_tile and len(from_tile) >= 4 and len(to_tile) >= 4:
-                    from_elevation = from_tile[3] if len(from_tile) > 3 else 0
-                    to_elevation = to_tile[3] if len(to_tile) > 3 else 0
-                    
-                    # If elevations differ, check if movement is allowed
-                    if from_elevation != to_elevation:
-                        # Movement between different elevations is ONLY allowed if:
-                        # 1. There's a ledge/slide behavior (one-way jump)
-                        # 2. There's stairs/ladder/escalator (two-way connection)
-                        # 3. There's a bridge (connects elevations)
-                        
-                        # Check destination tile behavior
-                        to_behavior = to_tile[1] if len(to_tile) > 1 else 0
-                        from_behavior = from_tile[1] if len(from_tile) > 1 else 0
-                        
-                        # Get behavior names
-                        from_behavior_name = "UNKNOWN"
-                        to_behavior_name = "UNKNOWN"
-                        
-                        try:
-                            from pokemon_env.enums import MetatileBehavior
-                            if isinstance(from_behavior, (int, type(from_behavior).__name__ == 'int64' if hasattr(type(from_behavior), '__name__') else False)):
-                                import numpy as np
-                                if isinstance(from_behavior, (int, np.integer)):
-                                    from_behavior_enum = MetatileBehavior(int(from_behavior))
-                                    from_behavior_name = from_behavior_enum.name
-                            if isinstance(to_behavior, (int, type(to_behavior).__name__ == 'int64' if hasattr(type(to_behavior), '__name__') else False)):
-                                import numpy as np
-                                if isinstance(to_behavior, (int, np.integer)):
-                                    to_behavior_enum = MetatileBehavior(int(to_behavior))
-                                    to_behavior_name = to_behavior_enum.name
-                        except (ValueError, TypeError, AttributeError, ImportError):
-                            pass
-                        
-                        # Check if either tile has elevation-connecting behavior
-                        elevation_connectors = [
-                            "JUMP", "SLIDE", "WALK",  # One-way movement
-                            "STAIRS", "LADDER", "ESCALATOR",  # Two-way movement
-                            "BRIDGE"  # Connects elevations
-                        ]
-                        
-                        has_elevation_connector = False
-                        for connector in elevation_connectors:
-                            if connector in from_behavior_name or connector in to_behavior_name:
-                                has_elevation_connector = True
-                                break
-                        
-                        # Also check if symbols indicate elevation connectors
-                        if dest_symbol in ['→', '←', '↑', '↓', '↗', '↖', '↘', '↙', 'S', 'D', '&']:
-                            has_elevation_connector = True
-                        
-                        # Block movement if no explicit elevation connector
-                        if not has_elevation_connector:
-                            logger.debug(f"Blocking movement from ({from_x}, {from_y}) elev {from_elevation} to ({to_x}, {to_y}) elev {to_elevation}: no elevation connector")
-                            return False
-            except (IndexError, TypeError, AttributeError) as e:
-                # If we can't get elevation data, fall through to symbol-based checks
-                logger.debug(f"Could not check elevation: {e}")
+        # ========================================================================
+        # DEPRECATED: Elevation Checking Logic
+        # ========================================================================
+        # This elevation checking code has been DEPRECATED as of 2025-12-05.
+        # 
+        # Original Goal: Prevent pathfinding from generating paths across two
+        # walkable tiles that exist at different elevations and which consequently
+        # can't be walked across in the game.
+        #
+        # Reason for Deprecation: The elevation checking logic was too strict and
+        # was blocking valid paths. Small elevation differences (0-2) are often
+        # cosmetic in Pokemon Emerald and shouldn't block movement on walkable
+        # tiles according to the ASCII grid.
+        #
+        # Status: Code is preserved for future re-implementation. The elevation
+        # checking is currently DISABLED - pathfinding now relies solely on the
+        # ASCII grid from porymap data and ledge direction checks.
+        #
+        # TODO: Re-implement elevation checking with proper logic that:
+        #   - Only blocks significant elevation differences (>2)
+        #   - Trusts the ASCII grid for walkable tiles
+        #   - Properly handles elevation connectors (stairs, ledges, etc.)
+        # ========================================================================
+        #
+        # if 'raw_tiles' in map_data:
+        #     raw_tiles = map_data['raw_tiles']
+        #     try:
+        #         # Get elevation from raw tiles
+        #         # Raw tiles format: (tile_id, behavior, collision, elevation, ...)
+        #         from_tile = raw_tiles[from_y][from_x] if from_y < len(raw_tiles) and from_x < len(raw_tiles[from_y]) else None
+        #         to_tile = raw_tiles[to_y][to_x] if to_y < len(raw_tiles) and to_x < len(raw_tiles[to_y]) else None
+        #         
+        #         if from_tile and to_tile and len(from_tile) >= 4 and len(to_tile) >= 4:
+        #             from_elevation = from_tile[3] if len(from_tile) > 3 else 0
+        #             to_elevation = to_tile[3] if len(to_tile) > 3 else 0
+        #             
+        #             # If elevations differ, check if movement is allowed
+        #             if from_elevation != to_elevation:
+        #                 # Movement between different elevations is ONLY allowed if:
+        #                 # 1. There's a ledge/slide behavior (one-way jump)
+        #                 # 2. There's stairs/ladder/escalator (two-way connection)
+        #                 # 3. There's a bridge (connects elevations)
+        #                 
+        #                 # Check destination tile behavior
+        #                 to_behavior = to_tile[1] if len(to_tile) > 1 else 0
+        #                 from_behavior = from_tile[1] if len(from_tile) > 1 else 0
+        #                 
+        #                 # Get behavior names
+        #                 from_behavior_name = "UNKNOWN"
+        #                 to_behavior_name = "UNKNOWN"
+        #                 
+        #                 try:
+        #                     from pokemon_env.enums import MetatileBehavior
+        #                     if isinstance(from_behavior, (int, type(from_behavior).__name__ == 'int64' if hasattr(type(from_behavior), '__name__') else False)):
+        #                         import numpy as np
+        #                         if isinstance(from_behavior, (int, np.integer)):
+        #                             from_behavior_enum = MetatileBehavior(int(from_behavior))
+        #                             from_behavior_name = from_behavior_enum.name
+        #                     if isinstance(to_behavior, (int, type(to_behavior).__name__ == 'int64' if hasattr(type(to_behavior), '__name__') else False)):
+        #                         import numpy as np
+        #                         if isinstance(to_behavior, (int, np.integer)):
+        #                             to_behavior_enum = MetatileBehavior(int(to_behavior))
+        #                             to_behavior_name = to_behavior_enum.name
+        #                 except (ValueError, TypeError, AttributeError, ImportError):
+        #                     pass
+        #                 
+        #                 # Check if either tile has elevation-connecting behavior
+        #                 elevation_connectors = [
+        #                     "JUMP", "SLIDE", "WALK",  # One-way movement
+        #                     "STAIRS", "LADDER", "ESCALATOR",  # Two-way movement
+        #                     "BRIDGE"  # Connects elevations
+        #                 ]
+        #                 
+        #                 has_elevation_connector = False
+        #                 for connector in elevation_connectors:
+        #                     if connector in from_behavior_name or connector in to_behavior_name:
+        #                         has_elevation_connector = True
+        #                         break
+        #                 
+        #                 # Also check if symbols indicate elevation connectors
+        #                 if dest_symbol in ['→', '←', '↑', '↓', '↗', '↖', '↘', '↙', 'S', 'D', '&']:
+        #                     has_elevation_connector = True
+        #                 
+        #                 # Block movement if no explicit elevation connector
+        #                 if not has_elevation_connector:
+        #                     logger.debug(f"Blocking movement from ({from_x}, {from_y}) elev {from_elevation} to ({to_x}, {to_y}) elev {to_elevation}: no elevation connector")
+        #                     return False
+        #     except (IndexError, TypeError, AttributeError) as e:
+        #         # If we can't get elevation data, fall through to symbol-based checks
+        #         logger.debug(f"Could not check elevation: {e}")
+        # ========================================================================
         
         # Check if destination is a ledge - if so, validate direction
         # Ledge direction rules:

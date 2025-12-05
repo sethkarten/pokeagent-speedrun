@@ -2773,9 +2773,8 @@ class DirectObjectiveManager:
         This sequence is designed for the autonomous CLI agent. It contains a single objective
         that guides the agent through the autonomous objective creation pipeline:
         1. Call get_progress_summary() to review accomplishments
-        2. Call get_knowledge_summary() to see what's been learned
-        3. Use get_walkthrough(part=X) to find the next relevant walkthrough part
-        4. Create the next 3 direct objectives using create_direct_objectives()
+        2. Use get_walkthrough(part=X) to find the next relevant walkthrough part
+        3. Create the next 3 direct objectives using create_direct_objectives()
         
         When this objective is completed, the agent will have created new objectives and can
         proceed with those objectives.
@@ -2786,6 +2785,24 @@ class DirectObjectiveManager:
         """
         self.sequence_name = "autonomous_objective_creation"
         self.current_sequence = [
+            # DirectObjective(
+            #     id="dynamic_01_reach_route_102",
+            #     description="Head south from route 103 to enter Route 102",
+            #     action_type="navigate",
+            #     target_location="route 102",
+            #     navigation_hint="In route 103, go to the south (down) exit to reach Route 102.",
+            #     completion_condition="location_contains_route_102",
+            #     priority=1
+            # ),
+            # DirectObjective(
+            #     id="dynamic_01_travel_to_route_104",
+            #     description="Head south from petalburg to enter Route 104",
+            #     action_type="navigate",
+            #     target_location="route 104",
+            #     navigation_hint="In petalburg, go to exit to reach Route 104.",
+            #     completion_condition="location_contains_route_104",
+            #     priority=1
+            # ),
             DirectObjective(
                 id="autonomous_01_create_next_objectives",
                 description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
@@ -2794,7 +2811,7 @@ class DirectObjectiveManager:
                 navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Verify and create objectives with create_direct_objectives(). Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), the new objectives will be added to the sequence and the current_index will be incremented to the first new objective.",
                 completion_condition="dynamic_objectives_created",
                 priority=1
-            )
+            ),
         ]
         self.current_index = min(start_index, len(self.current_sequence))
         
