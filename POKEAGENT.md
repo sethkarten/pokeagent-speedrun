@@ -105,16 +105,16 @@ ACTION: [calls press_buttons(['A'], "Advance dialogue")]
 
 | Button | Use |
 |--------|-----|
-| `A` | Confirm, Talk, Select |
-| `B` | Cancel, Back |
-| `START` | Open menu |
-| `SELECT` | Special functions |
-| `UP` | Move up, Navigate menus |
-| `DOWN` | Move down, Navigate menus |
-| `LEFT` | Move left, Navigate menus |
-| `RIGHT` | Move right, Navigate menus |
-| `L` | Left shoulder button |
-| `R` | Right shoulder button |
+| "A" | Confirm, Talk, Select |
+| "B" | Cancel, Back |
+| "START" | Open menu |
+| "SELECT" | Special functions |
+| "UP" | Move up, Navigate menus |
+| "DOWN" | Move down, Navigate menus |
+| "LEFT" | Move left, Navigate menus |
+| "RIGHT" | Move right, Navigate menus |
+| "L" | Left shoulder button |
+| "R" | Right shoulder button |
 
 **⚠️ CRITICAL - DO NOT CONFUSE BUTTONS WITH GAME ACTIONS:**
 - ❌ **WRONG**: `press_buttons(['QUICK ATTACK'])` - This is a Pokemon move, NOT a button!

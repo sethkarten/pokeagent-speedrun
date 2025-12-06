@@ -840,27 +840,64 @@ class Pathfinder:
             if dist > max_search_distance:
                 break
             
-            # Check all neighbors
-            for dx in [-1, 0, 1]:
-                for dy in [-1, 0, 1]:
-                    if dx == 0 and dy == 0:
-                        continue
+            # Check neighbors in priority order:
+            # 1. Cardinal directions (especially directly below/south)
+            # 2. Diagonals
+            # This ensures we prefer positions directly adjacent to the goal
+            # For objects like clocks, directly below is usually the best position
+            
+            # Priority order: (dx, dy) pairs
+            # First: cardinal directions (south/down has highest priority for objects)
+            cardinal_directions = [
+                (0, 1),   # South (directly below) - highest priority for objects
+                (0, -1),  # North (directly above)
+                (-1, 0),  # West (left)
+                (1, 0),   # East (right)
+            ]
+            
+            # Then: diagonal directions
+            diagonal_directions = [
+                (-1, -1),  # Northwest
+                (1, -1),   # Northeast
+                (-1, 1),   # Southwest
+                (1, 1),    # Southeast
+            ]
+            
+            # Check cardinal directions first
+            for dx, dy in cardinal_directions:
+                new_pos = (pos[0] + dx, pos[1] + dy)
+                
+                if new_pos not in visited:
+                    visited.add(new_pos)
                     
-                    new_pos = (pos[0] + dx, pos[1] + dy)
+                    if new_pos not in blocked:
+                        # Found a reachable position
+                        # Check if we can path from start to here
+                        test_result = self._astar(start, new_pos, blocked, map_data, 50)
+                        # Handle both tuple (None, best_node) and list returns
+                        if isinstance(test_result, list):
+                            # Found a complete path
+                            return new_pos
                     
-                    if new_pos not in visited:
-                        visited.add(new_pos)
-                        
-                        if new_pos not in blocked:
-                            # Found a reachable position
-                            # Check if we can path from start to here
-                            test_result = self._astar(start, new_pos, blocked, map_data, 50)
-                            # Handle both tuple (None, best_node) and list returns
-                            if isinstance(test_result, list):
-                                # Found a complete path
-                                return new_pos
-                        
-                        queue.append((new_pos, dist + 1))
+                    queue.append((new_pos, dist + 1))
+            
+            # Then check diagonal directions
+            for dx, dy in diagonal_directions:
+                new_pos = (pos[0] + dx, pos[1] + dy)
+                
+                if new_pos not in visited:
+                    visited.add(new_pos)
+                    
+                    if new_pos not in blocked:
+                        # Found a reachable position
+                        # Check if we can path from start to here
+                        test_result = self._astar(start, new_pos, blocked, map_data, 50)
+                        # Handle both tuple (None, best_node) and list returns
+                        if isinstance(test_result, list):
+                            # Found a complete path
+                            return new_pos
+                    
+                    queue.append((new_pos, dist + 1))
         
         return None
     

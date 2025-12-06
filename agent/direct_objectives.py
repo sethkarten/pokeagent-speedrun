@@ -2803,6 +2803,36 @@ class DirectObjectiveManager:
             #     completion_condition="location_contains_route_104",
             #     priority=1
             # ),
+            # DirectObjective(
+            #     id="dynamic_01_exit_rustboro_gym",
+            #     description="I have just defeated Gym Leader Roxanne at Rustboro Gym. I need to exit the gym and continue my journey.",
+            #     action_type="navigate",
+            #     target_location="Rustboro City",
+            #     navigation_hint="Travel to the exit of the gym and continue my journey.",
+            #     completion_condition="location_contains_rustboro_city",
+            #     priority=1
+            # ),
+            # DirectObjective(
+            #     id="dynamic_03_find_briney",
+            #     description="Travel to Mr. Briney's Cottage",
+            #     action_type="navigate",
+            #     target_location="Route 104",
+            #     navigation_hint="Go south from Rustboro, through Petalburg Woods, to reach the cottage on the south side of Route 104.",
+            #     completion_condition="location_map_is_route_104_south",
+            #     priority=1
+            # ),
+
+
+            # gemini 2.5 - flash, autonomous objective creation... fix bug in pathfinding
+            DirectObjective(
+                id="set_clock_in_rival_player_bedroom",
+                description="Set the clock in the player's bedroom to 12:00 PM",
+                action_type="interact",
+                target_location="Player's Bedroom",
+                navigation_hint="Go to the player's bedroom and set the clock. navigate to the clock via navigate_to(5, 1) and directly face it by pressing up. Interact with it by pressing A.",
+                completion_condition="clock_set",
+                priority=1
+            ),
             DirectObjective(
                 id="autonomous_01_create_next_objectives",
                 description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
@@ -2812,6 +2842,7 @@ class DirectObjectiveManager:
                 completion_condition="dynamic_objectives_created",
                 priority=1
             ),
+
         ]
         self.current_index = min(start_index, len(self.current_sequence))
         
