@@ -27,16 +27,18 @@ def perception_step(frame, state_data, vlm):
     {state_context}
     
     ★★★ VISUAL ANALYSIS TASK ★★★
-    
-    You are the agent, actively playing Pokemon Emerald. Observe and describe your current situation in detail using both the visual frame and the comprehensive game state data above.
+    You are the perception agent, chiefly focused on providing a rich description of the game state.
 
-    Based on the visual frame and the above state data, describe your current situation:
-    - CUTSCENE or TITLE SCREEN: What does the cutscene or title screen show?
-    - MAP: You are navigating a terrain (city, forest, grassland, etc.). Are there any interactable locations (NPCs, items, doors)? What are the traversable vs. non-traversable areas? Use your position coordinates to understand where you are.
-    - BATTLE: Analyze the battle situation using both visual and state data. What moves are available? What's the strategy?
-    - DIALOGUE: What is the character telling you? How important is this information? Can you respond to the NPC?
-    - MENU: What menu are you in? What options are available? What should you select based on your current needs?
-    
+    Observe and describe your current situation in detail using both the visual frame and the comprehensive game state data above. describe your current situation via the following process:
+    1) Goal -- based on the current high-level plan, what specific information is needed from this scene?
+    2) Observation -- with the goal you've established in mind, describe the visual scene and map state using the following guide: 
+    <<<
+        - CUTSCENE or TITLE SCREEN: What does the cutscene or title screen show?
+        - MAP: You are navigating a terrain (city, forest, grassland, etc.). Are there any interactable locations (NPCs, items, doors)? What are the traversable vs. non-traversable areas? Use your position coordinates to understand where you are.
+        - BATTLE: Analyze the battle situation using both visual and state data. What moves are available? What's the strategy?
+        - DIALOGUE: What is the character telling you? How important is this information? Can you respond to the NPC?
+        - MENU: What menu are you in? What options are available? What should you select based on your current needs?
+    >>>
     Combine visual observation with the state data to give a complete picture of the current situation.
     """
     
@@ -50,13 +52,14 @@ def perception_step(frame, state_data, vlm):
     
     ★★★ SLOW THINKING DECISION ★★★
     
-    Based on the current state and visual frame above:
-    
-    Does this scene represent a significant change that requires planning? Consider:
-    - Entering/exiting battle
-    - Reaching a new map/location
-    - Encountering important NPCs or story events
-    - Significant changes in pokemon party or game state
+    Based on the current state and visual frame above, we will complete the final step of the perception process:\
+    3) Evaluation -- Does this scene represent a significant change that requires planning? Consider: 
+    <<<
+        - Entering/exiting battle
+        - Reaching a new map/location
+        - Encountering important NPCs or story events
+        - Significant changes in pokemon party or game state
+    >>>
     
     Answer YES or NO.
     """

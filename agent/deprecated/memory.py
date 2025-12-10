@@ -37,10 +37,15 @@ def extract_key_state_info(state_data):
         key_info['position'] = {}
     
     # Battle opponent
-    if game_data.get('battle_info'):
-        battle = game_data['battle_info']
-        opponent_pokemon = battle.get('opponent_pokemon', {})
-        key_info['battle_opponent'] = opponent_pokemon.get('species_name', opponent_pokemon.get('species', 'Unknown Pokemon'))
+    # TODO: Rework to get more detailed info
+    if game_data.get("is_in_battle", False):
+        # No detailed battle_info available from client
+        key_info['in_battle'] = True
+        key_info['battle_opponent'] = "Unknown Pokemon"
+    else:
+        key_info['in_battle'] = False
+        key_info['battle_opponent'] = None
+
     
     # Traversability summary
     if 'traversability' in map_info and map_info['traversability']:

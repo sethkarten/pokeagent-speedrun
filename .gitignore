@@ -6,9 +6,7 @@
 *.gba
 llm_log_*
 CLAUDE.md
-AGENTS.md
-docs
-examples
+.pokeagent_cache*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -189,3 +187,8 @@ cython_debug/
 
 *.mp4
 .pokeagent_cache/*
+*scripts/*
+test_gemini.py
+run_data/*
+out.txt
+*.sh

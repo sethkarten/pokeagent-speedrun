@@ -54,13 +54,14 @@ knowledge_base = get_knowledge_base()
 # HELPER FUNCTIONS FOR SERVER ENDPOINTS (NO HTTP CALLS)
 # ============================================================================
 
-def get_game_state_direct(env, state_formatter) -> dict:
+def get_game_state_direct(env, state_formatter, action_history=None) -> dict:
     """
     Get game state without HTTP calls - for use by server endpoints.
 
     Args:
         env: EmeraldEmulator instance
         state_formatter: format_state_for_llm function
+        action_history: Optional list of recent actions with start/end positions
 
     Returns:
         Dictionary with success status and state data including screenshot
@@ -71,7 +72,8 @@ def get_game_state_direct(env, state_formatter) -> dict:
         from PIL import Image
 
         state = env.get_comprehensive_state()
-        state_text = state_formatter(state)
+        # Pass action history to state formatter
+        state_text = state_formatter(state, action_history=action_history)
 
         # Get screenshot as base64 for vision models
         screenshot_b64 = None
@@ -101,7 +103,7 @@ def get_game_state_direct(env, state_formatter) -> dict:
         return {"success": False, "error": str(e)}
 
 
-def press_buttons_direct(buttons, action_queue, reasoning="") -> dict:
+def press_buttons_direct(buttons, action_queue, reasoning="", source=None, metadata=None) -> dict:
     """
     Queue buttons without HTTP calls - for use by server endpoints.
 
@@ -117,13 +119,29 @@ def press_buttons_direct(buttons, action_queue, reasoning="") -> dict:
         return {"success": False, "error": "No buttons provided"}
 
     try:
+        # Validate and normalize buttons
+        VALID_BUTTONS = {'A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R'}
+        normalized_buttons = []
+        
+        for button in buttons:
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+            
+            # Check if valid
+            if button_upper in VALID_BUTTONS:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append('A')
+        
         # Add to action queue
-        action_queue.extend(buttons)
-        logger.info(f"🎮 Queued buttons: {buttons} - {reasoning}")
+        action_queue.extend(normalized_buttons)
+        logger.info(f"🎮 Queued buttons: {normalized_buttons} - {reasoning}")
 
         return {
             "success": True,
-            "buttons_queued": buttons,
+            "buttons_queued": normalized_buttons,
             "reasoning": reasoning
         }
     except Exception as e:
@@ -131,7 +149,7 @@ def press_buttons_direct(buttons, action_queue, reasoning="") -> dict:
         return {"success": False, "error": str(e)}
 
 
-def navigate_to_direct(env, x, y, reason="") -> dict:
+def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = None) -> dict:
     """
     Calculate path to coordinates without HTTP calls - for use by server endpoints.
     Returns buttons to be queued via take_action.
@@ -150,8 +168,135 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
         x = int(x)
         y = int(y)
 
+        variance_level = None
+        nav_reason = "" if reason is None else str(reason)
+
+        if variance is not None:
+            variance_str = str(variance).strip()
+            variance_lower = variance_str.lower()
+            if variance_lower in {"low", "medium", "high"}:
+                variance_level = variance_lower
+            elif variance_lower in {"", "none"}:
+                variance_level = None
+            elif not reason:
+                nav_reason = variance_str
+        elif nav_reason.lower() in {"low", "medium", "high"}:
+            variance_level = nav_reason.lower()
+            nav_reason = ""
+
         # Get current state for pathfinding
         state = env.get_comprehensive_state()
+
+        # CRITICAL: Load porymap data into state for pathfinding
+        # The pathfinder needs map['porymap']['grid'] which is normally added by format_state_for_llm
+        location_name = state.get('player', {}).get('location', 'Unknown')
+        if location_name and location_name != 'Unknown' and location_name != 'TITLE_SEQUENCE':
+            try:
+                from utils.porymap_json_builder import build_json_map_for_llm
+                from utils.pokeemerald_parser import PokeemeraldMapLoader
+                from pathlib import Path
+                import os
+                
+                # Get pokeemerald root (use same logic as state_formatter)
+                pokeemerald_root = None
+                # Try environment variable first (same as state_formatter)
+                root = os.environ.get('POKEEMERALD_ROOT')
+                if root:
+                    root_path = Path(root).resolve()
+                    if (root_path / "data" / "maps").exists():
+                        pokeemerald_root = root_path
+                
+                # Try porymap_data directory (same as state_formatter)
+                if not pokeemerald_root:
+                    # Get the server/cli directory's parent's parent (pokeagent-speedrun root)
+                    current_dir = Path(__file__).parent.parent.parent
+                    porymap_path = current_dir / "porymap_data"
+                    if (porymap_path / "data" / "maps").exists():
+                        pokeemerald_root = porymap_path.resolve()
+                
+                # Try common relative paths (same as state_formatter)
+                if not pokeemerald_root:
+                    current_dir = Path(__file__).parent.parent.parent
+                    possible_paths = [
+                        current_dir / "pokeemerald",
+                        current_dir / "../pokeemerald",
+                        current_dir / "../../pokeemerald",
+                    ]
+                    for path in possible_paths:
+                        resolved = path.resolve()
+                        if (resolved / "data" / "maps").exists():
+                            pokeemerald_root = resolved
+                            break
+                
+                if pokeemerald_root:
+                    # Import comprehensive ROM to Porymap mapping from state_formatter
+                    from utils.state_formatter import ROM_TO_PORYMAP_MAP
+                    
+                    porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
+                    
+                    # Try fuzzy matching if not in direct mapping (use fuzzywuzzy like state_formatter)
+                    if not porymap_map_name:
+                        try:
+                            from fuzzywuzzy import process
+                            map_loader = PokeemeraldMapLoader(pokeemerald_root)
+                            maps_dir = pokeemerald_root / "data" / "maps"
+                            if maps_dir.exists():
+                                available_maps = [d.name for d in maps_dir.iterdir() if d.is_dir() and d.name != "map_groups.json"]
+                                best_match, best_match_score = process.extractOne(location_name, available_maps)
+                                # Only accept matches with score >= 70 to avoid bad matches
+                                if best_match_score >= 70:
+                                    porymap_map_name = best_match
+                                    logger.debug(f"Fuzzy matched '{location_name}' to '{porymap_map_name}' (score: {best_match_score})")
+                        except ImportError:
+                            # Fallback: use simple substring matching but prefer exact substring matches
+                            # and prefer longer matches (more specific)
+                            map_loader = PokeemeraldMapLoader(pokeemerald_root)
+                            maps_dir = pokeemerald_root / "data" / "maps"
+                            if maps_dir.exists():
+                                location_normalized = location_name.lower().replace(" ", "").replace("_", "")
+                                best_candidate = None
+                                best_match_len = 0
+                                for map_dir in maps_dir.iterdir():
+                                    if map_dir.is_dir() and map_dir.name != "map_groups.json":
+                                        map_normalized = map_dir.name.lower().replace(" ", "").replace("_", "")
+                                        # Check if location is a substring of map name (prefer longer matches)
+                                        if location_normalized in map_normalized:
+                                            match_len = len(map_normalized)
+                                            if match_len > best_match_len:
+                                                best_candidate = map_dir.name
+                                                best_match_len = match_len
+                                if best_candidate:
+                                    porymap_map_name = best_candidate
+                    
+                    if porymap_map_name:
+                        # Build JSON map with grid for pathfinding
+                        try:
+                            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+                        except ValueError as e:
+                            logger.error(f"Failed to build porymap for '{porymap_map_name}' due to corrupted tileset: {e}")
+                            json_map = None
+                        
+                        if json_map and 'grid' in json_map:
+                            # Ensure map dict exists
+                            if 'map' not in state:
+                                state['map'] = {}
+                            if 'porymap' not in state['map']:
+                                state['map']['porymap'] = {}
+                            
+                            # Add porymap data for pathfinding
+                            state['map']['porymap']['grid'] = json_map['grid']
+                            state['map']['porymap']['objects'] = json_map.get('objects', [])
+                            state['map']['porymap']['dimensions'] = json_map.get('dimensions', {})
+                            state['map']['porymap']['warps'] = json_map.get('warps', [])
+                            logger.debug(f"Loaded porymap data for '{porymap_map_name}' (ROM: '{location_name}')")
+                        else:
+                            logger.warning(f"Porymap data for '{porymap_map_name}' missing grid data")
+                    else:
+                        logger.warning(f"Could not map ROM location '{location_name}' to porymap map name")
+                else:
+                    logger.warning(f"Could not find pokeemerald root for porymap data")
+            except Exception as porymap_err:
+                logger.warning(f"Failed to load porymap data for pathfinding: {porymap_err}")
 
         # Get player position
         player_pos = state.get('player', {}).get('position', {})
@@ -160,8 +305,20 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
         start = (start_x, start_y)
         goal = (x, y)
 
+        # Check if requested goal is blocked (for agent notification)
+        goal_was_blocked = False
+        map_data = state.get('map', {}).get('porymap', {})
+        if map_data.get('grid'):
+            grid = map_data['grid']
+            if 0 <= y < len(grid):
+                row = grid[y]
+                if isinstance(row, (list, str)) and 0 <= x < len(row):
+                    cell = row[x] if isinstance(row, str) else row[x]
+                    if cell == '#':
+                        goal_was_blocked = True
+
         # Calculate path buttons using Pathfinder
-        buttons = pathfinder.find_path(start, goal, state)
+        buttons = pathfinder.find_path(start, goal, state, variance=variance_level)
 
         if not buttons:
             return {
@@ -170,21 +327,32 @@ def navigate_to_direct(env, x, y, reason="") -> dict:
                 "target": f"({x}, {y})"
             }
 
-        nav_reason = f"Navigating from ({start_x}, {start_y}) to ({x}, {y})"
-        if reason:
-            nav_reason += f": {reason}"
+        nav_reason_text = f"Navigating from ({start_x}, {start_y}) to ({x}, {y})"
+        if nav_reason:
+            nav_reason_text += f": {nav_reason}"
+        if variance_level:
+            nav_reason_text += f" (variance={variance_level})"
 
-        logger.info(f"🗺️ {nav_reason} - Buttons calculated: {len(buttons)}")
+        logger.info(f"🗺️ {nav_reason_text} - Buttons calculated: {len(buttons)}")
 
-        return {
+        result = {
             "success": True,
             "buttons": buttons,
             "target": f"({x}, {y})",
             "path_length": len(buttons),
-            "reason": reason
+            "reason": nav_reason,
+            "variance": variance_level or "none"
         }
+        
+        # Inform agent if goal was blocked and adjusted
+        if goal_was_blocked:
+            result["note"] = f"Requested target ({x}, {y}) was blocked; navigated to nearest reachable tile"
+
+        return result
     except Exception as e:
         logger.error(f"Failed to navigate: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {"success": False, "error": str(e)}
 
 
@@ -256,28 +424,14 @@ def get_game_state() -> dict:
         response.raise_for_status()
         state = response.json()
 
-        # Print ASCII map to console (same as pressing M)
-        # from utils.state_formatter import print_map_debug
-        # print("=" * 80)
-        # print("📊 COMPREHENSIVE STATE (LLM View)")
-        # print("=" * 80)
-        # # print_map_debug(state)
-
-        # # Print ASCII version for human viewing
-        ascii_state = format_state_for_llm(state, use_json_map=False)
-        # print(ascii_state)
-        # print("=" * 80)
-        # print(flush=True)
-
-        # Return JSON map format for LLM (clearer tile information)
-        state_text = format_state_for_llm(state, use_json_map=True)
+        # Format state for LLM
+        state_text = format_state_for_llm(state)
 
         return {
             "success": True,
             "state_text": state_text,
             "player_position": state.get('player', {}).get('position', {}),
-            "location": state.get('map', {}).get('current_map', 'Unknown'),
-            "debug": ascii_state
+            "location": state.get('map', {}).get('current_map', 'Unknown')
         }
     except Exception as e:
         logger.error(f"Failed to get game state: {e}")
@@ -285,7 +439,12 @@ def get_game_state() -> dict:
 
 
 @mcp.tool()
-def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
+def press_buttons(
+    buttons: List[str],
+    reasoning: str = "",
+    source: str = "",
+    metadata: Optional[Dict[str, Any]] = None
+) -> dict:
     """
     Press buttons on the Game Boy Advance emulator. Buttons are executed sequentially.
     You will automatically receive the updated game state after buttons are executed.
@@ -294,6 +453,8 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
         buttons: List of buttons to press in sequence (e.g., ['A', 'A', 'B'])
                  Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R
         reasoning: Brief explanation of why you're pressing these buttons
+        source: Optional label identifying where this action originated (e.g., 'navigate_to')
+        metadata: Optional dictionary of metadata to attach to the action (e.g., {'variance': 'high'})
 
     Returns:
         Dictionary with success status, buttons pressed, and updated game state
@@ -302,10 +463,34 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
         return {"success": False, "error": "No buttons provided"}
 
     try:
-        # Send buttons to server
+        # Validate and normalize buttons
+        VALID_BUTTONS = {'A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R'}
+        normalized_buttons = []
+        invalid_buttons = []
+        
+        for button in buttons:
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+            
+            # Check if valid
+            if button_upper in VALID_BUTTONS:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                invalid_buttons.append(button)
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append('A')
+        
+        # Send normalized buttons to server
+        payload = {"buttons": normalized_buttons}
+        if source:
+            payload["source"] = source
+        if metadata is not None:
+            payload["metadata"] = metadata
+
         response = requests.post(
             f"{SERVER_URL}/action",
-            json={"buttons": buttons},
+            json=payload,
             timeout=10
         )
         response.raise_for_status()
@@ -314,20 +499,26 @@ def press_buttons(buttons: List[str], reasoning: str = "") -> dict:
         # Get updated state after action
         state_response = get_game_state()
 
-        return {
+        response_dict = {
             "success": True,
-            "buttons_pressed": buttons,
+            "buttons_pressed": normalized_buttons,
             "reasoning": reasoning,
             "result": result,
             "new_state": state_response.get("state_text", "State unavailable")
         }
+        
+        # Include warning if any buttons were invalid
+        if invalid_buttons:
+            response_dict["warning"] = f"Invalid buttons replaced with 'A': {invalid_buttons}"
+        
+        return response_dict
     except Exception as e:
         logger.error(f"Failed to press buttons: {e}")
         return {"success": False, "error": str(e)}
 
 
 @mcp.tool()
-def navigate_to(x: int, y: int, reason: str = "") -> dict:
+def navigate_to(x: int, y: int, variance: str = "none", reason: str = "") -> dict:
     """
     Automatically pathfind and move to a specific coordinate on the current map using A* algorithm.
     Handles collision detection and finds the optimal path. The pathfinding will be executed
@@ -336,7 +527,8 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
     Args:
         x: Target X coordinate
         y: Target Y coordinate
-        reason: Why you're navigating to this location
+        variance: Path variance level ('low', 'medium', 'high', or 'none')
+        reason: Why you're navigating to this location (optional context)
 
     Returns:
         Dictionary with success status, path information, and navigation result
@@ -355,32 +547,61 @@ def navigate_to(x: int, y: int, reason: str = "") -> dict:
         return {"success": False, "error": f"Failed to get state for pathfinding: {e}"}
 
     try:
-        # Calculate path
-        path = pathfinder.find_path(state, x, y)
+        variance_level = None
+        nav_reason = "" if reason is None else str(reason)
 
-        if not path:
+        if variance is not None:
+            variance_str = str(variance).strip()
+            variance_lower = variance_str.lower()
+            if variance_lower in {"low", "medium", "high"}:
+                variance_level = variance_lower
+            elif variance_lower in {"", "none"}:
+                variance_level = None
+            elif not reason:
+                nav_reason = variance_str
+        elif nav_reason.lower() in {"low", "medium", "high"}:
+            variance_level = nav_reason.lower()
+            nav_reason = ""
+
+        # Get player position from state
+        player_pos = state.get('player', {}).get('position', {})
+        start_x = player_pos.get('x', 0)
+        start_y = player_pos.get('y', 0)
+        start = (start_x, start_y)
+        goal = (x, y)
+        
+        # Calculate path using Pathfinder
+        buttons = pathfinder.find_path(start, goal, state, variance=variance_level)
+
+        if not buttons:
             return {
                 "success": False,
                 "error": "No path found to target location",
                 "target": f"({x}, {y})"
             }
 
-        # Convert path to button presses
-        buttons = pathfinder.path_to_buttons(path)
-
         # Execute navigation
-        nav_reason = f"Navigating to ({x}, {y})"
-        if reason:
-            nav_reason += f": {reason}"
+        nav_reason_text = f"Navigating to ({x}, {y})"
+        if nav_reason:
+            nav_reason_text += f": {nav_reason}"
+        if variance_level:
+            nav_reason_text += f" (variance={variance_level})"
 
-        result = press_buttons(buttons, nav_reason)
+        variance_metadata = variance_level or "none"
+        result = press_buttons(
+            buttons,
+            nav_reason_text,
+            source="navigate_to",
+            metadata={"variance": variance_metadata}
+        )
 
         return {
             "success": True,
             "target": f"({x}, {y})",
-            "path_length": len(path),
+            "path_length": len(buttons),
             "buttons_executed": len(buttons),
-            "reason": reason,
+            "reason": nav_reason,
+            "variance": variance_level or "none",
             "navigation_result": result
         }
     except Exception as e:

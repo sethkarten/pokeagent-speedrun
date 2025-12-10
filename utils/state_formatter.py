@@ -14,6 +14,8 @@ from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dy
 import base64
 import io
 import os, sys
+from pathlib import Path
+from typing import Optional, List, Tuple
 from pokemon_env.enums import MetatileBehavior
 from utils import state_formatter as sf
 
@@ -25,84 +27,6 @@ LAST_LOCATION = None
 LAST_TRANSITION = None  # Stores transition coordinates
 MAP_STITCHER_SAVE_CALLBACK = None  # Callback to save map stitcher when location connections change
 MAP_STITCHER_INSTANCE = None  # Reference to the MapStitcher instance
-
-
-def print_map_debug(state_data):
-    """Print debug information about tile locations (stairs, doors, TV, etc).
-
-    This is called when pressing 'M' in manual mode to show tile coordinates.
-
-    Args:
-        state_data: The comprehensive state dict from get_comprehensive_state()
-    """
-    map_info = state_data.get('map', {})
-    player_data = state_data.get('player', {})
-
-    # Get player position
-    player_pos = player_data.get('position', {})
-    if player_pos:
-        player_x = player_pos.get('x')
-        player_y = player_pos.get('y')
-    else:
-        player_x = player_y = None
-
-    # Get location name
-    location_name = player_data.get('location')
-
-    print(f"\n[MAP DEBUG] Location: {location_name if location_name else 'Unknown'}")
-    if player_x is not None and player_y is not None:
-        print(f"[MAP DEBUG] Player at ({player_x}, {player_y})")
-
-    # Analyze memory tiles
-    raw_tiles = map_info.get('tiles')
-    if not raw_tiles or player_x is None or player_y is None:
-        print("[MAP DEBUG] No tile data available")
-        return
-
-    # Track interesting tiles
-    debug_tiles = {'stairs': [], 'door': [], 'tv': [], 'computer': [], 'ledge': []}
-
-    radius = 7  # Memory tiles are 15x15 grid centered on player
-    for y_idx, row in enumerate(raw_tiles):
-        for x_idx, tile_data in enumerate(row):
-            if tile_data and isinstance(tile_data, (list, tuple)) and len(tile_data) > 1:
-                behavior_obj = tile_data[1]
-                behavior = behavior_obj.value if hasattr(behavior_obj, 'value') else behavior_obj
-
-                # Map behavior to type
-                tile_type = None
-                if behavior in [96, 105]:
-                    tile_type = "stairs"
-                elif behavior in [97, 98, 99, 100, 101]:
-                    tile_type = "door"
-                elif behavior == 134:
-                    tile_type = "tv"
-                elif behavior in [131, 197]:
-                    tile_type = "computer"
-                elif behavior in [56, 57, 58, 59, 60, 61, 62, 63]:
-                    tile_type = "ledge"
-
-                if tile_type:
-                    game_x = player_x + (x_idx - radius)
-                    game_y = player_y + (y_idx - radius)
-                    debug_tiles[tile_type].append((game_x, game_y))
-
-    # Add hardcoded special objects for BRENDANS HOUSE 2F
-    if location_name and "BRENDAN" in location_name.upper() and "2F" in location_name.upper():
-        special_objects = {
-            'clock': [(5, 1)],
-            'gamecube': [(3, 1)],
-            'notebook': [(1, 1)],
-        }
-        for obj_type, positions in special_objects.items():
-            if obj_type not in debug_tiles:
-                debug_tiles[obj_type] = []
-            debug_tiles[obj_type].extend(positions)
-
-    # Print results
-    for tile_type, positions in debug_tiles.items():
-        if positions:
-            print(f"[MAP DEBUG] {tile_type.upper()}: {positions}")
 
 def _get_location_connections_from_cache():
     """Read location connections from MapStitcher's cache file"""
@@ -240,41 +164,43 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
         logger.warning(f"Failed to detect dialogue on frame: {e}")
         return {'has_dialogue': False, 'confidence': 0.0, 'reason': f'error: {e}'}
 
-def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True, use_json_map=False):
+def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Format comprehensive state data into readable text.
-
+    
     Args:
         state_data (dict): The comprehensive state from /state endpoint
         format_type (str): "summary" for one-line summary, "detailed" for multi-line LLM format
         include_debug_info (bool): Whether to include extra debug information (for detailed format)
         include_npcs (bool): Whether to include NPC information in the state
-        use_json_map (bool): Use JSON-based map format instead of ASCII grid (for detailed format)
-
+        include_movement_preview (bool): Whether to include movement preview (for detailed format)
+        action_history (list): Optional list of recent actions with start/end positions
+    
     Returns:
         str: Formatted state text
     """
     if format_type == "summary":
         return _format_state_summary(state_data)
     elif format_type == "detailed":
-        return _format_state_detailed(state_data, include_debug_info, include_npcs, use_json_map)
+        return _format_state_detailed(state_data, include_debug_info, include_npcs, include_movement_preview, action_history)
     else:
         raise ValueError(f"Unknown format_type: {format_type}. Use 'summary' or 'detailed'")
 
-def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True, use_json_map=False):
+def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Format comprehensive state data into a readable context for the VLM.
-
+    
     Args:
         state_data (dict): The comprehensive state from /state endpoint
         include_debug_info (bool): Whether to include extra debug information
         include_npcs (bool): Whether to include NPC information in the state
-        use_json_map (bool): Use JSON-based map format instead of ASCII grid
-
+        include_movement_preview (bool): Whether to include movement preview (deprecated for pathfinding agents)
+        action_history (list): Optional list of recent actions with start/end positions
+    
     Returns:
         str: Formatted state context for LLM prompts
     """
-    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs, use_json_map=use_json_map)
+    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs, include_movement_preview=include_movement_preview, action_history=action_history)
 
 def format_state_summary(state_data):
     """
@@ -394,14 +320,17 @@ def _format_state_summary(state_data):
     
     return " | ".join(summary_parts) if summary_parts else "No state data"
 
-def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True, use_json_map=False):
+def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Internal function to create detailed multi-line state format for LLM prompts.
-
-    Args:
-        use_json_map: If True, use JSON-based map format instead of ASCII grid
     """
     context_parts = []
+    
+    # Add action history at the beginning if available
+    if action_history:
+        action_history_text = format_action_history(action_history)
+        context_parts.append(action_history_text)
+        context_parts.append("")  # Add blank line for spacing
     
     # Check both player and game sections for data
     player_data = state_data.get('player', {})
@@ -411,7 +340,11 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
     is_in_battle = game_data.get('is_in_battle', False) or game_data.get('in_battle', False)
     
     if is_in_battle:
-        # BATTLE MODE: Focus on battle-relevant information
+        # Remove heavy overworld map data while in battle to reduce prompt size
+        map_info = state_data.get('map') if isinstance(state_data, dict) else None
+        if isinstance(map_info, dict):
+            map_info.pop('porymap', None)
+         # BATTLE MODE: Focus on battle-relevant information
         context_parts.append("=== BATTLE MODE ===")
         context_parts.append("Currently in battle - map and dialogue information hidden")
         
@@ -568,11 +501,11 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.extend(party_context)
 
         # Map/Location information with traversability (NOT shown in battle)
-        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data, use_json_map)
+        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
         context_parts.extend(map_context)
 
         # Game state information (including dialogue if not in battle)
-        game_context = _format_game_state(game_data, state_data)
+        game_context = _format_game_state(game_data, state_data, include_movement_preview)
         context_parts.extend(game_context)
     
     # Debug information if requested (shown in both modes)
@@ -681,12 +614,21 @@ def _format_party_info(player_data, game_data):
     
     return context_parts
 
-def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None, use_json_map=False):
+def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None):
     """Format map and traversability information using MapStitcher."""
     context_parts = []
     
     if not map_info:
         return context_parts
+    
+    # Ensure map_info is actually part of state (not a copy)
+    # This ensures porymap data we store persists in the state
+    if full_state_data and 'map' not in full_state_data:
+        full_state_data['map'] = map_info
+    elif full_state_data and full_state_data.get('map') is not map_info:
+        # If map_info is a different object, merge our changes back
+        full_state_data['map'].update(map_info)
+        map_info = full_state_data['map']
     
     # Get location name from player data
     location_name = None
@@ -708,221 +650,32 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     if location_name:
         context_parts.append(f"Current Location: {location_name}")
     
-    # Also add current map if different
-    if 'current_map' in map_info and map_info['current_map'] != location_name:
-        context_parts.append(f"Current Map: {map_info['current_map']}")
-    
-    # Get player coordinates
+    # Get player coordinates from ROM (read via memory_reader.read_coordinates())
+    # This is the actual player position from the game, not from MapStitcher
     player_coords = None
-    player_coords_dict = map_info.get('player_coords', {})
-    if isinstance(player_coords_dict, dict) and player_coords_dict.get('x') is not None:
-        player_coords = (player_coords_dict.get('x', 0), player_coords_dict.get('y', 0))
-    elif player_coords_dict and not isinstance(player_coords_dict, dict):
-        player_coords = player_coords_dict
-    elif player_data and 'position' in player_data:
+    if player_data and 'position' in player_data:
         pos = player_data['position']
         if pos:
             player_coords = (pos.get('x', 0), pos.get('y', 0))
-        else:
-            player_coords = (0, 0)
+            context_parts.append(f"Player Position (ROM): ({player_coords[0]}, {player_coords[1]})")
     
-    # Get MapStitcher instance - prefer the one from memory_reader if available
-    # This ensures we use the instance that has the actual map data
-    map_stitcher = map_info.get('_map_stitcher_instance') if map_info else None
-    if not map_stitcher:
-        map_stitcher = _get_map_stitcher_instance()
+    # MapStitcher map display removed - using porymap ground truth instead
     
-    # Get NPCs if available
-    # NPCs disabled - unreliable detection with incorrect positions
-    npcs = []
-    # if include_npcs and 'object_events' in map_info:
-    #     npcs = map_info.get('object_events', [])
-    
-    # Get connections from current area
-    connections = []
-    if map_info.get('stitched_map_info'):
-        current_area = map_info['stitched_map_info'].get('current_area', {})
-        connections = current_area.get('connections', [])
-    
-    # When using JSON format, ONLY show JSON data (visual comes from screenshot image)
-    if use_json_map:
-        json_generated = False
-
-        # For JSON format, we have a tradeoff:
-        # - map_stitcher: Has warp overlays (doors/stairs) but may have stale coordinates
-        # - memory tiles: Always current coordinates but missing warp detection (some warps use metatile IDs not behaviors)
-        #
-        # Solution: Try map_stitcher first BUT validate coordinates are reasonable
-        # If validation fails, fall back to memory tiles (which won't show all warps but will have correct coords)
-
-        # DISABLED: map_stitcher accumulates tiles from different times/areas with inconsistent coordinates
-        # Always use memory tiles for JSON to ensure coordinate accuracy
-        # (map_stitcher is still used for ASCII maps where visual layout is more important than exact coords)
-
-        # Fallback: Convert raw memory tiles to JSON (works even without location name)
-        if not json_generated and 'tiles' in map_info and map_info['tiles']:
-            raw_tiles = map_info['tiles']
-            # Convert raw tiles grid to JSON format
-            tiles_list = []
-
-            # Memory tiles are centered on player with radius=7 (15x15 grid)
-            # Array index [7][7] = player position
-            # Convert array indices to game coordinates
-            radius = 7
-            player_x, player_y = player_coords if player_coords else (0, 0)
-
-            # Track interesting tiles for debug logging
-            debug_tiles = {'stairs': [], 'door': [], 'tv': [], 'clock': [], 'computer': [], 'ledge': []}
-
-            for y_idx, row in enumerate(raw_tiles):
-                for x_idx, tile_data in enumerate(row):
-                    if tile_data:
-                        # Tile format: (metatile_id, behavior, collision, ...)
-                        # Extract behavior value from index 1
-                        if isinstance(tile_data, (list, tuple)) and len(tile_data) > 1:
-                            behavior_obj = tile_data[1]
-                            # Get numeric value from behavior enum or int
-                            if hasattr(behavior_obj, 'value'):
-                                behavior = behavior_obj.value
-                            else:
-                                behavior = behavior_obj
-                        else:
-                            behavior = 0
-
-                        # Map behavior to type
-                        if behavior in [96, 105]:  # NON_ANIMATED_DOOR, ANIMATED_DOOR (actually stairs)
-                            tile_type = "stairs"
-                        elif behavior in [97, 98, 99, 100, 101]:  # LADDER, arrow warps (actually doors)
-                            tile_type = "door"
-                        elif behavior == 134:  # TELEVISION
-                            tile_type = "tv"
-                        elif behavior in [131, 197]:  # PC, PLAYER_ROOM_PC_ON
-                            tile_type = "computer"
-                        elif behavior in [56, 57, 58, 59, 60, 61, 62, 63]:  # JUMP_* (ledges)
-                            tile_type = "ledge"
-                        elif behavior == 0:
-                            tile_type = "walkable"
-                        else:
-                            tile_type = "blocked"
-
-                        # Convert array index to game coordinates
-                        game_x = player_x + (x_idx - radius)
-                        game_y = player_y + (y_idx - radius)
-
-                        # Track interesting tiles for debug output
-                        if tile_type in debug_tiles:
-                            debug_tiles[tile_type].append((game_x, game_y))
-
-                        tiles_list.append({
-                            "x": game_x,
-                            "y": game_y,
-                            "type": tile_type,
-                            "walkable": tile_type in ["walkable", "door", "stairs", "tv", "computer", "ledge"]
-                        })
-
-            # Add hardcoded special objects for BRENDANS HOUSE 2F
-            # (These objects don't have behavior values in memory, so we add them manually)
-            if location_name and "BRENDAN" in location_name.upper() and "2F" in location_name.upper():
-                special_objects = [
-                    {'x': 5, 'y': 1, 'type': 'clock', 'walkable': False},
-                    {'x': 3, 'y': 1, 'type': 'gamecube', 'walkable': False},
-                    {'x': 1, 'y': 1, 'type': 'notebook', 'walkable': False},
-                ]
-                for obj in special_objects:
-                    # Check if position already has a tile
-                    existing = [t for t in tiles_list if t['x'] == obj['x'] and t['y'] == obj['y']]
-                    if existing:
-                        # Replace the existing tile with the special object
-                        tiles_list = [t for t in tiles_list if not (t['x'] == obj['x'] and t['y'] == obj['y'])]
-                    tiles_list.append(obj)
-                    # Add to debug tracking
-                    obj_type = obj['type']
-                    if obj_type not in debug_tiles:
-                        debug_tiles[obj_type] = []
-                    debug_tiles[obj_type].append((obj['x'], obj['y']))
-
-            # Build JSON output
-            import json as json_lib
-            json_output = {
-                "location": location_name if location_name else "Unknown",
-                "player_position": {"x": player_coords[0], "y": player_coords[1]} if player_coords else None,
-                "tiles": tiles_list
-            }
-
-            # Console debug: Print interesting tile locations
-            print(f"\n[MAP DEBUG] Location: {location_name if location_name else 'Unknown'}")
-            if player_coords:
-                print(f"[MAP DEBUG] Player at ({player_coords[0]}, {player_coords[1]})")
-            for tile_type, positions in debug_tiles.items():
-                if positions:
-                    print(f"[MAP DEBUG] {tile_type.upper()}: {positions}")
-
-            context_parts.append(f"\n--- MAP DATA (JSON from memory) ---")
-            context_parts.append(json_lib.dumps(json_output, indent=2))
-            json_generated = True
-
-        # Last resort: just show location info
-        if not json_generated and location_name:
-            context_parts.append(f"\n--- MAP INFO ---")
-            context_parts.append(f"Location: {location_name}")
-            if player_coords:
-                context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
-            context_parts.append("Note: See screenshot for visual map. Detailed tile data not available.")
-    else:
-        # When NOT using JSON format, show ASCII visual maps
-        # Check for pre-generated visual map first (from memory_reader)
-        if map_info.get('visual_map'):
-            # Show the pre-generated map visualization
-            context_parts.append(map_info['visual_map'])
-        elif location_name:
-            # Generate map display using MapStitcher
-                # print( Attempting to generate map for location: '{location_name}'")
-                # print( MapStitcher exists: {map_stitcher is not None}")
-            if map_stitcher:
-                # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
-                for map_id in list(map_stitcher.map_areas.keys())[:3]:
-                    area = map_stitcher.map_areas[map_id]
-                    # print(   Area {map_id}: '{area.location_name}'")
-
-                # Show ASCII grid format
-                map_lines = map_stitcher.generate_location_map_display(
-                    location_name=location_name,
-                    player_pos=player_coords,
-                    npcs=npcs,
-                    connections=connections
-                )
-
-                if map_lines:
-                    # print( Generated {len(map_lines)} map lines from MapStitcher")
-                    context_parts.extend(map_lines)
-                    # Add exploration statistics
-                    location_grid = map_stitcher.get_location_grid(location_name)
-                    if location_grid:
-                        total_tiles = len(location_grid)
-                        context_parts.append("")
-                        context_parts.append(f"Total explored: {total_tiles} tiles")
-                else:
-                    # print( MapStitcher returned empty, falling back to memory tiles")
-                    # Fallback if MapStitcher doesn't have data for this location - use memory tiles
-                    if 'tiles' in map_info and map_info['tiles']:
-                        context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
-                        _add_local_map_fallback(context_parts, map_info, include_npcs, location_name)
-                    else:
-                        context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
-                        context_parts.append("No map data available")
-
-    if not location_name:
-        # No location name - use local map fallback
-        context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
-        if 'tiles' in map_info and map_info['tiles']:
-            _add_local_map_fallback(context_parts, map_info, include_npcs, None)
-    
-    # NPC information removed - unreliable detection with incorrect positions
-    
-    # Add stitched map information if available
-    stitched_info = _format_stitched_map_info(map_info)
-    if stitched_info:
-        context_parts.extend(stitched_info)
+    # Add porymap ground truth data (JSON and ASCII map)
+    porymap_result = _format_porymap_info(location_name, player_coords)
+    if isinstance(porymap_result, tuple):
+        porymap_info, porymap_data = porymap_result
+        if porymap_info:
+            context_parts.extend(porymap_info)
+            # Store porymap data in map_info for pathfinding (don't add to context text)
+            if 'porymap' not in map_info:
+                map_info['porymap'] = {}
+            map_info['porymap']['grid'] = porymap_data.get('grid')
+            map_info['porymap']['objects'] = porymap_data.get('objects', [])
+            map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
+            map_info['porymap']['raw_tiles'] = porymap_data.get('raw_tiles')  # Include raw tiles with elevation
+    elif porymap_result:
+        context_parts.extend(porymap_result)
     
     return context_parts
 
@@ -1302,7 +1055,650 @@ def _format_stitched_map_info(map_info):
     # Old world map knowledge system removed - replaced by location-based maps with portal coordinates
     return context_parts
 
-def _format_game_state(game_data, state_data=None):
+def _get_pokeemerald_root() -> Optional[Path]:
+    """Get the pokeemerald root directory path."""
+    # Try environment variable first
+    root = os.environ.get('POKEEMERALD_ROOT')
+    if root:
+        root_path = Path(root).resolve()
+        if (root_path / "data" / "maps").exists():
+            logger.info(f"Found pokeemerald root from env var: {root_path}")
+            return root_path
+    
+    # Try porymap_data directory first (under pokeagent-speedrun)
+    current_dir = Path(__file__).parent.parent
+    porymap_path = current_dir / "porymap_data"
+    if (porymap_path / "data" / "maps").exists():
+        logger.info(f"Found pokeemerald root: {porymap_path}")
+        return porymap_path.resolve()
+    
+    # Try common relative paths
+    possible_paths = [
+        current_dir / "pokeemerald",
+        current_dir / "../pokeemerald",
+        current_dir / "../../pokeemerald",
+    ]
+    
+    for path in possible_paths:
+        resolved = path.resolve()
+        if (resolved / "data" / "maps").exists():
+            logger.info(f"Found pokeemerald root: {resolved}")
+            return resolved
+    
+    logger.warning("Could not find pokeemerald root directory. Checked:")
+    logger.warning(f"  - POKEEMERALD_ROOT env var: {os.environ.get('POKEEMERALD_ROOT', 'not set')}")
+    logger.warning(f"  - porymap_data: {porymap_path}")
+    logger.warning(f"  - Common paths: {possible_paths}")
+    return None
+
+# ROM location name to Porymap map name mapping
+ROM_TO_PORYMAP_MAP = {
+    # Intro/Cutscene locations
+    "MOVING_VAN": "InsideOfTruck",  # Intro cutscene (moving van)
+    
+    # Towns
+    "LITTLEROOT TOWN": "LittlerootTown",
+    "OLDALE TOWN": "OldaleTown",
+    "DEWFORD TOWN": "DewfordTown",
+    "LAVARIDGE TOWN": "LavaridgeTown",
+    "FALLARBOR TOWN": "FallarborTown",
+    "VERDANTURF TOWN": "VerdanturfTown",
+    "PACIFIDLOG TOWN": "PacifidlogTown",
+    
+    # Cities
+    "PETALBURG CITY": "PetalburgCity",
+    "SLATEPORT CITY": "SlateportCity",
+    "MAUVILLE CITY": "MauvilleCity",
+    "RUSTBORO CITY": "RustboroCity",
+    "FORTREE CITY": "FortreeCity",
+    "LILYCOVE CITY": "LilycoveCity",
+    "MOSSDEEP CITY": "MossdeepCity",
+    "SOOTOPOLIS CITY": "SootopolisCity",
+    "EVER GRANDE CITY": "EverGrandeCity",
+    
+    # Routes
+    "ROUTE 101": "Route101",
+    "ROUTE 102": "Route102",
+    "ROUTE 103": "Route103",
+    "ROUTE 104": "Route104",
+    "ROUTE 105": "Route105",
+    "ROUTE 106": "Route106",
+    "ROUTE 107": "Route107",
+    "ROUTE 108": "Route108",
+    "ROUTE 109": "Route109",
+    "ROUTE 110": "Route110",
+    "ROUTE 111": "Route111",
+    "ROUTE 112": "Route112",
+    "ROUTE 113": "Route113",
+    "ROUTE 114": "Route114",
+    "ROUTE 115": "Route115",
+    "ROUTE 116": "Route116",
+    "ROUTE 117": "Route117",
+    "ROUTE 118": "Route118",
+    "ROUTE 119": "Route119",
+    "ROUTE 120": "Route120",
+    "ROUTE 121": "Route121",
+    "ROUTE 122": "Route122",
+    "ROUTE 123": "Route123",
+    "ROUTE 124": "Route124",
+    "ROUTE 125": "Route125",
+    "ROUTE 126": "Route126",
+    "ROUTE 127": "Route127",
+    "ROUTE 128": "Route128",
+    "ROUTE 129": "Route129",
+    "ROUTE 130": "Route130",
+    "ROUTE 131": "Route131",
+    "ROUTE 132": "Route132",
+    "ROUTE 133": "Route133",
+    "ROUTE 134": "Route134",
+    
+    # Buildings (common patterns)
+    "PETALBURG WOODS": "PetalburgWoods",
+    "RUSTURF TUNNEL": "RusturfTunnel",
+
+    # Professor Birch's Lab
+    "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
+    "PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
+
+    # Raw map IDs (fallback when memory reader can't resolve location name)
+    "Map_18_0B": "PetalburgWoods",  # Group 0x18 (Dungeons), Map 0x0B
+    "Map_18_04": "RusturfTunnel",  # Group 0x18 (Indoor Route 104), Map 0x04
+    "MAP_18_04": "RusturfTunnel",  # Alternate capitalization
+
+        # The folloing mappings were generated via cursor and verified
+    "ABANDONED SHIP CAPTAINS OFFICE": "AbandonedShip_CaptainsOffice",  # 100.0% match, verified
+    "ABANDONED SHIP CORRIDORS 1F": "AbandonedShip_Corridors_1F",  # 100.0% match, verified
+    "ABANDONED SHIP CORRIDORS B1F": "AbandonedShip_Corridors_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP DECK": "AbandonedShip_Deck",  # 100.0% match, verified
+    "ABANDONED SHIP HIDDEN FLOOR CORRIDORS": "AbandonedShip_HiddenFloorCorridors",  # 100.0% match, verified
+    "ABANDONED SHIP HIDDEN FLOOR ROOMS": "AbandonedShip_HiddenFloorRooms",  # 100.0% match, verified
+    "ABANDONED SHIP ROOM B1F": "AbandonedShip_Room_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS 1F": "AbandonedShip_Rooms_1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS B1F": "AbandonedShip_Rooms_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS2 1F": "AbandonedShip_Rooms2_1F",  # 100.0% match, verified
+    "ABANDONED SHIP ROOMS2 B1F": "AbandonedShip_Rooms2_B1F",  # 100.0% match, verified
+    "ABANDONED SHIP UNDERWATER1": "AbandonedShip_Underwater1",  # 100.0% match, verified
+    "ABANDONED SHIP UNDERWATER2": "AbandonedShip_Underwater2",  # 100.0% match, verified
+    "ALTERING CAVE": "AlteringCave",  # 100.0% match, verified
+    "ANCIENT TOMB": "AncientTomb",  # 100.0% match, verified
+    "AQUA HIDEOUT 1F": "AquaHideout_1F",  # 100.0% match, verified
+    "AQUA HIDEOUT B1F": "AquaHideout_B1F",  # 100.0% match, verified
+    "AQUA HIDEOUT B2F": "AquaHideout_B2F",  # 100.0% match, verified
+    "AQUA HIDEOUT UNUSED RUBY MAP1": "AquaHideout_UnusedRubyMap1",  # 100.0% match, verified
+    "AQUA HIDEOUT UNUSED RUBY MAP2": "AquaHideout_UnusedRubyMap2",  # 100.0% match, verified
+    "AQUA HIDEOUT UNUSED RUBY MAP3": "AquaHideout_UnusedRubyMap3",  # 100.0% match, verified
+    "ARTISAN CAVE 1F": "ArtisanCave_1F",  # 100.0% match, verified
+    "ARTISAN CAVE B1F": "ArtisanCave_B1F",  # 100.0% match, verified
+    "CAVE OF ORIGIN 1F": "CaveOfOrigin_1F",  # 100.0% match, verified
+    "CAVE OF ORIGIN B1F": "CaveOfOrigin_B1F",  # 100.0% match, verified
+    "CAVE OF ORIGIN ENTRANCE": "CaveOfOrigin_Entrance",  # 100.0% match, verified
+    "CAVE OF ORIGIN UNUSED RUBY SAPPHIRE MAP1": "CaveOfOrigin_UnusedRubySapphireMap1",  # 100.0% match, verified
+    "CAVE OF ORIGIN UNUSED RUBY SAPPHIRE MAP2": "CaveOfOrigin_UnusedRubySapphireMap2",  # 100.0% match, verified
+    "CAVE OF ORIGIN UNUSED RUBY SAPPHIRE MAP3": "CaveOfOrigin_UnusedRubySapphireMap3",  # 100.0% match, verified
+    "DESERT RUINS": "DesertRuins",  # 100.0% match, verified
+    "DESERT UNDERPASS": "DesertUnderpass",  # 100.0% match, verified
+    "DEWFORD TOWN GYM": "DewfordTown_Gym",  # 100.0% match, verified
+    "DEWFORD TOWN HALL": "DewfordTown_Hall",  # 100.0% match, verified
+    "DEWFORD TOWN HOUSE1": "DewfordTown_House1",  # 100.0% match, verified
+    "DEWFORD TOWN HOUSE2": "DewfordTown_House2",  # 100.0% match, verified
+    "DEWFORD TOWN POKEMON CENTER 1F": "DewfordTown_PokemonCenter_1F",  # 100.0% match, verified
+    "DEWFORD TOWN POKEMON CENTER 2F": "DewfordTown_PokemonCenter_2F",  # 100.0% match, verified
+    "EVER GRANDE CITY CHAMPIONS ROOM": "EverGrandeCity_ChampionsRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY DRAKES ROOM": "EverGrandeCity_DrakesRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY GLACIAS ROOM": "EverGrandeCity_GlaciasRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL OF FAME": "EverGrandeCity_HallOfFame",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL1": "EverGrandeCity_Hall1",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL2": "EverGrandeCity_Hall2",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL3": "EverGrandeCity_Hall3",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL4": "EverGrandeCity_Hall4",  # 100.0% match, verified
+    "EVER GRANDE CITY HALL5": "EverGrandeCity_Hall5",  # 100.0% match, verified
+    "EVER GRANDE CITY PHOEBES ROOM": "EverGrandeCity_PhoebesRoom",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON CENTER 1F": "EverGrandeCity_PokemonCenter_1F",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON CENTER 2F": "EverGrandeCity_PokemonCenter_2F",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON LEAGUE 1F": "EverGrandeCity_PokemonLeague_1F",  # 100.0% match, verified
+    "EVER GRANDE CITY POKEMON LEAGUE 2F": "EverGrandeCity_PokemonLeague_2F",  # 100.0% match, verified
+    "EVER GRANDE CITY SIDNEYS ROOM": "EverGrandeCity_SidneysRoom",  # 100.0% match, verified
+    "FALLARBOR TOWN BATTLE TENT BATTLE ROOM": "FallarborTown_BattleTentBattleRoom",  # 100.0% match, verified
+    "FALLARBOR TOWN BATTLE TENT CORRIDOR": "FallarborTown_BattleTentCorridor",  # 100.0% match, verified
+    "FALLARBOR TOWN BATTLE TENT LOBBY": "FallarborTown_BattleTentLobby",  # 100.0% match, verified
+    "FALLARBOR TOWN COZMOS HOUSE": "FallarborTown_CozmosHouse",  # 100.0% match, verified
+    "FALLARBOR TOWN MART": "FallarborTown_Mart",  # 100.0% match, verified
+    "FALLARBOR TOWN MOVE RELEARNERS HOUSE": "FallarborTown_MoveRelearnersHouse",  # 100.0% match, verified
+    "FALLARBOR TOWN POKEMON CENTER 1F": "FallarborTown_PokemonCenter_1F",  # 100.0% match, verified
+    "FALLARBOR TOWN POKEMON CENTER 2F": "FallarborTown_PokemonCenter_2F",  # 100.0% match, verified
+    "FIERY PATH": "FieryPath",  # 100.0% match, verified
+    "FORTREE CITY DECORATION SHOP": "FortreeCity_DecorationShop",  # 100.0% match, verified
+    "FORTREE CITY GYM": "FortreeCity_Gym",  # 100.0% match, verified
+    "FORTREE CITY HOUSE1": "FortreeCity_House1",  # 100.0% match, verified
+    "FORTREE CITY HOUSE2": "FortreeCity_House2",  # 100.0% match, verified
+    "FORTREE CITY HOUSE3": "FortreeCity_House3",  # 100.0% match, verified
+    "FORTREE CITY HOUSE4": "FortreeCity_House4",  # 100.0% match, verified
+    "FORTREE CITY HOUSE5": "FortreeCity_House5",  # 100.0% match, verified
+    "FORTREE CITY MART": "FortreeCity_Mart",  # 100.0% match, verified
+    "FORTREE CITY POKEMON CENTER 1F": "FortreeCity_PokemonCenter_1F",  # 100.0% match, verified
+    "FORTREE CITY POKEMON CENTER 2F": "FortreeCity_PokemonCenter_2F",  # 100.0% match, verified
+    "GRANITE CAVE 1F": "GraniteCave_1F",  # 100.0% match, verified
+    "GRANITE CAVE B1F": "GraniteCave_B1F",  # 100.0% match, verified
+    "GRANITE CAVE B2F": "GraniteCave_B2F",  # 100.0% match, verified
+    "GRANITE CAVE STEVENS ROOM": "GraniteCave_StevensRoom",  # 100.0% match, verified
+    "ISLAND CAVE": "IslandCave",  # 100.0% match, verified
+    "JAGGED PASS": "JaggedPass",  # 100.0% match, verified
+    "LAVARIDGE TOWN GYM 1F": "LavaridgeTown_Gym_1F",  # 100.0% match, verified
+    "LAVARIDGE TOWN GYM B1F": "LavaridgeTown_Gym_B1F",  # 100.0% match, verified
+    "LAVARIDGE TOWN HERB SHOP": "LavaridgeTown_HerbShop",  # 100.0% match, verified
+    "LAVARIDGE TOWN HOUSE": "LavaridgeTown_House",  # 100.0% match, verified
+    "LAVARIDGE TOWN MART": "LavaridgeTown_Mart",  # 100.0% match, verified
+    "LAVARIDGE TOWN POKEMON CENTER 1F": "LavaridgeTown_PokemonCenter_1F",  # 100.0% match, verified
+    "LAVARIDGE TOWN POKEMON CENTER 2F": "LavaridgeTown_PokemonCenter_2F",  # 100.0% match, verified
+    "LILYCOVE CITY CONTEST HALL": "LilycoveCity_ContestHall",  # 100.0% match, verified
+    "LILYCOVE CITY CONTEST LOBBY": "LilycoveCity_ContestLobby",  # 100.0% match, verified
+    "LILYCOVE CITY COVE LILY MOTEL 1F": "LilycoveCity_CoveLilyMotel_1F",  # 100.0% match, verified
+    "LILYCOVE CITY COVE LILY MOTEL 2F": "LilycoveCity_CoveLilyMotel_2F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 1F": "LilycoveCity_DepartmentStore_1F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 2F": "LilycoveCity_DepartmentStore_2F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 3F": "LilycoveCity_DepartmentStore_3F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 4F": "LilycoveCity_DepartmentStore_4F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE 5F": "LilycoveCity_DepartmentStore_5F",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE ELEVATOR": "LilycoveCity_DepartmentStoreElevator",  # 100.0% match, verified
+    "LILYCOVE CITY DEPARTMENT STORE ROOFTOP": "LilycoveCity_DepartmentStoreRooftop",  # 100.0% match, verified
+    "LILYCOVE CITY HARBOR": "LilycoveCity_Harbor",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE1": "LilycoveCity_House1",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE2": "LilycoveCity_House2",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE3": "LilycoveCity_House3",  # 100.0% match, verified
+    "LILYCOVE CITY HOUSE4": "LilycoveCity_House4",  # 100.0% match, verified
+    "LILYCOVE CITY LILYCOVE MUSEUM 1F": "LilycoveCity_LilycoveMuseum_1F",  # 100.0% match, verified
+    "LILYCOVE CITY LILYCOVE MUSEUM 2F": "LilycoveCity_LilycoveMuseum_2F",  # 100.0% match, verified
+    "LILYCOVE CITY MOVE DELETERS HOUSE": "LilycoveCity_MoveDeletersHouse",  # 100.0% match, verified
+    "LILYCOVE CITY POKEMON CENTER 1F": "LilycoveCity_PokemonCenter_1F",  # 100.0% match, verified
+    "LILYCOVE CITY POKEMON CENTER 2F": "LilycoveCity_PokemonCenter_2F",  # 100.0% match, verified
+    "LILYCOVE CITY POKEMON TRAINER FAN CLUB": "LilycoveCity_PokemonTrainerFanClub",  # 100.0% match, verified
+    "LILYCOVE CITY UNUSED MART": "LilycoveCity_UnusedMart",  # 100.0% match, verified
+    "LITTLEROOT TOWN BRENDANS HOUSE 1F": "LittlerootTown_BrendansHouse_1F",  # 100.0% match, verified
+    "LITTLEROOT TOWN BRENDANS HOUSE 2F": "LittlerootTown_BrendansHouse_2F",  # 100.0% match, verified
+    "LITTLEROOT TOWN MAYS HOUSE 1F": "LittlerootTown_MaysHouse_1F",  # 100.0% match, verified
+    "LITTLEROOT TOWN MAYS HOUSE 2F": "LittlerootTown_MaysHouse_2F",  # 100.0% match, verified
+    "MAGMA HIDEOUT 1F": "MagmaHideout_1F",  # 100.0% match, verified
+    "MAGMA HIDEOUT 2F 1R": "MagmaHideout_2F_1R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 2F 2R": "MagmaHideout_2F_2R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 2F 3R": "MagmaHideout_2F_3R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 3F 1R": "MagmaHideout_3F_1R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 3F 2R": "MagmaHideout_3F_2R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 3F 3R": "MagmaHideout_3F_3R",  # 100.0% match, verified
+    "MAGMA HIDEOUT 4F": "MagmaHideout_4F",  # 100.0% match, verified
+    "MAP RUSTURF TUNNEL": "RusturfTunnel",  # 89.7% match, verified
+    "MARINE CAVE END": "MarineCave_End",  # 100.0% match, verified
+    "MARINE CAVE ENTRANCE": "MarineCave_Entrance",  # 100.0% match, verified
+    "MAUVILLE CITY BIKE SHOP": "MauvilleCity_BikeShop",  # 100.0% match, verified
+    "MAUVILLE CITY GAME CORNER": "MauvilleCity_GameCorner",  # 100.0% match, verified
+    "MAUVILLE CITY GYM": "MauvilleCity_Gym",  # 100.0% match, verified
+    "MAUVILLE CITY HOUSE1": "MauvilleCity_House1",  # 100.0% match, verified
+    "MAUVILLE CITY HOUSE2": "MauvilleCity_House2",  # 100.0% match, verified
+    "MAUVILLE CITY MART": "MauvilleCity_Mart",  # 100.0% match, verified
+    "MAUVILLE CITY POKEMON CENTER 1F": "MauvilleCity_PokemonCenter_1F",  # 100.0% match, verified
+    "MAUVILLE CITY POKEMON CENTER 2F": "MauvilleCity_PokemonCenter_2F",  # 100.0% match, verified
+    "METEOR FALLS 1F 1R": "MeteorFalls_1F_1R",  # 100.0% match, verified
+    "METEOR FALLS 1F 2R": "MeteorFalls_1F_2R",  # 100.0% match, verified
+    "METEOR FALLS B1F 1R": "MeteorFalls_B1F_1R",  # 100.0% match, verified
+    "METEOR FALLS B1F 2R": "MeteorFalls_B1F_2R",  # 100.0% match, verified
+    "METEOR FALLS STEVENS CAVE": "MeteorFalls_StevensCave",  # 100.0% match, verified
+    "MIRAGE TOWER 1F": "MirageTower_1F",  # 100.0% match, verified
+    "MIRAGE TOWER 2F": "MirageTower_2F",  # 100.0% match, verified
+    "MIRAGE TOWER 3F": "MirageTower_3F",  # 100.0% match, verified
+    "MIRAGE TOWER 4F": "MirageTower_4F",  # 100.0% match, verified
+    "MOSSDEEP CITY GAME CORNER 1F": "MossdeepCity_GameCorner_1F",  # 100.0% match, verified
+    "MOSSDEEP CITY GAME CORNER B1F": "MossdeepCity_GameCorner_B1F",  # 100.0% match, verified
+    "MOSSDEEP CITY GYM": "MossdeepCity_Gym",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE1": "MossdeepCity_House1",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE2": "MossdeepCity_House2",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE3": "MossdeepCity_House3",  # 100.0% match, verified
+    "MOSSDEEP CITY HOUSE4": "MossdeepCity_House4",  # 100.0% match, verified
+    "MOSSDEEP CITY MART": "MossdeepCity_Mart",  # 100.0% match, verified
+    "MOSSDEEP CITY POKEMON CENTER 1F": "MossdeepCity_PokemonCenter_1F",  # 100.0% match, verified
+    "MOSSDEEP CITY POKEMON CENTER 2F": "MossdeepCity_PokemonCenter_2F",  # 100.0% match, verified
+    "MOSSDEEP CITY SPACE CENTER 1F": "MossdeepCity_SpaceCenter_1F",  # 100.0% match, verified
+    "MOSSDEEP CITY SPACE CENTER 2F": "MossdeepCity_SpaceCenter_2F",  # 100.0% match, verified
+    "MOSSDEEP CITY STEVENS HOUSE": "MossdeepCity_StevensHouse",  # 100.0% match, verified
+    "MT CHIMNEY": "MtChimney",  # 100.0% match, verified
+    "MT CHIMNEY CABLE CAR STATION": "MtChimney_CableCarStation",  # 100.0% match, verified
+    "MT PYRE 1F": "MtPyre_1F",  # 100.0% match, verified
+    "MT PYRE 2F": "MtPyre_2F",  # 100.0% match, verified
+    "MT PYRE 3F": "MtPyre_3F",  # 100.0% match, verified
+    "MT PYRE 4F": "MtPyre_4F",  # 100.0% match, verified
+    "MT PYRE 5F": "MtPyre_5F",  # 100.0% match, verified
+    "MT PYRE 6F": "MtPyre_6F",  # 100.0% match, verified
+    "MT PYRE EXTERIOR": "MtPyre_Exterior",  # 100.0% match, verified
+    "MT PYRE SUMMIT": "MtPyre_Summit",  # 100.0% match, verified
+    "NEW MAUVILLE ENTRANCE": "NewMauville_Entrance",  # 100.0% match, verified
+    "NEW MAUVILLE INSIDE": "NewMauville_Inside",  # 100.0% match, verified
+    "OLDALE TOWN HOUSE1": "OldaleTown_House1",  # 100.0% match, verified
+    "OLDALE TOWN HOUSE2": "OldaleTown_House2",  # 100.0% match, verified
+    "OLDALE TOWN MART": "OldaleTown_Mart",  # 100.0% match, verified
+    "OLDALE TOWN POKEMON CENTER 1F": "OldaleTown_PokemonCenter_1F",  # 100.0% match, verified
+    "OLDALE TOWN POKEMON CENTER 2F": "OldaleTown_PokemonCenter_2F",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE1": "PacifidlogTown_House1",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE2": "PacifidlogTown_House2",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE3": "PacifidlogTown_House3",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE4": "PacifidlogTown_House4",  # 100.0% match, verified
+    "PACIFIDLOG TOWN HOUSE5": "PacifidlogTown_House5",  # 100.0% match, verified
+    "PACIFIDLOG TOWN POKEMON CENTER 1F": "PacifidlogTown_PokemonCenter_1F",  # 100.0% match, verified
+    "PACIFIDLOG TOWN POKEMON CENTER 2F": "PacifidlogTown_PokemonCenter_2F",  # 100.0% match, verified
+    "PETALBURG CITY GYM": "PetalburgCity_Gym",  # 100.0% match, verified
+    "PETALBURG CITY HOUSE1": "PetalburgCity_House1",  # 100.0% match, verified
+    "PETALBURG CITY HOUSE2": "PetalburgCity_House2",  # 100.0% match, verified
+    "PETALBURG CITY MART": "PetalburgCity_Mart",  # 100.0% match, verified
+    "PETALBURG CITY POKEMON CENTER 1F": "PetalburgCity_PokemonCenter_1F",  # 100.0% match, verified
+    "PETALBURG CITY POKEMON CENTER 2F": "PetalburgCity_PokemonCenter_2F",  # 100.0% match, verified
+    "PETALBURG CITY WALLYS HOUSE": "PetalburgCity_WallysHouse",  # 100.0% match, verified
+    "ROUTE 104 MR BRINEYS HOUSE": "Route104_MrBrineysHouse",  # 100.0% match, verified
+    "ROUTE 104 MR BRINEYS HOUSE ALT": "Route104_MrBrineysHouse",  # 91.9% match, verified
+    "ROUTE 104 PRETTY PETAL FLOWER SHOP": "Route104_PrettyPetalFlowerShop",  # 100.0% match, verified
+    "ROUTE 109 SEASHORE HOUSE": "Route109_SeashoreHouse",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE CORRIDOR": "Route110_TrickHouseCorridor",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE END": "Route110_TrickHouseEnd",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE ENTRANCE": "Route110_TrickHouseEntrance",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE1": "Route110_TrickHousePuzzle1",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE2": "Route110_TrickHousePuzzle2",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE3": "Route110_TrickHousePuzzle3",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE4": "Route110_TrickHousePuzzle4",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE5": "Route110_TrickHousePuzzle5",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE6": "Route110_TrickHousePuzzle6",  # 100.0% match, verified
+    "ROUTE 110 TRICK HOUSE PUZZLE7": "Route110_TrickHousePuzzle7",  # 100.0% match, verified
+    "ROUTE 111 OLD LADYS REST STOP": "Route111_OldLadysRestStop",  # 100.0% match, verified
+    "ROUTE 111 WINSTRATE FAMILYS HOUSE": "Route111_WinstrateFamilysHouse",  # 100.0% match, verified
+    "ROUTE 112 CABLE CAR STATION": "Route112_CableCarStation",  # 100.0% match, verified
+    "ROUTE 113 GLASS WORKSHOP": "Route113_GlassWorkshop",  # 100.0% match, verified
+    "ROUTE 114 FOSSIL MANIACS HOUSE": "Route114_FossilManiacsHouse",  # 100.0% match, verified
+    "ROUTE 114 FOSSIL MANIACS TUNNEL": "Route114_FossilManiacsTunnel",  # 100.0% match, verified
+    "ROUTE 114 LANETTES HOUSE": "Route114_LanettesHouse",  # 100.0% match, verified
+    "ROUTE 116 TUNNELERS REST HOUSE": "Route116_TunnelersRestHouse",  # 100.0% match, verified
+    "ROUTE 117 POKEMON DAY CARE": "Route117_PokemonDayCare",  # 100.0% match, verified
+    "ROUTE 119 HOUSE": "Route119_House",  # 100.0% match, verified
+    "ROUTE 119 WEATHER INSTITUTE 1F": "Route119_WeatherInstitute_1F",  # 100.0% match, verified
+    "ROUTE 119 WEATHER INSTITUTE 2F": "Route119_WeatherInstitute_2F",  # 100.0% match, verified
+    "ROUTE 121 SAFARI ZONE ENTRANCE": "Route121_SafariZoneEntrance",  # 100.0% match, verified
+    "ROUTE 123 BERRY MASTERS HOUSE": "Route123_BerryMastersHouse",  # 100.0% match, verified
+    "ROUTE 124 DIVING TREASURE HUNTERS HOUSE": "Route124_DivingTreasureHuntersHouse",  # 100.0% match, verified
+    "RUSTBORO CITY CUTTERS HOUSE": "RustboroCity_CuttersHouse",  # 100.0% match, verified
+    "RUSTBORO CITY DEVON CORP 1F": "RustboroCity_DevonCorp_1F",  # 100.0% match, verified
+    "RUSTBORO CITY DEVON CORP 2F": "RustboroCity_DevonCorp_2F",  # 100.0% match, verified
+    "RUSTBORO CITY DEVON CORP 3F": "RustboroCity_DevonCorp_3F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT1 1F": "RustboroCity_Flat1_1F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT1 2F": "RustboroCity_Flat1_2F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT2 1F": "RustboroCity_Flat2_1F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT2 2F": "RustboroCity_Flat2_2F",  # 100.0% match, verified
+    "RUSTBORO CITY FLAT2 3F": "RustboroCity_Flat2_3F",  # 100.0% match, verified
+    "RUSTBORO CITY GYM": "RustboroCity_Gym",  # 100.0% match, verified
+    "RUSTBORO CITY HOUSE1": "RustboroCity_House1",  # 100.0% match, verified
+    "RUSTBORO CITY HOUSE2": "RustboroCity_House2",  # 100.0% match, verified
+    "RUSTBORO CITY HOUSE3": "RustboroCity_House3",  # 100.0% match, verified
+    "RUSTBORO CITY MART": "RustboroCity_Mart",  # 100.0% match, verified
+    "RUSTBORO CITY POKEMON CENTER 1F": "RustboroCity_PokemonCenter_1F",  # 100.0% match, verified
+    "RUSTBORO CITY POKEMON CENTER 2F": "RustboroCity_PokemonCenter_2F",  # 100.0% match, verified
+    "RUSTBORO CITY POKEMON SCHOOL": "RustboroCity_PokemonSchool",  # 100.0% match, verified
+    "SCORCHED SLAB": "ScorchedSlab",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ENTRANCE": "SeafloorCavern_Entrance",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM1": "SeafloorCavern_Room1",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM2": "SeafloorCavern_Room2",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM3": "SeafloorCavern_Room3",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM4": "SeafloorCavern_Room4",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM5": "SeafloorCavern_Room5",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM6": "SeafloorCavern_Room6",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM7": "SeafloorCavern_Room7",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM8": "SeafloorCavern_Room8",  # 100.0% match, verified
+    "SEAFLOOR CAVERN ROOM9": "SeafloorCavern_Room9",  # 100.0% match, verified
+    "SEALED CHAMBER INNER ROOM": "SealedChamber_InnerRoom",  # 100.0% match, verified
+    "SEALED CHAMBER OUTER ROOM": "SealedChamber_OuterRoom",  # 100.0% match, verified
+    "SHOAL CAVE HIGH TIDE ENTRANCE ROOM": "ShoalCave_HighTideEntranceRoom",  # 100.0% match, verified
+    "SHOAL CAVE HIGH TIDE INNER ROOM": "ShoalCave_HighTideInnerRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE ENTRANCE ROOM": "ShoalCave_LowTideEntranceRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE ICE ROOM": "ShoalCave_LowTideIceRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE INNER ROOM": "ShoalCave_LowTideInnerRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE LOWER ROOM": "ShoalCave_LowTideLowerRoom",  # 100.0% match, verified
+    "SHOAL CAVE LOW TIDE STAIRS ROOM": "ShoalCave_LowTideStairsRoom",  # 100.0% match, verified
+    "SKY PILLAR 1F": "SkyPillar_1F",  # 100.0% match, verified
+    "SKY PILLAR 2F": "SkyPillar_2F",  # 100.0% match, verified
+    "SKY PILLAR 3F": "SkyPillar_3F",  # 100.0% match, verified
+    "SKY PILLAR 4F": "SkyPillar_4F",  # 100.0% match, verified
+    "SKY PILLAR 5F": "SkyPillar_5F",  # 100.0% match, verified
+    "SKY PILLAR ENTRANCE": "SkyPillar_Entrance",  # 100.0% match, verified
+    "SKY PILLAR OUTSIDE": "SkyPillar_Outside",  # 100.0% match, verified
+    "SKY PILLAR TOP": "SkyPillar_Top",  # 100.0% match, verified
+    "SLATEPORT CITY BATTLE TENT BATTLE ROOM": "SlateportCity_BattleTentBattleRoom",  # 100.0% match, verified
+    "SLATEPORT CITY BATTLE TENT CORRIDOR": "SlateportCity_BattleTentCorridor",  # 100.0% match, verified
+    "SLATEPORT CITY BATTLE TENT LOBBY": "SlateportCity_BattleTentLobby",  # 100.0% match, verified
+    "SLATEPORT CITY HARBOR": "SlateportCity_Harbor",  # 100.0% match, verified
+    "SLATEPORT CITY HOUSE": "SlateportCity_House",  # 100.0% match, verified
+    "SLATEPORT CITY MART": "SlateportCity_Mart",  # 100.0% match, verified
+    "SLATEPORT CITY NAME RATERS HOUSE": "SlateportCity_NameRatersHouse",  # 100.0% match, verified
+    "SLATEPORT CITY OCEANIC MUSEUM 1F": "SlateportCity_OceanicMuseum_1F",  # 100.0% match, verified
+    "SLATEPORT CITY OCEANIC MUSEUM 2F": "SlateportCity_OceanicMuseum_2F",  # 100.0% match, verified
+    "SLATEPORT CITY POKEMON CENTER 1F": "SlateportCity_PokemonCenter_1F",  # 100.0% match, verified
+    "SLATEPORT CITY POKEMON CENTER 2F": "SlateportCity_PokemonCenter_2F",  # 100.0% match, verified
+    "SLATEPORT CITY POKEMON FAN CLUB": "SlateportCity_PokemonFanClub",  # 100.0% match, verified
+    "SLATEPORT CITY STERNS SHIPYARD 1F": "SlateportCity_SternsShipyard_1F",  # 100.0% match, verified
+    "SLATEPORT CITY STERNS SHIPYARD 2F": "SlateportCity_SternsShipyard_2F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY GYM 1F": "SootopolisCity_Gym_1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY GYM B1F": "SootopolisCity_Gym_B1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE1": "SootopolisCity_House1",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE2": "SootopolisCity_House2",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE3": "SootopolisCity_House3",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE4": "SootopolisCity_House4",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE5": "SootopolisCity_House5",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE6": "SootopolisCity_House6",  # 100.0% match, verified
+    "SOOTOPOLIS CITY HOUSE7": "SootopolisCity_House7",  # 100.0% match, verified
+    "SOOTOPOLIS CITY LOTAD AND SEEDOT HOUSE": "SootopolisCity_LotadAndSeedotHouse",  # 100.0% match, verified
+    "SOOTOPOLIS CITY MART": "SootopolisCity_Mart",  # 100.0% match, verified
+    "SOOTOPOLIS CITY MYSTERY EVENTS HOUSE 1F": "SootopolisCity_MysteryEventsHouse_1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY MYSTERY EVENTS HOUSE B1F": "SootopolisCity_MysteryEventsHouse_B1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY POKEMON CENTER 1F": "SootopolisCity_PokemonCenter_1F",  # 100.0% match, verified
+    "SOOTOPOLIS CITY POKEMON CENTER 2F": "SootopolisCity_PokemonCenter_2F",  # 100.0% match, verified
+    "TERRA CAVE END": "TerraCave_End",  # 100.0% match, verified
+    "TERRA CAVE ENTRANCE": "TerraCave_Entrance",  # 100.0% match, verified
+    "UNDERWATER MARINE CAVE": "Underwater_MarineCave",  # 100.0% match, verified
+    "UNDERWATER ROUTE 105": "Underwater_Route105",  # 100.0% match, verified
+    "UNDERWATER ROUTE 124": "Underwater_Route124",  # 100.0% match, verified
+    "UNDERWATER ROUTE 125": "Underwater_Route125",  # 100.0% match, verified
+    "UNDERWATER ROUTE 126": "Underwater_Route126",  # 100.0% match, verified
+    "UNDERWATER ROUTE 127": "Underwater_Route127",  # 100.0% match, verified
+    "UNDERWATER ROUTE 128": "Underwater_Route128",  # 100.0% match, verified
+    "UNDERWATER ROUTE 129": "Underwater_Route129",  # 100.0% match, verified
+    "UNDERWATER ROUTE134": "Underwater_Route134",  # 100.0% match, verified
+    "UNDERWATER SEAFLOOR CAVERN": "Underwater_SeafloorCavern",  # 100.0% match, verified
+    "UNDERWATER SEALED CHAMBER": "Underwater_SealedChamber",  # 100.0% match, verified
+    "UNDERWATER SOOTOPOLIS CITY": "Underwater_SootopolisCity",  # 100.0% match, verified
+    "VERDANTURF TOWN BATTLE TENT BATTLE ROOM": "VerdanturfTown_BattleTentBattleRoom",  # 100.0% match, verified
+    "VERDANTURF TOWN BATTLE TENT CORRIDOR": "VerdanturfTown_BattleTentCorridor",  # 100.0% match, verified
+    "VERDANTURF TOWN BATTLE TENT LOBBY": "VerdanturfTown_BattleTentLobby",  # 100.0% match, verified
+    "VERDANTURF TOWN FRIENDSHIP RATERS HOUSE": "VerdanturfTown_FriendshipRatersHouse",  # 100.0% match, verified
+    "VERDANTURF TOWN HOUSE": "VerdanturfTown_House",  # 100.0% match, verified
+    "VERDANTURF TOWN MART": "VerdanturfTown_Mart",  # 100.0% match, verified
+    "VERDANTURF TOWN POKEMON CENTER 1F": "VerdanturfTown_PokemonCenter_1F",  # 100.0% match, verified
+    "VERDANTURF TOWN POKEMON CENTER 2F": "VerdanturfTown_PokemonCenter_2F",  # 100.0% match, verified
+    "VERDANTURF TOWN WANDAS HOUSE": "VerdanturfTown_WandasHouse",  # 100.0% match, verified
+    "VICTORY ROAD 1F": "VictoryRoad_1F",  # 100.0% match, verified
+    "VICTORY ROAD B1F": "VictoryRoad_B1F",  # 100.0% match, verified
+    "VICTORY ROAD B2F": "VictoryRoad_B2F",  # 100.0% match, verified
+}
+
+def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None) -> List[str]:
+    """
+    Format porymap ground truth data (JSON and ASCII map) for the agent.
+    
+    Returns list of formatted strings to add to context.
+    """
+    context_parts = []
+    
+    if not location_name or location_name == 'TITLE_SEQUENCE' or location_name == 'Unknown':
+        return context_parts
+    
+    try:
+        # Import here to avoid circular dependencies and allow graceful failure
+        from utils.porymap_json_builder import build_json_map_for_llm
+        from utils.pokeemerald_parser import PokeemeraldMapLoader
+        
+        # Get pokeemerald root
+        pokeemerald_root = _get_pokeemerald_root()
+        if not pokeemerald_root:
+            logger.warning(f"Porymap: Could not find pokeemerald root for location '{location_name}'")
+            return context_parts
+        
+        # Convert ROM location name to porymap map name using mapping
+        porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
+        
+        # If not in direct mapping, try fuzzy matching
+        if not porymap_map_name:
+            map_loader = PokeemeraldMapLoader(pokeemerald_root)
+            
+            def normalize_for_matching(name: str) -> str:
+                """Normalize location name for fuzzy matching."""
+                # Normalize: lowercase, remove spaces/underscores, remove common suffixes
+                normalized = str(name).lower().replace(" ", "").replace("_", "").replace("town", "").replace("city", "").replace("route", "")
+                # Also try removing "professor", "birchs", "lab" for building matching
+                if "professor" in normalized or "birch" in normalized or "lab" in normalized:
+                    normalized = normalized.replace("professor", "").replace("birchs", "").replace("birch", "").replace("lab", "")
+                return normalized
+            
+            rom_normalized = normalize_for_matching(location_name)
+            maps_dir = pokeemerald_root / "data" / "maps"
+            
+            if maps_dir.exists():
+                # Try direct directory name match
+                best_match = None
+                best_match_score = 0
+                
+                for map_dir in maps_dir.iterdir():
+                    if not map_dir.is_dir() or map_dir.name == "map_groups.json":
+                        continue
+                    
+                    map_name = map_dir.name
+                    map_normalized = normalize_for_matching(map_name)
+                    
+                    # Exact match
+                    if rom_normalized == map_normalized:
+                        porymap_map_name = map_name
+                        logger.info(f"Porymap: Matched '{location_name}' to '{porymap_map_name}' via fuzzy match")
+                        break
+                    
+                    # Partial match scoring (for cases like "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" -> "LittlerootTown_ProfessorBirchsLab")
+                    if rom_normalized in map_normalized or map_normalized in rom_normalized:
+                        match_length = min(len(rom_normalized), len(map_normalized))
+                        if match_length > best_match_score and match_length > 5:  # Require at least 5 chars match
+                            best_match = map_name
+                            best_match_score = match_length
+                
+                # Use best partial match if no exact match found
+                if not porymap_map_name and best_match:
+                    porymap_map_name = best_match
+                    logger.info(f"Porymap: Matched '{location_name}' to '{porymap_map_name}' via partial match (score: {best_match_score})")
+        
+        if not porymap_map_name:
+            logger.warning(f"Porymap: Could not map ROM location '{location_name}' to porymap map name")
+            return context_parts
+        
+        logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}')")
+        
+        # Build JSON map (with grid included for pathfinding, even though we don't show it in prompt)
+        try:
+            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+        except ValueError as e:
+            logger.error(f"Porymap: Failed to build map for '{porymap_map_name}' due to corrupted tileset data: {e}")
+            logger.error("This likely indicates missing or corrupted tileset files in the porymap_data directory.")
+            logger.error("Pathfinding will not be available for this location.")
+            return context_parts
+        
+        # Ensure grid is built (even if we don't include it in the text output)
+        if not json_map.get('grid'):
+            # Rebuild with grid if needed
+            from utils.porymap_json_builder import build_json_map
+            try:
+                json_map_with_grid = build_json_map(porymap_map_name, pokeemerald_root, include_grid=True, include_ascii=True)
+                if json_map_with_grid and json_map_with_grid.get('grid'):
+                    json_map['grid'] = json_map_with_grid['grid']
+            except ValueError as e:
+                logger.error(f"Porymap: Failed to rebuild grid for '{porymap_map_name}': {e}")
+        
+        if not json_map:
+            logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
+            return context_parts
+        
+        # Format for LLM
+        context_parts.append("\n=== PORYMAP GROUND TRUTH MAP ===")
+        context_parts.append(f"Location: {json_map.get('name', porymap_map_name)}")
+        context_parts.append(f"Dimensions: {json_map['dimensions']['width']}x{json_map['dimensions']['height']}")
+        
+        # Add ASCII map with player position marked
+        if json_map.get('ascii'):
+            ascii_map = json_map['ascii']
+            
+            # Insert player position 'P' if provided
+            if player_coords and json_map.get('grid'):
+                px, py = player_coords[0], player_coords[1]
+                grid = json_map['grid']
+                
+                # Check if player position is within map bounds
+                if 0 <= py < len(grid) and 0 <= px < len(grid[0]) if grid else False:
+                    # Split ASCII map into lines
+                    ascii_lines = ascii_map.split('\n')
+                    
+                    # Find the line corresponding to player's Y coordinate
+                    if py < len(ascii_lines):
+                        line = list(ascii_lines[py])
+                        # Replace character at player's X position with 'P'
+                        if px < len(line):
+                            original_char = line[px]
+                            line[px] = 'P'
+                            ascii_lines[py] = ''.join(line)
+                            ascii_map = '\n'.join(ascii_lines)
+            
+            context_parts.append("\nASCII Map:")
+            context_parts.append(ascii_map)
+            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
+        
+        # Add warps
+        warps = json_map.get('warps', [])
+        if warps:
+            context_parts.append(f"\nWarps ({len(warps)}):")
+            for warp in warps[:10]:  # Limit to first 10
+                dest = warp.get('dest_map', '?')
+                context_parts.append(f"  At ({warp.get('x', 0)}, {warp.get('y', 0)}) → {dest}")
+            if len(warps) > 10:
+                context_parts.append(f"  ... and {len(warps) - 10} more warps")
+        
+        # Add objects (NPCs, items, etc.)
+        objects = json_map.get('objects', [])
+        if objects:
+            context_parts.append(f"\nObjects/NPCs ({len(objects)}):")
+            for obj in objects[:10]:  # Limit to first 10
+                gfx_id = obj.get('graphics_id', '?')
+                context_parts.append(f"  {gfx_id} at ({obj.get('x', 0)}, {obj.get('y', 0)})")
+            if len(objects) > 10:
+                context_parts.append(f"  ... and {len(objects) - 10} more objects")
+        
+        # Add connections
+        connections = json_map.get('connections', [])
+        if connections:
+            context_parts.append(f"\nMap Connections ({len(connections)}):")
+            for conn in connections[:5]:  # Limit to first 5
+                direction = conn.get('direction', '?')
+                target = conn.get('map', '?')
+                context_parts.append(f"  {direction} → {target}")
+            if len(connections) > 5:
+                context_parts.append(f"  ... and {len(connections) - 5} more connections")
+        
+        # Add compact JSON map data (simplified format to save tokens)
+        context_parts.append("\nMap Data (JSON):")
+        
+        # Include full object details (retain additional fields for precision)
+        objects_for_json = json_map.get('objects', [])
+        
+        # Simplified warps
+        simplified_warps = []
+        for warp in json_map.get('warps', []):
+            simplified_warps.append({
+                "x": warp.get('x', 0),
+                "y": warp.get('y', 0),
+                "elevation": warp.get('elevation', 0),
+                "dest_map": warp.get('dest_map', '?'),
+                "dest_warp_id": warp.get('dest_warp_id', 0)
+            })
+        
+        # Simplified connections
+        simplified_connections = []
+        for conn in json_map.get('connections', []):
+            simplified_connections.append({
+                "direction": conn.get('direction', '?'),
+                "offset": conn.get('offset', 0),
+                "map": conn.get('map', '?')
+            })
+        
+        # Build compact JSON map (matching example format)
+        compact_json_map = {
+            "name": json_map.get('name'),
+            "id": json_map.get('id'),
+            "dimensions": json_map.get('dimensions'),
+            "warps": simplified_warps,
+            "objects": objects_for_json,
+            "connections": simplified_connections
+        }
+        context_parts.append(json.dumps(compact_json_map, indent=2))
+        
+        logger.info(f"Porymap: Successfully added map data for '{porymap_map_name}' ({json_map['dimensions']['width']}x{json_map['dimensions']['height']})")
+        
+        # Store porymap data in context_parts for later extraction (hidden from LLM but accessible for pathfinding)
+        # We'll store it as a special marker that can be extracted from state
+        return context_parts, json_map  # Return both formatted text and raw data
+        
+    except ImportError as e:
+        # Log import errors as warnings
+        logger.warning(f"Porymap modules not available: {e}")
+    except Exception as e:
+        # Log errors but don't break state formatting
+        logger.warning(f"Error adding porymap info for location '{location_name}': {e}", exc_info=True)
+    
+    # Return formatted text only if json_map not available
+    return context_parts
+
+def _format_game_state(game_data, state_data=None, include_movement_preview=True):
     """Format game state information (for non-battle mode)."""
     context_parts = []
     
@@ -1347,7 +1743,8 @@ def _format_game_state(game_data, state_data=None):
         context_parts.append("Be creative and have fun with the naming!")
     
     # Add movement preview for overworld navigation (but not during title sequence)
-    if (state_data and not is_in_battle and 
+    # Can be disabled for agents using pathfinding utility
+    if (include_movement_preview and state_data and not is_in_battle and 
         game_data.get('game_state') == 'overworld' and 
         player_location != 'TITLE_SEQUENCE'):
         movement_preview = format_movement_preview_for_llm(state_data)
@@ -1453,6 +1850,9 @@ def get_movement_preview(state_data):
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
+    # Get NPCs from map info
+    npcs = map_info.get('object_events', [])
+    
     directions = {
         'UP': (0, -1),
         'DOWN': (0, 1), 
@@ -1487,8 +1887,19 @@ def get_movement_preview(state_data):
             'new_coords': (new_world_x, new_world_y),
             'blocked': True,
             'tile_symbol': '#',
-            'tile_description': 'BLOCKED - Out of bounds'
+            'tile_description': 'BLOCKED - Out of bounds',
+            'npc_at_position': None,
+            'npc_info': None
         }
+        
+        # Check if there's an NPC at the target position
+        npc_at_position = None
+        for npc in npcs:
+            npc_x = npc.get('current_x', npc.get('x', 0))
+            npc_y = npc.get('current_y', npc.get('y', 0))
+            if npc_x == new_world_x and npc_y == new_world_y:
+                npc_at_position = npc
+                break
         
         # Check if the target position is within the grid bounds
         if (0 <= grid_y < len(raw_tiles) and 
@@ -1502,8 +1913,16 @@ def get_movement_preview(state_data):
                 # Get tile symbol and check if walkable
                 tile_symbol = format_tile_to_symbol(target_tile)
                 
-                # Determine if movement is blocked
-                is_blocked = tile_symbol in ['#', 'W']  # Walls and water block movement
+                # Determine if movement is blocked by terrain
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N']  # Walls, water, and NPCs block movement
+                
+                # Check if movement is blocked by NPC
+                is_blocked_by_npc = False
+                if npc_at_position and npc_at_position.get('is_blocking', True):
+                    is_blocked_by_npc = True
+                
+                # Overall blocking status
+                is_blocked = is_blocked_by_terrain or is_blocked_by_npc
                 
                 # SPECIAL CASE: If player is standing on stairs/door, don't block the warp direction
                 # Stairs and doors often require moving in a specific direction to activate
@@ -1514,7 +1933,7 @@ def get_movement_preview(state_data):
                     # tile might normally be considered blocked
                     if tile_symbol in ['#', 'W']:
                         # Override the blocking for navigation tiles but KEEP original symbol
-                        is_blocked = False
+                        is_blocked = is_blocked_by_npc  # Only block if NPC is present
                         # DO NOT change tile_symbol - preserve S, D, #, W, etc.
                 
                 # Special handling for jump ledges - they're only walkable in their direction
@@ -1584,10 +2003,33 @@ def get_movement_preview(state_data):
                 else:
                     tile_description = "Unknown tile"
                 
+                # Add NPC information to description if present
+                npc_info = None
+                if npc_at_position:
+                    npc_name = npc_at_position.get('name', 'Unknown')
+                    npc_type = npc_at_position.get('npc_type', 'npc')
+                    npc_description = npc_at_position.get('description', '')
+                    
+                    # Create NPC info string
+                    npc_info = f"{npc_name} ({npc_type})"
+                    if npc_description:
+                        npc_info += f" - {npc_description}"
+                    
+                    # Update tile description to include NPC info
+                    if is_blocked_by_npc:
+                        if is_blocked_by_terrain:
+                            tile_description += f" + BLOCKED by {npc_info}"
+                        else:
+                            tile_description = f"BLOCKED - {npc_info}"
+                    else:
+                        tile_description += f" + {npc_info} (non-blocking)"
+                
                 preview_info.update({
                     'blocked': is_blocked,
                     'tile_symbol': tile_symbol,
-                    'tile_description': tile_description
+                    'tile_description': tile_description,
+                    'npc_at_position': npc_at_position,
+                    'npc_info': npc_info
                 })
                 
             except (IndexError, TypeError) as e:
@@ -1624,7 +2066,23 @@ def format_movement_preview_for_llm(state_data):
             symbol = info['tile_symbol']
             status = "BLOCKED" if info['blocked'] else "WALKABLE"
             
+            # Special override: if description contains "Stairs" or "Warp", show 'W' instead of any other symbol
+            desc = info.get('tile_description', '')
+            if not info['blocked'] and ('Stairs' in desc or 'Warp' in desc):
+                symbol = 'W'
+            
             lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
+            
+            # Add NPC information if present
+            if info.get('npc_info'):
+                npc_info = info['npc_info']
+                if info['blocked'] and 'BLOCKED by' in info['tile_description']:
+                    lines[-1] += f" - {npc_info}"
+                elif not info['blocked'] and 'non-blocking' in info['tile_description']:
+                    lines[-1] += f" - {npc_info}"
+                else:
+                    lines[-1] += f" - {npc_info}"
+            
             # Add brief description for tiles
             desc = info['tile_description']
             if info['blocked']:
@@ -1635,6 +2093,8 @@ def format_movement_preview_for_llm(state_data):
                     lines[-1] += " - Need Surf to cross"
                 elif 'Wall' in desc or 'Obstacle' in desc:
                     lines[-1] += " - Impassable"
+                elif 'trainer' in desc.lower() or 'npc' in desc.lower():
+                    lines[-1] += " - NPC blocks movement"
             else:
                 # Add brief description for walkable tiles
                 if 'Tall grass' in desc:
@@ -1645,7 +2105,85 @@ def format_movement_preview_for_llm(state_data):
                     lines[-1] += " - Door/Entrance"
                 elif 'Jump ledge' in desc and 'correct direction' in desc:
                     lines[-1] += " - Jump ledge (can jump this way)"
+                elif 'trainer' in desc.lower() or 'npc' in desc.lower():
+                    lines[-1] += " - NPC present (interact with A)"
     
+    return "\n".join(lines)
+
+
+def format_action_history(action_history, max_actions=10):
+    """
+    Format action history with starting and ending positions.
+    
+    Args:
+        action_history: List of action dicts with button, start_pos, end_pos
+        max_actions: Maximum number of recent actions to show
+    
+    Returns:
+        str: Formatted action history text
+    """
+    if not action_history:
+        return "No recent actions"
+    
+    lines = []
+    
+    # Get the most recent completed actions
+    completed_actions = [a for a in action_history if a.get('completed', False)]
+    recent_actions = completed_actions[-max_actions:]
+    
+    if not recent_actions:
+        return "No completed actions yet"
+    
+    lines.append("RECENT ACTION HISTORY:")
+    lines.append("(Shows last {} actions with start → end positions)".format(len(recent_actions)))
+    
+    for i, action in enumerate(recent_actions, 1):
+        button = action.get('button', 'UNKNOWN')
+        start_pos = action.get('start_pos', (None, None, 'Unknown'))
+        end_pos = action.get('end_pos', (None, None, 'Unknown'))
+        
+        start_x, start_y, start_loc = start_pos
+        end_x, end_y, end_loc = end_pos
+        sequence_index = action.get('sequence_index', 0)
+        metadata = action.get('metadata') or {}
+        source = action.get('source')
+
+        # Build base line text
+        if button in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+            if start_x is not None and end_x is not None:
+                if start_x == end_x and start_y == end_y and start_loc == end_loc:
+                    line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → BLOCKED (stayed at same position)"
+                else:
+                    if start_loc == end_loc:
+                        line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → ({end_x:3},{end_y:3})"
+                    else:
+                        line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) [{start_loc}] → ({end_x:3},{end_y:3}) [{end_loc}]"
+            else:
+                line = f"  {i}. {button:5} (position unavailable)"
+        else:
+            if start_x is not None:
+                line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3})"
+            else:
+                line = f"  {i}. {button:5}"
+
+        # Append contextual metadata (only on first button of a sequence)
+        context_parts = []
+        if sequence_index == 0:
+            if source == 'navigate_to':
+                variance = metadata.get('variance')
+                if variance is not None:
+                    context_parts.append(f"navigate_to variance={variance}")
+            elif source:
+                context_parts.append(str(source))
+            elif metadata:
+                for key, value in metadata.items():
+                    context_parts.append(f"{key}={value}")
+
+        if context_parts:
+            line += " [" + "; ".join(str(part) for part in context_parts) + "]"
+
+        lines.append(line)
+        
     return "\n".join(lines)
 
 
