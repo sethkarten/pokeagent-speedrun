@@ -15,6 +15,7 @@ import signal
 import sys
 import threading
 import time
+from pathlib import Path
 
 # Third-party imports
 import cv2
@@ -26,8 +27,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from PIL import Image
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from urllib.parse import quote_plus
+
+from typing import Any, Dict, List, Optional
 
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -67,6 +70,10 @@ step_counter = 0  # Track steps for submission logging
 last_action_time = None  # Track time of last action for decision time calculation
 running = True
 step_count = 0
+direct_objectives_sequence = None
+direct_objectives_start_index = 0
+direct_objectives_manager = None
+current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
 fps = 80
@@ -248,7 +255,9 @@ app.add_middleware(
 
 # Models for API requests and responses
 class ActionRequest(BaseModel):
-    buttons: list = []  # List of button names: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT
+    buttons: List[str] = Field(default_factory=list)  # List of button names: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT
+    source: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class GameStateResponse(BaseModel):
     screenshot_base64: str
@@ -307,13 +316,94 @@ def periodic_milestone_updater():
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully"""
-    global running, state_update_running
+    global running, state_update_running, video_recording, video_filename
+    
+    # Prevent multiple signal handlers from running simultaneously
+    if not running:
+        return
+    
     print(f"\nReceived signal {signum}, shutting down gracefully...")
     running = False
     state_update_running = False
+    
+    # IMPORTANT: Finalize run data BEFORE cleanup
+    # Check video_recording flag BEFORE cleanup_video_recording() resets it
+    was_recording = video_recording
+    
+    try:
+        from utils.run_data_manager import get_run_data_manager
+        from utils.llm_logger import get_llm_logger
+        
+        run_manager = get_run_data_manager()
+        if run_manager:
+            print("📦 Finalizing run data...")
+            
+            # Get final metrics from LLM logger
+            llm_logger = get_llm_logger()
+            final_metrics = llm_logger.get_cumulative_metrics() if llm_logger else None
+            
+            # Save end-state snapshot (ensures all data is saved)
+            run_manager.save_end_state_snapshot()
+            
+            # Copy all data to run_data
+            logger.info(f"🔍 [DEBUG] Finalizing run data - run_manager: {run_manager is not None}")
+            if llm_logger:
+                logger.info(f"🔍 [DEBUG] LLM logger available, log_file: {llm_logger.log_file}")
+                # Verify LLM log file exists before copying
+                if os.path.exists(llm_logger.log_file):
+                    logger.info(f"🔍 [DEBUG] LLM log file exists, copying...")
+                    run_manager.copy_llm_traces(llm_logger.log_file)
+                    logger.info(f"🔍 [DEBUG] Copied LLM traces from: {llm_logger.log_file}")
+                else:
+                    logger.warning(f"🔍 [DEBUG] LLM log file not found: {llm_logger.log_file}")
+                    logger.warning(f"🔍 [DEBUG] Current working directory: {os.getcwd()}")
+                    # Try to find the log file by pattern
+                    import glob
+                    log_pattern = f"llm_logs/llm_log_{run_manager.run_id.split('_', 1)[1] if '_' in run_manager.run_id else '*'}*.jsonl"
+                    logger.info(f"🔍 [DEBUG] Searching for log files with pattern: {log_pattern}")
+                    log_files = glob.glob(log_pattern)
+                    logger.info(f"🔍 [DEBUG] Found {len(log_files)} log files: {log_files}")
+                    if log_files:
+                        # Use the most recent one
+                        log_file = max(log_files, key=os.path.getmtime)
+                        logger.info(f"🔍 [DEBUG] Using most recent log file: {log_file}")
+                        run_manager.copy_llm_traces(log_file)
+                        logger.info(f"🔍 [DEBUG] Found and copied LLM traces from: {log_file}")
+            else:
+                logger.warning(f"🔍 [DEBUG] LLM logger is None - cannot copy LLM traces")
+            
+            run_manager.copy_objectives()
+            
+            # Copy knowledge_base to agent_scratch_space (agent writes to it)
+            run_manager.copy_knowledge_base()
+            
+            # Copy frame_cache to end_state
+            run_manager.copy_frame_cache()
+            
+            # Copy video if recording was enabled (check flag BEFORE cleanup)
+            logger.info(f"🔍 [DEBUG] Video recording flag: {was_recording}, video_filename: {video_filename}")
+            run_manager.copy_video_recording(record_enabled=was_recording)
+            
+            # Finalize with metrics
+            run_manager.finalize_run(final_metrics=final_metrics)
+            print(f"✅ Run data finalized: {run_manager.get_run_directory()}")
+            
+            # Clean up deprecated run directories
+            from utils.run_data_manager import cleanup_old_cache_runs
+            try:
+                cleanup_old_cache_runs()
+                print("🧹 Cleaned up deprecated run directories")
+            except Exception as e:
+                logger.debug(f"Could not clean up old runs: {e}")
+    except Exception as e:
+        logger.error(f"❌ Error during run data finalization: {e}", exc_info=True)
+    
+    # Cleanup video recording AFTER copying (so file is still available)
     cleanup_video_recording()
+    
     if env:
         env.stop()
+    
     sys.exit(0)
 
 def setup_environment(skip_initial_state=False):
@@ -532,6 +622,22 @@ def game_loop(manual_mode=False):
                 action_frames_remaining -= 1
                 if action_frames_remaining == 0:
                     # Action finished, start release delay
+                    # Record ending position for this action
+                    global recent_button_presses
+                    current_state = env.get_comprehensive_state()
+                    player_data = current_state.get('player', {})
+                    position = player_data.get('position', {})
+                    location = player_data.get('location', 'Unknown')
+                    end_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
+                    
+                    # Find and update the most recent incomplete action matching current_action
+                    for i in range(len(recent_button_presses) - 1, -1, -1):
+                        if (recent_button_presses[i]["button"] == current_action and 
+                            not recent_button_presses[i]["completed"]):
+                            recent_button_presses[i]["end_pos"] = end_pos
+                            recent_button_presses[i]["completed"] = True
+                            break
+                    
                     current_action = None
                     release_frames_remaining = ACTION_RELEASE_DELAY
                     action_completed = True  # Mark action as completed
@@ -727,14 +833,38 @@ async def take_action(request: ActionRequest):
             action_queue.extend(request.buttons)
             print(f"📋 Action queue after extend: {action_queue}")
             
-            # Track button presses for recent actions display
+            # Track button presses for recent actions display with position tracking
             current_time = time.time()
-            for button in request.buttons:
-                # Add all buttons to recent actions (removed duplicate filtering for debugging)
-                recent_button_presses.append({
+            
+            # Get current player position
+            current_state = env.get_comprehensive_state()
+            player_data = current_state.get('player', {})
+            position = player_data.get('position', {})
+            location = player_data.get('location', 'Unknown')
+            start_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
+            
+            source = request.source
+            metadata = request.metadata or {}
+            sequence_length = len(request.buttons)
+
+            for idx, button in enumerate(request.buttons):
+                # Add all buttons to recent actions with starting position
+                action_entry = {
                     "button": button,
-                    "timestamp": current_time
-                })
+                    "timestamp": current_time,
+                    "start_pos": start_pos,
+                    "end_pos": None,  # Will be filled when action completes
+                    "completed": False,
+                    "sequence_index": idx,
+                    "sequence_length": sequence_length
+                }
+
+                if source:
+                    action_entry["source"] = source
+                if metadata:
+                    action_entry["metadata"] = dict(metadata)
+
+                recent_button_presses.append(action_entry)
             
             # Update total actions count in metrics
             with step_lock:
@@ -899,46 +1029,74 @@ async def get_comprehensive_state():
         # Add stitched map info to the map section
         if not "map" in state:
             state["map"] = {}
-        
-        # Check if visual_map was already generated by memory_reader
-        # If so, preserve it as it has the proper accumulated map data
-        visual_map_from_memory_reader = state.get("map", {}).get("visual_map")
-        if visual_map_from_memory_reader:
-            logger.debug("Using visual_map generated by memory_reader")
-            # Keep the visual_map as-is
-        elif map_stitcher:
-            # Generate visual map if not already present
+
+        # PRIORITY 1: Check for agent's SLAM map first
+        slam_map_loaded = False
+        if current_location and current_location != "Unknown":
             try:
-                # Get NPCs from state if available
-                npcs = state.get("map", {}).get("object_events", [])
-                
-                # Get connections for this location
-                connections_with_coords = []
-                if current_location and current_location != "Unknown":
-                    location_connections = map_stitcher.get_location_connections(current_location)
-                    for conn in location_connections:
-                        if len(conn) >= 3:
-                            other_loc, my_coords, their_coords = conn[0], conn[1], conn[2]
-                            connections_with_coords.append({
-                                "to": other_loc,
-                                "from_pos": list(my_coords) if my_coords else [],
-                                "to_pos": list(their_coords) if their_coords else []
-                            })
-                
-                # Generate the map display
-                map_lines = map_stitcher.generate_location_map_display(
-                    location_name=current_location,
-                    player_pos=player_coords,
-                    npcs=npcs,
-                    connections=connections_with_coords
-                )
-                
-                # Store as formatted text
-                if map_lines:
-                    state["map"]["visual_map"] = "\n".join(map_lines)
-                    logger.debug(f"Generated visual_map with {len(map_lines)} lines")
+                # Path imported at top of file
+                maps_dir = Path(".pokeagent_cache/maps")
+                # Normalize case to title case for consistent filenames
+                normalized_location = current_location.title()
+                safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (' ', '_', '-')).strip()
+                safe_name = safe_name.replace(' ', '_')
+                slam_map_file = maps_dir / f"{safe_name}.txt"
+
+                logger.info(f"🗺️ Checking for SLAM map: location='{current_location}' (normalized: '{normalized_location}') → file='{slam_map_file}'")
+
+                if slam_map_file.exists():
+                    slam_map_data = slam_map_file.read_text()
+                    state["map"]["visual_map"] = slam_map_data
+                    state["map"]["map_source"] = "agent_slam"
+                    logger.info(f"✅ Using SLAM map for {current_location} ({len(slam_map_data)} chars)")
+                    slam_map_loaded = True
+                else:
+                    logger.info(f"   No SLAM map found at {slam_map_file}")
             except Exception as e:
-                logger.error(f"Failed to generate visual_map: {e}")
+                logger.error(f"Error loading SLAM map: {e}")
+
+        # PRIORITY 2: Check if visual_map was already generated by memory_reader
+        # If so, preserve it as it has the proper accumulated map data
+        if not slam_map_loaded:
+            visual_map_from_memory_reader = state.get("map", {}).get("visual_map")
+            if visual_map_from_memory_reader:
+                logger.debug("Using visual_map generated by memory_reader")
+                state["map"]["map_source"] = "memory_reader"
+                # Keep the visual_map as-is
+            elif map_stitcher:
+                # Generate visual map if not already present
+                state["map"]["map_source"] = "map_stitcher"
+                try:
+                    # Get NPCs from state if available
+                    npcs = state.get("map", {}).get("object_events", [])
+
+                    # Get connections for this location
+                    connections_with_coords = []
+                    if current_location and current_location != "Unknown":
+                        location_connections = map_stitcher.get_location_connections(current_location)
+                        for conn in location_connections:
+                            if len(conn) >= 3:
+                                other_loc, my_coords, their_coords = conn[0], conn[1], conn[2]
+                                connections_with_coords.append({
+                                    "to": other_loc,
+                                    "from_pos": list(my_coords) if my_coords else [],
+                                    "to_pos": list(their_coords) if their_coords else []
+                                })
+
+                    # Generate the map display
+                    map_lines = map_stitcher.generate_location_map_display(
+                        location_name=current_location,
+                        player_pos=player_coords,
+                        npcs=npcs,
+                        connections=connections_with_coords
+                    )
+
+                    # Store as formatted text
+                    if map_lines:
+                        state["map"]["visual_map"] = "\n".join(map_lines)
+                        logger.debug(f"Generated visual_map with {len(map_lines)} lines")
+                except Exception as e:
+                    logger.error(f"Failed to generate visual_map: {e}")
         
         # Add stitched map info for the client/frontend
         if map_stitcher:
@@ -1003,9 +1161,6 @@ async def get_comprehensive_state():
                             print(f"🗺️ SERVER: Added portal connections to state: {map_id_connections}")
                             print(f"🗺️ SERVER: State now has keys: {list(state.keys())}")
                             logger.debug(f"Loaded portal connections for {len(map_id_connections) if map_id_connections else 0} maps from persistent storage")
-                        else:
-                            print(f"🗺️ SERVER: No warp connections found in map data")
-                            logger.debug("No warp connections found in map stitcher data")
                 else:
                     print(f"🗺️ SERVER: Cache file not found at {cache_file}")
                     logger.debug(f"Map stitcher cache file not found: {cache_file}")
@@ -1475,6 +1630,17 @@ async def update_agent_step(request: Request = None):
             try:
                 request_data = await request.json()
 
+                # Store agent thinking if provided
+                if "thinking" in request_data:
+                    thinking_text = request_data["thinking"]
+                    step_num = request_data.get("step", agent_step_count)
+                    # Write to a simple text file for the stream to read
+                    try:
+                        with open("agent_thinking.txt", "w") as f:
+                            f.write(f"Step {step_num}:\n{thinking_text}\n")
+                    except Exception as e:
+                        logger.debug(f"Could not write thinking: {e}")
+
                 # Update metrics if provided (with thread safety)
                 if "metrics" in request_data and isinstance(request_data["metrics"], dict):
                     with step_lock:  # Use existing lock for thread safety
@@ -1502,6 +1668,17 @@ async def update_agent_step(request: Request = None):
     # Default increment behavior
     with step_lock:
         agent_step_count += 1
+        
+        # Save end-state snapshot every 20 steps
+        if agent_step_count % 20 == 0:
+            try:
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    run_manager.save_end_state_snapshot()
+                    logger.info(f"💾 Saved end-state snapshot at step {agent_step_count}")
+            except Exception as e:
+                logger.debug(f"Could not save end-state snapshot: {e}")
     
     return {"status": "updated", "agent_step": agent_step_count}
 
@@ -1717,13 +1894,55 @@ async def mcp_get_game_state():
     try:
         from utils.state_formatter import format_state_for_llm
         from server.cli import pokemon_mcp_server
+        from agent.direct_objectives import DirectObjectiveManager
 
-        # Create wrapper that uses JSON map format
-        def json_state_formatter(state):
-            return format_state_for_llm(state, use_json_map=True)
-
-        # Use helper function from pokemon_mcp_server
-        return pokemon_mcp_server.get_game_state_direct(env, json_state_formatter)
+        # Get recent button presses with position history
+        global recent_button_presses
+        
+        # Use helper function from pokemon_mcp_server with action history
+        result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm, action_history=recent_button_presses)
+        
+        # Add direct objectives information
+        if result.get("success", False):
+            global direct_objectives_manager, current_run_dir
+            
+            # Initialize direct objective manager if needed
+            if direct_objectives_manager is None:
+                direct_objectives_manager = DirectObjectiveManager()
+            
+            # Load direct objectives sequence if specified
+            if direct_objectives_sequence:
+                if not direct_objectives_manager.is_sequence_active():
+                    # Use run_data agent_scratch_space for objectives
+                    from utils.run_data_manager import get_run_data_manager
+                    run_manager = get_run_data_manager()
+                    objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
+                    
+                    if direct_objectives_sequence == "tutorial_to_rival":
+                        direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                    elif direct_objectives_sequence == "tutorial_to_rustboro_city":
+                        direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                    elif direct_objectives_sequence == "part_1_walkthrough_claude_4_5":
+                        direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                    elif direct_objectives_sequence == "autonomous_objective_creation":
+                        direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                    else:
+                        logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+            
+            # Get current objective guidance
+            if direct_objectives_manager.is_sequence_active():
+                game_state = result.get("raw_state", {})
+                current_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+                if current_guidance:
+                    result["direct_objective"] = current_guidance
+                    result["direct_objective_status"] = direct_objectives_manager.get_sequence_status()
+                
+                # Add objective context (previous, current, next)
+                objective_context = direct_objectives_manager.get_objective_context(game_state)
+                if objective_context:
+                    result["direct_objective_context"] = objective_context
+        
+        return result
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
         return {"success": False, "error": str(e)}
@@ -1738,6 +1957,23 @@ async def mcp_press_buttons(request: dict):
     try:
         buttons = request.get("buttons", [])
         reasoning = request.get("reasoning", "")
+        source = request.get("source")
+        metadata = request.get("metadata")
+        metadata_dict = metadata if isinstance(metadata, dict) else {}
+
+        # Normalize buttons to always be a list
+        if isinstance(buttons, str):
+            buttons = [buttons]
+        elif isinstance(buttons, dict):
+            # Handle dict like {'U': 'P'} -> reconstruct "UP"
+            if len(buttons) == 1:
+                key, value = next(iter(buttons.items()))
+                if isinstance(value, str) and len(value) == 1:
+                    buttons = [key + value]  # Reconstruct "UP" from {'U': 'P'}
+                else:
+                    buttons = list(buttons.keys())
+            else:
+                buttons = list(buttons.keys())
 
         if not buttons:
             return {"success": False, "error": "No buttons specified"}
@@ -1745,13 +1981,25 @@ async def mcp_press_buttons(request: dict):
         # Valid buttons (including WAIT for no-op)
         valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
 
-        # Filter out WAIT buttons (they're just for agent decision-making, not actual button presses)
-        actual_buttons = [b for b in buttons if b != "WAIT"]
+        # Validate and normalize buttons with fallback to 'A'
+        normalized_buttons = []
+        invalid_buttons = []
 
-        # Validate all buttons
         for button in buttons:
-            if button not in valid_buttons:
-                return {"success": False, "error": f"Invalid button: {button}"}
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+            
+            # Check if valid
+            if button_upper in valid_buttons:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                invalid_buttons.append(button)
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append('A')
+        
+        # Filter out WAIT buttons (they're just for agent decision-making, not actual button presses)
+        actual_buttons = [b for b in normalized_buttons if b != "WAIT"]
 
         # If only WAIT was requested, treat it as a no-op but still complete successfully
         if not actual_buttons:
@@ -1764,17 +2012,167 @@ async def mcp_press_buttons(request: dict):
             }
 
         # Call the existing take_action function to ensure metrics tracking
-        action_request = ActionRequest(buttons=actual_buttons)
+        action_request = ActionRequest(
+            buttons=actual_buttons,
+            source=source,
+            metadata=metadata_dict
+        )
         await take_action(action_request)
 
         logger.info(f"🎮 Queued buttons via MCP: {actual_buttons} - {reasoning}")
-        return {
+        response_dict = {
             "success": True,
             "buttons_queued": actual_buttons,
             "reasoning": reasoning
         }
+        
+        # Include warning if any buttons were invalid
+        if invalid_buttons:
+            response_dict["warning"] = f"Invalid buttons replaced with 'A': {invalid_buttons}"
+        
+        return response_dict
     except Exception as e:
         logger.error(f"Error pressing buttons: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/complete_direct_objective")
+async def mcp_complete_direct_objective(request: dict):
+    """MCP Tool: Complete current direct objective"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        from agent.direct_objectives import DirectObjectiveManager
+        
+        # Get current game state to check objective completion
+        from utils.state_formatter import format_state_for_llm
+        from server.cli import pokemon_mcp_server
+        
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        if not game_state_result.get("success", False):
+            return {"success": False, "error": "Failed to get game state"}
+        
+        game_state = game_state_result.get("raw_state", {})
+        
+        # Use global direct objective manager and current_run_dir
+        global direct_objectives_manager, current_run_dir
+        
+        # Initialize direct objective manager if needed
+        if direct_objectives_manager is None:
+            direct_objectives_manager = DirectObjectiveManager()
+        
+        # Load direct objectives sequence if specified
+        if direct_objectives_sequence:
+            if not direct_objectives_manager.is_sequence_active():
+                # Use run_data agent_scratch_space for objectives
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
+                
+                if direct_objectives_sequence == "tutorial_to_rival":
+                    direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                elif direct_objectives_sequence == "tutorial_to_rustboro_city":
+                    direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                elif direct_objectives_sequence == "part_1_walkthrough_claude_4_5":
+                    direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                elif direct_objectives_sequence == "autonomous_objective_creation":
+                    direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                else:
+                    logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+        
+        # Check if sequence is active
+        if not direct_objectives_manager.is_sequence_active():
+            return {"success": False, "error": "No direct objective sequence active"}
+        
+        # Get current objective
+        current_obj = direct_objectives_manager.get_current_objective()
+        if not current_obj:
+            return {"success": False, "error": "No current objective to complete"}
+        
+        # Mark objective as completed
+        direct_objectives_manager._mark_objective_completed(current_obj)
+        direct_objectives_manager.current_index += 1
+        
+        # Get next objective if available
+        next_obj = direct_objectives_manager.get_current_objective()
+        if next_obj:
+            next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+            return {
+                "success": True,
+                "completed_objective": {
+                    "id": current_obj.id,
+                    "description": current_obj.description
+                },
+                "next_objective": next_guidance,
+                "sequence_status": direct_objectives_manager.get_sequence_status()
+            }
+        else:
+            # Sequence complete - save to history in timestamped run directory
+            if current_run_dir:
+                try:
+                    # Save to agent_scratch_space in run_data
+                    from utils.run_data_manager import get_run_data_manager
+                    run_manager = get_run_data_manager()
+                    if not run_manager:
+                        logger.error("Cannot save completed_objectives: run_data_manager not initialized")
+                        raise RuntimeError("run_data_manager must be initialized to save completed_objectives")
+                    scratch_space_dir = str(run_manager.get_scratch_space_dir())
+                    saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
+                    logger.info(f"💾 Saved completed objectives to {saved_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to save completed objectives: {e}")
+            
+            # Automatically create a new objective to guide the agent through next steps
+            try:
+                from agent.direct_objectives import DirectObjective
+                
+                # Get current game state for context
+                next_step_obj = DirectObjective(
+                    id="sequence_complete_create_next_objectives",
+                    description="Sequence completed! Call get_progress_summary() to review accomplishments, then use get_walkthrough() to find the next relevant walkthrough part based on your location, and finally create the next 3 direct objectives using create_direct_objectives()",
+                    action_type="interact",
+                    target_location=None,
+                    navigation_hint="Step 1: Call get_progress_summary() to see milestones and current location. Step 2: Use get_walkthrough(part=X) based on your location to plan next steps. Step 3: Call create_direct_objectives() with 3 new objectives based on the walkthrough information.",
+                    completion_condition="dynamic_objectives_created",
+                    priority=1
+                )
+                
+                # Add the new objective to the sequence
+                direct_objectives_manager.current_sequence.append(next_step_obj)
+                
+                # Get guidance for the new objective
+                next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+                
+                return {
+                    "success": True,
+                    "completed_objective": {
+                        "id": current_obj.id,
+                        "description": current_obj.description
+                    },
+                    "next_objective": next_guidance,
+                    "sequence_status": direct_objectives_manager.get_sequence_status(),
+                    "message": "All objectives completed! A new objective has been automatically created to guide you through creating the next 3 objectives. Follow the steps: get_progress_summary() → get_walkthrough() → create_direct_objectives()",
+                    "sequence_complete": False,  # Not complete anymore - we added a new objective
+                    "auto_objective_created": True
+                }
+            except Exception as e:
+                logger.error(f"Failed to create auto objective: {e}")
+                # Fallback to original behavior if auto-objective creation fails
+                return {
+                    "success": True,
+                    "completed_objective": {
+                        "id": current_obj.id,
+                        "description": current_obj.description
+                    },
+                    "next_objective": None,
+                    "sequence_status": direct_objectives_manager.get_sequence_status(),
+                    "message": "All objectives completed! Use get_progress_summary() to see what you've accomplished, then get_walkthrough() to plan next steps, and create_direct_objectives() to create the next 3 objectives.",
+                    "sequence_complete": True
+                }
+            
+    except Exception as e:
+        logger.error(f"Error completing direct objective: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -1790,6 +2188,7 @@ async def mcp_navigate_to(request: dict):
         x = request.get("x")
         y = request.get("y")
         reason = request.get("reason", "")
+        variance = request.get("variance")
 
         if x is None or y is None:
             return {"success": False, "error": "x and y coordinates required"}
@@ -1802,7 +2201,7 @@ async def mcp_navigate_to(request: dict):
             return {"success": False, "error": f"Invalid coordinates: x={x}, y={y}"}
 
         # Calculate path and get buttons
-        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason)
+        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason=reason, variance=variance)
 
         if not result.get("success"):
             return result
@@ -1810,7 +2209,14 @@ async def mcp_navigate_to(request: dict):
         # Queue buttons via take_action to ensure metrics tracking
         buttons = result.get("buttons", [])
         if buttons:
-            action_request = ActionRequest(buttons=buttons)
+            variance_value = result.get("variance")
+            if variance_value is None:
+                variance_value = variance or "none"
+            action_request = ActionRequest(
+                buttons=buttons,
+                source="navigate_to",
+                metadata={"variance": variance_value}
+            )
             await take_action(action_request)
 
         return {
@@ -1818,7 +2224,8 @@ async def mcp_navigate_to(request: dict):
             "target": result.get("target"),
             "path_length": result.get("path_length"),
             "buttons_queued": len(buttons),
-            "reason": reason
+            "reason": reason,
+            "variance": result.get("variance", variance or "none")
         }
     except Exception as e:
         logger.error(f"Error in navigate_to: {e}")
@@ -1827,7 +2234,7 @@ async def mcp_navigate_to(request: dict):
 
 @app.post("/mcp/add_knowledge")
 async def mcp_add_knowledge(request: dict):
-    """MCP Tool: Add knowledge to knowledge base"""
+    """MCP Tool: Add knowledge to knowledge base (persistent across runs)"""
     try:
         from server.cli import pokemon_mcp_server
 
@@ -1846,7 +2253,7 @@ async def mcp_add_knowledge(request: dict):
 
 @app.post("/mcp/search_knowledge")
 async def mcp_search_knowledge(request: dict):
-    """MCP Tool: Search knowledge base"""
+    """MCP Tool: Search knowledge base (persistent across runs)"""
     try:
         from server.cli import pokemon_mcp_server
 
@@ -1863,7 +2270,7 @@ async def mcp_search_knowledge(request: dict):
 
 @app.post("/mcp/get_knowledge_summary")
 async def mcp_search_knowledge_summary(request: dict):
-    """MCP Tool: Get knowledge summary"""
+    """MCP Tool: Get knowledge summary (persistent across runs)"""
     try:
         from server.cli import pokemon_mcp_server
 
@@ -2148,9 +2555,33 @@ async def mcp_read_file(request: dict):
 
 @app.post("/mcp/write_file")
 async def mcp_write_file(request: dict):
-    """MCP Tool: Write file (restricted to .pokeagent_cache/cli/)"""
+    """MCP Tool: Write file (restricted to .pokeagent_cache/cli/ or current run directory)"""
     tools = _get_baseline_mcp_tools()
-    return tools.write_file(file_path=request.get("file_path"), content=request.get("content"))
+    
+    # Allow writing to current run directory as well
+    file_path = request.get("file_path")
+    global current_run_dir
+    
+    # If path is relative and run_dir exists, allow writing to run_dir
+    if current_run_dir and file_path and not os.path.isabs(file_path):
+        # If relative path, write to run directory
+        run_file_path = os.path.join(current_run_dir, file_path)
+        try:
+            os.makedirs(os.path.dirname(run_file_path), exist_ok=True)
+            with open(run_file_path, 'w', encoding='utf-8') as f:
+                f.write(request.get("content", ""))
+            return {
+                "success": True,
+                "message": f"Successfully wrote to {run_file_path}",
+                "path": run_file_path,
+                "write_dir": current_run_dir
+            }
+        except Exception as e:
+            logger.error(f"Failed to write to run directory: {e}")
+            return {"success": False, "error": str(e)}
+    
+    # Otherwise use baseline tool (restricted to .pokeagent_cache/cli/)
+    return tools.write_file(file_path=file_path, content=request.get("content"))
 
 @app.post("/mcp/list_directory")
 async def mcp_list_directory(request: dict):
@@ -2215,9 +2646,392 @@ async def mcp_google_web_search(request: dict):
 
 @app.post("/mcp/save_memory")
 async def mcp_save_memory(request: dict):
-    """MCP Tool: Save facts to persistent memory"""
-    tools = _get_baseline_mcp_tools()
-    return tools.save_memory(fact=request.get("fact"))
+    """MCP Tool: Save facts to persistent memory (saved to run directory)"""
+    global current_run_dir
+    
+    fact = request.get("fact")
+    if not fact:
+        return {"success": False, "error": "fact is required"}
+    
+    try:
+        # Save to current run directory if available
+        if current_run_dir:
+            memory_file = os.path.join(current_run_dir, "AGENT.md")
+            
+            # Read existing content
+            if os.path.exists(memory_file):
+                with open(memory_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            else:
+                content = "# Agent Memory\n\nThis file stores facts and observations from the AI agent.\n"
+            
+            # Check if "## Agent Memories" section exists
+            if "## Agent Memories" not in content:
+                if content and not content.endswith('\n'):
+                    content += '\n'
+                content += "\n## Agent Memories\n"
+            
+            # Append the fact
+            content += f"- {fact}\n"
+            
+            # Write back
+            with open(memory_file, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            return {
+                "success": True,
+                "message": f"Memory saved to {memory_file}",
+                "path": memory_file
+            }
+        else:
+            # Fallback to baseline tool if no run directory
+            tools = _get_baseline_mcp_tools()
+            return tools.save_memory(fact=fact)
+    except Exception as e:
+        logger.error(f"Failed to save memory: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/mcp/create_direct_objectives")
+async def mcp_create_direct_objectives(request: dict):
+    """MCP Tool: Create next 3 direct objectives dynamically"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+    
+    try:
+        from agent.direct_objectives import DirectObjectiveManager
+        
+        objectives_data = request.get("objectives", [])
+        reasoning = request.get("reasoning", "")
+        
+        if len(objectives_data) != 3:
+            return {"success": False, "error": f"Must provide exactly 3 objectives (got {len(objectives_data)})"}
+        
+        # Validate required fields
+        for i, obj in enumerate(objectives_data):
+            if not obj.get("id"):
+                return {"success": False, "error": f"Objective {i+1} missing 'id' field"}
+            if not obj.get("description"):
+                return {"success": False, "error": f"Objective {i+1} missing 'description' field"}
+            if not obj.get("action_type"):
+                return {"success": False, "error": f"Objective {i+1} missing 'action_type' field"}
+        
+        global direct_objectives_manager
+        if direct_objectives_manager is None:
+            direct_objectives_manager = DirectObjectiveManager()
+        
+        # Check if we need to complete the "sequence_complete_create_next_objectives" objective first
+        current_obj = direct_objectives_manager.get_current_objective()
+        should_complete_auto_obj = False
+        if current_obj and current_obj.id == "sequence_complete_create_next_objectives":
+            should_complete_auto_obj = True
+        
+        # Add dynamic objectives (this will automatically set current_index to the first new objective)
+        direct_objectives_manager.add_dynamic_objectives(objectives_data, set_as_current=True)
+        
+        # If we just created the auto-objective to create new objectives, mark it as completed
+        # Note: add_dynamic_objectives already set current_index to the first new objective,
+        # so we don't need to increment it again here
+        if should_complete_auto_obj:
+            direct_objectives_manager._mark_objective_completed(current_obj)
+            logger.info(f"✅ Marked sequence_complete_create_next_objectives as completed after creating {len(objectives_data)} new objectives")
+            logger.info(f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)")
+        
+        # Get current game state for context
+        from utils.state_formatter import format_state_for_llm
+        from server.cli import pokemon_mcp_server
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state = game_state_result.get("raw_state", {})
+        
+        # Get next objective guidance (should now be the first of the newly created objectives)
+        next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+        
+        return {
+            "success": True,
+            "message": f"Created {len(objectives_data)} objectives",
+            "reasoning": reasoning,
+            "next_objective": next_guidance,
+            "sequence_status": direct_objectives_manager.get_sequence_status(),
+            "context": {
+                "current_location": game_state.get("player", {}).get("location"),
+                "milestones_completed": [
+                    m for m, d in (env.milestone_tracker.milestones.items() if env.milestone_tracker else [])
+                    if d.get("completed", False)
+                ]
+            },
+            "auto_objective_completed": should_complete_auto_obj
+        }
+    except Exception as e:
+        logger.error(f"Error creating direct objectives: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+@app.post("/mcp/get_progress_summary")
+async def mcp_get_progress_summary():
+    """MCP Tool: Get comprehensive progress summary including milestones, completed objectives, and knowledge"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+    
+    try:
+        # Get milestones
+        milestones = env.milestone_tracker.milestones if env.milestone_tracker else {}
+        completed_milestones = [mid for mid, data in milestones.items() if data.get("completed", False)]
+        
+        # Get current game state
+        from utils.state_formatter import format_state_for_llm
+        from server.cli import pokemon_mcp_server
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state = game_state_result.get("raw_state", {})
+        
+        # Get direct objective status
+        global direct_objectives_manager
+        obj_status = {}
+        completed_history = []
+        if direct_objectives_manager:
+            obj_status = direct_objectives_manager.get_sequence_status()
+            
+            # Load completed objectives history from current run directory
+            global current_run_dir
+            if current_run_dir:
+                # Use agent_scratch_space in run_data
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if not run_manager:
+                    logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
+                    completed_obj_file = None
+                else:
+                    completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
+                if os.path.exists(completed_obj_file):
+                    import json
+                    with open(completed_obj_file, 'r') as f:
+                        history_data = json.load(f)
+                        completed_history = history_data.get("sequences", [])
+        
+        # Get knowledge summary (persistent)
+        kb_result = pokemon_mcp_server.get_knowledge_summary_direct(min_importance=3)
+        kb_summary = kb_result.get("summary", "No knowledge yet") if isinstance(kb_result, dict) else "No knowledge yet"
+        
+        # Get location and coordinates
+        location = game_state.get("player", {}).get("location", "Unknown")
+        player_pos = game_state_result.get("player_position", {}) if game_state_result.get("success") else {}
+        
+        return {
+            "success": True,
+            "progress": {
+                "milestones_completed": completed_milestones,
+                "total_milestones_completed": len(completed_milestones),
+                "current_location": location,
+                "player_coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")} if player_pos else None,
+                "direct_objectives": {
+                    "current_sequence": obj_status.get("sequence_name"),
+                    "objectives_completed_in_current_sequence": obj_status.get("completed_count", 0),
+                    "total_in_current_sequence": obj_status.get("total_objectives", 0),
+                    "is_sequence_complete": obj_status.get("is_complete", False),
+                    "current_objective": obj_status.get("current_objective")
+                },
+                "completed_sequences_history": completed_history,
+                "knowledge_summary": kb_summary,
+                "run_directory": current_run_dir
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting progress summary: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/reflect")
+async def mcp_reflect(request: dict):
+    """MCP Tool: Return context data for agent to perform self-reflection using its own VLM"""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        situation = request.get("situation", "Agent requested reflection")
+
+        # Load recent agent history
+        global current_run_dir
+        agent_history = []
+        if current_run_dir:
+            history_file = os.path.join(current_run_dir, "agent_history.json")
+            if os.path.exists(history_file):
+                import json
+                with open(history_file, 'r') as f:
+                    agent_history = json.load(f)
+
+        # Get last 15 steps for analysis
+        recent_steps = agent_history[-15:] if len(agent_history) > 15 else agent_history
+
+        # Get current objective status
+        global direct_objectives_manager
+        current_objective = None
+        objectives_complete = False
+        sequence_name = None
+        if direct_objectives_manager:
+            obj_status = direct_objectives_manager.get_sequence_status()
+            current_objective = obj_status.get("current_objective")
+            objectives_complete = obj_status.get("is_complete", False)
+            sequence_name = obj_status.get("sequence_name")
+
+        # Get current game state
+        from utils.state_formatter import format_state_for_llm, _format_porymap_info
+        from server.cli import pokemon_mcp_server
+        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        state_text = game_state_result.get("state_text", "")
+        player_pos = game_state_result.get("player_position", {})
+        location = game_state_result.get("raw_state", {}).get("player", {}).get("location", "Unknown")
+
+        # Get porymap ground truth data
+        porymap_text = ""
+        if location and location != "Unknown" and location != "TITLE_SEQUENCE":
+            try:
+                player_coords = (player_pos.get("x"), player_pos.get("y")) if player_pos else None
+                porymap_parts = _format_porymap_info(location, player_coords)
+                if porymap_parts:
+                    porymap_text = "\n".join(porymap_parts)
+            except Exception as e:
+                logger.warning(f"Could not get porymap info for reflection: {e}")
+
+        # Get progress summary
+        progress_result = await mcp_get_progress_summary()
+        progress_info = progress_result.get("progress", {}) if progress_result.get("success") else {}
+
+        # Format recent history
+        history_summary = []
+        for step in recent_steps[-10:]:  # Last 10 for brevity
+            action = step.get("action", "unknown")
+            action_details = step.get("action_details", "")
+            llm_response = step.get("llm_response", "")[:200]  # Truncate
+            coords = step.get("player_coords", "")
+
+            history_summary.append({
+                "step": step.get("step"),
+                "action": action,
+                "action_details": action_details,
+                "thinking": llm_response,
+                "coords": coords
+            })
+
+        # Return all context for agent to analyze
+        return {
+            "success": True,
+            "context": {
+                "situation": situation,
+                "current_state": {
+                    "location": location,
+                    "coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")},
+                    "state_text": state_text[:1000],  # Truncate for token efficiency
+                    "porymap_ground_truth": porymap_text  # Ground truth map with obstacles
+                },
+                "current_objective": {
+                    "sequence": sequence_name,
+                    "objective": current_objective,
+                    "status": "complete" if objectives_complete else "active",
+                    "is_complete": objectives_complete
+                },
+                "progress": {
+                    "milestones_completed": progress_info.get('total_milestones_completed', 0),
+                    "objectives_completed": progress_info.get('direct_objectives', {}).get('objectives_completed_in_current_sequence', 0),
+                    "total_objectives": progress_info.get('direct_objectives', {}).get('total_in_current_sequence', 0)
+                },
+                "recent_history": history_summary
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error in reflect tool: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/save_map")
+async def mcp_save_map(request: dict):
+    """MCP Tool: Save agent's mental map of a location to file (SLAM)"""
+    try:
+        location_name = request.get("location_name", "")
+        map_data = request.get("map_data", "")
+
+        if not location_name:
+            return {"success": False, "error": "location_name is required"}
+
+        if not map_data:
+            return {"success": False, "error": "map_data is required"}
+
+        # Create maps directory (Path imported at top of file)
+        maps_dir = Path(".pokeagent_cache/maps")
+        maps_dir.mkdir(parents=True, exist_ok=True)
+
+        # Normalize case to title case for consistent filenames
+        normalized_location = location_name.title()
+        # Sanitize location name for filename
+        safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (' ', '_', '-')).strip()
+        safe_name = safe_name.replace(' ', '_')
+
+        map_file = maps_dir / f"{safe_name}.txt"
+        map_file.write_text(map_data)
+
+        logger.info(f"🗺️  Saved SLAM map for {location_name} to {map_file}")
+        return {
+            "success": True,
+            "message": f"Map saved to {map_file}",
+            "location": location_name,
+            "file_path": str(map_file)
+        }
+
+    except Exception as e:
+        logger.error(f"Error saving map: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/load_map")
+async def mcp_load_map(request: dict):
+    """MCP Tool: Load agent's previously saved mental map of a location (SLAM)"""
+    try:
+        location_name = request.get("location_name", "")
+
+        if not location_name:
+            return {"success": False, "error": "location_name is required"}
+
+        # Create maps directory if it doesn't exist (Path imported at top of file)
+        maps_dir = Path(".pokeagent_cache/maps")
+        maps_dir.mkdir(parents=True, exist_ok=True)
+
+        # Normalize case to title case for consistent filenames
+        normalized_location = location_name.title()
+        # Sanitize location name for filename
+        safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (' ', '_', '-')).strip()
+        safe_name = safe_name.replace(' ', '_')
+
+        map_file = maps_dir / f"{safe_name}.txt"
+
+        if not map_file.exists():
+            logger.info(f"🗺️  No existing SLAM map for {location_name}")
+            return {
+                "success": True,
+                "message": f"No existing map for {location_name}",
+                "location": location_name,
+                "map_data": None
+            }
+
+        map_data = map_file.read_text()
+        logger.info(f"🗺️  Loaded SLAM map for {location_name} from {map_file}")
+        return {
+            "success": True,
+            "message": f"Map loaded from {map_file}",
+            "location": location_name,
+            "map_data": map_data,
+            "file_path": str(map_file)
+        }
+
+    except Exception as e:
+        logger.error(f"Error loading map: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
 
 
 # ============================================================================
@@ -2403,7 +3217,7 @@ def main():
     """Main function"""
     import argparse
     
-    global state_update_running, state_update_thread
+    global running, state_update_running, state_update_thread
     
     # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -2415,9 +3229,18 @@ def main():
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
+    parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival')")
+    parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for direct objectives (for resuming from checkpoints)")
     # Server always runs headless - display handled by client
     
     args = parser.parse_args()
+    
+    # Set global direct objectives sequence
+    global direct_objectives_sequence, direct_objectives_start_index
+    if args.direct_objectives:
+        direct_objectives_sequence = args.direct_objectives
+        direct_objectives_start_index = args.direct_objectives_start
+        print(f"🎯 Direct objectives sequence: {direct_objectives_sequence} (starting at index {direct_objectives_start_index})")
     
     # Check for environment variables from multiprocess mode
     env_load_state = os.environ.get("LOAD_STATE")
@@ -2471,6 +3294,51 @@ def main():
         print("🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
+    # Initialize run data manager for structured data collection
+    # Use run_id from environment if provided (set by client), otherwise create new one
+    from utils.run_data_manager import initialize_run_data_manager
+    
+    run_id = os.environ.get("RUN_DATA_ID")
+    run_name = os.environ.get("RUN_NAME")
+    run_manager = initialize_run_data_manager(run_id=run_id, run_name=run_name)
+    print(f"📁 Run data directory: {run_manager.get_run_directory()}")
+    
+    # Only save metadata if this is a new run (not set by client)
+    # If run_id was provided, metadata was already saved by client
+    if run_id is None:
+        command_args = vars(args)
+        run_manager.save_metadata(
+            command_args=command_args,
+            sys_argv=sys.argv,
+            additional_info={
+                "server_mode": True,
+                "checkpoint_loading_enabled": checkpoint_loading_enabled
+            }
+        )
+    else:
+        # Update metadata with server-specific info without overwriting
+        metadata_file = run_manager.run_dir / "metadata.json"
+        if metadata_file.exists():
+            import json
+            with open(metadata_file, 'r') as f:
+                metadata = json.load(f)
+            metadata["server_info"] = {
+                "server_mode": True,
+                "checkpoint_loading_enabled": checkpoint_loading_enabled,
+                "server_start_time": datetime.now().isoformat()
+            }
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            logger.info(f"Updated metadata with server info")
+    
+    # Initialize run directory for this execution (deprecated, will be moved)
+    global current_run_dir
+    if current_run_dir is None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        current_run_dir = os.path.join(CACHE_DIR, f"run_{timestamp}")
+        os.makedirs(current_run_dir, exist_ok=True)
+        print(f"📁 Legacy run directory (deprecated): {current_run_dir}")
+    
     # Initialize video recording if requested
     init_video_recording(args.record)
     print("Server mode - headless operation, display handled by client")
@@ -2605,10 +3473,27 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
     finally:
-        # Cleanup
-        global running
+        # Backup cleanup (in case signal handler didn't run or failed)
+        # The signal handler should handle most finalization, but this is a safety net
+        # Note: running and state_update_running are already declared as global at start of main()
+        was_running = running  # Read value before modifying
         running = False
         state_update_running = False
+        
+        # Only run backup if we weren't already shutting down
+        # (signal handler should have handled it, but check if it actually did)
+        if was_running:
+            print("📦 Running backup finalization in finally block...")
+            try:
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    # Quick finalization - just save end state snapshot
+                    run_manager.save_end_state_snapshot()
+                    print("✅ Backup finalization completed")
+            except Exception as e:
+                logger.error(f"❌ Error in backup finalization: {e}", exc_info=True)
+        
         if env:
             env.stop()
         print("Server stopped")

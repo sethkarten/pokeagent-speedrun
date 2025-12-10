@@ -22,7 +22,8 @@ except ImportError:
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent import Agent
+from agent.my_agent import MyAgent # Agent
+from agent import Agent # ADDED
 from utils.state_formatter import format_state_for_llm
 
 
@@ -72,8 +73,12 @@ def run_multiprocess_client(server_port=8000, args=None):
     server_url = f"http://localhost:{server_port}"
     
     # Initialize the agent (it handles VLM, simple vs 4-module, etc internally)
-    agent = Agent(args)
-    print(f"✅ Agent initialized")
+    # Initialize the agent
+    if args and getattr(args, "my_agent", False):
+        agent = MyAgent(args)
+    else:
+        agent = Agent(args)
+    print("✅ Agent initialized")
     print(f"🎮 Client connected to server at {server_url}")
     
     # Display setup
@@ -101,7 +106,7 @@ def run_multiprocess_client(server_port=8000, args=None):
         font = pygame.font.Font(None, 24)
         clock = pygame.time.Clock()
         print("✅ Display initialized")
-        print("Controls: Tab=Cycle Mode (MANUAL/AGENT/AUTO), Space=Agent Step, M=Show State+Tiles, Arrows/WASD=Move, Z=A, X=B")
+        print("Controls: Tab=Cycle Mode (MANUAL/AGENT/AUTO), Space=Agent Step, M=Show State, Arrows/WASD=Move, Z=A, X=B")
     elif not headless and not PYGAME_AVAILABLE:
         print("⚠️ Pygame not available, running in headless mode")
         headless = True
@@ -125,11 +130,7 @@ def run_multiprocess_client(server_port=8000, args=None):
                         print("=" * 80)
                         print("📊 COMPREHENSIVE STATE (LLM View)")
                         print("=" * 80)
-
-                        # Show map debug info (tile coordinates)
-                        from utils.state_formatter import print_map_debug, format_state_for_llm
-                        print_map_debug(state_data)
-
+                        from utils.state_formatter import format_state_for_llm
                         formatted_state = format_state_for_llm(state_data)
                         print(formatted_state)
                         print("=" * 80)
@@ -268,15 +269,11 @@ def run_multiprocess_client(server_port=8000, args=None):
                                         print("=" * 80)
                                         print("📊 COMPREHENSIVE STATE (LLM View)")
                                         print("=" * 80)
-
-                                        # First show map debug info (tile coordinates)
-                                        from utils.state_formatter import print_map_debug
-                                        print_map_debug(state_data)
-
+                                        
                                         # Format and display state in a readable way (exactly what LLM sees)
                                         formatted_state = format_state_for_llm(state_data)
                                         print(formatted_state)
-
+                                        
                                         print("=" * 80)
                                     else:
                                         print(f"❌ Failed to get state: {response.status_code}")
