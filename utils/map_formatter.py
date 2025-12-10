@@ -5,10 +5,142 @@ Centralized Map Formatting Utility
 Single source of truth for all map formatting across the codebase.
 """
 
-from pokemon_env.enums import MetatileBehavior
+try:
+    from pokemon_env.enums import MetatileBehavior
+except ImportError:  # Allow usage in builder scripts without mgba
+    class _FallbackEnum(int):
+        name = "NORMAL"
+
+        def __new__(cls, value=0):
+            obj = int.__new__(cls, value)
+            obj._name = "NORMAL"
+            return obj
+
+        @property
+        def name(self):
+            return self._name
+
+    MetatileBehavior = type("MetatileBehavior", (), {"NORMAL": _FallbackEnum(0)})
 
 
-def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=None, stairs_pos=None):
+def is_tile_walkable(tile) -> bool:
+    """
+    Determine if a tile is walkable based on its behavior and collision.
+    This is the SINGLE SOURCE OF TRUTH for walkability logic.
+    
+    Used by both pathfinding and map display to ensure consistency.
+    
+    Args:
+        tile: Tile tuple (tile_id, behavior, collision, elevation) or similar format
+        
+    Returns:
+        True if walkable, False if blocked
+    """
+    if not tile or len(tile) < 2:
+        return False
+    
+    # Extract tile components
+    tile_id = tile[0] if len(tile) > 0 else 0
+    behavior = tile[1] if len(tile) > 1 else 0
+    collision = tile[2] if len(tile) > 2 else 0
+    
+    # Always block invalid tiles
+    if tile_id == 1023:  # Invalid/out-of-bounds tile
+        return False
+    
+    # NPC markers are blocked
+    if behavior == 999:
+        return False
+    
+    # Get behavior name for matching
+    behavior_name = "UNKNOWN"
+    if hasattr(behavior, 'name'):
+        behavior_name = behavior.name
+    else:
+        # Handle both int and numpy integer types
+        try:
+            import numpy as np
+            if isinstance(behavior, (int, np.integer)):
+                behavior_int = int(behavior)
+                behavior_enum = MetatileBehavior(behavior_int)
+                behavior_name = behavior_enum.name
+        except (ValueError, TypeError, AttributeError):
+            # MetatileBehavior might be fallback that doesn't accept args
+            if hasattr(MetatileBehavior, 'NORMAL'):
+                behavior_name = "UNKNOWN"
+            else:
+                behavior_name = "UNKNOWN"
+    
+    # Special case for Brendan's House - stairs and doors are reversed
+    # NON_ANIMATED_DOOR (96) appears at top and should be stairs (walkable)
+    # SOUTH_ARROW_WARP (101) appears at bottom and should be door (walkable)
+    if behavior == 96 or "NON_ANIMATED_DOOR" in behavior_name:
+        return True  # Stairs are walkable
+    elif behavior == 101 or "SOUTH_ARROW_WARP" in behavior_name:
+        return True  # Door is walkable
+    
+    # Doors, stairs, and warps are walkable
+    if ("DOOR" in behavior_name or 
+        "STAIRS" in behavior_name or 
+        "WARP" in behavior_name or
+        "LADDER" in behavior_name or
+        "ESCALATOR" in behavior_name):
+        return True
+    
+    # Bridges are walkable
+    if "BRIDGE" in behavior_name:
+        return True
+    
+    # Normal tiles - check collision (collision 0 = passable)
+    if behavior_name == "NORMAL":
+        return collision == 0
+    
+    # Walkable behaviors
+    if behavior_name in ["INDOOR", "DECORATION", "HOLDS", "CAVE"]:
+        return True
+    
+    # Blocked behaviors
+    if "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
+        return False
+    
+    # Water (need surf) - blocked for now
+    if "WATER" in behavior_name and "SHALLOW" not in behavior_name:
+        return False
+    
+    # Waterfall (need waterfall) - blocked for now
+    if "WATERFALL" in behavior_name:
+        return False
+    
+    # WALL behaviors are blocked
+    if "WALL" in behavior_name:
+        return False
+    
+    # Walkable terrain types
+    walkable_terrain = [
+        "TALL_GRASS", "LONG_GRASS", "SHORT_GRASS", "ASHGRASS",
+        "SAND", "DEEP_SAND", "ICE", "THIN_ICE", "CRACKED_ICE",
+        "PUDDLE", "SHALLOW_WATER", "FOOTPRINTS", "HOT_SPRINGS",
+        "MUDDY_SLOPE", "BUMPY_SLOPE", "CRACKED_FLOOR",
+        "VERTICAL_RAIL", "HORIZONTAL_RAIL",
+        "ISOLATED_VERTICAL_RAIL", "ISOLATED_HORIZONTAL_RAIL",
+        "INDOOR_ENCOUNTER", "MOUNTAIN_TOP", "SHOAL_CAVE_ENTRANCE",
+        "REFLECTION_UNDER_BRIDGE", "SEAWEED", "SEAWEED_NO_SURFACING"
+    ]
+    if any(terrain in behavior_name for terrain in walkable_terrain):
+        return True
+    
+    # Directional behaviors (JUMP_*, WALK_*, SLIDE_*) are walkable
+    # but need special handling in neighbor checking
+    if ("JUMP" in behavior_name or 
+        "WALK" in behavior_name or 
+        "SLIDE" in behavior_name):
+        return True
+    
+    # Default: use collision data (collision 0 = passable, >0 = blocked)
+    return collision == 0
+
+
+def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=None, stairs_pos=None, raw_tiles=None):
     """
     Convert a single tile to its display symbol.
     
@@ -19,12 +151,13 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         location_name: Optional location name for context-specific symbols
         player_pos: Optional player position tuple (px, py) for relative positioning
         stairs_pos: Optional stairs position tuple (sx, sy) for relative positioning
+        raw_tiles: Optional 2D array of all tiles for elevation connector detection
         
     Returns:
         str: Single character symbol representing the tile
     """
     if len(tile) >= 4:
-        tile_id, behavior, collision, _ = tile  # elevation not used
+        tile_id, behavior, collision, elevation = tile
     elif len(tile) >= 2:
         tile_id, behavior = tile[:2]
         collision = 0
@@ -36,14 +169,17 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
     # Convert behavior to symbol using unified logic
     if hasattr(behavior, 'name'):
         behavior_name = behavior.name
-    elif isinstance(behavior, int):
-        try:
-            behavior_enum = MetatileBehavior(behavior)
-            behavior_name = behavior_enum.name
-        except ValueError:
-            behavior_name = "UNKNOWN"
     else:
-        behavior_name = "UNKNOWN"
+        # Handle both int and numpy integer types
+        try:
+            import numpy as np
+            if isinstance(behavior, (int, np.integer)):
+                behavior_int = int(behavior)
+                behavior_enum = MetatileBehavior(behavior_int)
+                behavior_name = behavior_enum.name
+        except (ValueError, TypeError, AttributeError):
+            # MetatileBehavior might be fallback that doesn't accept args
+            behavior_name = "UNKNOWN"
     
     # Special handling for Brendan's House 2F wall clock
     # The clock is a wall tile with no special behavior, just tile ID 1023
@@ -72,8 +208,10 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         return "D"  # Other doors remain as doors
     elif "STAIRS" in behavior_name or "WARP" in behavior_name:
         return "S"  # Other stairs/warps remain as stairs
+    elif "SHALLOW_WATER" in behavior_name:
+        return "."  # Shallow water is walkable
     elif "WATER" in behavior_name:
-        return "W"
+        return "W"  # Deep water requires Surf
     elif "TALL_GRASS" in behavior_name:
         return "~"
     elif "COMPUTER" in behavior_name or "PC" in behavior_name:
@@ -121,15 +259,36 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
             return "↙"
         else:
             return "J"
+    elif "SLIDE" in behavior_name:
+        # Slides are directional like jumps, but allow movement in one direction
+        if "SOUTH" in behavior_name:
+            return "↓"  # Slide down (south)
+        elif "EAST" in behavior_name:
+            return "→"  # Slide east
+        elif "WEST" in behavior_name:
+            return "←"  # Slide west
+        elif "NORTH" in behavior_name:
+            return "↑"  # Slide up (north)
+        else:
+            return "S"  # Generic slide/stairs symbol
+    elif "BRIDGE" in behavior_name:
+        return "&"  # Bridge tiles are walkable
     elif "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
         return "#"  # Blocked
+    elif "WALL" in behavior_name:
+        return "#"  # Walls are blocked
     elif "INDOOR" in behavior_name:
         return "."  # Indoor tiles are walkable
+    elif "CAVE" in behavior_name:
+        return "."  # Cave tiles are walkable
     elif "DECORATION" in behavior_name or "HOLDS" in behavior_name:
         return "."  # Decorations are walkable
+    elif behavior == 999:
+        return "N"  # NPC marker (visually detected)
     else:
-        # For unknown behavior, mark as blocked for safety
-        return "#"
+        # For all other tiles, use shared walkability function to determine symbol
+        # This ensures consistency between map display and pathfinding
+        return "." if is_tile_walkable(tile) else "#"
 
 
 def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=None, trim_padding=True, location_name=None):
@@ -176,49 +335,7 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
     # Always use P for player instead of direction arrows
     player_symbol = "P"
     
-    # Create NPC position lookup (convert to relative grid coordinates)
-    npc_positions = {}
-    if npcs and player_coords:
-        try:
-            # Handle both tuple and dict formats for player_coords
-            if isinstance(player_coords, dict):
-                player_abs_x = player_coords.get('x', 0)
-                player_abs_y = player_coords.get('y', 0)
-            else:
-                player_abs_x, player_abs_y = player_coords
-            
-            # Ensure coordinates are integers
-            player_abs_x = int(player_abs_x) if player_abs_x is not None else 0
-            player_abs_y = int(player_abs_y) if player_abs_y is not None else 0
-            
-            for npc in npcs:
-                # NPCs have absolute world coordinates, convert to relative grid position
-                npc_abs_x = npc.get('current_x', 0)
-                npc_abs_y = npc.get('current_y', 0)
-                
-                # Ensure NPC coordinates are integers
-                npc_abs_x = int(npc_abs_x) if npc_abs_x is not None else 0
-                npc_abs_y = int(npc_abs_y) if npc_abs_y is not None else 0
-                
-                # Calculate offset from player in absolute coordinates
-                offset_x = npc_abs_x - player_abs_x
-                offset_y = npc_abs_y - player_abs_y
-                
-                # Convert offset to grid position (player is at center)
-                grid_x = center_x + offset_x
-                grid_y = center_y + offset_y
-                
-                # Check if NPC is within our grid view
-                if 0 <= grid_x < len(raw_tiles[0]) and 0 <= grid_y < len(raw_tiles):
-                    npc_positions[(grid_y, grid_x)] = npc
-                    
-        except (ValueError, TypeError) as e:
-            # If coordinate conversion fails, skip NPC positioning
-            print(f"Warning: Failed to convert coordinates for NPC positioning: {e}")
-            print(f"  player_coords: {player_coords}")
-            if npcs:
-                print(f"  npc coords: {[(npc.get('current_x'), npc.get('current_y')) for npc in npcs]}")
-            npc_positions = {}
+    # NPCs are not displayed on the map grid - they appear in movement preview only
     
     for y, row in enumerate(raw_tiles):
         grid_row = []
@@ -226,14 +343,6 @@ def format_map_grid(raw_tiles, player_facing="South", npcs=None, player_coords=N
             if y == center_y and x == center_x:
                 # Player position
                 grid_row.append(player_symbol)
-            elif (y, x) in npc_positions:
-                # NPC position - use NPC symbol
-                npc = npc_positions[(y, x)]
-                # Use different symbols for different NPC types
-                if npc.get('trainer_type', 0) > 0:
-                    grid_row.append("@")  # Trainer
-                else:
-                    grid_row.append("N")  # Regular NPC
             else:
                 # Regular tile - pass coordinates and context for special handling
                 symbol = format_tile_to_symbol(tile, x=x, y=y, location_name=location_name, 
@@ -355,6 +464,7 @@ def get_symbol_legend():
         "F": "Flowers/Plants",
         "C": "Counter/Desk",
         "=": "Bed",
+        "&": "Bridge (walkable)",
         "t": "Table/Chair",
         "K": "Clock (Wall)",
         "O": "Clock",
@@ -431,61 +541,31 @@ def generate_dynamic_legend(grid):
 
 def format_map_for_llm(raw_tiles, player_facing="South", npcs=None, player_coords=None, location_name=None):
     """
-    Format raw tiles into LLM-friendly grid format (no headers/legends).
-
+    Format raw tiles into LLM-friendly grid format with detailed NPC information.
+    
     Args:
-        raw_tiles: 2D list of tile tuples
+        raw_tiles: 2D list of tile tuples  
         player_facing: Direction player is facing
         npcs: List of NPC/object events
         player_coords: Player position for relative positioning
-        location_name: Location name for context-specific symbols
+        location_name: Location name for context-specific symbols  
         player_facing: Player facing direction
         npcs: List of NPC/object events with positions
         player_coords: Tuple of (player_x, player_y) in absolute world coordinates
-
+        
     Returns:
-        str: Grid format suitable for LLM
+        str: Grid format suitable for LLM with NPC details
     """
     if not raw_tiles:
         return "No map data available"
-
+    
     grid = format_map_grid(raw_tiles, player_facing, npcs, player_coords, location_name=location_name)
-
+    
     # Simple grid format for LLM
     lines = []
     for row in grid:
         lines.append(" ".join(row))
-
+    
+    # NPCs are shown in movement preview, not on the map
+    
     return "\n".join(lines)
-
-
-def format_map_for_llm_json(map_stitcher, location_name: str, player_coords=None, npcs=None, connections=None):
-    """
-    Format map as structured JSON data for LLM consumption.
-
-    This provides explicit tile information including coordinates, type, and walkability
-    instead of relying on the LLM to interpret ASCII symbols.
-
-    Args:
-        map_stitcher: MapStitcher instance with map data
-        location_name: Name of the location
-        player_coords: Tuple of (player_x, player_y)
-        npcs: List of NPC/object events
-        connections: List of location connections
-
-    Returns:
-        str: Formatted text representation of map JSON data
-    """
-    if not map_stitcher:
-        return "No map data available"
-
-    # Generate JSON map data
-    map_json = map_stitcher.generate_location_map_json(
-        location_name=location_name,
-        player_pos=player_coords,
-        npcs=npcs,
-        connections=connections
-    )
-
-    # Format as readable text
-    return map_stitcher.format_map_json_as_text(map_json)

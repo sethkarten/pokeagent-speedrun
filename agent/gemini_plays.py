@@ -16,17 +16,64 @@ Core architectural principles:
 
 import json
 import logging
+import time
+import requests
 from typing import Dict, Any, List, Optional, Tuple, Set
 from dataclasses import dataclass, field
 from collections import deque
-import random
+
+import google.generativeai as genai
 
 from utils.vlm import VLM
 from utils.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
+from utils.pathfinding import Pathfinder
 from utils.agent_helpers import update_server_metrics
 
 logger = logging.getLogger(__name__)
+
+
+class MCPToolAdapter:
+    """Adapter to call MCP server tools via HTTP."""
+
+    def __init__(self, server_url: str):
+        self.server_url = server_url
+
+    def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Call an MCP tool via HTTP request to the game server."""
+        try:
+            # Map tool names to server endpoints
+            endpoint_map = {
+                "get_game_state": "/mcp/get_game_state",
+                "press_buttons": "/mcp/press_buttons",
+                "navigate_to": "/mcp/navigate_to",
+                "complete_direct_objective": "/mcp/complete_direct_objective",
+                "create_direct_objectives": "/mcp/create_direct_objectives",
+                "get_progress_summary": "/mcp/get_progress_summary",
+            }
+
+            endpoint = endpoint_map.get(tool_name)
+            if not endpoint:
+                return {"success": False, "error": f"Unknown tool: {tool_name}"}
+
+            url = f"{self.server_url}{endpoint}"
+            logger.info(f"🔧 Calling MCP tool: {tool_name}")
+
+            # Log arguments, but exclude large base64 data
+            args_for_log = {k: f"<{len(v)} bytes>" if k == "screenshot_base64" and isinstance(v, str) and len(v) > 100 else v
+                           for k, v in arguments.items()}
+            logger.debug(f"   Args: {args_for_log}")
+
+            response = requests.post(url, json=arguments, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
+            logger.info(f"✅ Tool {tool_name} completed")
+            return result
+
+        except Exception as e:
+            logger.error(f"❌ Tool {tool_name} failed: {e}")
+            return {"success": False, "error": str(e)}
 
 
 @dataclass
@@ -48,27 +95,18 @@ class MapMemory:
     points_of_interest: Dict[Tuple[int, int], str] = field(default_factory=dict)
     blocked_paths: Set[Tuple[int, int]] = field(default_factory=set)
     last_visited: Dict[Tuple[int, int], int] = field(default_factory=dict)
-    visited_warps: Set[Tuple[int, int]] = field(default_factory=set)  # Track which warps have been used
-
+    
     def mark_explored(self, x: int, y: int, step: int):
-        """Mark a tile as explored (seen, but not necessarily visited)."""
+        """Mark a tile as explored."""
         self.explored_tiles.add((x, y))
-
-    def mark_visited(self, x: int, y: int, step: int):
-        """Mark a tile as visited (player stood on it)."""
-        self.explored_tiles.add((x, y))  # Visited implies explored
         self.last_visited[(x, y)] = step
-
-    def mark_warp_used(self, x: int, y: int):
-        """Mark a warp as having been used."""
-        self.visited_warps.add((x, y))
-
+    
     def get_exploration_percentage(self, total_tiles: int) -> float:
         """Calculate exploration percentage."""
         if total_tiles == 0:
             return 0.0
         return (len(self.explored_tiles) / total_tiles) * 100
-
+    
     def get_unexplored_neighbors(self, x: int, y: int) -> List[Tuple[int, int]]:
         """Get unexplored neighboring tiles."""
         neighbors = []
@@ -77,61 +115,6 @@ class MapMemory:
             if (nx, ny) not in self.explored_tiles:
                 neighbors.append((nx, ny))
         return neighbors
-
-    def get_navigable_unseen_tiles(self, tiles: List[Dict]) -> List[Tuple[int, int]]:
-        """Get tiles with type 'unknown' (?) that are adjacent to walkable explored tiles.
-
-        These are the HIGHEST PRIORITY for exploration in GPP.
-
-        Args:
-            tiles: List of tile dicts from JSON map with x, y, type, walkable fields
-
-        Returns:
-            List of (x, y) coordinates of navigable unseen tiles
-        """
-        unseen = []
-
-        # Build set of walkable explored tiles
-        walkable_explored = set()
-        for tile in tiles:
-            x, y = tile['x'], tile['y']
-            if tile.get('walkable') and (x, y) in self.explored_tiles:
-                walkable_explored.add((x, y))
-
-        # Find unknown tiles adjacent to walkable explored tiles
-        for tile in tiles:
-            if tile.get('type') == 'unknown':
-                x, y = tile['x'], tile['y']
-                # Check if adjacent to any walkable explored tile
-                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                    if (x + dx, y + dy) in walkable_explored:
-                        unseen.append((x, y))
-                        break
-
-        return unseen
-
-    def get_navigable_unvisited_warps(self, tiles: List[Dict]) -> List[Tuple[int, int, str]]:
-        """Get warps (doors/stairs) that have not been visited yet.
-
-        These are the 2nd HIGHEST PRIORITY for exploration in GPP (after unseen tiles).
-
-        Args:
-            tiles: List of tile dicts from JSON map with x, y, type, walkable, leads_to fields
-
-        Returns:
-            List of (x, y, leads_to) tuples for unvisited warps
-        """
-        unvisited_warps = []
-
-        for tile in tiles:
-            if tile.get('type') in ['door', 'stairs']:
-                x, y = tile['x'], tile['y']
-                # Check if this warp has been used
-                if (x, y) not in self.visited_warps:
-                    leads_to = tile.get('leads_to', 'Unknown')
-                    unvisited_warps.append((x, y, leads_to))
-
-        return unvisited_warps
 
 
 @dataclass
@@ -150,11 +133,10 @@ class AgentContext:
 
 class SpecializedAgent:
     """Base class for specialized sub-agents."""
-
-    def __init__(self, name: str, vlm_client: VLM, llm_logger):
+    
+    def __init__(self, name: str, vlm_client: VLM):
         self.name = name
         self.vlm_client = vlm_client
-        self.llm_logger = llm_logger
         self.logger = logging.getLogger(f"{__name__}.{name}")
     
     def execute(self, task: str, state: Dict[str, Any], screenshot: Any = None) -> Dict[str, Any]:
@@ -163,96 +145,57 @@ class SpecializedAgent:
 
 
 class PathfindingAgent(SpecializedAgent):
-    """Specialized agent for navigation and pathfinding using LLM reasoning.
-
-    Uses focused LLM reasoning to solve complex pathfinding tasks like mazes,
-    spinner puzzles, and ice tile navigation that require spatial reasoning.
-    """
-
-    def __init__(self, vlm_client: VLM, llm_logger):
-        super().__init__("pathfinding", vlm_client, llm_logger)
-
+    """Specialized agent for navigation and pathfinding."""
+    
+    def __init__(self, vlm_client: VLM):
+        super().__init__("pathfinding", vlm_client)
+        self.pathfinder = Pathfinder()
+    
     def execute(self, task: str, state: Dict[str, Any], screenshot: Any = None) -> Dict[str, Any]:
-        """Execute pathfinding using LLM to reason about the path.
+        """Execute pathfinding to a target location."""
+        # Parse target from task
+        prompt = f"""You are a pathfinding specialist. Given this navigation task:
+{task}
 
-        The LLM analyzes the map, identifies obstacles, and generates a sequence
-        of movements to reach the target location.
-        """
-        # Get current position and map data
-        current_pos = state.get("player_position", {})
-        player_x = current_pos.get("x", 0)
-        player_y = current_pos.get("y", 0)
+And this game state:
+{format_state_for_llm(state)[:500]}
 
-        # Get map information
-        map_data = format_state_for_llm(state, use_json_map=True)
+Extract the target location as X,Y coordinates. Reply with just the numbers.
+Format: X,Y"""
+        
+        response = self.vlm_client.get_text_query(prompt, "pathfinding")
+        response_text = self._extract_text_from_response(response) if hasattr(self, '_extract_text_from_response') else str(response)
 
-        prompt = f"""You are a pathfinding specialist for Pokemon Emerald. Your task is to navigate complex terrain.
-
-**Current Task:** {task}
-
-**Current Position:** ({player_x}, {player_y})
-
-**Game State & Map:**
-{map_data[:2000]}
-
-**Your Goal:**
-Analyze the screenshot and map to generate a sequence of movements to reach the destination. Consider:
-1. Walkable tiles vs obstacles (walls, water without Surf, etc.)
-2. Special tiles (doors, stairs, spinner tiles, ice tiles)
-3. Optimal path avoiding unnecessary detours
-4. NPCs that might block the path
-5. Visual cues from the screenshot (terrain, layout, current orientation)
-
-**Output Format:**
-Provide a sequence of 5-10 button presses to make progress toward the goal.
-Reply with ONLY the buttons separated by commas.
-Valid buttons: UP, DOWN, LEFT, RIGHT, A (for interactions)
-
-Example: "RIGHT, RIGHT, UP, UP, A, UP, LEFT"
-
-Generate the path:"""
-
-        # Use screenshot if available for better spatial reasoning
-        if screenshot is not None:
-            response = self.vlm_client.get_query(screenshot, prompt, "pathfinding")
-        else:
-            response = self.vlm_client.get_text_query(prompt, "pathfinding")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_pathfinding",
-            prompt=prompt,
-            response=response
-        )
-
-        # Parse button sequence from response
-        buttons = []
-        for part in response.upper().split(','):
-            button = part.strip()
-            if button in ["A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT"]:
-                buttons.append(button)
-                if len(buttons) >= 10:
-                    break
-
-        if buttons:
+        try:
+            coords = response_text.strip().split(',')
+            target_x = int(coords[0])
+            target_y = int(coords[1])
+            
+            current_pos = state.get("player_position", {})
+            start = (current_pos.get("x", 0), current_pos.get("y", 0))
+            goal = (target_x, target_y)
+            
+            path_buttons = self.pathfinder.find_path(start, goal, state)
+            
             return {
-                "success": True,
-                "buttons": buttons,
-                "message": f"Generated path: {len(buttons)} steps"
+                "success": bool(path_buttons),
+                "buttons": path_buttons[:10] if path_buttons else [],
+                "target": goal,
+                "message": f"Path found: {len(path_buttons)} steps" if path_buttons else "No path found"
             }
-        else:
+        except:
             return {
                 "success": False,
                 "buttons": [],
-                "message": "Failed to generate valid path"
+                "message": "Failed to parse target location"
             }
 
 
 class BattleAgent(SpecializedAgent):
     """Specialized agent for battle strategy."""
-
-    def __init__(self, vlm_client: VLM, llm_logger):
-        super().__init__("battle", vlm_client, llm_logger)
+    
+    def __init__(self, vlm_client: VLM):
+        super().__init__("battle", vlm_client)
     
     def execute(self, task: str, state: Dict[str, Any], screenshot: Any = None) -> Dict[str, Any]:
         """Execute battle strategy."""
@@ -260,49 +203,39 @@ class BattleAgent(SpecializedAgent):
         if not battle:
             return {"success": False, "buttons": [], "message": "Not in battle"}
         
-        prompt = f"""You are a Pokemon battle specialist. Analyze this battle from the screenshot and game state.
+        prompt = f"""You are a Pokemon battle specialist. Analyze this battle:
 
-{format_state_for_llm(state, use_json_map=True)[:1000]}
+{format_state_for_llm(state)[:1000]}
 
 Task: {task}
 
-Look at the battle screen and choose the best action:
+Choose the best action:
 1. Use move (specify which: 1-4)
 2. Switch Pokemon (specify which: 1-6)
 3. Use item
 4. Run
 
 Reply with just the action and number, e.g., "move 1" or "switch 2"."""
-
-        # Use screenshot if available for visual battle analysis
-        if screenshot is not None:
-            response = self.vlm_client.get_query(screenshot, prompt, "battle")
-        else:
-            response = self.vlm_client.get_text_query(prompt, "battle")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_battle",
-            prompt=prompt,
-            response=response
-        )
+        
+        response = self.vlm_client.get_text_query(prompt, "battle")
+        response_text = self._extract_text_from_response(response) if hasattr(self, '_extract_text_from_response') else str(response)
 
         # Parse response and convert to buttons
         buttons = []
-        if "move" in response.lower():
+        if "move" in response_text.lower():
             buttons = ["A"]  # Select fight
-            if "2" in response:
+            if "2" in response_text:
                 buttons.extend(["DOWN", "A"])
-            elif "3" in response:
+            elif "3" in response_text:
                 buttons.extend(["RIGHT", "A"])
-            elif "4" in response:
+            elif "4" in response_text:
                 buttons.extend(["DOWN", "RIGHT", "A"])
             else:
                 buttons.append("A")  # Default to move 1
-        elif "switch" in response.lower():
+        elif "switch" in response_text.lower():
             buttons = ["RIGHT", "A"]  # Go to Pokemon menu
             # Add navigation for specific Pokemon
-        elif "run" in response.lower():
+        elif "run" in response_text.lower():
             buttons = ["DOWN", "RIGHT", "A"]  # Run option
         else:
             buttons = ["A"]  # Default action
@@ -316,42 +249,30 @@ Reply with just the action and number, e.g., "move 1" or "switch 2"."""
 
 class PuzzleAgent(SpecializedAgent):
     """Specialized agent for solving puzzles (boulder puzzles, etc.)."""
-
-    def __init__(self, vlm_client: VLM, llm_logger):
-        super().__init__("puzzle", vlm_client, llm_logger)
+    
+    def __init__(self, vlm_client: VLM):
+        super().__init__("puzzle", vlm_client)
     
     def execute(self, task: str, state: Dict[str, Any], screenshot: Any = None) -> Dict[str, Any]:
-        """Execute puzzle solving strategy using visual analysis."""
-        prompt = f"""You are a puzzle-solving specialist for Pokemon Emerald (boulder/Strength puzzles, ice puzzles, etc.).
+        """Execute puzzle solving strategy."""
+        prompt = f"""You are a puzzle-solving specialist. Analyze this puzzle:
 
 Task: {task}
-Current state: {format_state_for_llm(state, use_json_map=True)[:500]}
-
-Analyze the screenshot to understand the puzzle layout. Consider:
-1. Boulder positions and target holes
-2. Ice tile sliding mechanics
-3. Order of operations needed
-4. Irreversible moves that could block progress
+Current state: {format_state_for_llm(state)[:500]}
 
 Provide the next 5 moves to progress in solving the puzzle.
 Reply with just the button sequence, e.g., "UP, UP, LEFT, DOWN, A"."""
-
-        # Use screenshot if available for visual puzzle analysis
-        if screenshot is not None:
-            response = self.vlm_client.get_query(screenshot, prompt, "puzzle")
+        
+        if screenshot:
+            response = self.vlm_client.get_query(screenshot, prompt, "gemini_plays")
         else:
-            response = self.vlm_client.get_text_query(prompt, "puzzle")
+            response = self.vlm_client.get_text_query(prompt, "gemini_plays")
 
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_puzzle",
-            prompt=prompt,
-            response=response
-        )
+        response_text = self._extract_text_from_response(response) if hasattr(self, '_extract_text_from_response') else str(response)
 
         # Parse button sequence
         buttons = []
-        for part in response.upper().split(','):
+        for part in response_text.upper().split(','):
             button = part.strip()
             if button in ["A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT", "L", "R"]:
                 buttons.append(button)
@@ -363,88 +284,636 @@ Reply with just the button sequence, e.g., "UP, UP, LEFT, DOWN, A"."""
         }
 
 
+def _create_gemini_plays_tools():
+    """Create comprehensive function declarations for GeminiPlaysAgent tools."""
+    tools = [
+        # =====================================================================
+        # GAME CONTROL TOOLS (require MCP server)
+        # =====================================================================
+        {
+            "name": "get_game_state",
+            "description": "Get the current game state including player position, party Pokemon, map, items, and a screenshot.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "press_buttons",
+            "description": "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "buttons": {
+                        "type_": "ARRAY",
+                        "items": {"type_": "STRING"},
+                        "description": "List of buttons to press (e.g., ['A'], ['UP'])"
+                    },
+                    "reasoning": {
+                        "type_": "STRING",
+                        "description": "Explain why you are pressing these buttons"
+                    }
+                },
+                "required": ["buttons", "reasoning"]
+            }
+        },
+        {
+            "name": "navigate_to",
+            "description": "Automatically navigate to specific coordinates using A* pathfinding with porymap ground truth.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "x": {"type_": "INTEGER", "description": "Target X coordinate"},
+                    "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
+                    "variance": {
+                        "type_": "STRING",
+                        "description": "Path variance level: 'none', 'low', 'medium', 'high', 'extreme'",
+                        "enum": ["none", "low", "medium", "high", "extreme"]
+                    },
+                    "reason": {"type_": "STRING", "description": "Why you are navigating here"}
+                },
+                "required": ["x", "y", "variance", "reason"]
+            }
+        },
+
+        # =====================================================================
+        # GOAL MANAGEMENT TOOLS (native/local execution)
+        # =====================================================================
+        {
+            "name": "update_primary_goal",
+            "description": "Update or set the primary goal (main progression objective like defeating gym leader, reaching new city).",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "description": {"type_": "STRING", "description": "Clear description of the primary goal"},
+                    "completion_conditions": {
+                        "type_": "ARRAY",
+                        "items": {"type_": "STRING"},
+                        "description": "List of conditions that indicate goal completion"
+                    }
+                },
+                "required": ["description", "completion_conditions"]
+            }
+        },
+        {
+            "name": "update_secondary_goal",
+            "description": "Update or set the secondary goal (goal that enables the primary goal, like training Pokemon, getting items).",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "description": {"type_": "STRING", "description": "Clear description of the secondary goal"},
+                    "completion_conditions": {
+                        "type_": "ARRAY",
+                        "items": {"type_": "STRING"},
+                        "description": "List of conditions that indicate goal completion"
+                    }
+                },
+                "required": ["description", "completion_conditions"]
+            }
+        },
+        {
+            "name": "update_tertiary_goal",
+            "description": "Update or set the tertiary goal (opportunistic/exploratory goal like catching Pokemon, exploring areas).",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "description": {"type_": "STRING", "description": "Clear description of the tertiary goal"},
+                    "completion_conditions": {
+                        "type_": "ARRAY",
+                        "items": {"type_": "STRING"},
+                        "description": "List of conditions that indicate goal completion"
+                    }
+                },
+                "required": ["description", "completion_conditions"]
+            }
+        },
+        {
+            "name": "mark_goal_complete",
+            "description": "Mark a goal as completed when you've achieved its objectives.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "goal_type": {
+                        "type_": "STRING",
+                        "enum": ["primary", "secondary", "tertiary"],
+                        "description": "Which goal to mark as complete"
+                    },
+                    "reasoning": {"type_": "STRING", "description": "Why this goal is now complete"}
+                },
+                "required": ["goal_type", "reasoning"]
+            }
+        },
+        {
+            "name": "get_current_goals",
+            "description": "Get information about all current goals (primary, secondary, tertiary) and their status.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {},
+                "required": []
+            }
+        },
+
+        # =====================================================================
+        # MEMORY/KNOWLEDGE TOOLS (native/local execution)
+        # =====================================================================
+        {
+            "name": "add_to_notepad",
+            "description": "Add important information to your long-term notepad for future reference.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "note": {"type_": "STRING", "description": "Important information to remember"}
+                },
+                "required": ["note"]
+            }
+        },
+        {
+            "name": "read_notepad",
+            "description": "Read recent entries from your notepad to recall important information.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "last_n_entries": {
+                        "type_": "INTEGER",
+                        "description": "Number of recent entries to read (default: 5)"
+                    }
+                },
+                "required": []
+            }
+        },
+        {
+            "name": "mark_location_important",
+            "description": "Mark a specific location as a point of interest (Pokemon Center, Gym, NPC, etc.).",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "x": {"type_": "INTEGER", "description": "X coordinate"},
+                    "y": {"type_": "INTEGER", "description": "Y coordinate"},
+                    "description": {"type_": "STRING", "description": "What makes this location important"}
+                },
+                "required": ["x", "y", "description"]
+            }
+        },
+        {
+            "name": "get_exploration_status",
+            "description": "Get current exploration statistics (percentage explored, unexplored neighbors).",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {},
+                "required": []
+            }
+        },
+
+        # =====================================================================
+        # SELF-CRITIQUE TOOLS (native/local execution)
+        # =====================================================================
+        {
+            "name": "analyze_recent_actions",
+            "description": "Trigger self-critique analysis of recent actions to identify if you're stuck or making poor decisions.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "get_stuck_analysis",
+            "description": "Check if you appear to be stuck and get suggestions for recovery.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {},
+                "required": []
+            }
+        },
+
+        # =====================================================================
+        # META TOOLS (native/local execution)
+        # =====================================================================
+        {
+            "name": "define_custom_agent",
+            "description": "Define a custom mini-agent for a specific recurring task.",
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "name": {"type_": "STRING", "description": "Name of the custom agent"},
+                    "task_description": {"type_": "STRING", "description": "What this agent should do"}
+                },
+                "required": ["name", "task_description"]
+            }
+        },
+    ]
+    return tools
+
+
 class GeminiPlaysAgent:
     """
-    Implementation of Gemini Plays Pokemon architecture.
-    
+    Implementation of Gemini Plays Pokemon architecture with MCP tool integration.
+
     Key features:
     - Hierarchical goal management
     - Map memory with fog-of-war
-    - Specialized agent delegation
+    - MCP tools (press_buttons, navigate_to with porymap pathfinding)
     - Self-critique and improvement
     - Context reset with summarization
     - Exploration directives
-    - Meta-tools for AI self-extension (define_agent, execute_script, notepad)
     """
-    
+
     def __init__(
         self,
         vlm_client: Optional[VLM] = None,
+        server_url: str = "http://localhost:8000",
         context_reset_interval: int = 100,
         enable_self_critique: bool = True,
         enable_exploration: bool = True,
-        enable_meta_tools: bool = True,
+        enable_meta_tools: bool = False,  # Disabled by default for simplicity
+        use_mcp_tools: bool = True,  # Enable MCP tools by default
         verbose: bool = True
     ):
         """
         Initialize the GeminiPlaysAgent.
-        
+
         Args:
             vlm_client: Vision-language model client
+            server_url: MCP server URL for tool integration
             context_reset_interval: Steps before context reset (default 100 like original)
             enable_self_critique: Enable self-critique mechanism
             enable_exploration: Enable forced exploration
+            enable_meta_tools: Enable meta-tools (define_agent, execute_script, notepad)
+            use_mcp_tools: Use MCP tools (press_buttons, navigate_to) instead of internal agents
             verbose: Detailed logging
         """
-        self.vlm_client = vlm_client or VLM()
+        self.server_url = server_url
         self.context_reset_interval = context_reset_interval
         self.enable_self_critique = enable_self_critique
         self.enable_exploration = enable_exploration
         self.enable_meta_tools = enable_meta_tools
+        self.use_mcp_tools = use_mcp_tools
         self.verbose = verbose
-        
+
         # Core components
         self.step_count = 0
         self.map_memory = MapMemory()
         self.context = AgentContext()
         self.llm_logger = LLMLogger()
-        
+
+        # Tool integration (MCP + native tools)
+        if self.use_mcp_tools:
+            self.mcp_adapter = MCPToolAdapter(server_url)
+            self.tools = _create_gemini_plays_tools()
+            logger.info(f"✅ Tools enabled: {len(self.tools)} tools available (3 MCP + {len(self.tools)-3} native)")
+        else:
+            self.mcp_adapter = None
+            self.tools = []
+
+        # Initialize VLM client (should already have tools configured)
+        if vlm_client:
+            self.vlm_client = vlm_client
+            # Verify tools are configured in VLM
+            if self.use_mcp_tools:
+                if not hasattr(vlm_client, 'tools') or not vlm_client.tools:
+                    logger.warning("⚠️ VLM client has no tools configured! Function calling may not work.")
+                else:
+                    logger.info(f"✅ VLM client has {len(vlm_client.tools)} tools configured")
+        else:
+            # Create default VLM with tools
+            self.vlm_client = VLM(
+                backend='gemini',
+                model_name='gemini-2.0-flash-exp',
+                tools=self.tools if self.use_mcp_tools else []
+            )
+            logger.info(f"🔧 Created default VLM with {len(self.tools) if self.use_mcp_tools else 0} tools")
+
         # Hierarchical goals
         self.primary_goal: Optional[Goal] = None
         self.secondary_goal: Optional[Goal] = None
         self.tertiary_goal: Optional[Goal] = None
-        
-        # Specialized agents
-        self.pathfinding_agent = PathfindingAgent(vlm_client, self.llm_logger)
-        self.battle_agent = BattleAgent(vlm_client, self.llm_logger)
-        self.puzzle_agent = PuzzleAgent(vlm_client, self.llm_logger)
-        
+
+        # Specialized agents (only used if MCP tools disabled)
+        if not self.use_mcp_tools:
+            self.pathfinding_agent = PathfindingAgent(vlm_client)
+            self.battle_agent = BattleAgent(vlm_client)
+            self.puzzle_agent = PuzzleAgent(vlm_client)
+        else:
+            self.pathfinding_agent = None
+            self.battle_agent = None
+            self.puzzle_agent = None
+
         # Action queue
         self.action_queue: deque = deque()
-        
+
         # Performance tracking for self-critique
         self.recent_actions: deque = deque(maxlen=20)
         self.stuck_counter = 0
         self.last_position = (0, 0)
-    
-    def step(self, state: Dict[str, Any], screenshot: Any) -> str:
+
+    def _extract_text_from_response(self, response) -> str:
+        """Extract text from response (handles both string and GenerateContentResponse)."""
+        if isinstance(response, str):
+            return response
+
+        # Handle response.candidates structure first (more reliable)
+        if hasattr(response, 'candidates') and response.candidates:
+            try:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                        for part in candidate.content.parts:
+                            # If it's a function call, skip it
+                            if hasattr(part, 'function_call'):
+                                continue
+                            # Check if it's a text part (not a function_call)
+                            # Use try/except to safely access text
+                            try:
+                                if hasattr(part, 'text'):
+                                    text = part.text
+                                    if text:
+                                        return text
+                            except (ValueError, AttributeError):
+                                continue
+            except Exception as e:
+                logger.debug(f"Could not extract text from candidates: {e}")
+
+        # Try accessing .text property (but catch ValueError for function calls)
+        # CRITICAL: Don't use hasattr() - it can return True even for function_call responses
+        try:
+            text = response.text
+            if text:
+                return text
+        except ValueError as e:
+            # This happens when response contains function_call instead of text
+            logger.debug(f"Response contains function call, not text: {e}")
+            return ""
+        except AttributeError:
+            # Response doesn't have .text property
+            pass
+        except Exception as e:
+            logger.debug(f"Could not access response.text: {e}")
+
+        # Fallback to empty string (don't convert to str as it's too verbose)
+        return ""
+
+    def _convert_protobuf_args(self, proto_args) -> dict:
+        """Convert protobuf arguments to JSON-serializable Python types."""
+        arguments = {}
+        for key, value in proto_args.items():
+            # Convert protobuf types to native Python types
+            if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
+                # Check if it's a list-like type first
+                if hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
+                    try:
+                        arguments[key] = list(value)
+                    except:
+                        arguments[key] = value
+                else:
+                    try:
+                        arguments[key] = dict(value)
+                    except:
+                        arguments[key] = value
+            else:
+                arguments[key] = value
+        return arguments
+
+    def _execute_tool(self, function_call) -> str:
+        """Execute a tool (MCP or native) and return the result as JSON string."""
+        function_name = function_call.name
+
+        # Parse arguments - convert protobuf types to native Python types
+        try:
+            arguments = self._convert_protobuf_args(function_call.args)
+        except Exception as e:
+            logger.error(f"Failed to parse function arguments: {e}")
+            return json.dumps({"success": False, "error": f"Invalid arguments: {e}"})
+
+        # Route to appropriate execution handler
+        # MCP tools: get_game_state, press_buttons, navigate_to
+        if function_name in ["get_game_state", "press_buttons", "navigate_to"]:
+            if not self.use_mcp_tools or not self.mcp_adapter:
+                return json.dumps({"success": False, "error": "MCP tools not enabled"})
+            result = self.mcp_adapter.call_tool(function_name, arguments)
+            return json.dumps(result, indent=2)
+
+        # Native tools: Execute locally
+        elif function_name == "update_primary_goal":
+            return self._tool_update_primary_goal(**arguments)
+        elif function_name == "update_secondary_goal":
+            return self._tool_update_secondary_goal(**arguments)
+        elif function_name == "update_tertiary_goal":
+            return self._tool_update_tertiary_goal(**arguments)
+        elif function_name == "mark_goal_complete":
+            return self._tool_mark_goal_complete(**arguments)
+        elif function_name == "get_current_goals":
+            return self._tool_get_current_goals()
+        elif function_name == "add_to_notepad":
+            return self._tool_add_to_notepad(**arguments)
+        elif function_name == "read_notepad":
+            return self._tool_read_notepad(**arguments)
+        elif function_name == "mark_location_important":
+            return self._tool_mark_location_important(**arguments)
+        elif function_name == "get_exploration_status":
+            return self._tool_get_exploration_status()
+        elif function_name == "analyze_recent_actions":
+            return self._tool_analyze_recent_actions()
+        elif function_name == "get_stuck_analysis":
+            return self._tool_get_stuck_analysis()
+        elif function_name == "define_custom_agent":
+            return self._tool_define_custom_agent(**arguments)
+        else:
+            return json.dumps({"success": False, "error": f"Unknown tool: {function_name}"})
+
+    # =========================================================================
+    # NATIVE TOOL IMPLEMENTATIONS
+    # =========================================================================
+
+    def _tool_update_primary_goal(self, description: str, completion_conditions: List[str]) -> str:
+        """Update primary goal."""
+        self.primary_goal = Goal(
+            type="primary",
+            description=description,
+            conditions=completion_conditions,
+            priority=1,
+            created_at=self.step_count
+        )
+        if self.verbose:
+            print(f"[GOAL] Updated primary goal: {description}")
+        return json.dumps({"success": True, "message": f"Primary goal updated: {description}"})
+
+    def _tool_update_secondary_goal(self, description: str, completion_conditions: List[str]) -> str:
+        """Update secondary goal."""
+        self.secondary_goal = Goal(
+            type="secondary",
+            description=description,
+            conditions=completion_conditions,
+            priority=2,
+            created_at=self.step_count
+        )
+        if self.verbose:
+            print(f"[GOAL] Updated secondary goal: {description}")
+        return json.dumps({"success": True, "message": f"Secondary goal updated: {description}"})
+
+    def _tool_update_tertiary_goal(self, description: str, completion_conditions: List[str]) -> str:
+        """Update tertiary goal."""
+        self.tertiary_goal = Goal(
+            type="tertiary",
+            description=description,
+            conditions=completion_conditions,
+            priority=3,
+            created_at=self.step_count
+        )
+        if self.verbose:
+            print(f"[GOAL] Updated tertiary goal: {description}")
+        return json.dumps({"success": True, "message": f"Tertiary goal updated: {description}"})
+
+    def _tool_mark_goal_complete(self, goal_type: str, reasoning: str) -> str:
+        """Mark a goal as complete."""
+        if goal_type == "primary" and self.primary_goal:
+            self.primary_goal.completed = True
+            if self.verbose:
+                print(f"[GOAL] Primary goal completed: {reasoning}")
+            return json.dumps({"success": True, "message": f"Primary goal marked complete: {reasoning}"})
+        elif goal_type == "secondary" and self.secondary_goal:
+            self.secondary_goal.completed = True
+            if self.verbose:
+                print(f"[GOAL] Secondary goal completed: {reasoning}")
+            return json.dumps({"success": True, "message": f"Secondary goal marked complete: {reasoning}"})
+        elif goal_type == "tertiary" and self.tertiary_goal:
+            self.tertiary_goal.completed = True
+            if self.verbose:
+                print(f"[GOAL] Tertiary goal completed: {reasoning}")
+            return json.dumps({"success": True, "message": f"Tertiary goal marked complete: {reasoning}"})
+        else:
+            return json.dumps({"success": False, "error": f"No {goal_type} goal to mark complete"})
+
+    def _tool_get_current_goals(self) -> str:
+        """Get current goals and their status."""
+        goals_info = {
+            "primary": {
+                "description": self.primary_goal.description if self.primary_goal else None,
+                "completed": self.primary_goal.completed if self.primary_goal else False,
+                "conditions": self.primary_goal.conditions if self.primary_goal else [],
+                "progress": self.primary_goal.progress if self.primary_goal else ""
+            },
+            "secondary": {
+                "description": self.secondary_goal.description if self.secondary_goal else None,
+                "completed": self.secondary_goal.completed if self.secondary_goal else False,
+                "conditions": self.secondary_goal.conditions if self.secondary_goal else [],
+                "progress": self.secondary_goal.progress if self.secondary_goal else ""
+            },
+            "tertiary": {
+                "description": self.tertiary_goal.description if self.tertiary_goal else None,
+                "completed": self.tertiary_goal.completed if self.tertiary_goal else False,
+                "conditions": self.tertiary_goal.conditions if self.tertiary_goal else [],
+                "progress": self.tertiary_goal.progress if self.tertiary_goal else ""
+            }
+        }
+        return json.dumps({"success": True, "goals": goals_info})
+
+    def _tool_add_to_notepad(self, note: str) -> str:
+        """Add note to notepad."""
+        self.context.notepad.append(f"[Step {self.step_count}] {note}")
+        # Keep notepad size manageable
+        if len(self.context.notepad) > 20:
+            self.context.notepad = self.context.notepad[-20:]
+        if self.verbose:
+            print(f"[NOTE] Added to notepad: {note[:50]}...")
+        return json.dumps({"success": True, "message": "Note added to notepad"})
+
+    def _tool_read_notepad(self, last_n_entries: int = 5) -> str:
+        """Read notepad entries."""
+        entries = self.context.notepad[-last_n_entries:] if self.context.notepad else []
+        return json.dumps({
+            "success": True,
+            "entries": entries,
+            "total_entries": len(self.context.notepad)
+        })
+
+    def _tool_mark_location_important(self, x: int, y: int, description: str) -> str:
+        """Mark location as point of interest."""
+        self.map_memory.points_of_interest[(x, y)] = description
+        if self.verbose:
+            print(f"[MAP] Marked ({x}, {y}) as important: {description}")
+        return json.dumps({
+            "success": True,
+            "message": f"Marked ({x}, {y}) as: {description}"
+        })
+
+    def _tool_get_exploration_status(self) -> str:
+        """Get exploration statistics."""
+        exploration_pct = self.map_memory.get_exploration_percentage(1000)
+        total_explored = len(self.map_memory.explored_tiles)
+        total_pois = len(self.map_memory.points_of_interest)
+        return json.dumps({
+            "success": True,
+            "exploration_percentage": round(exploration_pct, 2),
+            "tiles_explored": total_explored,
+            "points_of_interest": total_pois,
+            "important_locations": list(self.map_memory.points_of_interest.values())
+        })
+
+    def _tool_analyze_recent_actions(self) -> str:
+        """Trigger self-critique analysis."""
+        recent_actions_str = ", ".join(list(self.recent_actions)[-10:])
+
+        # This would normally call the LLM for analysis, but for now return a summary
+        analysis = f"Recent actions: {recent_actions_str}. "
+        analysis += f"Step count: {self.step_count}. "
+
+        if self.stuck_counter > 5:
+            analysis += f"WARNING: Stuck counter at {self.stuck_counter}!"
+
+        return json.dumps({
+            "success": True,
+            "analysis": analysis,
+            "stuck_counter": self.stuck_counter,
+            "recent_actions": list(self.recent_actions)[-10:]
+        })
+
+    def _tool_get_stuck_analysis(self) -> str:
+        """Check if stuck and get suggestions."""
+        is_stuck = self.stuck_counter > 5
+        suggestions = []
+
+        if is_stuck:
+            suggestions.append("Try a different direction or approach")
+            suggestions.append("Consider using navigate_to with higher variance")
+            suggestions.append("Check if you're trying to walk through an obstacle")
+
+        return json.dumps({
+            "success": True,
+            "is_stuck": is_stuck,
+            "stuck_counter": self.stuck_counter,
+            "suggestions": suggestions,
+            "last_position": list(self.last_position)
+        })
+
+    def _tool_define_custom_agent(self, name: str, task_description: str) -> str:
+        """Define a custom mini-agent."""
+        agent_def = f"""Custom agent '{name}' for: {task_description}
+Created at step {self.step_count}"""
+
+        self.context.custom_agents[name] = agent_def
+
+        if self.verbose:
+            print(f"[BOT] Created custom agent: {name}")
+
+        return json.dumps({
+            "success": True,
+            "message": f"Custom agent '{name}' created",
+            "definition": agent_def
+        })
+
+    def step(self, state: Dict[str, Any], screenshot: Any = None) -> str:
         """
         Execute one step following Gemini Plays Pokemon architecture.
 
         Args:
-            state: Current game state (includes 'frame' key with screenshot)
+            state: Current game state
+            screenshot: Current game screenshot
 
         Returns:
-            Button command (e.g., "A", "UP", "NONE")
+            Button command (e.g., "A", "UP", "NONE") or "MCP_TOOL_EXECUTED"
         """
         self.step_count += 1
-
-        # Detect game context from screenshot using VLM (title, dialogue, battle, overworld)
-        print(f"has screenshot? {screenshot is not None}")
-        context_type = self.get_game_context(screenshot) if screenshot is not None else "unknown"
-        if self.verbose and hasattr(self, '_last_context') and self._last_context != context_type:
-            print(f"[CONTEXT] Changed from {self._last_context} → {context_type}")
-        self._last_context = context_type
 
         # Check for context reset
         if self.step_count % self.context_reset_interval == 0:
@@ -452,144 +921,432 @@ class GeminiPlaysAgent:
 
         # Update map memory
         self._update_map_memory(state)
-        
+
         # Check if stuck (self-critique)
         if self.enable_self_critique:
             self._check_if_stuck(state)
-        
-        # If we have queued actions, return them all at once for the server to execute
-        if self.action_queue:
-            actions = list(self.action_queue)
-            self.action_queue.clear()
-            self.recent_actions.extend(actions)
-            if self.verbose:
-                print(f"[QUEUE] Returning {len(actions)} queued actions: {', '.join(actions)}")
-            # Return as comma-separated string for client to split
-            return ','.join(actions)
 
-        # Check for meta-tool usage (before normal decision making)
-        if self.enable_meta_tools and self.step_count % 10 == 0:
-            if self._process_meta_tools(state, screenshot):
-                # If meta-tool was used, it may have queued actions
-                if self.action_queue:
-                    actions = list(self.action_queue)
-                    self.action_queue.clear()
-                    self.recent_actions.extend(actions)
-                    if self.verbose:
-                        print(f"[QUEUE] Returning {len(actions)} meta-tool actions: {', '.join(actions)}")
-                    return ','.join(actions)
+        # If we have queued actions, execute them
+        if self.action_queue:
+            action = self.action_queue.popleft()
+            self.recent_actions.append(action)
+            return action
 
         # Update goals
         self._update_goals(state)
 
-        # Decide next action based on hierarchical goals (pass context_type to avoid re-detection)
-        action = self._decide_action(state, screenshot, context_type)
-
-        # If delegation happened, queue should have actions - check and return them
-        if action == "DELEGATED" and self.action_queue:
-            actions = list(self.action_queue)
-            self.action_queue.clear()
-            self.recent_actions.extend(actions)
-            if self.verbose:
-                print(f"[DELEGATION] Returning {len(actions)} delegated actions")
-            return ','.join(actions)
-
-        # Apply exploration directive if enabled
-        if self.enable_exploration and self.step_count % 50 == 0:
-            exploration_action = self._get_exploration_action(state)
-            if exploration_action and exploration_action != "NONE":
-                action = exploration_action
+        # Decide next action using function calling
+        action = self._decide_action(state, screenshot)
 
         # Update server with agent step and metrics (for agent thinking display)
         update_server_metrics()
 
         self.recent_actions.append(action)
         return action
-    
+
+    def run(self, max_steps: int = None) -> int:
+        """
+        Run the agent loop (similar to my_cli_agent.run()).
+
+        Args:
+            max_steps: Maximum number of steps to run (None for unlimited)
+
+        Returns:
+            0 if successful, 1 if error
+        """
+        import json as json_module
+        import base64
+        from PIL import Image
+        import io
+        import time
+
+        logger.info("=" * 70)
+        logger.info("🎮 GeminiPlaysAgent with Native Tools")
+        logger.info("=" * 70)
+        logger.info(f"Server: {self.server_url}")
+        logger.info(f"Tools: {len(self.tools)} tools (3 MCP + {len(self.tools)-3} native)")
+        logger.info(f"Context reset: Every {self.context_reset_interval} steps")
+        if max_steps:
+            logger.info(f"Max steps: {max_steps}")
+        logger.info("=" * 70)
+
+        logger.info("\n🚀 Starting agent loop...")
+        logger.info("Press Ctrl+C to stop")
+        logger.info("-" * 70)
+
+        try:
+            while True:
+                # Check max steps
+                if max_steps and self.step_count >= max_steps:
+                    logger.info(f"\n✅ Reached max steps ({max_steps})")
+                    break
+
+                logger.info(f"\n{'='*70}")
+                logger.info(f"🤖 Step {self.step_count + 1}")
+                logger.info(f"{'='*70}")
+
+                # Fetch game state via MCP
+                try:
+                    game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
+
+                    # Parse game state
+                    if not game_state_result.get("success"):
+                        logger.error(f"❌ Failed to get game state: {game_state_result.get('error')}")
+                        time.sleep(3)
+                        continue
+
+                    # Extract screenshot
+                    screenshot_b64 = game_state_result.get("screenshot_base64")
+                    screenshot = None
+                    if screenshot_b64:
+                        try:
+                            image_data = base64.b64decode(screenshot_b64)
+                            screenshot = Image.open(io.BytesIO(image_data))
+
+                            # Check for black frame (transition screen)
+                            if self._is_black_frame(screenshot):
+                                logger.info("⏳ Black frame detected (likely a transition), waiting for next frame...")
+                                time.sleep(1)
+                                continue
+
+                        except Exception as e:
+                            logger.warning(f"Failed to decode screenshot: {e}")
+
+                    # Use the state_text from get_game_state (includes porymap data)
+                    # Plus extract key fields for internal use
+                    state = {
+                        'state_text': game_state_result.get('state_text', ''),  # Includes porymap!
+                        'player_position': game_state_result.get('player_position', {}),
+                        'location': game_state_result.get('location', 'Unknown'),
+                        'team': game_state_result.get('team', []),
+                        'badges': game_state_result.get('badges', 0),
+                        'in_battle': game_state_result.get('in_battle', False),
+                        'items': game_state_result.get('items', []),
+                        'money': game_state_result.get('money', 0)
+                    }
+
+                    # Run step (calls _decide_action which executes tools)
+                    action = self.step(state, screenshot)
+
+                    # CRITICAL: Wait for action queue to complete if action tool was called
+                    # This ensures button presses finish before the next step starts
+                    if action == "TOOL_EXECUTED":
+                        self._wait_for_actions_complete()
+
+                    if action and action != "WAIT":
+                        logger.info(f"✅ Step {self.step_count} completed: {action}")
+
+                    # Update server metrics
+                    try:
+                        update_server_metrics(self.server_url)
+                    except Exception as e:
+                        logger.debug(f"Failed to update server metrics: {e}")
+
+                    # Auto-save checkpoint every 10 steps
+                    if self.step_count % 10 == 0:
+                        try:
+                            import requests
+                            checkpoint_response = requests.post(
+                                f"{self.server_url}/checkpoint",
+                                json={"step_count": self.step_count},
+                                timeout=10
+                            )
+                            if checkpoint_response.status_code == 200:
+                                logger.info(f"💾 Checkpoint saved at step {self.step_count}")
+                        except Exception as e:
+                            logger.debug(f"Checkpoint save failed: {e}")
+
+                    # Small delay between steps
+                    time.sleep(0.5)
+
+                except Exception as e:
+                    logger.error(f"❌ Step failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    time.sleep(3)
+                    continue
+
+        except KeyboardInterrupt:
+            logger.info("\n\n🛑 Shutdown requested by user")
+            return 0
+        except Exception as e:
+            logger.error(f"\n❌ Fatal error: {e}")
+            import traceback
+            traceback.print_exc()
+            return 1
+
+        return 0
+
+    def _is_black_frame(self, image) -> bool:
+        """Check if frame is a black screen (transition)."""
+        try:
+            import numpy as np
+
+            # Convert PIL Image to numpy array if needed
+            if hasattr(image, 'save'):  # PIL Image
+                frame_array = np.array(image)
+            else:
+                frame_array = image
+
+            # Calculate mean brightness
+            mean_brightness = frame_array.mean()
+
+            # If mean brightness is very low, it's likely a black frame
+            threshold = 10  # Very dark threshold
+            is_black = mean_brightness < threshold
+
+            if is_black:
+                logger.debug(f"Black frame detected: mean brightness = {mean_brightness:.2f} < {threshold}")
+
+            return is_black
+        except Exception as e:
+            logger.warning(f"Error checking for black frame: {e}")
+            return False  # If we can't check, assume it's not black
+
+    def _wait_for_actions_complete(self, timeout: int = 30) -> None:
+        """Wait for all queued actions to complete before proceeding (same as my_cli_agent)."""
+        import requests
+        import time
+
+        logger.info("⏳ Waiting for actions to complete...")
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            try:
+                response = requests.get(f"{self.server_url}/queue_status", timeout=2)
+                if response.status_code == 200:
+                    status = response.json()
+                    if status.get("queue_empty", False):
+                        logger.info("✅ All actions completed")
+                        return
+                    else:
+                        queue_len = status.get("queue_length", 0)
+                        logger.debug(f"   Queue: {queue_len} actions remaining...")
+                        time.sleep(0.5)  # Poll every 500ms
+                else:
+                    logger.warning(f"Failed to get queue status: {response.status_code}")
+                    time.sleep(0.5)
+            except Exception as e:
+                logger.warning(f"Error checking queue status: {e}")
+                time.sleep(0.5)
+        time.sleep(1)
+
+        logger.warning(f"⚠️ Timeout waiting for actions to complete after {timeout}s")
+
+    def _decide_action(self, state: Dict[str, Any], screenshot: Any) -> str:
+        """Decide next action using function calling (MCP + native tools)."""
+        # Build prompt with goals and state
+        prompt = self._build_decision_prompt(state)
+        start_time = time.time()
+        try:
+            # Use VLM with function calling (tools already configured in VLM constructor)
+            if screenshot:
+                response = self.vlm_client.get_query(screenshot, prompt, "gemini_plays")
+            else:
+                response = self.vlm_client.get_text_query(prompt, "gemini_plays")
+
+            # Extract thinking and action for logging
+            thinking_text = ""
+            action_text = ""
+
+            # Process function calls if present
+            if hasattr(response, 'candidates') and response.candidates:
+                candidate = response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    content = candidate.content
+                    if hasattr(content, 'parts'):
+                        for part in content.parts:
+                            if hasattr(part, 'function_call') and part.function_call:
+                                function_call = part.function_call
+                                function_name = function_call.name
+
+                                # Extract thinking/reasoning from function args
+                                args = self._convert_protobuf_args(function_call.args)
+                                thinking = args.get('reasoning') or args.get('reason') or ""
+                                thinking_text = thinking
+
+                                # Format action details
+                                if function_name == "press_buttons":
+                                    buttons = args.get('buttons', [])
+                                    action_str = f"press_buttons({buttons})"
+                                elif function_name == "navigate_to":
+                                    x = args.get('x')
+                                    y = args.get('y')
+                                    variance = args.get('variance', 'none')
+                                    action_str = f"navigate_to(x={x}, y={y}, variance={variance})"
+                                else:
+                                    action_str = f"{function_name}(...)"
+
+                                action_text = action_str
+
+                                # Display thinking and action
+                                if self.verbose:
+                                    print(f"\n{'='*70}")
+                                    print(f"🧠 THINKING:")
+                                    print(f"   {thinking}")
+                                    print(f"\n🎮 ACTION:")
+                                    print(f"   {action_str}")
+                                    print(f"{'='*70}\n")
+
+                                # Log interaction with clean format
+                                log_response = f"THINKING: {thinking}\nACTION: {action_str}"
+                                token_usage = {}
+                                if hasattr(response, 'usage_metadata'):
+                                    usage = response.usage_metadata
+                                    token_usage = {
+                                        "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
+                                        "completion_tokens": getattr(usage, 'candidates_token_count', 0),
+                                        "total_tokens": getattr(usage, 'total_token_count', 0)
+                                    }
+                                duration = time.time() - start_time
+                                # Log the interaction
+                                self.llm_logger.log_interaction(
+                                    interaction_type=f"gemini_plays",
+                                    prompt=log_response,
+                                    response=result,
+                                    duration=duration,
+                                    metadata={"model": self.model_name, "backend": "gemini", "has_image": True, "token_usage": token_usage},
+                                    model_info={"model": self.model_name, "backend": "gemini"}
+                                )
+
+                                # Execute the tool (MCP or native)
+                                result = self._execute_tool(function_call)
+
+                                # For press_buttons and navigate_to, return special marker
+                                # The actual execution happens via MCP server
+                                if function_name in ["press_buttons", "navigate_to"]:
+                                    return "TOOL_EXECUTED"
+
+                                # For other tools, continue processing
+                                # (goals, notepad, etc. are informational)
+
+            # If no function call, return WAIT
+            return "WAIT"
+
+        except Exception as e:
+            logger.error(f"Error in tool-based decision making: {e}")
+            return "WAIT"
+
+    def _build_decision_prompt(self, state: Dict[str, Any]) -> str:
+        """Build decision prompt with comprehensive tool descriptions."""
+        goals_text = f"""Current Goals:
+- Primary: {self.primary_goal.description if self.primary_goal else 'None'}
+- Secondary: {self.secondary_goal.description if self.secondary_goal else 'None'}
+- Tertiary: {self.tertiary_goal.description if self.tertiary_goal else 'None'}"""
+
+        exploration_text = f"""Exploration: {self.map_memory.get_exploration_percentage(1000):.1f}% of estimated map
+Points of Interest: {len(self.map_memory.points_of_interest)} marked"""
+
+        context_text = ""
+        if self.context.summary:
+            context_text = f"Context: {self.context.summary}"
+
+        notepad_text = ""
+        if self.context.notepad:
+            notepad_text = f"\nNotepad entries: {len(self.context.notepad)}"
+
+        # Use state_text from get_game_state (includes porymap ground truth!)
+        # Fall back to format_state_for_llm if state_text not available
+        state_text = state.get('state_text', '')
+        if not state_text:
+            state_text = format_state_for_llm(state)
+        
+        return f"""You are playing Pokemon Emerald. You can see the game screen and control the game by executing emulator commands.
+
+Your goal is to play through Pokemon Emerald and eventually defeat the Elite Four. Make decisions based on what you see on the screen.
+
+Before each action, explain your reasoning briefly, then use the tools to execute your chosen commands.
+
+The conversation history may occasionally be summarized to save context space. If you see a message labeled "CONVERSATION HISTORY SUMMARY", this contains the key information about your progress so far. Use this information to maintain continuity in your gameplay.
+
+Be strategic in your decisions - consider type advantages in battles, manage your Pokemon's health, and explore thoroughly to find items and trainers.
+
+
+{goals_text}
+
+{exploration_text}
+{context_text}{notepad_text}
+
+Current State (includes porymap ground truth):
+{state_text}
+
+Recent actions: {', '.join(list(self.recent_actions)[-5:])}
+
+AVAILABLE TOOLS (use function calling):
+
+🎮 GAME CONTROL:
+- press_buttons(buttons, reasoning) - Press GBA buttons: A, B, UP, DOWN, LEFT, RIGHT, START, SELECT, L, R, WAIT
+- navigate_to(x, y, variance, reason) - A* pathfind with porymap ground truth
+  variance: 'none', 'low', 'medium', 'high', 'extreme'
+
+🎯 GOAL MANAGEMENT:
+- update_primary_goal(description, completion_conditions) - Set main objective
+- update_secondary_goal(description, completion_conditions) - Set enabling goal
+- update_tertiary_goal(description, completion_conditions) - Set exploratory goal
+- mark_goal_complete(goal_type, reasoning) - Mark goal as done
+- get_current_goals() - View all goals and status
+
+📝 MEMORY/KNOWLEDGE:
+- add_to_notepad(note) - Store important information
+- read_notepad(last_n_entries) - Recall stored notes
+- mark_location_important(x, y, description) - Mark point of interest
+- get_exploration_status() - Get exploration statistics
+
+🧠 SELF-CRITIQUE:
+- analyze_recent_actions() - Analyze if stuck or making poor choices
+- get_stuck_analysis() - Check stuck status and get suggestions
+
+🔧 META:
+- define_custom_agent(name, task_description) - Create mini-agent
+
+STRATEGY:
+1. Use navigate_to for distant movement (ground-truth pathfinding!)
+2. Use press_buttons for interactions and manual movement
+3. Update goals as you progress through the game
+4. Use notepad to remember important NPCs, locations, items
+5. Mark important locations (Pokemon Centers, Gyms, etc.)
+6. If stuck, use analyze_recent_actions or get_stuck_analysis
+7. Complete goals when done, then set new ones
+8. Check the image for dialog
+
+IMPORTANT: Please think step by step before choosing your action. Structure your response like this:
+
+ANALYSIS:
+[Analyze what you see in the frame and current game state - what's happening? where are you? is there dialog that you need to interact with? what should you be doing? 
+IMPORTANT: Look carefully at the game image for objects (clocks, pokeballs, bags) and NPCs (people, trainers) that might not be shown on the map. NPCs appear as sprite characters and can block movement or trigger battles/dialogue. When you see them try determine their location (X,Y) on the map relative to the player and any objects.]
+
+OBJECTIVES:
+[Review your current goals to follow the storyline of Pokemon Emerald]
+
+PLAN:
+[Think about your immediate goal - what do you want to accomplish in the next few actions? Consider your current objectives and recent history. 
+Check MOVEMENT MEMORY for areas you've had trouble with before and plan your route accordingly.]
+
+REASONING:
+[Explain why you're choosing this specific action. Reference the MOVEMENT PREVIEW and MOVEMENT MEMORY sections. Check the visual frame for NPCs before moving. If you see NPCs in the image, avoid walking into them. Consider any failed movements or known obstacles from your memory.]
+
+Action:
+[Action deciding what tool and arguments]
+"""
+
     def _update_map_memory(self, state: Dict[str, Any]):
         """Update fog-of-war map memory."""
         pos = state.get("player_position", {})
         x, y = pos.get("x", 0), pos.get("y", 0)
-
-        # Mark current position as VISITED (player stood on it)
-        self.map_memory.mark_visited(x, y, self.step_count)
-
-        # Mark visible area as explored (seen but not visited) (5x5 around player)
+        
+        # Mark current position as explored
+        self.map_memory.mark_explored(x, y, self.step_count)
+        
+        # Mark visible area as explored (5x5 around player)
         for dx in range(-2, 3):
             for dy in range(-2, 3):
-                if dx != 0 or dy != 0:  # Don't re-mark center as just explored
-                    self.map_memory.mark_explored(x + dx, y + dy, self.step_count)
-
-        # Check if player used a warp (location changed)
-        current_location = state.get("player", {}).get("location", "")
-        if hasattr(self, '_last_location') and self._last_location != current_location:
-            # Location changed - mark last position as warp used
-            if hasattr(self, '_last_position'):
-                last_x, last_y = self._last_position
-                self.map_memory.mark_warp_used(last_x, last_y)
-
-        # Track location and position for next step
-        self._last_location = current_location
-        self._last_position = (x, y)
+                self.map_memory.mark_explored(x + dx, y + dy, self.step_count)
         
         # Track points of interest
         if state.get("in_pokemon_center"):
             self.map_memory.points_of_interest[(x, y)] = "pokemon_center"
-
-    def get_game_context(self, screenshot: Any) -> str:
-        """Determine current game context from the visual frame using VLM.
-
-        Uses vision-language model to analyze the screenshot and identify screen type.
-
-        Args:
-            screenshot: PIL Image of current game frame
-
-        Returns:
-            str: One of "title", "dialogue", "battle", "menu", "overworld", "unknown"
-        """
-        if screenshot is None:
-            return "unknown"
-
-        try:
-            detection_prompt = """Analyze this Pokemon Emerald screenshot and identify the current game screen type.
-
-Look for these visual indicators:
-1. TITLE - Title screen with "Pokemon" logo, "Press Start" text, or intro cutscene
-2. DIALOGUE - Text box at bottom with NPC dialogue or narration (white box with black text)
-3. BATTLE - Pokemon battle screen with HP bars, move selection, or battle animations
-4. MENU - In-game menu (Pokédex, Pokemon, Bag, Save, Options, Exit)
-5. OVERWORLD - Top-down map view with player character, NPCs, buildings, routes
-
-Reply with ONLY ONE WORD from: TITLE, DIALOGUE, BATTLE, MENU, or OVERWORLD"""
-
-            response = self.vlm_client.get_query(screenshot, detection_prompt, "context")
-
-            # Log interaction
-            self.llm_logger.log_interaction(
-                interaction_type="gemini_plays_context",
-                prompt=detection_prompt,
-                response=response
-            )
-
-            # Parse response to get context type
-            context = response.strip().upper()
-
-            # Map to lowercase and validate
-            valid_contexts = ["TITLE", "DIALOGUE", "BATTLE", "MENU", "OVERWORLD"]
-            if context in valid_contexts:
-                return context.lower()
-
-            # Fallback: try to find the context word in response
-            for ctx in valid_contexts:
-                if ctx in response.upper():
-                    return ctx.lower()
-
-            logger.warning(f"Could not parse game context from VLM response: {response}")
-            return "unknown"
-
-        except Exception as e:
-            logger.warning(f"Error determining game context with VLM: {e}")
-            return "unknown"
+        elif state.get("in_pokemart"):
+            self.map_memory.points_of_interest[(x, y)] = "pokemart"
     
     def _check_if_stuck(self, state: Dict[str, Any]):
         """Self-critique: Check if agent is stuck."""
@@ -605,7 +1362,7 @@ Reply with ONLY ONE WORD from: TITLE, DIALOGUE, BATTLE, MENU, or OVERWORLD"""
         # If stuck for too long, trigger self-critique
         if self.stuck_counter > 10:
             if self.verbose:
-                print("Self-critique: Agent appears stuck, analyzing...")
+                print("> Self-critique: Agent appears stuck, analyzing...")
             self._perform_self_critique(state)
             self.stuck_counter = 0
     
@@ -616,7 +1373,7 @@ Reply with ONLY ONE WORD from: TITLE, DIALOGUE, BATTLE, MENU, or OVERWORLD"""
         prompt = f"""Analyze this agent's recent performance in Pokemon Emerald:
 
 Recent actions: {recent_actions_str}
-Current state: {format_state_for_llm(state, use_json_map=True)}
+Current state: {format_state_for_llm(state)[:500]}
 Steps taken: {self.step_count}
 Exploration: {self.map_memory.get_exploration_percentage(1000):.1f}%
 
@@ -626,21 +1383,15 @@ The agent appears stuck. Identify:
 3. Suggest 5 specific actions to unstick.
 
 Be concise and specific."""
-
-        critique = self.vlm_client.get_text_query(prompt, "critique")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_critique",
-            prompt=prompt,
-            response=critique
-        )
+        
+        critique = self.vlm_client.get_text_query(prompt, "gemini_plays")
+        critique_text = self._extract_text_from_response(critique)
 
         if self.verbose:
-            print(f"   Self-critique: {critique[:150]}...")
-        
+            print(f"   Self-critique: {critique_text[:150]}...")
+
         # Extract suggested actions
-        self._extract_recovery_actions(critique)
+        self._extract_recovery_actions(critique_text)
     
     def _extract_recovery_actions(self, critique: str):
         """Extract recovery actions from self-critique using LLM."""
@@ -650,19 +1401,13 @@ Be concise and specific."""
 Provide a sequence of 3-5 button presses to help unstick the agent.
 Reply with just the buttons separated by commas (e.g., "UP, A, LEFT, DOWN, A").
 Valid buttons: A, B, UP, DOWN, LEFT, RIGHT, START, SELECT"""
-
-        response = self.vlm_client.get_text_query(prompt, "recovery")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_recovery",
-            prompt=prompt,
-            response=response
-        )
+        
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
+        response_text = self._extract_text_from_response(response)
 
         # Parse button sequence
         buttons_found = False
-        for part in response.upper().split(','):
+        for part in response_text.upper().split(','):
             button = part.strip()
             if button in ["A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT"]:
                 self.action_queue.append(button)
@@ -678,17 +1423,11 @@ Valid buttons: A, B, UP, DOWN, LEFT, RIGHT, START, SELECT"""
         """Add exploration sequence using LLM suggestion."""
         prompt = """The agent needs to explore. Provide a short sequence of 3-4 directional buttons for exploration.
 Reply with just the buttons separated by spaces (e.g., "UP LEFT DOWN RIGHT")."""
+        
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
+        response_text = self._extract_text_from_response(response)
 
-        response = self.vlm_client.get_text_query(prompt, "exploration_seq")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_exploration",
-            prompt=prompt,
-            response=response
-        )
-
-        for word in response.upper().split():
+        for word in response_text.upper().split():
             if word in ["UP", "DOWN", "LEFT", "RIGHT"]:
                 self.action_queue.append(word)
                 if len(self.action_queue) >= 4:
@@ -696,40 +1435,53 @@ Reply with just the buttons separated by spaces (e.g., "UP LEFT DOWN RIGHT")."""
         
         # Ultimate fallback
         if not self.action_queue:
+            import random
             for _ in range(3):
                 self.action_queue.append(random.choice(["UP", "DOWN", "LEFT", "RIGHT"]))
     
     def _update_goals(self, state: Dict[str, Any]):
         """Update hierarchical goal system using LLM to define goals."""
+        # Generate initial goals on first step
+        if self.step_count == 1 and not self.primary_goal:
+            self._generate_new_goals(state)
+            return
+
+        # Only check goals every 20 steps to avoid blocking
+        if self.step_count % 20 != 0:
+            return
+
         # Check if goals need updating
         should_update = False
-        
-        # Check primary goal completion
+
+        # Check primary goal completion (only if exists and not recently created)
         if self.primary_goal:
-            if self._check_goal_completion(self.primary_goal, state):
-                self.primary_goal.completed = True
-                should_update = True
+            if self.step_count - self.primary_goal.created_at > 20:
+                if self._check_goal_completion(self.primary_goal, state):
+                    self.primary_goal.completed = True
+                    should_update = True
         else:
             should_update = True
-        
-        # Check secondary goal completion
+
+        # Check secondary goal completion (only if exists and not recently created)
         if self.secondary_goal:
-            if self._check_goal_completion(self.secondary_goal, state):
-                self.secondary_goal.completed = True
-                should_update = True
+            if self.step_count - self.secondary_goal.created_at > 20:
+                if self._check_goal_completion(self.secondary_goal, state):
+                    self.secondary_goal.completed = True
+                    should_update = True
         elif self.primary_goal:
             should_update = True
-        
-        # Check tertiary goal completion
+
+        # Check tertiary goal completion (only if exists and not recently created)
         if self.tertiary_goal:
-            if self._check_goal_completion(self.tertiary_goal, state):
-                self.tertiary_goal.completed = True
-                should_update = True
+            if self.step_count - self.tertiary_goal.created_at > 20:
+                if self._check_goal_completion(self.tertiary_goal, state):
+                    self.tertiary_goal.completed = True
+                    should_update = True
         else:
             should_update = True
-        
-        # Update goals if needed
-        if should_update or self.step_count % 50 == 0:
+
+        # Update goals if needed (but not on every step)
+        if should_update and self.step_count % 50 == 0:
             self._generate_new_goals(state)
         
         if self.verbose and self.step_count % 20 == 0:
@@ -743,7 +1495,7 @@ Reply with just the buttons separated by spaces (e.g., "UP LEFT DOWN RIGHT")."""
         prompt = f"""You are playing Pokemon Emerald. Based on the current game state, define three hierarchical goals.
 
 Current State:
-{format_state_for_llm(state, use_json_map=True)[:800]}
+{format_state_for_llm(state)[:800]}
 
 Context: {self.context.summary}
 Exploration: {self.map_memory.get_exploration_percentage(1000):.1f}% of map explored
@@ -772,22 +1524,18 @@ Rules:
 - Be specific and measurable
 - Consider what was just completed to avoid repetition"""
 
-        response = self.vlm_client.get_text_query(prompt, "goals")
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
 
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_goals",
-            prompt=prompt,
-            response=response
-        )
+        # Extract text from response (handles both string and GenerateContentResponse)
+        response_text = self._extract_text_from_response(response)
 
         # Parse goals from response
         try:
             # Extract JSON from response
-            start = response.find('{')
-            end = response.rfind('}') + 1
+            start = response_text.find('{')
+            end = response_text.rfind('}') + 1
             if start >= 0 and end > start:
-                goals_data = json.loads(response[start:end])
+                goals_data = json.loads(response_text[start:end])
                 
                 # Update primary goal
                 if "primary" in goals_data and not (self.primary_goal and not self.primary_goal.completed):
@@ -842,20 +1590,14 @@ Goal: {goal.description}
 Completion condition: {', '.join(goal.conditions)}
 
 Current game state:
-{format_state_for_llm(state, use_json_map=True)[:500]}
+{format_state_for_llm(state)[:500]}
 
 Has this goal been completed? Reply with just YES or NO."""
 
-        response = self.vlm_client.get_text_query(prompt, "goal_check")
+        response = self.vlm_client.get_text_query(prompt, "gemini_plays")
+        response_text = self._extract_text_from_response(response)
 
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_goal_check",
-            prompt=prompt,
-            response=f"[GOAL] {goal}: Completed? {response}"
-        )
-
-        return "YES" in response.upper()
+        return "YES" in response_text.upper()
     
     def _set_fallback_goals(self, state: Dict[str, Any]):
         """Set simple fallback goals if LLM goal generation fails."""
@@ -887,528 +1629,6 @@ Has this goal been completed? Reply with just YES or NO."""
                 priority=3,
                 created_at=self.step_count
             )
-    
-    def _decide_action(self, state: Dict[str, Any], screenshot: Any, game_context: str = "unknown") -> str:
-        """Decide next action based on goals and state.
-
-        Args:
-            state: Current game state
-            screenshot: Current game screenshot
-            game_context: Detected game context (from step() method)
-        """
-        # Check if we should delegate to specialized agent
-        delegation = self._check_delegation_needed(state, screenshot)
-        if delegation:
-            result = delegation["agent"].execute(
-                delegation["task"], 
-                state, 
-                screenshot
-            )
-            if result["success"] and result["buttons"]:
-                self.action_queue.extend(result["buttons"])
-                if self.verbose:
-                    print(f"> Delegated to {delegation['agent'].name}: {result['message']}")
-                return "DELEGATED"  # Queue will be returned by step()
-        
-        # Standard decision making (game_context passed from step())
-        prompt = self._build_decision_prompt(state, game_context)
-
-        # Add GPP-style system reminder about navigable unseen tiles (if any exist)
-        # This is added as a separate message to ensure the LLM pays attention
-        in_battle = state.get("in_battle", False)
-        screen_text = state.get("dialogue", {}).get("text", "").strip()
-
-        # Extract navigable unseen tiles count (compute it here too for reminder)
-        map_info = state.get('map', {})
-        navigable_unseen_count = 0
-        if 'tiles' in map_info and map_info['tiles']:
-            raw_tiles = map_info['tiles']
-            radius = 7
-            player_x = state.get("player_position", {}).get("x", 0)
-            player_y = state.get("player_position", {}).get("y", 0)
-            map_tiles = []
-
-            for y_idx, row in enumerate(raw_tiles):
-                for x_idx, tile_data in enumerate(row):
-                    if tile_data and isinstance(tile_data, (list, tuple)) and len(tile_data) > 1:
-                        behavior = tile_data[1].value if hasattr(tile_data[1], 'value') else tile_data[1]
-                        x = player_x - radius + x_idx
-                        y = player_y - radius + y_idx
-
-                        if behavior in [96, 105, 97, 98, 99, 100, 101]:  # Warps
-                            walkable = True
-                        elif behavior == 0:  # Passable
-                            walkable = True
-                        else:
-                            walkable = False
-
-                        tile_type = "stairs" if behavior in [96, 105] else "door" if behavior in [97, 98, 99, 100, 101] else "walkable" if walkable else "blocked"
-                        map_tiles.append({'x': x, 'y': y, 'type': tile_type, 'walkable': walkable})
-
-            navigable_unseen_tiles = self.map_memory.get_navigable_unseen_tiles(map_tiles)
-            navigable_unseen_count = len(navigable_unseen_tiles)
-
-        # Build system reminder similar to GPP
-        system_reminder = ""
-        if navigable_unseen_count > 0 and not in_battle and not screen_text:
-            system_reminder = f"""
-
-SYSTEM NOTE: As per the exploration priorities, there are still {navigable_unseen_count} NAVIGABLE UNSEEN TILES remaining.
-
-- These tiles are your *absolute highest priority*. They are fully reachable (barring scripted events).
-- You MUST reveal them first before continuing other tasks, UNLESS:
-    (a) Your primary or secondary goal is immediately achievable within the next 2-3 turns.
-    (b) There is an NPC, object or item you wish to interact with within a 5 tile radius (excluding warps).
-    (c) An event or NPC is stopping you from reaching the tile (triggers dialogue repeatedly).
-    (d) Reaching the tile requires Surf or Cut and you lack the move.
-    (e) Your box is full and you need to find a PC.
-    (f) You just reached a city and need to heal at a Pokecenter first.
-- Explore these tiles by moving to an **adjacent** walkable tile.
-- Move at least 5 steps at a time whenever possible to save time.
-- *Highly prefer manual movement (UP/DOWN/LEFT/RIGHT) over using the path tool* unless you can't figure out how to reach the tile.
-
-Internalize these instructions for your decision-making process, ensuring they guide your actions without being explicitly referenced in your thoughts."""
-
-        full_prompt = prompt + system_reminder
-
-        if screenshot:
-            response = self.vlm_client.get_query(screenshot, full_prompt, "decision")
-        else:
-            response = self.vlm_client.get_text_query(full_prompt, "decision")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays",
-            prompt=full_prompt,
-            response=response
-        )
-
-        # Parse action from response
-        return self._parse_action(response)
-    
-    def _process_meta_tools(self, state: Dict[str, Any], screenshot: Any) -> bool:
-        """
-        Process meta-tool requests from LLM (define_agent, execute_script, notepad).
-        Returns True if a meta-tool was used.
-        """
-        if not self.enable_meta_tools:
-            return False
-        
-        # Check if LLM wants to use meta-tools
-        prompt = f"""You have access to meta-tools for self-extension:
-
-1. define_agent: Create a custom mini-agent for a specific task
-2. execute_script: Run Python code to solve problems
-3. notepad_write: Store long-term plans or important information
-4. notepad_read: Retrieve stored plans
-
-Current state: {format_state_for_llm(state, use_json_map=True)[:300]}
-Goals: {self.primary_goal.description if self.primary_goal else 'None'}
-
-Do you want to use a meta-tool? Reply with:
-- "DEFINE_AGENT: [name] [task description]" to create a new agent
-- "EXECUTE_SCRIPT: [code]" to run Python code
-- "NOTEPAD_WRITE: [text]" to store information
-- "NOTEPAD_READ" to retrieve stored information
-- "NONE" if no meta-tool needed
-
-Be specific and only use when beneficial."""
-
-        if screenshot:
-            response = self.vlm_client.get_query(screenshot, prompt, "metatool")
-        else:
-            response = self.vlm_client.get_text_query(prompt, "metatool")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_metatool",
-            prompt=prompt,
-            response=response
-        )
-
-        if "DEFINE_AGENT:" in response:
-            return self._handle_define_agent(response)
-        elif "EXECUTE_SCRIPT:" in response:
-            return self._handle_execute_script(response)
-        elif "NOTEPAD_WRITE:" in response:
-            return self._handle_notepad_write(response)
-        elif "NOTEPAD_READ" in response:
-            return self._handle_notepad_read()
-        
-        return False
-    
-    def _handle_define_agent(self, response: str) -> bool:
-        """Handle define_agent meta-tool."""
-        try:
-            parts = response.split("DEFINE_AGENT:", 1)[1].strip().split(" ", 1)
-            agent_name = parts[0]
-            agent_task = parts[1] if len(parts) > 1 else "Custom task"
-            
-            # Create agent definition
-            agent_def = f"""Custom agent '{agent_name}' for: {agent_task}
-Created at step {self.step_count}"""
-            
-            self.context.custom_agents[agent_name] = agent_def
-            
-            if self.verbose:
-                print(f"[BOT] Created custom agent: {agent_name}")
-            
-            return True
-        except:
-            return False
-    
-    def _handle_execute_script(self, response: str) -> bool:
-        """Handle execute_script meta-tool (safely limited)."""
-        try:
-            code = response.split("EXECUTE_SCRIPT:", 1)[1].strip()
-            
-            # For safety, only allow simple path calculations
-            if "path" in code.lower() or "distance" in code.lower():
-                # Create safe execution context
-                safe_globals = {
-                    "abs": abs,
-                    "min": min,
-                    "max": max,
-                    "len": len,
-                    "range": range,
-                }
-                
-                # Execute with limitations
-                exec_result = {}
-                exec(code, safe_globals, exec_result)
-                
-                if self.verbose:
-                    print(f"[SCRIPT] Executed script (limited scope)")
-                
-                # Convert result to button presses if it's a path
-                if "path" in exec_result and isinstance(exec_result["path"], list):
-                    for move in exec_result["path"][:10]:
-                        if move in ["UP", "DOWN", "LEFT", "RIGHT"]:
-                            self.action_queue.append(move)
-                
-                return True
-        except:
-            return False
-    
-    def _handle_notepad_write(self, response: str) -> bool:
-        """Handle notepad_write meta-tool."""
-        try:
-            text = response.split("NOTEPAD_WRITE:", 1)[1].strip()
-            self.context.notepad.append(f"[Step {self.step_count}] {text}")
-            
-            # Keep notepad size manageable
-            if len(self.context.notepad) > 20:
-                self.context.notepad = self.context.notepad[-20:]
-            
-            if self.verbose:
-                print(f"[NOTE] Notepad: {text[:50]}...")
-            
-            return True
-        except:
-            return False
-    
-    def _handle_notepad_read(self) -> bool:
-        """Handle notepad_read meta-tool."""
-        if self.context.notepad:
-            notepad_content = "\n".join(self.context.notepad[-5:])
-            if self.verbose:
-                print(f"[READ] Reading notepad (last 5 entries)")
-            # Store in action queue as a special marker
-            # The next decision will consider notepad content
-            return True
-        return False
-    
-    def _check_delegation_needed(self, state: Dict[str, Any], screenshot: Any) -> Optional[Dict[str, Any]]:
-        """Check if we should delegate to a specialized agent using LLM decision."""
-        # Always delegate battles to specialized agent
-        if state.get("in_battle"):
-            return {
-                "agent": self.battle_agent,
-                "task": "Win this battle using optimal strategy"
-            }
-        
-        # Ask LLM if delegation is needed for current situation
-        prompt = f"""Analyze if this situation requires a specialized agent:
-
-Current state: {format_state_for_llm(state, use_json_map=True)[:400]}
-Primary goal: {self.primary_goal.description if self.primary_goal else 'None'}
-
-Available specialized agents:
-1. Pathfinding Agent - For navigating to distant locations
-2. Puzzle Agent - For solving boulder puzzles, gym puzzles, etc.
-3. None - Handle normally without delegation
-
-Which agent should handle this? Reply with just the number (1, 2, or 3) and a brief task description.
-Format: "NUMBER: task description" """
-        
-        if screenshot:
-            response = self.vlm_client.get_query(screenshot, prompt, "delegation")
-        else:
-            response = self.vlm_client.get_text_query(prompt, "delegation")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_delegation",
-            prompt=prompt,
-            response=response
-        )
-
-        # Parse delegation decision
-        if "1:" in response or "pathfind" in response.lower():
-            task = response.split(":", 1)[-1].strip() if ":" in response else "Navigate to goal location"
-            return {"agent": self.pathfinding_agent, "task": task}
-        elif "2:" in response or "puzzle" in response.lower():
-            task = response.split(":", 1)[-1].strip() if ":" in response else "Solve the puzzle"
-            return {"agent": self.puzzle_agent, "task": task}
-        
-        return None
-    
-    def _build_decision_prompt(self, state: Dict[str, Any], game_context: str = "unknown") -> str:
-        """Build decision prompt with goals and context, including GPP exploration priorities.
-
-        Args:
-            state: Current game state
-            game_context: Detected game context from get_game_context()
-        """
-        goals_text = f"""Current Goals:
-- Primary: {self.primary_goal.description if self.primary_goal else 'None'}
-- Secondary: {self.secondary_goal.description if self.secondary_goal else 'None'}
-- Tertiary: {self.tertiary_goal.description if self.tertiary_goal else 'None'}"""
-
-        # Extract tiles from JSON map in state (if available)
-        navigable_unseen_tiles = []
-        navigable_unvisited_warps = []
-        map_tiles = []
-
-        # Try to parse tiles from map data in state
-        map_info = state.get('map', {})
-        if 'tiles' in map_info and map_info['tiles']:
-            # Memory tiles format - convert to tile dicts
-            raw_tiles = map_info['tiles']
-            radius = 7
-            player_x = state.get("player_position", {}).get("x", 0)
-            player_y = state.get("player_position", {}).get("y", 0)
-
-            for y_idx, row in enumerate(raw_tiles):
-                for x_idx, tile_data in enumerate(row):
-                    if tile_data and isinstance(tile_data, (list, tuple)) and len(tile_data) > 1:
-                        behavior = tile_data[1].value if hasattr(tile_data[1], 'value') else tile_data[1]
-                        x = player_x - radius + x_idx
-                        y = player_y - radius + y_idx
-
-                        # Determine tile type
-                        if behavior in [96, 105]:
-                            tile_type = "stairs"
-                            walkable = True
-                        elif behavior in [97, 98, 99, 100, 101]:
-                            tile_type = "door"
-                            walkable = True
-                        elif behavior == 0:  # Passable
-                            tile_type = "walkable"
-                            walkable = True
-                        else:
-                            tile_type = "blocked"
-                            walkable = False
-
-                        map_tiles.append({
-                            'x': x, 'y': y, 'type': tile_type, 'walkable': walkable
-                        })
-
-            # Get navigable unseen and unvisited warps
-            navigable_unseen_tiles = self.map_memory.get_navigable_unseen_tiles(map_tiles)
-            navigable_unvisited_warps = self.map_memory.get_navigable_unvisited_warps(map_tiles)
-
-        # Format navigable unseen tiles (HIGHEST PRIORITY)
-        unseen_text = ""
-        if navigable_unseen_tiles:
-            unseen_coords = ", ".join([f"({x},{y})" for x, y in navigable_unseen_tiles[:10]])
-            unseen_text = f"""
-## ⚠️ NAVIGABLE UNSEEN TILES (HIGHEST PRIORITY)
-{len(navigable_unseen_tiles)} unseen tiles adjacent to explored areas: {unseen_coords}
-These are your ABSOLUTE HIGHEST PRIORITY - explore them before other goals!"""
-
-        # Format navigable unvisited warps (2nd HIGHEST PRIORITY)
-        warps_text = ""
-        if navigable_unvisited_warps:
-            warp_coords = ", ".join([f"({x},{y})→{dest}" for x, y, dest in navigable_unvisited_warps[:5]])
-            warps_text = f"""
-## 🚪 NAVIGABLE UNVISITED WARPS (2nd PRIORITY)
-{len(navigable_unvisited_warps)} unvisited warps: {warp_coords}
-Explore these after all unseen tiles are revealed!"""
-
-        exploration_text = f"""Exploration: {self.map_memory.get_exploration_percentage(1000):.1f}% of estimated map{unseen_text}{warps_text}"""
-
-        context_text = ""
-        if self.context.summary:
-            context_text = f"Context: {self.context.summary}"
-
-        # Context-specific guidance (game_context passed as parameter)
-        context_guidance = ""
-        if game_context == "title":
-            context_guidance = """
-**TITLE SCREEN DETECTED:**
-- Press START or A to begin the game
-- Navigate menus with UP/DOWN, confirm with A
-- Skip dialogue/intro with A or B (hold)"""
-        elif game_context == "dialogue":
-            context_guidance = """
-**DIALOGUE ACTIVE:**
-- Press A to advance dialogue text
-- Press B to try to exit dialogue quickly
-- Read dialogue for important information (items, story progression)"""
-        elif game_context == "battle":
-            context_guidance = """
-**BATTLE MODE:**
-- Choose moves strategically based on type matchups
-- Consider switching Pokemon if at disadvantage
-- Use items (potions, revives) when necessary
-- Press A to select, B to go back in battle menu"""
-        elif game_context == "menu":
-            context_guidance = """
-**MENU OPEN:**
-- Navigate with UP/DOWN/LEFT/RIGHT
-- Confirm with A, cancel with B
-- Check Pokemon status, bag items, or save game
-- Exit menu with B when done"""
-        elif game_context == "overworld":
-            context_guidance = """
-**OVERWORLD EXPLORATION:**
-- Use directional buttons (UP/DOWN/LEFT/RIGHT) to move
-- Press A to interact with NPCs, objects, signs
-- Press START to open menu (only when necessary)
-- Explore systematically to reveal fog-of-war"""
-
-        # GPP-style exploration directive (only for overworld)
-        exploration_directive = ""
-        if game_context == "overworld" and (navigable_unseen_tiles or navigable_unvisited_warps):
-            exploration_directive = """
-### Map Exploration Strategy (CRITICAL)
-YOUR ABSOLUTE HIGHEST PRIORITY **overriding other navigation goals** follows this order:
-1. **Navigable Unseen Tiles:** Move to reveal any unseen tiles (?) adjacent to explored areas
-2. **Navigable Unvisited Warps:** Enter warps (doors/stairs) you haven't visited yet
-3. **Accessible Items:** Once all accessible unvisited warps and unseen tiles have been explored, pick up any accessible discovered items
-4. **Other Goals:** Only pursue other objectives after completing priorities 1-3
-
-**EXCEPTIONS** that allow you to deviate from exploration priorities:
-a) Your primary/secondary goal is immediately achievable within 2-3 turns
-b) NPC/object/item within 5 tile radius you can interact with (excluding warps)
-c) NPC triggers dialogue repeatedly and blocks path to unseen tile
-d) Tile requires Surf/Cut and you lack the move
-e) Box is full, need PC to switch boxes
-f) Just reached city, need to heal at Pokecenter first
-
-**IMPORTANT:** Highly prefer manual movement (UP/DOWN/LEFT/RIGHT) over path tool.
-Move at least 5 steps at a time when possible to save time."""
-
-        return f"""You are playing Pokemon Emerald. Decide the next action.
-
-**Game Context: {game_context.upper()}**
-{context_guidance}
-
-{goals_text}
-
-{exploration_text}
-
-{exploration_directive}
-
-{context_text}
-
-Current State:
-{format_state_for_llm(state, use_json_map=True)}
-
-Recent actions: {', '.join(list(self.recent_actions)[-5:])}
-
-What single button should you press next? Choose from: A, B, UP, DOWN, LEFT, RIGHT, START, SELECT, L, R
-Consider your goals and avoid repeating failed actions.
-
-IMPORTANT RULES:
-- NEVER save the game using the START menu - this disrupts the game flow and is not allowed.
-- Do not open the START menu unless absolutely necessary for gameplay (like checking Pokemon status).
-
-Reply with just the button name."""
-    
-    def _parse_action(self, response: str) -> str:
-        """Parse action from response."""
-        response = response.upper().strip()
-        
-        # Look for valid buttons using word tokenization to avoid substring issues
-        valid_buttons = ["A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT", "L", "R"]
-        
-        # Tokenize the response (split by spaces, commas, periods, etc.)
-        response_clean = response.replace(',', ' ').replace('.', ' ').replace(';', ' ')
-        tokens = response_clean.split()
-        
-        # Check each token for exact match
-        for token in tokens:
-            if token in valid_buttons:
-                return token
-        
-        # If no exact match found, look for buttons in the text more carefully
-        # This handles cases like "Press START" or "Hit the A button"
-        for button in valid_buttons:
-            # Check for word boundaries to avoid "A" matching in "START"
-            if f" {button} " in f" {response} " or response.startswith(f"{button} ") or response.endswith(f" {button}"):
-                return button
-        
-        # Default to exploring if no clear action
-        if self.step_count % 4 == 0:
-            return "UP"
-        elif self.step_count % 4 == 1:
-            return "RIGHT"
-        elif self.step_count % 4 == 2:
-            return "DOWN"
-        else:
-            return "LEFT"
-    
-    def _get_exploration_action(self, state: Dict[str, Any]) -> str:
-        """Get exploration action using LLM to choose direction."""
-        pos = state.get("player_position", {})
-        unexplored = self.map_memory.get_unexplored_neighbors(
-            pos.get("x", 0),
-            pos.get("y", 0)
-        )
-        
-        if not unexplored:
-            return "NONE"
-        
-        # Ask LLM for exploration strategy
-        unexplored_str = ", ".join([f"({x},{y})" for x, y in unexplored[:5]])
-        prompt = f"""You need to explore unexplored areas in Pokemon Emerald.
-
-Current position: ({pos.get('x', 0)}, {pos.get('y', 0)})
-Unexplored neighbors: {unexplored_str}
-Exploration progress: {self.map_memory.get_exploration_percentage(1000):.1f}%
-
-Which direction should you explore? Consider:
-- Unexplored areas
-- Potential for finding items or trainers
-- Efficient exploration patterns
-
-Reply with just one button: UP, DOWN, LEFT, or RIGHT"""
-
-        response = self.vlm_client.get_text_query(prompt, "exploration_dir")
-
-        # Log interaction
-        self.llm_logger.log_interaction(
-            interaction_type="gemini_plays_exploration_action",
-            prompt=prompt,
-            response=response
-        )
-
-        # Parse direction
-        for direction in ["UP", "DOWN", "LEFT", "RIGHT"]:
-            if direction in response.upper():
-                return direction
-        
-        # Fallback to simple heuristic if parsing fails
-        target = unexplored[0]
-        dx = target[0] - pos.get("x", 0)
-        dy = target[1] - pos.get("y", 0)
-        
-        if abs(dx) > abs(dy):
-            return "RIGHT" if dx > 0 else "LEFT"
-        else:
-            return "DOWN" if dy > 0 else "UP"
     
     def _reset_context(self, state: Dict[str, Any]):
         """Reset context with intelligent summarization."""
@@ -1454,5 +1674,19 @@ Reply with just one button: UP, DOWN, LEFT, or RIGHT"""
 
 
 def create_gemini_plays_agent(**kwargs) -> GeminiPlaysAgent:
-    """Factory function to create GeminiPlaysAgent."""
+    """Factory function to create GeminiPlaysAgent with MCP tool support.
+
+    Args:
+        vlm_client: Optional VLM client
+        server_url: MCP server URL (default: "http://localhost:8000")
+        context_reset_interval: Steps before context reset (default: 100)
+        enable_self_critique: Enable self-critique mechanism (default: True)
+        enable_exploration: Enable forced exploration (default: True)
+        enable_meta_tools: Enable meta-tools (default: False)
+        use_mcp_tools: Use MCP tools for actions (default: True)
+        verbose: Detailed logging (default: True)
+
+    Returns:
+        GeminiPlaysAgent instance
+    """
     return GeminiPlaysAgent(**kwargs)

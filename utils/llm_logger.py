@@ -19,14 +19,26 @@ logger = logging.getLogger(__name__)
 class LLMLogger:
     """Logger for all LLM interactions"""
     
-    def __init__(self, log_dir: str = "llm_logs"):
+    def __init__(self, log_dir: str = "llm_logs", session_id: Optional[str] = None):
         """Initialize the LLM logger
         
         Args:
             log_dir: Directory to store log files
+            session_id: Optional session ID. If None, checks environment variable LLM_SESSION_ID.
+                        If still None, generates one from current time.
+                        This ensures consistent logging across processes.
         """
         self.log_dir = log_dir
-        self.session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Check for session_id from environment variable (for multiprocess consistency)
+        if session_id is None:
+            session_id = os.environ.get("LLM_SESSION_ID")
+        
+        # Generate new session_id if still None
+        if session_id is None:
+            session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        self.session_id = session_id
         self.log_file = os.path.join(log_dir, f"llm_log_{self.session_id}.jsonl")
         
         # Ensure log directory exists
@@ -43,13 +55,21 @@ class LLMLogger:
             "total_llm_calls": 0
         }
         
-        # Model pricing (per 1K tokens) - can be updated based on actual pricing
+        # Model pricing (per 1K tokens) - Updated January 2025
         self.pricing = {
+            # OpenAI models
             "gpt-4o": {"prompt": 0.01, "completion": 0.03},
             "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
             "o3-mini": {"prompt": 0.0012, "completion": 0.0048},
-            "gemini-2.5-flash": {"prompt": 0.000315, "completion": 0.00126},
-            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.005},
+
+            # Gemini 2.5 models (standard pricing, not thinking mode)
+            "gemini-2.5-flash": {"prompt": 0.0003, "completion": 0.0006},  # $0.30/$0.60 per 1M
+            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01},      # $1.25/$10 per 1M
+
+            # Gemini 3 models (≤200K context)
+            "gemini-3-pro-preview": {"prompt": 0.002, "completion": 0.012},  # $2/$12 per 1M
+            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012},          # $2/$12 per 1M
+
             "default": {"prompt": 0.001, "completion": 0.002}  # Default pricing
         }
         
@@ -467,7 +487,9 @@ def get_llm_logger() -> LLMLogger:
     """
     global _llm_logger
     if _llm_logger is None:
-        _llm_logger = LLMLogger()
+        # Check for session_id from environment (set by client for multiprocess consistency)
+        session_id = os.environ.get("LLM_SESSION_ID")
+        _llm_logger = LLMLogger(session_id=session_id)
     return _llm_logger
 
 def setup_map_stitcher_checkpoint_integration(memory_reader):
