@@ -450,10 +450,141 @@ class VisionOnlyAgent:
 
     def _execute_function_call_by_name(self, function_name: str, arguments: dict) -> str:
         """Execute a function by name with given arguments and return result as JSON string."""
+
+        # Special handling for reflect tool - use agent's own VLM for analysis
+        if function_name == "reflect":
+            return self._execute_reflect(arguments)
+
         # All tools (including SLAM) now go through MCP adapter for consistency
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
         return json.dumps(result, indent=2)
+
+    def _execute_reflect(self, arguments: dict) -> str:
+        """Execute reflection using agent's own VLM to analyze situation."""
+        try:
+            # Get context from server
+            context_result = self.mcp_adapter.call_tool("reflect", arguments)
+
+            if not context_result.get("success"):
+                return json.dumps({"success": False, "error": context_result.get("error", "Failed to get context")})
+
+            context = context_result.get("context", {})
+
+            # Build reflection prompt
+            situation = context.get("situation", "")
+            current_state = context.get("current_state", {})
+            current_obj = context.get("current_objective", {})
+            progress = context.get("progress", {})
+            history = context.get("recent_history", [])
+
+            # Format history for readability
+            history_text = []
+            for h in history:
+                history_text.append(f"Step {h.get('step')}: [{h.get('action')}] {h.get('action_details')}")
+                if h.get('thinking'):
+                    history_text.append(f"  Thinking: {h.get('thinking')}")
+
+            history_str = "\n".join(history_text)
+
+            # Format objective
+            obj_text = "None"
+            if current_obj.get("objective"):
+                obj = current_obj["objective"]
+                if isinstance(obj, dict):
+                    obj_text = obj.get("description", "Unknown")
+                    if obj.get("navigation_hint"):
+                        obj_text += f"\nHint: {obj['navigation_hint']}"
+                else:
+                    obj_text = str(obj)
+
+            # Vision-only agent doesn't have porymap, but may have SLAM maps
+            slam_section = ""
+            if self.allow_slam:
+                try:
+                    location = current_state.get('location', '')
+                    if location and location != "Unknown":
+                        from pathlib import Path
+                        maps_dir = Path(".pokeagent_cache/maps")
+                        normalized_location = location.title()
+                        safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (' ', '_', '-')).strip()
+                        safe_name = safe_name.replace(' ', '_')
+                        map_file = maps_dir / f"{safe_name}.txt"
+
+                        if map_file.exists():
+                            slam_map = map_file.read_text()
+                            slam_section = f"\n\nSLAM MAP (Agent's mental map):\n{slam_map}\n"
+                except Exception as e:
+                    logger.warning(f"Could not load SLAM map for reflection: {e}")
+
+            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald (VISION-ONLY mode). Provide direct, actionable guidance.
+
+AGENT'S CONCERN:
+{situation}
+
+CURRENT GAME STATE (Vision-Only):
+Location: {current_state.get('location')}
+{current_state.get('state_text', '')}{slam_section}
+
+CURRENT OBJECTIVE:
+Sequence: {current_obj.get('sequence')}
+Objective: {obj_text}
+Status: {'COMPLETE - needs new objectives' if current_obj.get('is_complete') else 'Active'}
+
+PROGRESS:
+- Milestones: {progress.get('milestones_completed', 0)}
+- Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence
+
+RECENT ACTIONS (last 10 steps):
+{history_str}
+
+ANALYZE (vision-only considerations):
+1. Is the agent stuck or repeating actions?
+2. Does the objective match what's visible in the game?
+3. Are there signs of confusion?
+4. Is the agent making progress toward the objective?
+5. What should the agent do next?
+
+PROVIDE (in this exact format):
+
+**ASSESSMENT**:
+[2-3 sentences analyzing what's happening]
+
+**ISSUES**:
+[List specific problems: stuck, wrong objective, confusion, etc.]
+
+**RECOMMENDATIONS**:
+[Numbered list of specific actions to take]
+
+**SHOULD_REALIGN**: [YES or NO - whether to create new objectives]
+
+Be direct and actionable. Focus on what the agent can see and do."""
+
+            logger.info("🤔 Agent performing self-reflection using VLM...")
+
+            # Use agent's own VLM for reflection
+            reflection_response = self.vlm.get_text_query(reflection_prompt, "Self_Reflection")
+
+            logger.info(f"✅ Self-reflection complete ({len(reflection_response)} chars)")
+
+            return json.dumps({
+                "success": True,
+                "reflection": reflection_response,
+                "context_analyzed": {
+                    "steps_reviewed": len(history),
+                    "location": current_state.get('location'),
+                    "objective_status": current_obj.get('status')
+                }
+            }, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in reflect execution: {e}")
+            import traceback
+            traceback.print_exc()
+            return json.dumps({
+                "success": False,
+                "error": f"Reflection failed: {str(e)}"
+            })
 
     def _convert_protobuf_args(self, proto_args) -> dict:
         """Convert protobuf arguments to JSON-serializable Python types."""
@@ -1178,6 +1309,7 @@ AVAILABLE TOOLS:
 
 🎯 **OBJECTIVE MANAGEMENT**:
 - create_direct_objectives(objectives, reasoning) - Create next 3 objectives when sequences complete
+- reflect(situation) - Use when stuck or uncertain or when repeating yourself. Analyzes recent actions and provides strategic guidance
 
 ** MOVEMENT **:
 - Use press_buttons with directional buttons: UP, DOWN, LEFT, RIGHT
