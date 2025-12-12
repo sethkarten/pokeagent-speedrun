@@ -15,6 +15,15 @@ import requests
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
 import numpy as np
+import traceback
+
+import PIL.Image as PILImage
+import io
+import base64
+import json as json_module
+
+import google.generativeai.types as genai_types
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -23,6 +32,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
 from utils.vlm import VLM
+from utils.run_data_manager import get_run_data_manager
+from utils.prompt_optimizer import create_prompt_optimizer
+from utils.run_data_manager import get_run_data_manager
+from utils.run_data_manager import initialize_run_data_manager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -169,14 +182,11 @@ class AutonomousCLIAgent:
         print(f"✅ System instructions loaded ({len(self.system_instructions)} chars)")
 
         # Initialize LLM logger
-        from utils.llm_logger import get_llm_logger
         self.llm_logger = get_llm_logger()
         
         # Initialize prompt optimizer if enabled
         self.prompt_optimizer = None
         if self.optimization_enabled:
-            from utils.run_data_manager import get_run_data_manager
-            from utils.prompt_optimizer import create_prompt_optimizer
             
             run_manager = get_run_data_manager()
             if run_manager:
@@ -244,7 +254,6 @@ class AutonomousCLIAgent:
         """Create Gemini function declarations for ALL MCP tools (Pokemon + Baseline) - ALL ENABLED."""
 
         # Use Gemini's declaration format with proper types
-        import google.generativeai.types as genai_types
 
         tools = [
             # ============================================================
@@ -742,7 +751,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
         except Exception as e:
             logger.error(f"Error in reflect execution: {e}")
-            import traceback
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
@@ -818,7 +826,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                 logger.debug(f"   ✅ Key '{key}' converted successfully: type={type(converted).__name__}")
             except Exception as e:
                 logger.error(f"   ❌ Error converting key '{key}': {e}")
-                import traceback
                 logger.error(f"   Traceback: {traceback.format_exc()}")
                 # Try to include the raw value as fallback
                 arguments[key] = str(value)
@@ -874,7 +881,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             logger.error(f"❌ Failed to parse function arguments: {e}")
             logger.error(f"   Function: {function_name}")
             logger.error(f"   Args type: {type(function_call.args) if hasattr(function_call, 'args') else 'NO ARGS'}")
-            import traceback
             logger.error(f"   Traceback: {traceback.format_exc()}")
             return json.dumps({"success": False, "error": f"Invalid arguments: {e}"})
 
@@ -1023,18 +1029,15 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         """
         try:
             # Capture pre-state for trajectory logging
-            from utils.run_data_manager import get_run_data_manager
             run_manager = get_run_data_manager()
             
             # DEBUG: Log run_manager availability
             if not run_manager:
                 logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None - trajectory logging will be skipped")
                 # Try to initialize if not available
-                import os
                 run_id = os.environ.get("RUN_DATA_ID")
                 if run_id:
                     logger.info(f"🔍 [DEBUG] Attempting to initialize run_manager with run_id: {run_id}")
-                    from utils.run_data_manager import initialize_run_data_manager
                     run_manager = initialize_run_data_manager(run_id=run_id)
                     if run_manager:
                         logger.info(f"🔍 [DEBUG] Successfully initialized run_manager")
@@ -1051,7 +1054,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                 try:
                     game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
                     if isinstance(game_state_result, str):
-                        import json
                         game_state_result = json.loads(game_state_result)
                     if game_state_result.get("success"):
                         raw_state = game_state_result.get("raw_state", {})
@@ -1061,7 +1063,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                         logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: get_game_state returned success=False")
                 except Exception as e:
                     logger.error(f"🔍 [DEBUG] Step {self.step_count + 1}: Could not capture pre-state: {e}")
-                    import traceback
                     logger.error(traceback.format_exc())
             else:
                 logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None, skipping pre_state capture")
@@ -1081,13 +1082,8 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             start_time = time.time()
             vlm_call_start = time.time()
             try:
-                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
                 if screenshot_b64:
-                    import PIL.Image as PILImage
-                    import io
-                    import base64
-
                     # Decode base64 to image
                     image_data = base64.b64decode(screenshot_b64)
                     image = PILImage.open(io.BytesIO(image_data))
@@ -1218,7 +1214,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                                     except Exception as e:
                                         logger.error(f"      ⚠️ Could not parse function call args: {e}")
                                         logger.error(f"      Args type: {type(fc.args) if hasattr(fc, 'args') else 'NO ARGS ATTR'}")
-                                        import traceback
                                         logger.error(f"      Traceback: {traceback.format_exc()}")
                                 logger.info(f"   Part {i}: {', '.join(part_info) if part_info else 'empty'}")
                         else:
@@ -1243,7 +1238,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                 logger.error(f"❌ VLM call failed after {vlm_duration:.1f}s")
                 logger.error(f"   Error type: {error_type}")
                 logger.error(f"   Error message: {error_msg[:500]}")
-                import traceback
                 traceback.print_exc()
                 return False, f"VLM API error ({error_type}) after {vlm_duration:.1f}s: {error_msg[:200]}"
 
@@ -1303,7 +1297,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                     self._wait_for_actions_complete()
                     final_pos = None
                     final_state_result = self._execute_function_call_by_name("get_game_state", {})
-                    import json as json_module
                     final_state_data = json_module.loads(final_state_result)
                     if final_state_data.get("success"):
                         player_pos = final_state_data.get("player_position", {})
@@ -1404,17 +1397,38 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
         except Exception as e:
             logger.error(f"❌ Error in agent step: {e}")
-            import traceback
             traceback.print_exc()
             return False, str(e)
 
     def _wait_for_actions_complete(self, timeout: int = 30) -> None:
-        """Wait for all queued actions to complete before proceeding."""
-        import requests
+        """Wait for all queued actions to complete before proceeding.
 
-        logger.info("⏳ Waiting for actions to complete...")
+        Optimization: For single actions, just wait a fixed time instead of polling.
+        This avoids timeout errors when the queue_status endpoint is slow.
+        """
+        # First, check initial queue length
+        try:
+            response = requests.get(f"{self.server_url}/queue_status", timeout=2)
+            if response.status_code == 200:
+                status = response.json()
+                initial_queue_len = status.get("queue_length", 0)
+
+                # If only 1 action or empty queue, just wait a fixed time
+                if initial_queue_len <= 1:
+                    logger.info(f"⏳ Single action queued, waiting 1.5s...")
+                    time.sleep(1.5)  # Fixed wait for single action
+                    logger.info("✅ Action completed (fixed wait)")
+                    return
+
+                logger.info(f"⏳ Waiting for {initial_queue_len} actions to complete...")
+        except Exception as e:
+            # If we can't check queue, fall back to fixed wait
+            logger.debug(f"Could not check queue length: {e}, using fixed wait")
+            time.sleep(1.5)
+            return
+
+        # For multiple actions, poll the queue
         start_time = time.time()
-
         while time.time() - start_time < timeout:
             try:
                 response = requests.get(f"{self.server_url}/queue_status", timeout=2)
@@ -1433,7 +1447,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             except Exception as e:
                 logger.warning(f"Error checking queue status: {e}")
                 time.sleep(0.5)
-        time.sleep(1)
 
         logger.warning(f"⚠️ Timeout waiting for actions to complete after {timeout}s")
 
@@ -1454,7 +1467,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
     def _store_function_result_for_context(self, function_name: str, result_json: str):
         """Store function result to include in next step's context."""
-        import time
         self.recent_function_results.append({
             "function_name": function_name,
             "result": result_json,
@@ -1506,7 +1518,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         """
         
         # Parse game state to extract relevant information
-        import json as json_module
         try:
             game_state_data = json_module.loads(game_state_result)
         except:
@@ -1651,7 +1662,6 @@ Step {step_count}"""
         """Build an autonomous prompt that emphasizes creating your own objectives."""
 
         # Parse game state to extract relevant information
-        import json as json_module
         try:
             game_state_data = json_module.loads(game_state_result)
         except:
@@ -2020,7 +2030,12 @@ Step {step_count}"""
         return '\n'.join(filtered_lines)
 
     def _is_black_frame(self, image) -> bool:
-        """Check if frame is a black screen (transition)"""
+        """Check if frame is a black screen (transition)
+
+        Uses both mean brightness AND variance to avoid false positives in caves.
+        A true black transition frame has very low brightness AND very low variance.
+        A cave scene has low brightness but higher variance (lit areas vs dark areas).
+        """
         try:
             if hasattr(image, 'save'):  # PIL Image
                 frame_array = np.array(image)
@@ -2028,11 +2043,19 @@ Step {step_count}"""
                 frame_array = image
 
             mean_brightness = frame_array.mean()
-            threshold = 10
-            is_black = mean_brightness < threshold
+            std_brightness = frame_array.std()
+
+            # True black frame: very low brightness AND very low variance
+            brightness_threshold = 10
+            variance_threshold = 5  # Low variance = uniform darkness
+
+            is_black = (mean_brightness < brightness_threshold and
+                       std_brightness < variance_threshold)
 
             if is_black:
-                logger.debug(f"Black frame detected: mean brightness = {mean_brightness:.2f} < {threshold}")
+                logger.debug(f"Black frame detected: mean={mean_brightness:.2f}, std={std_brightness:.2f}")
+            elif mean_brightness < brightness_threshold:
+                logger.debug(f"Dark frame (cave?) but not black: mean={mean_brightness:.2f}, std={std_brightness:.2f}")
 
             return is_black
         except Exception as e:
@@ -2081,7 +2104,6 @@ Step {step_count}"""
             try:
                 game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
                 if isinstance(game_state_result, str):
-                    import json
                     game_state_result = json.loads(game_state_result)
                 if game_state_result.get("success"):
                     raw_state = game_state_result.get("raw_state", {})
@@ -2134,7 +2156,6 @@ Step {step_count}"""
             logger.info(f"🔍 [DEBUG] Successfully logged trajectory for step {step_num}")
         except Exception as e:
             logger.error(f"🔍 [DEBUG] Failed to log trajectory at step {step_num}: {e}")
-            import traceback
             logger.error(traceback.format_exc())
 
     def _format_action_history(self) -> str:
@@ -2215,7 +2236,6 @@ Step {step_count}"""
                 game_state_result = self._execute_function_call_by_name("get_game_state", {})
 
                 # Parse for screenshot
-                import json as json_module
                 try:
                     game_state_data = json_module.loads(game_state_result)
                     screenshot_b64 = game_state_data.get("screenshot_base64")
@@ -2277,7 +2297,6 @@ Step {step_count}"""
             return 0
         except Exception as e:
             logger.error(f"\n❌ Fatal error: {e}")
-            import traceback
             traceback.print_exc()
             return 1
 
@@ -2307,7 +2326,6 @@ Step {step_count}"""
                 logger.error(f"   finish_reason type: {type(finish_reason)}")
                 # Try to get more info about the finish reason
                 try:
-                    import google.generativeai.types as genai_types
                     if hasattr(genai_types, 'FinishReason'):
                         logger.error(f"   FinishReason enum values: {[e.name for e in genai_types.FinishReason]}")
                 except:
@@ -2369,13 +2387,11 @@ Step {step_count}"""
                         except Exception as e:
                             logger.error(f"      ❌ Failed to convert args: {e}")
                             logger.error(f"      Args raw value: {str(function_call.args)[:500]}")
-                            import traceback
                             logger.error(f"      Traceback: {traceback.format_exc()}")
                     else:
                         logger.warning(f"      ⚠️ Function call has no 'args' attribute")
                 except Exception as e:
                     logger.error(f"      ❌ Error examining function call: {e}")
-                    import traceback
                     logger.error(f"      Traceback: {traceback.format_exc()}")
 
                 # Execute the function
@@ -2385,7 +2401,6 @@ Step {step_count}"""
                     logger.info(f"📥 Function result: {result_str[:200]}...")
                 except Exception as e:
                     logger.error(f"❌ Error executing function call: {e}")
-                    import traceback
                     logger.error(f"   Traceback: {traceback.format_exc()}")
                     # Still try to track the failed call
                     try:

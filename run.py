@@ -180,9 +180,9 @@ def main():
                        help="VLM backend (openai, gemini, local, openrouter)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
-    parser.add_argument("--scaffold", type=str, default="fourmodule",
+    parser.add_argument("--scaffold", type=str, default="my_cli_agent",
                        choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli", "my_cli_agent", "autonomous_cli", "vision_only"],
-                       help="Agent scaffold: fourmodule (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), my_cli_agent (custom CLI agent), autonomous_cli (autonomous agent with all tools), or vision_only (vision-only agent without map/pathfinding)")
+                       help="Agent scaffold: my_cli_agent (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), my_cli_agent (custom CLI agent), autonomous_cli (autonomous agent with all tools), or vision_only (vision-only agent without map/pathfinding)")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
