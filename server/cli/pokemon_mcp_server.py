@@ -321,10 +321,36 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
         buttons = pathfinder.find_path(start, goal, state, variance=variance_level)
 
         if not buttons:
+            # Provide detailed error message about why path failed
+            error_msg = f"No path found from ({start_x}, {start_y}) to ({x}, {y})"
+
+            # Check if target is blocked
+            map_data = state.get('map', {}).get('porymap', {})
+            if map_data.get('grid'):
+                grid = map_data['grid']
+                if 0 <= y < len(grid):
+                    row = grid[y]
+                    if isinstance(row, (list, str)) and 0 <= x < len(row):
+                        cell = row[x] if isinstance(row, str) else row[x]
+                        if cell == '#':
+                            error_msg += " - Target is blocked by a wall or obstacle"
+                        elif cell == 'W':
+                            error_msg += " - Target requires Surf (water)"
+                        elif cell in ['X', '?']:
+                            error_msg += " - Target is out of bounds or unexplored"
+                        else:
+                            error_msg += f" - Target tile '{cell}' may be unreachable from current position"
+
+            # Check distance to see if it's just too far
+            manhattan_dist = abs(x - start_x) + abs(y - start_y)
+            if manhattan_dist > 100:
+                error_msg += f" (distance: {manhattan_dist} tiles - may be too far)"
+
             return {
                 "success": False,
-                "error": "No path found to target location",
-                "target": f"({x}, {y})"
+                "error": error_msg,
+                "target": f"({x}, {y})",
+                "reason": "unreachable"
             }
 
         nav_reason_text = f"Navigating from ({start_x}, {start_y}) to ({x}, {y})"

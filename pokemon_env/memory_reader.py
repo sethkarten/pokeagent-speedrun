@@ -1034,12 +1034,21 @@ class PokemonEmeraldReader:
     def is_in_title_sequence(self) -> bool:
         """Detect if we're in title sequence/intro before overworld"""
         try:
+            # PRIORITY CHECK: if player has a party, definitely not in title
+            # This must be checked FIRST before player name, as name can sometimes read as null
+            try:
+                party_size = self.read_party_size()
+                if party_size > 0:
+                    return False  # Not in title sequence
+            except:
+                pass
+
             # Check if player name is set - if not, likely in title/intro
             player_name = self.read_player_name()
             if not player_name or player_name.strip() == '':
                 return True
-                
-            
+
+
             # Check if we have valid SaveBlock pointers
             try:
                 saveblock1_ptr = self._read_u32(self.addresses.SAVE_BLOCK1_PTR)
@@ -1084,14 +1093,6 @@ class PokemonEmeraldReader:
             if map_id in early_game_maps or (0x0100 <= map_id <= 0x0104):
                 return False  # Not in title sequence, in early game
 
-            # Additional check: if player has a party, definitely not in title
-            try:
-                party_size = self.read_party_size()
-                if party_size > 0:
-                    return False  # Not in title sequence
-            except:
-                pass
-                
             return False
             
         except Exception:

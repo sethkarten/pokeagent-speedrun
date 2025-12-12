@@ -390,7 +390,7 @@ class MyCLIAgent:
             },
             {
                 "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() and get_progress_summary() to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition at a medium level of granularity (not too specific like "walk_left_to_oldale_town" but not too vague either like "complete_route_102"). This function will also increment the objective index to the first new objective created.",
+                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() and get_progress_summary() to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition at a medium level of granularity (not too specific like \"walk_left_to_oldale_town\" but not too vague either like \"complete_route_102\"). This function will also increment the objective index to the first new objective created.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -1348,12 +1348,36 @@ class MyCLIAgent:
             return False, str(e)
 
     def _wait_for_actions_complete(self, timeout: int = 30) -> None:
-        """Wait for all queued actions to complete before proceeding."""
+        """Wait for all queued actions to complete before proceeding.
+
+        Optimization: For single actions, just wait a fixed time instead of polling.
+        This avoids timeout errors when the queue_status endpoint is slow.
+        """
         import requests
 
-        logger.info("⏳ Waiting for actions to complete...")
-        start_time = time.time()
+        # First, check initial queue length
+        try:
+            response = requests.get(f"{self.server_url}/queue_status", timeout=2)
+            if response.status_code == 200:
+                status = response.json()
+                initial_queue_len = status.get("queue_length", 0)
 
+                # If only 1 action or empty queue, just wait a fixed time
+                if initial_queue_len <= 1:
+                    logger.info(f"⏳ Single action queued, waiting 1.5s...")
+                    time.sleep(1.5)  # Fixed wait for single action
+                    logger.info("✅ Action completed (fixed wait)")
+                    return
+
+                logger.info(f"⏳ Waiting for {initial_queue_len} actions to complete...")
+        except Exception as e:
+            # If we can't check queue, fall back to fixed wait
+            logger.debug(f"Could not check queue length: {e}, using fixed wait")
+            time.sleep(1.5)
+            return
+
+        # For multiple actions, poll the queue
+        start_time = time.time()
         while time.time() - start_time < timeout:
             try:
                 response = requests.get(f"{self.server_url}/queue_status", timeout=2)
@@ -1372,7 +1396,6 @@ class MyCLIAgent:
             except Exception as e:
                 logger.warning(f"Error checking queue status: {e}")
                 time.sleep(0.5)
-        time.sleep(1)
 
         logger.warning(f"⚠️ Timeout waiting for actions to complete after {timeout}s")
 
@@ -1932,24 +1955,33 @@ Step {step_count}"""
         return '\n'.join(filtered_lines)
 
     def _is_black_frame(self, image) -> bool:
-        """Check if frame is a black screen (transition)"""
-        try:
+        """Check if frame is a black screen (transition)
 
+        Uses both mean brightness AND variance to avoid false positives in caves.
+        A true black transition frame has very low brightness AND very low variance.
+        A cave scene has low brightness but higher variance (lit areas vs dark areas).
+        """
+        try:
             # Convert PIL Image to numpy array if needed
             if hasattr(image, 'save'):  # PIL Image
                 frame_array = np.array(image)
             else:
                 frame_array = image
 
-            # Calculate mean brightness
             mean_brightness = frame_array.mean()
+            std_brightness = frame_array.std()
 
-            # If mean brightness is very low, it's likely a black frame
-            threshold = 10  # Very dark threshold
-            is_black = mean_brightness < threshold
+            # True black frame: very low brightness AND very low variance
+            brightness_threshold = 10
+            variance_threshold = 5  # Low variance = uniform darkness
+
+            is_black = (mean_brightness < brightness_threshold and
+                       std_brightness < variance_threshold)
 
             if is_black:
-                logger.debug(f"Black frame detected: mean brightness = {mean_brightness:.2f} < {threshold}")
+                logger.debug(f"Black frame detected: mean={mean_brightness:.2f}, std={std_brightness:.2f}")
+            elif mean_brightness < brightness_threshold:
+                logger.debug(f"Dark frame (cave?) but not black: mean={mean_brightness:.2f}, std={std_brightness:.2f}")
 
             return is_black
         except Exception as e:

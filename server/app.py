@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from urllib.parse import quote_plus
 
 from typing import Any, Dict, List, Optional
+import hashlib
 
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -76,7 +77,7 @@ direct_objectives_manager = None
 current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
-fps = 80
+fps = 100
 
 # Performance monitoring
 last_fps_log = time.time()
@@ -103,6 +104,11 @@ CACHE_DIR = ".pokeagent_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 FRAME_CACHE_FILE = os.path.join(CACHE_DIR, "frame_cache.json")
 frame_cache_counter = 0
+frame_cache_skip_frames = 30  # Only update cache every 30 frames (4x/sec at 120 FPS)
+
+# Map stitcher performance toggle
+# Set to False when using ground truth porymap data to avoid expensive updates
+ENABLE_MAP_STITCHER = False  # Disabled - using porymap ground truth instead
 
 # Server runs headless - display handled by client
 
@@ -148,12 +154,23 @@ def init_video_recording(record_enabled=False):
         video_writer = None
 
 def update_frame_cache(screenshot):
-    """Update the frame cache file for the separate frame server"""
-    global frame_cache_counter, FRAME_CACHE_FILE
-    
+    """Update the frame cache file for the separate frame server
+
+    Performance optimization: Only update cache every N frames to reduce I/O overhead.
+    At 120 FPS, updating every 30 frames = 4 updates/sec instead of 120/sec.
+    """
+    global frame_cache_counter, FRAME_CACHE_FILE, frame_cache_skip_frames
+
     if screenshot is None:
         return
-        
+
+    # Increment counter on every call
+    frame_cache_counter += 1
+
+    # Only update cache file every N frames (skip intermediate frames)
+    if frame_cache_counter % frame_cache_skip_frames != 0:
+        return
+
     try:
         # Convert screenshot to base64
         if hasattr(screenshot, 'save'):  # PIL image
@@ -167,23 +184,21 @@ def update_frame_cache(screenshot):
             img_str = base64.b64encode(buffer.getvalue()).decode()
         else:
             return
-            
-        frame_cache_counter += 1
-        
+
         # Write to cache file atomically
         cache_data = {
             "frame_data": img_str,
             "frame_counter": frame_cache_counter,
             "timestamp": time.time()
         }
-        
+
         # Write to temporary file first, then move (atomic operation)
         temp_file = FRAME_CACHE_FILE + ".tmp"
         with open(temp_file, 'w') as f:
             json.dump(cache_data, f)
         os.rename(temp_file, FRAME_CACHE_FILE)
-        
-    except Exception as e:
+
+    except Exception:
         pass  # Silently handle cache write errors
 
 def record_frame(screenshot):
@@ -217,7 +232,6 @@ def record_frame(screenshot):
             video_writer.write(frame_bgr)
             
     except Exception as e:
-        import logging
         logger = logging.getLogger(__name__)
         logger.debug(f"Video recording frame error: {e}")
 
@@ -434,7 +448,6 @@ def setup_environment(skip_initial_state=False):
                 initial_state = env.get_comprehensive_state()
                 
                 # Create state hash
-                import hashlib
                 state_str = str(initial_state)
                 state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
                 
@@ -513,54 +526,54 @@ def step_environment(actions_pressed):
                 
             # Update map stitcher on position changes (lightweight approach)
             # This ensures map data stays current as player moves
-            if hasattr(env, 'memory_reader') and env.memory_reader:
+            # DISABLED: Using porymap ground truth instead for better performance
+            if ENABLE_MAP_STITCHER and hasattr(env, 'memory_reader') and env.memory_reader:
                 try:
                     # Check if player position has changed
                     should_update = False
-                    
+
                     # Get current player coordinates and map info
                     current_coords = env.memory_reader.read_coordinates()
                     current_map_bank = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_BANK)
                     current_map_number = env.memory_reader._read_u8(env.memory_reader.addresses.MAP_NUMBER)
                     current_map_info = (current_map_bank, current_map_number)
-                    
+
                     # Initialize tracking variables if needed
                     if not hasattr(env, '_last_player_coords'):
                         env._last_player_coords = None
                         env._last_map_info = None
-                    
+
                     # Check for position changes
                     if current_coords != env._last_player_coords or current_map_info != env._last_map_info:
                         should_update = True
                         env._last_player_coords = current_coords
                         env._last_map_info = current_map_info
-                        print(f"📍 Position change detected: {current_coords}, map: {current_map_info}")
+                        logger.debug(f"Position change detected: {current_coords}, map: {current_map_info}")
                         logger.debug(f"Map stitcher update triggered by position change: {current_coords}, map: {current_map_info}")
-                    
+
                     # Always update on area transitions (already detected above)
                     if hasattr(env.memory_reader, '_area_transition_detected') and env.memory_reader._area_transition_detected:
                         should_update = True
                         env.memory_reader._area_transition_detected = False  # Reset flag
                         logger.debug("Map stitcher update triggered by area transition")
-                    
+
                     # Update map stitcher directly when position changes
                     if should_update:
                         # @TODO should do location change warps here too
-                        print(f"🗺️ Triggering map stitcher update for position change")
+                        logger.debug("Triggering map stitcher update for position change")
                         # Call map stitcher update directly without full map reading
                         tiles = env.memory_reader.read_map_around_player(radius=7)
                         if tiles:
-                            print(f"🗺️ Got {len(tiles)} tiles, updating map stitcher")
+                            logger.debug(f"Got {len(tiles)} tiles, updating map stitcher")
                             state = {"map": {}}  # Basic state for stitcher
                             env.memory_reader._update_map_stitcher(tiles, state)
                             logger.debug("Map stitcher updated for position change")
-                            print(f"✅ Map stitcher update completed")
+                            logger.debug("Map stitcher update completed")
                         else:
-                            print(f"❌ No tiles found for map stitcher update")
-                        
+                            logger.debug("No tiles found for map stitcher update")
+
                 except Exception as e:
                     logger.error(f"Failed to update map stitcher during movement: {e}")
-                    print(f"❌ Map stitcher update failed: {e}")
     except Exception as e:
         logger.warning(f"Error updating screenshot: {e}")
 
@@ -835,9 +848,9 @@ async def take_action(request: ActionRequest):
             
             # Track button presses for recent actions display with position tracking
             current_time = time.time()
-            
-            # Get current player position
-            current_state = env.get_comprehensive_state()
+
+            # Get current player position (use cached state - 100ms cache in emulator)
+            current_state = env.get_comprehensive_state()  # Already cached internally
             player_data = current_state.get('player', {})
             position = player_data.get('position', {})
             location = player_data.get('location', 'Unknown')
@@ -1063,6 +1076,32 @@ async def get_comprehensive_state():
                 logger.debug("Using visual_map generated by memory_reader")
                 state["map"]["map_source"] = "memory_reader"
                 # Keep the visual_map as-is
+            elif not ENABLE_MAP_STITCHER and current_location and current_location != "Unknown":
+                # PRIORITY 3: Use porymap ground truth data when map stitcher is disabled
+                try:
+                    from utils.map_formatter import format_map_for_llm
+
+                    # Get raw tiles from state
+                    raw_tiles = state.get("map", {}).get("tiles")
+                    player_pos_dict = state.get("player", {}).get("position", {})
+                    player_facing = state.get("player", {}).get("facing", "South")
+
+                    if raw_tiles:
+                        # Generate visual map using ground truth tiles
+                        visual_map = format_map_for_llm(
+                            raw_tiles=raw_tiles,
+                            player_facing=player_facing,
+                            npcs=None,
+                            player_coords=player_pos_dict,
+                            location_name=current_location
+                        )
+
+                        if visual_map and visual_map != "No map data available":
+                            state["map"]["visual_map"] = visual_map
+                            state["map"]["map_source"] = "porymap_ground_truth"
+                            logger.debug(f"Generated visual_map from porymap ground truth for {current_location}")
+                except Exception as e:
+                    logger.error(f"Failed to generate visual_map from porymap: {e}")
             elif map_stitcher:
                 # Generate visual map if not already present
                 state["map"]["map_source"] = "map_stitcher"
@@ -1385,16 +1424,18 @@ async def stream_agent_thinking():
                     
                     new_interactions = []
                     try:
-                        # Read LLM log files directly (same as working /agent endpoint)
+                        # PERFORMANCE: Only glob once to find latest file, then read only new lines
+                        # Reduced from reading all lines from 2 files every 500ms
                         log_files = sorted(glob.glob("llm_logs/llm_log_*.jsonl"))
-                        
-                        # Check all recent log files for new entries
-                        for log_file in log_files[-2:]:  # Check last 2 files to catch session changes
+
+                        # Only check the most recent log file (optimization)
+                        if log_files:
+                            log_file = log_files[-1]
                             if os.path.exists(log_file):
                                 with open(log_file, 'r', encoding='utf-8') as f:
                                     lines = f.readlines()
-                                    # Check all lines, not just last 5
-                                    for line in lines:
+                                    # Only check last 10 lines for new entries (performance optimization)
+                                    for line in lines[-10:]:
                                         try:
                                             entry = json.loads(line.strip())
                                             if entry.get("type") == "interaction":
@@ -1438,8 +1479,8 @@ async def stream_agent_thinking():
                     elif heartbeat_counter % 10 == 0:
                         yield f"data: {json.dumps({'heartbeat': True, 'timestamp': time.time(), 'step': current_step})}\n\n"
                     
-                    # Wait before checking again
-                    await asyncio.sleep(0.5)
+                    # Wait before checking again (increased from 500ms to 2s for better performance)
+                    await asyncio.sleep(2.0)
                     
                 except Exception as e:
                     logger.error(f"SSE: Error in stream loop: {e}")
@@ -1926,6 +1967,8 @@ async def mcp_get_game_state():
                         direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                     elif direct_objectives_sequence == "autonomous_objective_creation":
                         direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                    elif direct_objectives_sequence == "full_game":
+                        direct_objectives_manager.load_full_game_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
             
@@ -2078,6 +2121,8 @@ async def mcp_complete_direct_objective(request: dict):
                     direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 elif direct_objectives_sequence == "autonomous_objective_creation":
                     direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                elif direct_objectives_sequence == "full_game":
+                    direct_objectives_manager.load_full_game_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
         

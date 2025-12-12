@@ -8,27 +8,16 @@ This module contains predefined objective sequences for critical game phases
 where the agent needs to follow a specific, well-defined path.
 """
 
-from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import logging
 import json
 import os
 
+from agent.objective_types import DirectObjective
+
 logger = logging.getLogger(__name__)
 
-@dataclass
-class DirectObjective:
-    """Single direct objective with specific guidance"""
-    id: str
-    description: str
-    action_type: str  # "move", "interact", "battle", "wait", "navigate"
-    target_location: Optional[str] = None
-    target_coords: Optional[tuple] = None
-    navigation_hint: Optional[str] = None  # General direction/approach hint
-    completion_condition: Optional[str] = None  # How to verify completion
-    priority: int = 1  # 1 = highest priority
-    completed: bool = False
 
 class DirectObjectiveManager:
     """Manages hardcoded objective sequences for specific game states"""
@@ -2883,7 +2872,70 @@ class DirectObjectiveManager:
                 logger.warning(f"Failed to save initial completed objectives: {e}")
         
         logger.info(f"Loaded autonomous_objective_creation sequence with {len(self.current_sequence)} objective, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
-        
+
+    def load_full_game_sequence(self, start_index: int = 0, run_dir: Optional[str] = None):
+        """Load the complete Pokemon Emerald full game sequence (244 objectives).
+
+        This sequence covers the entire game from tutorial through Elite Four and postgame content.
+        Imported from all_obj.py which contains the comprehensive objective list.
+
+        Args:
+            start_index: Index to start from (for resuming from checkpoints)
+            run_dir: Optional run directory for saving progress
+        """
+        self.sequence_name = "full_game"
+
+        # Import ALL_OBJECTIVES from all_obj.py
+        from agent.all_obj import ALL_OBJECTIVES
+
+        self.current_sequence = ALL_OBJECTIVES
+        self.current_index = start_index
+
+        # Load checkpoint if exists
+        initial_completed = []
+        if run_dir:
+            checkpoint_file = os.path.join(run_dir, "direct_objectives_progress.json")
+            if os.path.exists(checkpoint_file):
+                try:
+                    with open(checkpoint_file, 'r') as f:
+                        checkpoint_data = json.load(f)
+
+                    # Restore progress
+                    completed_ids = checkpoint_data.get("completed_objectives", [])
+                    last_index = checkpoint_data.get("last_completed_index", -1)
+
+                    # Mark objectives as completed
+                    for obj in self.current_sequence:
+                        if obj.id in completed_ids:
+                            obj.completed = True
+                            initial_completed.append(obj.id)
+
+                    # Set current index to last completed + 1
+                    if last_index >= 0:
+                        self.current_index = min(last_index + 1, len(self.current_sequence) - 1)
+
+                    logger.info(f"📁 Loaded checkpoint: {len(initial_completed)} objectives completed, resuming from index {self.current_index}")
+                except Exception as e:
+                    logger.warning(f"Failed to load checkpoint: {e}")
+
+            # Save initial state
+            try:
+                filename = os.path.join(run_dir, "direct_objectives_initial.json")
+                history = {
+                    "sequence_name": self.sequence_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "start_index": start_index,
+                    "total_objectives": len(self.current_sequence),
+                    "initial_completed": initial_completed
+                }
+                with open(filename, 'w') as f:
+                    json.dump(history, f, indent=2)
+                logger.info(f"💾 Saved initial state to {filename}")
+            except Exception as e:
+                logger.warning(f"Failed to save initial state: {e}")
+
+        logger.info(f"🎮 Loaded full_game sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
+
     def get_current_objective(self) -> Optional[DirectObjective]:
         """Get the current objective in the sequence"""
         if self.current_index < len(self.current_sequence):
