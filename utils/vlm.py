@@ -1376,8 +1376,6 @@ class GeminiBackend(VLMBackend):
         Handles 429 rate limit errors with exponential backoff.
         Uses 180 second timeout for slow preview models like gemini-3-pro-preview.
         """
-        import time
-        import random
 
         # Use longer timeout for preview models which are much slower
         timeout = 180 if 'preview' in self.model_name or '3-pro' in self.model_name else 60

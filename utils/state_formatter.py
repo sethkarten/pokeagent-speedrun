@@ -1238,8 +1238,11 @@ ROM_TO_PORYMAP_MAP = {
     "FORTREE CITY POKEMON CENTER 1F": "FortreeCity_PokemonCenter_1F",  # 100.0% match, verified
     "FORTREE CITY POKEMON CENTER 2F": "FortreeCity_PokemonCenter_2F",  # 100.0% match, verified
     "GRANITE CAVE 1F": "GraniteCave_1F",  # 100.0% match, verified
+    "GRANITE CAVE 1F ALT": "GraniteCave_1F",  # Map ID 0x1807 - same layout as 0x1907
     "GRANITE CAVE B1F": "GraniteCave_B1F",  # 100.0% match, verified
+    "GRANITE CAVE B1F ALT": "GraniteCave_B1F",  # Map ID 0x1808 - same layout as 0x1908
     "GRANITE CAVE B2F": "GraniteCave_B2F",  # 100.0% match, verified
+    "GRANITE CAVE B2F ALT": "GraniteCave_B2F",  # Map ID 0x1809 - same layout as 0x1909
     "GRANITE CAVE STEVENS ROOM": "GraniteCave_StevensRoom",  # 100.0% match, verified
     "ISLAND CAVE": "IslandCave",  # 100.0% match, verified
     "JAGGED PASS": "JaggedPass",  # 100.0% match, verified

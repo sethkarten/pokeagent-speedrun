@@ -652,6 +652,38 @@ class Pathfinder:
         #         logger.debug(f"Could not check elevation: {e}")
         # ========================================================================
         
+        # Check if source is a directional tile (slide/ledge) - can only move in allowed direction
+        # Slides and ledges are one-way: you can only exit in the direction they point
+        if from_symbol == '→':  # SLIDE/JUMP_EAST
+            # Can only move east (dx > 0) from this tile
+            if dx <= 0:
+                return False
+        elif from_symbol == '←':  # SLIDE/JUMP_WEST
+            # Can only move west (dx < 0) from this tile
+            if dx >= 0:
+                return False
+        elif from_symbol == '↑':  # SLIDE/JUMP_NORTH
+            # Can only move north (dy < 0) from this tile
+            if dy >= 0:
+                return False
+        elif from_symbol == '↓':  # SLIDE/JUMP_SOUTH (mudslides in caves)
+            # Can only move south (dy > 0) from this tile
+            if dy <= 0:
+                return False
+        elif from_symbol in ['↗', '↖', '↘', '↙']:  # Diagonal slides/ledges
+            if from_symbol == '↗':  # NORTHEAST
+                if dx <= 0 or dy >= 0:
+                    return False
+            elif from_symbol == '↖':  # NORTHWEST
+                if dx >= 0 or dy >= 0:
+                    return False
+            elif from_symbol == '↘':  # SOUTHEAST
+                if dx <= 0 or dy <= 0:
+                    return False
+            elif from_symbol == '↙':  # SOUTHWEST
+                if dx >= 0 or dy <= 0:
+                    return False
+
         # Check if destination is a ledge - if so, validate direction
         # Ledge direction rules:
         # - Can ONLY move TO a ledge from the correct direction
@@ -686,7 +718,7 @@ class Pathfinder:
             elif dest_symbol == '↙':  # JUMP_SOUTHWEST
                 if dx >= 0 or dy <= 0:  # Must move west AND south
                     return False
-        
+
         return True
     
     def _astar(

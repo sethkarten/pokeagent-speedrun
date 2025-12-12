@@ -22,7 +22,7 @@ except ImportError:
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.my_agent import MyAgent # Agent
+# from agent.my_agent import MyAgent # Agent
 from agent import Agent # ADDED
 from utils.state_formatter import format_state_for_llm
 
@@ -74,10 +74,7 @@ def run_multiprocess_client(server_port=8000, args=None):
     
     # Initialize the agent (it handles VLM, simple vs 4-module, etc internally)
     # Initialize the agent
-    if args and getattr(args, "my_agent", False):
-        agent = MyAgent(args)
-    else:
-        agent = Agent(args)
+    agent = Agent(args)
     print("✅ Agent initialized")
     print(f"🎮 Client connected to server at {server_url}")
     

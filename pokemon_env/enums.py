@@ -933,7 +933,10 @@ class MapLocation(IntEnum):
     
     # Indoor Route 121 (Group 24)
     ROUTE_121_SAFARI_ZONE_ENTRANCE = 0x1800
-    
+    GRANITE_CAVE_1F_ALT = 0x1807  # Same as GRANITE_CAVE_1F (0x1907)
+    GRANITE_CAVE_B1F_ALT = 0x1808  # Alternative B1F map (same as 0x1908)
+    GRANITE_CAVE_B2F_ALT = 0x1809  # Alternative B2F map (same as 0x1909)
+
     # Indoor Fortree (Group 12)
     FORTREE_CITY_HOUSE1 = 0xC00
     FORTREE_CITY_GYM = 0xC01
