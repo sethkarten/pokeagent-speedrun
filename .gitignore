@@ -193,3 +193,5 @@ test_gemini.py
 run_data/*
 out.txt
 *.sh
+# Agent cache backups
+backups/

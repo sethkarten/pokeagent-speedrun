@@ -197,7 +197,7 @@ def main():
     # Features
     parser.add_argument("--record", action="store_true", 
                        help="Record video of the gameplay")
-    parser.add_argument("--no-ocr", action="store_true", 
+    parser.add_argument("--no-ocr", action="store_true", default=True,
                        help="Disable OCR dialogue detection")
     parser.add_argument("--direct-objectives", type=str, 
                        help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival')")
