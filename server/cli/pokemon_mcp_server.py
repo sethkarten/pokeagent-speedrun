@@ -469,20 +469,47 @@ def get_game_state() -> dict:
 @mcp.tool()
 def press_buttons(
     buttons: List[str],
+    speed: str = "normal",
+    hold_frames: Optional[int] = None,
+    release_frames: Optional[int] = None,
     reasoning: str = "",
     source: str = "",
     metadata: Optional[Dict[str, Any]] = None
 ) -> dict:
     """
-    Press buttons on the Game Boy Advance emulator. Buttons are executed sequentially.
-    You will automatically receive the updated game state after buttons are executed.
+    Press buttons on the Game Boy Advance emulator with optional speed control.
+    Buttons are executed sequentially. You control action timing for optimal gameplay.
 
     Args:
         buttons: List of buttons to press in sequence (e.g., ['A', 'A', 'B'])
-                 Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R
+                 Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
+        speed: Action speed preset - "fast" (dialogue/menus, 9 frames), "normal" (movement, 18 frames),
+               or "slow" (careful inputs, 32 frames). Default is "normal".
+        hold_frames: Optional explicit hold duration in frames (overrides speed preset)
+        release_frames: Optional explicit release duration in frames (overrides speed preset)
         reasoning: Brief explanation of why you're pressing these buttons
         source: Optional label identifying where this action originated (e.g., 'navigate_to')
         metadata: Optional dictionary of metadata to attach to the action (e.g., {'variance': 'high'})
+
+    Speed Guide:
+        - "fast": Use for dialogue advancement, menu spam, rapid button presses (9 frames = ~0.09s at 100 FPS)
+        - "normal": Use for movement, pathfinding, general gameplay (18 frames = ~0.18s at 100 FPS) [DEFAULT]
+        - "slow": Use for critical inputs, careful timing (32 frames = ~0.32s at 100 FPS)
+
+    WAIT Action:
+        - Use WAIT to pause without pressing buttons (e.g., waiting for NPCs, animations)
+        - Example: press_buttons(["WAIT"], speed="slow") for a long wait
+        - Example: press_buttons(["WAIT"], release_frames=60) for a custom 60-frame wait
+
+    Examples:
+        # Fast dialogue advancement
+        press_buttons(["A", "A", "A"], speed="fast", reasoning="Advancing through NPC dialogue")
+
+        # Normal movement
+        press_buttons(["UP", "UP", "RIGHT"], speed="normal", reasoning="Walking to Pokemon Center")
+
+        # Wait for NPC to move
+        press_buttons(["WAIT"], speed="slow", reasoning="Waiting for NPC to finish walking")
 
     Returns:
         Dictionary with success status, buttons pressed, and updated game state
@@ -492,14 +519,14 @@ def press_buttons(
 
     try:
         # Validate and normalize buttons
-        VALID_BUTTONS = {'A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R'}
+        VALID_BUTTONS = {'A', 'B', 'START', 'SELECT', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R', 'WAIT'}
         normalized_buttons = []
         invalid_buttons = []
-        
+
         for button in buttons:
             # Normalize to uppercase
             button_upper = str(button).upper().strip()
-            
+
             # Check if valid
             if button_upper in VALID_BUTTONS:
                 normalized_buttons.append(button_upper)
@@ -508,9 +535,18 @@ def press_buttons(
                 invalid_buttons.append(button)
                 logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
                 normalized_buttons.append('A')
-        
-        # Send normalized buttons to server
+
+        # Send normalized buttons to server with speed parameters
         payload = {"buttons": normalized_buttons}
+
+        # Add speed control parameters
+        if speed:
+            payload["speed"] = speed
+        if hold_frames is not None:
+            payload["hold_frames"] = hold_frames
+        if release_frames is not None:
+            payload["release_frames"] = release_frames
+
         if source:
             payload["source"] = source
         if metadata is not None:

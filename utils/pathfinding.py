@@ -27,6 +27,9 @@ VARIANCE_LEVEL_TO_STEPS = {
     "extreme": 8,
 }
 
+# Pathfinding cost penalties
+GRASS_TILE_COST_MULTIPLIER = 1.5  # 50% penalty for traversing grass (to avoid wild encounters)
+
 
 @dataclass
 class Node:
@@ -782,8 +785,22 @@ class Pathfinder:
                 # Check if this move is valid (handles ledge directions)
                 if not self._can_move_to((current.x, current.y), neighbor_pos, map_data):
                     continue
-                
-                g_cost = current.g_cost + 1  # All moves cost 1 in Pokemon
+
+                # Calculate movement cost - add penalty for grass tiles to avoid wild encounters
+                move_cost = 1.0  # Base cost
+
+                # Check if moving onto grass tile (represented as '~' in porymap grid)
+                if 'grid' in map_data and map_data.get('type') == 'porymap':
+                    grid = map_data['grid']
+                    nx, ny = neighbor_pos
+                    if 0 <= ny < len(grid) and isinstance(grid[ny], (list, str)):
+                        row = grid[ny]
+                        if 0 <= nx < len(row):
+                            cell = row[nx]
+                            if cell == '~':  # Grass tile
+                                move_cost = GRASS_TILE_COST_MULTIPLIER  # Penalty to discourage grass traversal
+
+                g_cost = current.g_cost + move_cost
                 h_cost = self._heuristic(neighbor_pos, goal)
                 neighbors_with_cost.append((neighbor_pos, g_cost, h_cost))
             

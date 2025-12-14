@@ -936,6 +936,7 @@ class MapLocation(IntEnum):
     GRANITE_CAVE_1F_ALT = 0x1807  # Same as GRANITE_CAVE_1F (0x1907)
     GRANITE_CAVE_B1F_ALT = 0x1808  # Alternative B1F map (same as 0x1908)
     GRANITE_CAVE_B2F_ALT = 0x1809  # Alternative B2F map (same as 0x1909)
+    PETALBURG_WOODS = 0x180B  # Petalburg Woods (Group 24, Map 11)
 
     # Indoor Fortree (Group 12)
     FORTREE_CITY_HOUSE1 = 0xC00
@@ -1038,7 +1039,7 @@ class MapLocation(IntEnum):
     GRANITE_CAVE_B1F = 0x1908
     GRANITE_CAVE_B2F = 0x1909
     GRANITE_CAVE_STEVENS_ROOM = 0x1B0A
-    PETALBURG_WOODS = 0x1B0B
+    PETALBURG_WOODS_ALT = 0x1B0B  # Alternative map ID (not commonly used)
     MT_CHIMNEY = 0x1B0C
     JAGGED_PASS = 0x1B0D
     FIERY_PATH = 0x1B0E
