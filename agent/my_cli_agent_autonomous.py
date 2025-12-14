@@ -1405,6 +1405,9 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
         Optimization: For single actions, just wait a fixed time instead of polling.
         This avoids timeout errors when the queue_status endpoint is slow.
+
+        Wait time is 1.0s to allow game state to stabilize after action completes.
+        Actions execute faster (0.09-0.32s) but game state updates take additional time.
         """
         # First, check initial queue length
         try:
@@ -1415,8 +1418,8 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
                 # If only 1 action or empty queue, just wait a fixed time
                 if initial_queue_len <= 1:
-                    logger.info(f"⏳ Single action queued, waiting 1.5s...")
-                    time.sleep(1.5)  # Fixed wait for single action
+                    logger.info(f"⏳ Single action queued, waiting 1.0s for game state to stabilize...")
+                    time.sleep(1.0)  # Fixed wait for game state stabilization
                     logger.info("✅ Action completed (fixed wait)")
                     return
 
@@ -1424,7 +1427,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         except Exception as e:
             # If we can't check queue, fall back to fixed wait
             logger.debug(f"Could not check queue length: {e}, using fixed wait")
-            time.sleep(1.5)
+            time.sleep(1.0)
             return
 
         # For multiple actions, poll the queue
