@@ -168,15 +168,25 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
             width = len(grid[0]) if height > 0 else 0
 
             # Check if north of warp is blocked (edge warp going north)
-            if warp_y - 1 < 0 or grid[warp_y - 1][warp_x] == '#':
+            # Bounds check: ensure warp_x is valid for the row above
+            north_blocked = False
+            if warp_y - 1 < 0:
+                north_blocked = True  # Out of bounds (top edge)
+            elif warp_y - 1 < len(grid) and warp_x < len(grid[warp_y - 1]):
+                north_blocked = grid[warp_y - 1][warp_x] == '#'
+            else:
+                north_blocked = True  # Out of bounds (row width)
+
+            if north_blocked:
                 # Check if entire row north is blocked
                 is_north_edge = True
                 if warp_y - 1 >= 0:
                     # Check surrounding tiles to confirm it's a map edge
                     for check_x in range(max(0, warp_x - 2), min(width, warp_x + 3)):
-                        if warp_y - 1 >= 0 and grid[warp_y - 1][check_x] != '#':
-                            is_north_edge = False
-                            break
+                        if warp_y - 1 >= 0 and warp_y - 1 < len(grid) and check_x < len(grid[warp_y - 1]):
+                            if grid[warp_y - 1][check_x] != '#':
+                                is_north_edge = False
+                                break
 
                 if is_north_edge:
                     warp_y -= 1
@@ -184,15 +194,24 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                         needs_north_extension = True
 
             # Check if south of warp is blocked (edge warp going south)
-            if warp_y + 1 >= height or grid[warp_y + 1][warp_x] == '#':
+            south_blocked = False
+            if warp_y + 1 >= height:
+                south_blocked = True  # Out of bounds (bottom edge)
+            elif warp_y + 1 < len(grid) and warp_x < len(grid[warp_y + 1]):
+                south_blocked = grid[warp_y + 1][warp_x] == '#'
+            else:
+                south_blocked = True  # Out of bounds (row width)
+
+            if south_blocked:
                 # Check if entire row south is blocked
                 is_south_edge = True
                 if warp_y + 1 < height:
                     # Check surrounding tiles to confirm it's a map edge
                     for check_x in range(max(0, warp_x - 2), min(width, warp_x + 3)):
-                        if warp_y + 1 < height and grid[warp_y + 1][check_x] != '#':
-                            is_south_edge = False
-                            break
+                        if warp_y + 1 < height and warp_y + 1 < len(grid) and check_x < len(grid[warp_y + 1]):
+                            if grid[warp_y + 1][check_x] != '#':
+                                is_south_edge = False
+                                break
 
                 if is_south_edge:
                     warp_y += 1
@@ -200,14 +219,23 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                         needs_south_extension = True
 
             # Check if east of warp is blocked (edge warp going east)
-            elif warp_x + 1 >= width or grid[warp_y][warp_x + 1] == '#':
+            east_blocked = False
+            if warp_x + 1 >= width:
+                east_blocked = True  # Out of bounds (right edge)
+            elif warp_y < len(grid) and warp_x + 1 < len(grid[warp_y]):
+                east_blocked = grid[warp_y][warp_x + 1] == '#'
+            else:
+                east_blocked = True  # Out of bounds (row width)
+
+            if east_blocked:
                 # Check if entire column east is blocked
                 is_east_edge = True
                 if warp_x + 1 < width:
                     for check_y in range(max(0, warp_y - 2), min(height, warp_y + 3)):
-                        if warp_x + 1 < width and grid[check_y][warp_x + 1] != '#':
-                            is_east_edge = False
-                            break
+                        if check_y < len(grid) and warp_x + 1 < len(grid[check_y]):
+                            if grid[check_y][warp_x + 1] != '#':
+                                is_east_edge = False
+                                break
 
                 if is_east_edge:
                     warp_x += 1
@@ -215,14 +243,23 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                         needs_east_extension = True
 
             # Check if west of warp is blocked (edge warp going west)
-            elif warp_x - 1 < 0 or grid[warp_y][warp_x - 1] == '#':
+            west_blocked = False
+            if warp_x - 1 < 0:
+                west_blocked = True  # Out of bounds (left edge)
+            elif warp_y < len(grid) and warp_x - 1 < len(grid[warp_y]):
+                west_blocked = grid[warp_y][warp_x - 1] == '#'
+            else:
+                west_blocked = True  # Out of bounds (row width)
+
+            if west_blocked:
                 # Check if entire column west is blocked
                 is_west_edge = True
                 if warp_x - 1 >= 0:
                     for check_y in range(max(0, warp_y - 2), min(height, warp_y + 3)):
-                        if warp_x - 1 >= 0 and grid[check_y][warp_x - 1] != '#':
-                            is_west_edge = False
-                            break
+                        if check_y < len(grid) and warp_x - 1 < len(grid[check_y]):
+                            if grid[check_y][warp_x - 1] != '#':
+                                is_west_edge = False
+                                break
 
                 if is_west_edge:
                     warp_x -= 1

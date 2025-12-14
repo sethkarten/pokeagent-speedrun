@@ -707,7 +707,7 @@ ALL_OBJECTIVES = [
         description="Battle Rival on Route 110",
         action_type="battle",
         target_location="Route 110",
-        navigation_hint="Rival appears shortly after entering. Team: Starter Lv18, Wingull Lv18, plus one more Lv18.",
+        navigation_hint="Rival appears shortly after entering East from the Trick House. Then continue North until you see your rival. Team: Starter Lv18, Wingull Lv18, plus one more Lv18.",
         completion_condition="rival_battle_2_won",
         priority=1
     ),

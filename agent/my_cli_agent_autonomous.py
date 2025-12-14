@@ -70,17 +70,17 @@ class MCPToolAdapter:
                 "reflect": "/mcp/reflect",
 
                 # Baseline MCP tools (file/shell/web)
-                "read_file": "/mcp/read_file",
-                "write_file": "/mcp/write_file",
-                "list_directory": "/mcp/list_directory",
-                "glob": "/mcp/glob",
-                "search_file_content": "/mcp/search_file_content",
-                "replace": "/mcp/replace",
-                "read_many_files": "/mcp/read_many_files",
-                "run_shell_command": "/mcp/run_shell_command",
-                "web_fetch": "/mcp/web_fetch",
-                "google_web_search": "/mcp/google_web_search",
-                "save_memory": "/mcp/save_memory",
+                # "read_file": "/mcp/read_file",
+                # "write_file": "/mcp/write_file",
+                # "list_directory": "/mcp/list_directory",
+                # "glob": "/mcp/glob",
+                # "search_file_content": "/mcp/search_file_content",
+                # "replace": "/mcp/replace",
+                # "read_many_files": "/mcp/read_many_files",
+                # "run_shell_command": "/mcp/run_shell_command",
+                # "web_fetch": "/mcp/web_fetch",
+                # "google_web_search": "/mcp/google_web_search",
+                # "save_memory": "/mcp/save_memory",
             }
 
             endpoint = endpoint_map.get(tool_name)
@@ -470,113 +470,113 @@ class AutonomousCLIAgent:
             },
 
             # ============================================================
-            # BASELINE MCP TOOLS (File/Shell/Web) - NOW ALL ENABLED
+            # BASELINE MCP TOOLS (File/Shell/Web) - NOW ALL DISABLED
             # ============================================================
 
-            {
-                "name": "read_file",
-                "description": "Read file contents. Supports text, images, PDFs. Returns content or base64 for binary files.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "file_path": {"type_": "STRING", "description": "Absolute path to file"}
-                    },
-                    "required": ["file_path"]
-                }
-            },
-            {
-                "name": "write_file",
-                "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
-                        "content": {"type_": "STRING", "description": "File content"}
-                    },
-                    "required": ["file_path", "content"]
-                }
-            },
-            {
-                "name": "list_directory",
-                "description": "List files and directories at path.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "path": {"type_": "STRING", "description": "Directory path"}
-                    },
-                    "required": ["path"]
-                }
-            },
-            {
-                "name": "glob",
-                "description": "Find files matching glob pattern (e.g., '**/*.py', 'src/*.md').",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "pattern": {"type_": "STRING", "description": "Glob pattern"},
-                        "path": {"type_": "STRING", "description": "Starting directory (optional)"}
-                    },
-                    "required": ["pattern"]
-                }
-            },
-            {
-                "name": "search_file_content",
-                "description": "Search files for regex pattern. Returns matching lines.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "pattern": {"type_": "STRING", "description": "Regex pattern"},
-                        "path": {"type_": "STRING", "description": "Directory to search"},
-                        "file_pattern": {"type_": "STRING", "description": "File glob (e.g., '*.py')"}
-                    },
-                    "required": ["pattern", "path"]
-                }
-            },
-            {
-                "name": "run_shell_command",
-                "description": "Run shell command (42 safe commands allowed: ls, cat, grep, python, npm, etc. NO git, rm, sudo).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "command": {"type_": "STRING", "description": "Shell command"},
-                        "description": {"type_": "STRING", "description": "What this command does"}
-                    },
-                    "required": ["command", "description"]
-                }
-            },
-            {
-                "name": "web_fetch",
-                "description": "Fetch and parse web pages (up to 20 URLs). Extracts text content.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "prompt": {"type_": "STRING", "description": "Prompt with URLs and instructions"}
-                    },
-                    "required": ["prompt"]
-                }
-            },
-            {
-                "name": "google_web_search",
-                "description": "Search web using DuckDuckGo (privacy-friendly, no API key). Returns 10 results.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "query": {"type_": "STRING", "description": "Search query"}
-                    },
-                    "required": ["query"]
-                }
-            },
-            {
-                "name": "save_memory",
-                "description": "Save facts to remember across sessions (stored in .pokeagent_cache/cli/AGENT.md).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "fact": {"type_": "STRING", "description": "Clear, self-contained fact"}
-                    },
-                    "required": ["fact"]
-                }
-            },
+            # {
+            #     "name": "read_file",
+            #     "description": "Read file contents. Supports text, images, PDFs. Returns content or base64 for binary files.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "file_path": {"type_": "STRING", "description": "Absolute path to file"}
+            #         },
+            #         "required": ["file_path"]
+            #     }
+            # },
+            # {
+            #     "name": "write_file",
+            #     "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
+            #             "content": {"type_": "STRING", "description": "File content"}
+            #         },
+            #         "required": ["file_path", "content"]
+            #     }
+            # },
+            # {
+            #     "name": "list_directory",
+            #     "description": "List files and directories at path.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "path": {"type_": "STRING", "description": "Directory path"}
+            #         },
+            #         "required": ["path"]
+            #     }
+            # },
+            # {
+            #     "name": "glob",
+            #     "description": "Find files matching glob pattern (e.g., '**/*.py', 'src/*.md').",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "pattern": {"type_": "STRING", "description": "Glob pattern"},
+            #             "path": {"type_": "STRING", "description": "Starting directory (optional)"}
+            #         },
+            #         "required": ["pattern"]
+            #     }
+            # },
+            # {
+            #     "name": "search_file_content",
+            #     "description": "Search files for regex pattern. Returns matching lines.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "pattern": {"type_": "STRING", "description": "Regex pattern"},
+            #             "path": {"type_": "STRING", "description": "Directory to search"},
+            #             "file_pattern": {"type_": "STRING", "description": "File glob (e.g., '*.py')"}
+            #         },
+            #         "required": ["pattern", "path"]
+            #     }
+            # },
+            # {
+            #     "name": "run_shell_command",
+            #     "description": "Run shell command (42 safe commands allowed: ls, cat, grep, python, npm, etc. NO git, rm, sudo).",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "command": {"type_": "STRING", "description": "Shell command"},
+            #             "description": {"type_": "STRING", "description": "What this command does"}
+            #         },
+            #         "required": ["command", "description"]
+            #     }
+            # },
+            # {
+            #     "name": "web_fetch",
+            #     "description": "Fetch and parse web pages (up to 20 URLs). Extracts text content.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "prompt": {"type_": "STRING", "description": "Prompt with URLs and instructions"}
+            #         },
+            #         "required": ["prompt"]
+            #     }
+            # },
+            # {
+            #     "name": "google_web_search",
+            #     "description": "Search web using DuckDuckGo (privacy-friendly, no API key). Returns 10 results.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "query": {"type_": "STRING", "description": "Search query"}
+            #         },
+            #         "required": ["query"]
+            #     }
+            # },
+            # {
+            #     "name": "save_memory",
+            #     "description": "Save facts to remember across sessions (stored in .pokeagent_cache/cli/AGENT.md).",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "fact": {"type_": "STRING", "description": "Clear, self-contained fact"}
+            #         },
+            #         "required": ["fact"]
+            #     }
+            # },
         ]
 
         logger.info(f"✅ Created {len(tools)} tool declarations (ALL TOOLS ENABLED)")
@@ -983,7 +983,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
         for attempt in range(max_retries):
             try:
-                response = requests.get(f"{self.server_url}/status", timeout=5)
+                response = requests.get(f"{self.server_url}/status", timeout=15)
                 if response.status_code == 200:
                     logger.info(f"✅ Game server is ready")
                     break
@@ -1506,7 +1506,95 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         self.recent_function_results = []
 
         return "\n".join(lines)
-        
+
+    def _get_knowledge_base_context(self, max_entries: int = 15, min_importance: int = 3) -> str:
+        """
+        Fetch and format knowledge base entries for inclusion in the prompt.
+        Returns the N most recent entries (by importance first, then recency).
+
+        Args:
+            max_entries: Maximum number of entries to include (default 15)
+            min_importance: Minimum importance level (1-5, default 3)
+
+        Returns:
+            Formatted knowledge base string for prompt injection
+        """
+        try:
+            # Call the get_knowledge_summary tool via MCP
+            kb_result = self.mcp_adapter.call_tool("get_knowledge_summary", {"min_importance": min_importance})
+
+            if not kb_result.get("success"):
+                logger.debug("Knowledge base summary not available")
+                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+
+            summary = kb_result.get("summary", "")
+
+            if not summary or summary.strip() == "No knowledge entries yet.":
+                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+
+            # Parse the summary to limit entries
+            lines = summary.split("\n")
+
+            # Count actual entries (lines starting with "  • ")
+            entry_count = sum(1 for line in lines if line.strip().startswith("•"))
+
+            if entry_count == 0:
+                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+
+            # If we have too many entries, keep only the most recent N entries
+            if entry_count > max_entries:
+                # Collect all entries with their content
+                entries = []
+                current_entry = []
+                in_entry = False
+                category_headers = []
+                header_lines = []
+
+                for line in lines:
+                    # Save header/preamble lines
+                    if not line.strip().startswith("•") and not in_entry and not line.strip().startswith("["):
+                        if "===" in line or "Total:" in line:
+                            continue  # Skip header/footer lines
+                        header_lines.append(line)
+                    # Category header
+                    elif line.strip().startswith("["):
+                        if current_entry:
+                            entries.append("\n".join(current_entry))
+                            current_entry = []
+                        category_headers.append(line)
+                        in_entry = False
+                    # Start of new entry
+                    elif line.strip().startswith("•"):
+                        if current_entry:
+                            entries.append("\n".join(current_entry))
+                        current_entry = [line]
+                        in_entry = True
+                    # Entry content line
+                    elif in_entry:
+                        current_entry.append(line)
+
+                # Add last entry
+                if current_entry:
+                    entries.append("\n".join(current_entry))
+
+                # Keep only the last N entries (most recent)
+                recent_entries = entries[-max_entries:]
+
+                # Rebuild summary with recent entries
+                result_lines = []
+                if header_lines:
+                    result_lines.extend([h for h in header_lines if h.strip()])
+                result_lines.extend(recent_entries)
+                result_lines.append(f"\n(Showing {len(recent_entries)} most recent entries - {entry_count - len(recent_entries)} older entries available via get_knowledge_summary())")
+
+                return "\n".join(result_lines)
+
+            return summary
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch knowledge base for prompt: {e}")
+            return "Knowledge base temporarily unavailable."
+
     def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build optimized prompt by combining base_prompt.md with current game context.
         
@@ -1588,6 +1676,9 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
+        # Get knowledge base summary for context
+        knowledge_context = self._get_knowledge_base_context(max_entries=15, min_importance=3)
+
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
 
@@ -1597,6 +1688,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         logger.info(f"   state_text: {len(state_text):,} chars")
         logger.info(f"   action_history: {len(action_history):,} chars")
         logger.info(f"   function_results: {len(function_results_context):,} chars")
+        logger.info(f"   knowledge_base: {len(knowledge_context):,} chars")
         logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
@@ -1624,6 +1716,9 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
 ### CURRENT GAME STATE:
 {state_text}
+
+### KNOWLEDGE BASE - What You've Learned:
+{knowledge_context}
 
 Step {step_count}"""
 
@@ -1731,11 +1826,15 @@ Step {step_count}"""
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
+        # Get knowledge base summary for context
+        knowledge_context = self._get_knowledge_base_context(max_entries=15, min_importance=3)
+
         # Log component sizes
         logger.info(f"📏 Pre-prompt component sizes:")
         logger.info(f"   state_text: {len(state_text):,} chars")
         logger.info(f"   action_history: {len(action_history):,} chars")
         logger.info(f"   function_results: {len(function_results_context):,} chars")
+        logger.info(f"   knowledge_base: {len(knowledge_context):,} chars")
         logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
@@ -1830,12 +1929,17 @@ create_direct_objectives(
 CURRENT GAME STATE:
 {state_text}
 
+================================================================================
+📚 KNOWLEDGE BASE - What You've Learned
+================================================================================
+{knowledge_context}
+================================================================================
+
 **DIALOGUE CHECK**: Look at the game screen carefully - if you see a dialogue box with text, press_buttons(["A"], reasoning).
 
 AVAILABLE TOOLS - Use these function calls to interact with the game:
 
 🎮 **PRIMARY GAME TOOLS** :
-- get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
 - complete_direct_objective(reasoning) - Mark current direct objective as complete. Provide strict justification before completing the objective.
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
 - navigate_to(x, y, variance, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data.
@@ -1857,16 +1961,6 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 🎯 **OBJECTIVE MANAGEMENT** (use to create your own goals):
 - create_direct_objectives(objectives, reasoning) - Create next 3 direct objectives dynamically
   Use this to plan your progression through the game autonomously!
-
-📁 **FILE/WEB TOOLS** (use for research or saving notes):
-- read_file(file_path) - Read file contents
-- write_file(file_path, content) - Write file
-- list_directory(path) - List files
-- glob(pattern) - Find files by pattern
-- search_file_content(pattern, path) - Search files
-- run_shell_command(command) - Run shell commands
-- web_fetch(prompt) - Fetch web pages
-- google_web_search(query) - Search the web
 
 ** COORDINATE & MOVEMENT EXAMPLES **:
 - Pressing LEFT decreases your X coordinate (moves you west)
@@ -1985,17 +2079,24 @@ Step {step_count}"""
 
     def _is_title_sequence(self, game_state_data: Dict[str, Any]) -> bool:
         """Detect if in title sequence"""
-        player_location = game_state_data.get("location", "")
-        if player_location == "TITLE_SEQUENCE":
+        # Check location (returned by MCP get_game_state)
+        location = game_state_data.get("location", "")
+        if location == "TITLE_SEQUENCE":
             return True
 
-        player_name = game_state_data.get("player_name", "").strip()
-        if not player_name or player_name == "????????":
-            return True
-
-        game_state_value = game_state_data.get("game_state", "").lower()
-        if "title" in game_state_value or "intro" in game_state_value:
-            return True
+        # Check if state_text contains player name (more reliable than parsing JSON)
+        state_text = game_state_data.get("state_text", "")
+        if "Player Name:" in state_text:
+            # Extract player name from state text
+            import re
+            match = re.search(r"Player Name:\s*(\S+)", state_text)
+            if match:
+                player_name = match.group(1).strip()
+                if not player_name or player_name == "????????":
+                    return True
+            else:
+                # No player name found in text
+                return True
 
         return False
 
