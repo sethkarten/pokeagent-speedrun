@@ -82,14 +82,24 @@ fps = 100
 # Performance monitoring
 last_fps_log = time.time()
 frame_count_since_log = 0
-action_queue = []  # Queue for multi-action sequences
+action_queue = []  # Queue for multi-action sequences (now stores dicts with timing info)
 current_action = None  # Current action being held
 action_frames_remaining = 0  # Frames left to hold current action
 release_frames_remaining = 0  # Frames left to wait after release
+current_action_release_delay = 0  # Release delay for current action
 
-### IMPORTANT: DO NOT REDUCE THESE OR BUTTONS MAY NOT WORK! ###
-ACTION_HOLD_FRAMES = 12   # Hold each action for 12 frames 
-ACTION_RELEASE_DELAY = 24   # Delay between actions for processing
+### ACTION TIMING SYSTEM ###
+# LLM-controlled speed presets for flexible action timing
+SPEED_PRESETS = {
+    "fast": {"hold": 6, "release": 3},      # 9 frames total - dialogue, menus
+    "normal": {"hold": 10, "release": 8},   # 18 frames total - movement (2x faster than old default!)
+    "slow": {"hold": 16, "release": 16}     # 32 frames total - careful inputs
+}
+DEFAULT_SPEED = "normal"
+
+# Legacy constants for backward compatibility
+ACTION_HOLD_FRAMES = SPEED_PRESETS["normal"]["hold"]
+ACTION_RELEASE_DELAY = SPEED_PRESETS["normal"]["release"]
 
 # Video recording state
 video_writer = None
@@ -269,7 +279,10 @@ app.add_middleware(
 
 # Models for API requests and responses
 class ActionRequest(BaseModel):
-    buttons: List[str] = Field(default_factory=list)  # List of button names: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT
+    buttons: List[str] = Field(default_factory=list)  # List of button names: A, B, SELECT, START, UP, DOWN, LEFT, RIGHT, WAIT
+    speed: Optional[str] = "normal"  # Action speed: "fast", "normal", or "slow"
+    hold_frames: Optional[int] = None  # Optional explicit hold duration (overrides speed preset)
+    release_frames: Optional[int] = None  # Optional explicit release duration (overrides speed preset)
     source: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
@@ -627,11 +640,14 @@ def game_loop(manual_mode=False):
         # In server mode, handle action queue with proper button hold timing
         action_completed = False
         if not manual_mode:
-            global current_action, action_frames_remaining, release_frames_remaining
-            
+            global current_action, action_frames_remaining, release_frames_remaining, current_action_release_delay
+
             if current_action and action_frames_remaining > 0:
-                # Continue holding the current action
-                actions_pressed = [current_action]
+                # Continue holding the current action (WAIT actions press nothing)
+                if current_action == "WAIT":
+                    actions_pressed = []
+                else:
+                    actions_pressed = [current_action]
                 action_frames_remaining -= 1
                 if action_frames_remaining == 0:
                     # Action finished, start release delay
@@ -642,17 +658,17 @@ def game_loop(manual_mode=False):
                     position = player_data.get('position', {})
                     location = player_data.get('location', 'Unknown')
                     end_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
-                    
+
                     # Find and update the most recent incomplete action matching current_action
                     for i in range(len(recent_button_presses) - 1, -1, -1):
-                        if (recent_button_presses[i]["button"] == current_action and 
+                        if (recent_button_presses[i]["button"] == current_action and
                             not recent_button_presses[i]["completed"]):
                             recent_button_presses[i]["end_pos"] = end_pos
                             recent_button_presses[i]["completed"] = True
                             break
-                    
+
                     current_action = None
-                    release_frames_remaining = ACTION_RELEASE_DELAY
+                    release_frames_remaining = current_action_release_delay
                     action_completed = True  # Mark action as completed
                     print(f"✅ Action completed: step_count will increment")
             elif release_frames_remaining > 0:
@@ -661,14 +677,41 @@ def game_loop(manual_mode=False):
                 release_frames_remaining -= 1
             elif action_queue:
                 # Start a new action from the queue
-                current_action = action_queue.pop(0)
-                action_frames_remaining = ACTION_HOLD_FRAMES
-                actions_pressed = [current_action]
+                current_action_data = action_queue.pop(0)
+
+                # Handle both old format (string) and new format (dict) for backward compatibility
+                if isinstance(current_action_data, str):
+                    current_action = current_action_data
+                    timing = SPEED_PRESETS[DEFAULT_SPEED]
+                else:
+                    current_action = current_action_data["button"]
+                    speed = current_action_data.get("speed", DEFAULT_SPEED)
+                    timing = SPEED_PRESETS.get(speed, SPEED_PRESETS[DEFAULT_SPEED])
+
+                    # Allow explicit frame overrides
+                    if current_action_data.get("hold_frames") is not None:
+                        timing = timing.copy()  # Don't modify the preset
+                        timing["hold"] = current_action_data["hold_frames"]
+                    if current_action_data.get("release_frames") is not None:
+                        timing = timing.copy()
+                        timing["release"] = current_action_data["release_frames"]
+
+                # Special handling for WAIT action
+                if current_action == "WAIT":
+                    action_frames_remaining = 0  # Don't actually hold any button
+                    current_action_release_delay = timing["release"]  # Wait duration is in release
+                else:
+                    action_frames_remaining = timing["hold"]
+                    current_action_release_delay = timing["release"]
+
+                actions_pressed = [] if current_action == "WAIT" else [current_action]
                 queue_len = len(action_queue)
+
                 # Get current FPS for estimation
                 current_fps_for_calc = env.get_current_fps(fps) if env else fps
-                estimated_time = queue_len * (ACTION_HOLD_FRAMES + ACTION_RELEASE_DELAY) / current_fps_for_calc
-                print(f"🎮 Server processing action: {current_action}, Queue remaining: {queue_len} actions (~{estimated_time:.1f}s)")
+                estimated_time = queue_len * (timing["hold"] + timing["release"]) / current_fps_for_calc
+                speed_indicator = f" [{speed}]" if isinstance(current_action_data, dict) else ""
+                print(f"🎮 Server processing action: {current_action}{speed_indicator}, Queue remaining: {queue_len} actions (~{estimated_time:.1f}s)")
             else:
                 # No action to process
                 actions_pressed = []
@@ -869,11 +912,36 @@ async def take_action(request: ActionRequest):
     try:
         # Add all actions to the queue (handle both single actions and lists)
         if request.buttons:
+            # Get timing parameters
+            speed = request.speed or DEFAULT_SPEED
+            hold_frames = request.hold_frames
+            release_frames = request.release_frames
+
+            # Validate speed parameter
+            if speed not in SPEED_PRESETS:
+                speed = DEFAULT_SPEED
+                print(f"⚠️ Invalid speed '{request.speed}', using '{DEFAULT_SPEED}'")
+
             # Add ALL actions to the queue - let the game loop handle execution
-            print(f"📡 Server received actions: {request.buttons}")
+            speed_info = f" [speed={speed}]" if speed != DEFAULT_SPEED else ""
+            frame_info = ""
+            if hold_frames is not None or release_frames is not None:
+                frame_info = f" [hold={hold_frames}, release={release_frames}]"
+
+            print(f"📡 Server received actions: {request.buttons}{speed_info}{frame_info}")
             print(f"📋 Action queue before extend: {action_queue}")
-            action_queue.extend(request.buttons)
-            print(f"📋 Action queue after extend: {action_queue}")
+
+            # Create action data with timing info
+            for button in request.buttons:
+                action_data = {
+                    "button": button,
+                    "speed": speed,
+                    "hold_frames": hold_frames,
+                    "release_frames": release_frames
+                }
+                action_queue.append(action_data)
+
+            print(f"📋 Action queue after extend: {len(action_queue)} actions")
             
             # Track button presses for recent actions display with position tracking
             current_time = time.time()
