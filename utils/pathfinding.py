@@ -82,16 +82,17 @@ class Pathfinder:
         self.allow_diagonal = allow_diagonal
         
     def find_path(
-        self, 
-        start: Tuple[int, int], 
+        self,
+        start: Tuple[int, int],
         goal: Tuple[int, int],
         game_state: Dict,
         max_distance: int = 150,
-        variance: Optional[str] = None
+        variance: Optional[str] = None,
+        consider_npcs: bool = False
     ) -> Optional[List[str]]:
         """
         Find a path from start to goal using A* algorithm.
-        
+
         Args:
             start: Starting position (x, y) - ROM coordinates (0,0 = top-left of current map)
             goal: Goal position (x, y) - ROM coordinates
@@ -100,7 +101,8 @@ class Pathfinder:
             variance: Optional variance level ('low', 'medium', 'high') controlling
                 how many initial moves must differ when sampling alternative paths.
                 When None or invalid, pathfinding remains deterministic.
-            
+            consider_npcs: Whether to consider NPC positions as blocked (default False)
+
         Returns:
             List of button commands to reach the goal, or None if no path found
         """
@@ -139,7 +141,7 @@ class Pathfinder:
 
         # Get blocked positions (walls, NPCs, water, etc.)
         # CRITICAL: Exclude start position - player is there so it must be walkable
-        blocked = self._get_blocked_positions(game_state, map_data, start_pos=start, goal_pos=goal)
+        blocked = self._get_blocked_positions(game_state, map_data, start_pos=start, goal_pos=goal, consider_npcs=consider_npcs)
         
         # Get warp positions and ensure they're walkable (doors/stairs)
         warps = self._get_warp_positions(game_state, map_data)
@@ -358,15 +360,17 @@ class Pathfinder:
         game_state: Dict,
         map_data: Dict,
         start_pos: Optional[Tuple[int, int]] = None,
-        goal_pos: Optional[Tuple[int, int]] = None
+        goal_pos: Optional[Tuple[int, int]] = None,
+        consider_npcs: bool = False
     ) -> Set[Tuple[int, int]]:
         """
         Get all blocked positions on the current map.
         ONLY uses porymap ASCII grid data - no fallbacks.
-        
+
         Args:
             start_pos: Starting position - will NEVER be marked as blocked (player is there, so it is walkable)
             goal_pos: Goal position - excluded from stationary NPC blocking so we can reach the target NPC.
+            consider_npcs: Whether to consider NPC positions as blocked (default False)
 
         Returns set of (x, y) tuples that are not walkable.
         Note: Ledges are handled separately via directional checks.
@@ -415,7 +419,8 @@ class Pathfinder:
                         continue
 
         # Add NPC/object positions as blocked (from porymap objects)
-        if 'objects' in map_data:
+        # Only add NPCs if consider_npcs is True
+        if consider_npcs and 'objects' in map_data:
             objects = map_data['objects']
             for obj in objects:
                 obj_x = obj.get('x', 0)
@@ -425,9 +430,9 @@ class Pathfinder:
                 # Allow: WALK_*, RUN_*, JUMP_* (they actively move around)
                 movement_type = obj.get('movement_type', '')
                 movement_type_upper = movement_type.upper()
-                
-                if ('NONE' in movement_type_upper or 
-                    'STATIC' in movement_type_upper or 
+
+                if ('NONE' in movement_type_upper or
+                    'STATIC' in movement_type_upper or
                     'FACE_' in movement_type_upper or  # FACE_DOWN, FACE_UP, etc.
                     'WANDER' in movement_type_upper or  # WANDER_AROUND
                     'LOOK' in movement_type_upper or  # LOOK_AROUND, LOOK_AROUND_EX
@@ -1104,20 +1109,22 @@ def find_path(
     goal: Tuple[int, int],
     game_state: Dict,
     max_distance: int = 150,
-    variance: Optional[str] = None
+    variance: Optional[str] = None,
+    consider_npcs: bool = False
 ) -> Optional[List[str]]:
     """
     Find a path from start to goal position.
-    
+
     Args:
         start: Starting position (x, y)
         goal: Goal position (x, y)
         game_state: Current game state with map data
         max_distance: Maximum distance to search (default 150)
         variance: Optional variance level ('low', 'medium', 'high')
-        
+        consider_npcs: Whether to consider NPC positions as blocked (default False)
+
     Returns:
         List of button commands to reach the goal, or None if no path found
     """
     pathfinder = Pathfinder()
-    return pathfinder.find_path(start, goal, game_state, max_distance=max_distance, variance=variance)
+    return pathfinder.find_path(start, goal, game_state, max_distance=max_distance, variance=variance, consider_npcs=consider_npcs)

@@ -149,7 +149,7 @@ def press_buttons_direct(buttons, action_queue, reasoning="", source=None, metad
         return {"success": False, "error": str(e)}
 
 
-def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = None) -> dict:
+def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = None, consider_npcs: bool = False) -> dict:
     """
     Calculate path to coordinates without HTTP calls - for use by server endpoints.
     Returns buttons to be queued via take_action.
@@ -159,6 +159,8 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
         x: Target X coordinate (will be converted to int)
         y: Target Y coordinate (will be converted to int)
         reason: Reason for navigation
+        variance: Path variance level ('low', 'medium', 'high', or None)
+        consider_npcs: Whether to avoid NPC positions during pathfinding (default False)
 
     Returns:
         Dictionary with success status, buttons, and path info
@@ -318,7 +320,7 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
                         goal_was_blocked = True
 
         # Calculate path buttons using Pathfinder
-        buttons = pathfinder.find_path(start, goal, state, variance=variance_level)
+        buttons = pathfinder.find_path(start, goal, state, variance=variance_level, consider_npcs=consider_npcs)
 
         if not buttons:
             # Provide detailed error message about why path failed
@@ -544,7 +546,7 @@ def press_buttons(
 
 
 @mcp.tool()
-def navigate_to(x: int, y: int, variance: str = "none", reason: str = "") -> dict:
+def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consider_npcs: bool = False) -> dict:
     """
     Automatically pathfind and move to a specific coordinate on the current map using A* algorithm.
     Handles collision detection and finds the optimal path. The pathfinding will be executed
@@ -555,6 +557,7 @@ def navigate_to(x: int, y: int, variance: str = "none", reason: str = "") -> dic
         y: Target Y coordinate
         variance: Path variance level ('low', 'medium', 'high', or 'none')
         reason: Why you're navigating to this location (optional context)
+        consider_npcs: Whether to avoid NPC positions during pathfinding (default False, NPCs ignored)
 
     Returns:
         Dictionary with success status, path information, and navigation result
@@ -597,7 +600,7 @@ def navigate_to(x: int, y: int, variance: str = "none", reason: str = "") -> dic
         goal = (x, y)
         
         # Calculate path using Pathfinder
-        buttons = pathfinder.find_path(start, goal, state, variance=variance_level)
+        buttons = pathfinder.find_path(start, goal, state, variance=variance_level, consider_npcs=consider_npcs)
 
         if not buttons:
             return {

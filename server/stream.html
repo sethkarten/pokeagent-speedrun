@@ -470,27 +470,9 @@
         
 
 
-        /* CRT effect */
-        .crt-lines {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-            background-size: 100% 4px;
-            pointer-events: none;
-            z-index: 10;
-        }
-
-        .crt-flicker {
-            display: none; /* Disabled for performance */
-        }
     </style>
 </head>
 <body>
-    <div class="crt-lines"></div>
-    <div class="crt-flicker"></div>
     <div class="header">
         <div class="header-logo">PokeAgent Challenge //</div>
         <div class="header-title">PROTOCOL_EMERALD // AGENT = PLAYER</div>
@@ -569,7 +551,7 @@
             </div>
         </div>
     </div>
-    
+
     <script>
         let isConnected = false;
         let frameUpdateInterval;
@@ -621,20 +603,20 @@
                 }
             } catch (error) {
                 consecutiveErrors++;
-                
+
                 // Exponential backoff for polling interval
                 if (consecutiveErrors > 2) {
                     pollInterval = Math.min(pollInterval * 1.5, maxInterval);
                     clearInterval(frameUpdateInterval);
                     frameUpdateInterval = setInterval(pollFrameUpdate, pollInterval);
                 }
-                
+
                 if (isConnected || consecutiveErrors === 1) {
                     isConnected = false;
                     console.log(`FastAPI disconnected (${consecutiveErrors} errors): ${error.message}`);
                     document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
                 }
-                
+
                 // Log only every 5th consecutive error to avoid spam
                 if (consecutiveErrors % 5 === 0) {
                     console.warn(`${consecutiveErrors} consecutive connection errors, polling every ${pollInterval}ms`);
@@ -713,11 +695,11 @@
             }
         }
         
-        // Poll for metrics updates - reduced frequency for better performance  
+        // Poll for metrics updates - reduced frequency for better performance
         setInterval(updateMetrics, 2000);  // Update metrics every 2 seconds (reduced from 1s)
-        setInterval(updateTime, 500);  // Update timer every 500ms (reduced from 100ms) 
+        setInterval(updateTime, 500);  // Update timer every 500ms (reduced from 100ms)
         updateMetrics();  // Initial metrics load
-        
+
         // Start polling every 25ms (40 FPS) to better match 120 FPS emulator
         frameUpdateInterval = setInterval(pollFrameUpdate, 25);
         

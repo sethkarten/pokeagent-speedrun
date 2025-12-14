@@ -615,9 +615,9 @@ def reset_game():
 def game_loop(manual_mode=False):
     """Main game loop - runs in main thread, always headless"""
     global running, step_count
-    
+
     print("Starting headless game loop...")
-    
+
     while running:
         # Handle input
         should_continue, actions_pressed = handle_input(manual_mode)
@@ -700,7 +700,7 @@ def game_loop(manual_mode=False):
         
         # Use dynamic FPS - 2x speed during dialog
         current_fps = env.get_current_fps(fps) if env else fps
-        # Server runs headless - always use sleep for timing
+        # Simple sleep - more reliable than complex timing
         time.sleep(1.0 / current_fps)
 
 def run_fastapi_server(port):
@@ -824,6 +824,35 @@ async def get_latest_frame():
     except Exception as e:
         logger.warning(f"Frame endpoint: Error encoding frame: {e}")
         return {"frame": ""}
+
+@app.get("/frame")
+async def get_frame_from_cache():
+    """Get latest frame from in-memory cache (for stream.html) - zero file I/O!"""
+    global frame_cache_memory
+
+    try:
+        # Serve directly from in-memory cache
+        if frame_cache_memory["frame_data"]:
+            return {
+                "frame": frame_cache_memory["frame_data"],
+                "frame_count": frame_cache_memory["frame_counter"],
+                "timestamp": frame_cache_memory["timestamp"],
+                "status": "ok"
+            }
+        else:
+            # No frame available yet
+            return {
+                "frame": None,
+                "frame_count": 0,
+                "timestamp": time.time(),
+                "status": "no_frame"
+            }
+    except Exception as e:
+        return {
+            "frame": None,
+            "error": str(e),
+            "status": "error"
+        }
 
 @app.post("/action")
 async def take_action(request: ActionRequest):
@@ -2138,7 +2167,19 @@ async def mcp_complete_direct_objective(request: dict):
         # Mark objective as completed
         direct_objectives_manager._mark_objective_completed(current_obj)
         direct_objectives_manager.current_index += 1
-        
+
+        # Create backup of .pokeagent_cache after completing objective
+        try:
+            from utils.backup_manager import create_cache_backup
+            backup_path = create_cache_backup(
+                objective_id=current_obj.id,
+                objective_description=current_obj.description
+            )
+            if backup_path:
+                logger.info(f"📦 Created cache backup: {backup_path}")
+        except Exception as e:
+            logger.warning(f"Failed to create cache backup: {e}")
+
         # Get next objective if available
         next_obj = direct_objectives_manager.get_current_objective()
         if next_obj:
