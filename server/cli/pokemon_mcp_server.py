@@ -49,6 +49,12 @@ mcp = FastMCP(
 pathfinder = Pathfinder()
 knowledge_base = get_knowledge_base()
 
+# Screenshot cache to avoid re-encoding the same frame
+_screenshot_cache = {
+    "frame_count": -1,
+    "base64": None
+}
+
 
 # ============================================================================
 # HELPER FUNCTIONS FOR SERVER ENDPOINTS (NO HTTP CALLS)
@@ -75,21 +81,35 @@ def get_game_state_direct(env, state_formatter, action_history=None) -> dict:
         # Pass action history to state formatter
         state_text = state_formatter(state, action_history=action_history)
 
-        # Get screenshot as base64 for vision models
+        # Get screenshot as base64 for vision models (with caching)
         screenshot_b64 = None
         if hasattr(env, 'get_screenshot'):
-            screenshot = env.get_screenshot()
-            if screenshot is not None:
-                # Convert numpy array to PIL Image if needed
-                if hasattr(screenshot, 'shape'):  # numpy array
-                    img = Image.fromarray(screenshot)
-                else:
-                    img = screenshot
+            # Check if we can use cached screenshot
+            current_frame = getattr(env, 'frame_count', -1)
 
-                # Convert to base64
-                buffered = io.BytesIO()
-                img.save(buffered, format="PNG")
-                screenshot_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            if current_frame == _screenshot_cache["frame_count"] and _screenshot_cache["base64"]:
+                # Use cached screenshot - no encoding needed!
+                screenshot_b64 = _screenshot_cache["base64"]
+                logger.debug(f"Using cached screenshot for frame {current_frame}")
+            else:
+                # Encode new screenshot and cache it
+                screenshot = env.get_screenshot()
+                if screenshot is not None:
+                    # Convert numpy array to PIL Image if needed
+                    if hasattr(screenshot, 'shape'):  # numpy array
+                        img = Image.fromarray(screenshot)
+                    else:
+                        img = screenshot
+
+                    # Convert to base64
+                    buffered = io.BytesIO()
+                    img.save(buffered, format="PNG")
+                    screenshot_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+                    # Update cache
+                    _screenshot_cache["frame_count"] = current_frame
+                    _screenshot_cache["base64"] = screenshot_b64
+                    logger.debug(f"Cached new screenshot for frame {current_frame}")
 
         return {
             "success": True,
@@ -602,6 +622,19 @@ def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consid
     state_response = get_game_state()
     if not state_response.get("success"):
         return {"success": False, "error": "Failed to get current game state"}
+
+    # Disable navigate_to for Mauville Gym due to map coordinate issues
+    location = state_response.get("state", {}).get("player", {}).get("location", {})
+    if isinstance(location, dict):
+        location_name = location.get("map_name", "")
+    else:
+        location_name = str(location)
+
+    if location_name and "MAUVILLE" in location_name.upper() and "GYM" in location_name.upper():
+        return {
+            "success": False,
+            "error": "navigate_to is disabled in Mauville Gym due to coordinate mapping issues. Please use press_button with directional inputs (UP, DOWN, LEFT, RIGHT) to navigate manually."
+        }
 
     # Get raw state for pathfinding
     try:
