@@ -77,7 +77,7 @@ direct_objectives_manager = None
 current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
-fps = 100
+fps = 80
 
 # Performance monitoring
 last_fps_log = time.time()
@@ -1855,6 +1855,54 @@ async def get_llm_logs():
         logger.error(f"Error getting LLM logs: {e}")
         return {"error": str(e)}
 
+# Helper function to update objectives cache file (for fast reads by stream.html)
+def _update_objectives_cache():
+    """Write current objectives state to fast-access cache file"""
+    try:
+        global direct_objectives_manager
+        objectives_data = {
+            "current": None,
+            "recently_completed": [],
+            "total_in_sequence": 0,
+            "current_index": 0
+        }
+
+        if direct_objectives_manager and direct_objectives_manager.is_sequence_active():
+            current_obj = direct_objectives_manager.get_current_objective()
+
+            # Get recently completed objectives (last 5)
+            completed_objectives = []
+            if direct_objectives_manager.current_sequence:
+                for i in range(max(0, direct_objectives_manager.current_index - 5), direct_objectives_manager.current_index):
+                    if i < len(direct_objectives_manager.current_sequence):
+                        obj = direct_objectives_manager.current_sequence[i]
+                        completed_objectives.append({
+                            "id": obj.id,
+                            "description": obj.description,
+                            "completed": True,
+                            "index": i
+                        })
+
+            objectives_data = {
+                "current": {
+                    "id": current_obj.id,
+                    "description": current_obj.description,
+                    "index": direct_objectives_manager.current_index
+                } if current_obj else None,
+                "recently_completed": completed_objectives,
+                "total_in_sequence": len(direct_objectives_manager.current_sequence),
+                "current_index": direct_objectives_manager.current_index
+            }
+
+        # Write to cache file
+        os.makedirs(".pokeagent_cache", exist_ok=True)
+        cache_file = ".pokeagent_cache/current_objective.json"
+        with open(cache_file, 'w') as f:
+            json.dump(objectives_data, f)
+
+    except Exception as e:
+        logger.debug(f"Failed to update objectives cache: {e}")
+
 # Milestone checking is now handled by the emulator
 
 @app.get("/milestones")
@@ -1862,11 +1910,30 @@ async def get_milestones():
     """Get current milestones achieved based on persistent tracking"""
     if env is None:
         raise HTTPException(status_code=400, detail="Emulator not initialized")
-    
+
     try:
         # Get milestones directly from emulator
-        return env.get_milestones()
-        
+        result = env.get_milestones()
+
+        # Read objectives from cached file (fast, no manager access needed)
+        objectives_data = {
+            "current": None,
+            "recently_completed": [],
+            "total_in_sequence": 0,
+            "current_index": 0
+        }
+
+        try:
+            objectives_cache_file = ".pokeagent_cache/current_objective.json"
+            if os.path.exists(objectives_cache_file):
+                with open(objectives_cache_file, 'r') as f:
+                    objectives_data = json.load(f)
+        except Exception as e:
+            logger.debug(f"Could not read objectives cache: {e}")
+
+        result["objectives"] = objectives_data
+        return result
+
     except Exception as e:
         logger.error(f"Error getting milestones: {e}")
         # Fallback to basic milestones if memory reading fails
@@ -1880,6 +1947,12 @@ async def get_milestones():
             "total": 2,
             "progress": 1.0,
             "tracking_system": "fallback",
+            "objectives": {
+                "current": None,
+                "recently_completed": [],
+                "total_in_sequence": 0,
+                "current_index": 0
+            },
             "error": str(e)
         }
 
@@ -2235,6 +2308,9 @@ async def mcp_complete_direct_objective(request: dict):
         # Mark objective as completed
         direct_objectives_manager._mark_objective_completed(current_obj)
         direct_objectives_manager.current_index += 1
+
+        # Update objectives cache for stream.html (fast file read)
+        _update_objectives_cache()
 
         # Create backup of .pokeagent_cache after completing objective
         try:
@@ -2881,7 +2957,7 @@ async def mcp_create_direct_objectives(request: dict):
         
         # Add dynamic objectives (this will automatically set current_index to the first new objective)
         direct_objectives_manager.add_dynamic_objectives(objectives_data, set_as_current=True)
-        
+
         # If we just created the auto-objective to create new objectives, mark it as completed
         # Note: add_dynamic_objectives already set current_index to the first new objective,
         # so we don't need to increment it again here
@@ -2889,7 +2965,10 @@ async def mcp_create_direct_objectives(request: dict):
             direct_objectives_manager._mark_objective_completed(current_obj)
             logger.info(f"✅ Marked sequence_complete_create_next_objectives as completed after creating {len(objectives_data)} new objectives")
             logger.info(f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)")
-        
+
+        # Update objectives cache for stream.html (fast file read)
+        _update_objectives_cache()
+
         # Get current game state for context
         from utils.state_formatter import format_state_for_llm
         from server.cli import pokemon_mcp_server
