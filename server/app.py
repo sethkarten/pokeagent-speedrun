@@ -23,7 +23,7 @@ import numpy as np
 import requests
 import uvicorn
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from PIL import Image
@@ -120,12 +120,68 @@ frame_cache_skip_frames = 30  # Only update cache every 30 frames (4x/sec at 120
 # Set to False when using ground truth porymap data to avoid expensive updates
 ENABLE_MAP_STITCHER = False  # Disabled - using porymap ground truth instead
 
+# State endpoint cache - cache map data by location to avoid expensive regeneration
+_state_cache = {
+    "location": None,
+    "map_data": None,
+    "portal_data": None,
+    "timestamp": 0
+}
+_state_cache_ttl = 5.0  # Cache for 5 seconds per location
+
 # Server runs headless - display handled by client
 
 # Threading locks for thread safety
 obs_lock = threading.Lock()
 step_lock = threading.Lock()
 memory_lock = threading.Lock()  # New lock for memory operations to prevent race conditions
+
+# WebSocket connection manager for frame streaming
+class ConnectionManager:
+    """Manages WebSocket connections for real-time frame streaming"""
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+        self.lock = threading.Lock()
+        self.latest_frame = None  # Shared frame data (thread-safe)
+        self.last_sent_frame_count = {}  # Track last sent frame per connection
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        with self.lock:
+            self.active_connections.append(websocket)
+            self.last_sent_frame_count[id(websocket)] = 0
+        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        with self.lock:
+            if websocket in self.active_connections:
+                self.active_connections.remove(websocket)
+                ws_id = id(websocket)
+                if ws_id in self.last_sent_frame_count:
+                    del self.last_sent_frame_count[ws_id]
+        logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+
+    async def send_latest_frame(self, websocket: WebSocket):
+        """Send latest frame to a specific connection if new frame available"""
+        if not self.latest_frame:
+            return
+
+        ws_id = id(websocket)
+        frame_count = self.latest_frame.get("frame_count", 0)
+
+        # Only send if this is a new frame for this connection
+        if ws_id in self.last_sent_frame_count and self.last_sent_frame_count[ws_id] >= frame_count:
+            return
+
+        try:
+            message = json.dumps(self.latest_frame)
+            await websocket.send_text(message)
+            self.last_sent_frame_count[ws_id] = frame_count
+        except Exception as e:
+            logger.debug(f"Failed to send frame: {e}")
+            raise
+
+frame_manager = ConnectionManager()
 
 # Background milestone processing
 state_update_thread = None
@@ -164,12 +220,12 @@ def init_video_recording(record_enabled=False):
         video_writer = None
 
 def update_frame_cache(screenshot):
-    """Update the frame cache file for the separate frame server
+    """Update frame cache for WebSocket streaming - NO FILE I/O!
 
-    Performance optimization: Only update cache every N frames to reduce I/O overhead.
-    At 120 FPS, updating every 30 frames = 4 updates/sec instead of 120/sec.
+    Stores frames in memory for WebSocket clients to consume.
+    Performance: Updates every 2 frames = 40 FPS stream rate at 80 game FPS.
     """
-    global frame_cache_counter, FRAME_CACHE_FILE, frame_cache_skip_frames
+    global frame_cache_counter
 
     if screenshot is None:
         return
@@ -177,8 +233,8 @@ def update_frame_cache(screenshot):
     # Increment counter on every call
     frame_cache_counter += 1
 
-    # Only update cache file every N frames (skip intermediate frames)
-    if frame_cache_counter % frame_cache_skip_frames != 0:
+    # Only update every 2 frames (80 FPS / 2 = 40 FPS stream rate)
+    if frame_cache_counter % 2 != 0:
         return
 
     try:
@@ -195,21 +251,15 @@ def update_frame_cache(screenshot):
         else:
             return
 
-        # Write to cache file atomically
-        cache_data = {
+        # Store frame in memory for WebSocket clients (thread-safe)
+        frame_manager.latest_frame = {
             "frame_data": img_str,
-            "frame_counter": frame_cache_counter,
+            "frame_count": frame_cache_counter,
             "timestamp": time.time()
         }
 
-        # Write to temporary file first, then move (atomic operation)
-        temp_file = FRAME_CACHE_FILE + ".tmp"
-        with open(temp_file, 'w') as f:
-            json.dump(cache_data, f)
-        os.rename(temp_file, FRAME_CACHE_FILE)
-
-    except Exception:
-        pass  # Silently handle cache write errors
+    except Exception as e:
+        logger.debug(f"Frame update failed: {e}")
 
 def record_frame(screenshot):
     """Record frame to video if recording is enabled with frame skipping"""
@@ -870,32 +920,39 @@ async def get_latest_frame():
 
 @app.get("/frame")
 async def get_frame_from_cache():
-    """Get latest frame from in-memory cache (for stream.html) - zero file I/O!"""
-    global frame_cache_memory
+    """DISABLED - Use WebSocket /ws/frames for real-time streaming instead"""
+    raise HTTPException(
+        status_code=410,
+        detail="HTTP polling disabled. Use WebSocket endpoint /ws/frames for real-time frame streaming."
+    )
 
+@app.websocket("/ws/frames")
+async def websocket_frames(websocket: WebSocket):
+    """WebSocket endpoint for real-time frame streaming
+
+    This endpoint continuously sends new frames as they become available.
+    The game loop updates frame_manager.latest_frame, and we send it here.
+    """
+    import asyncio
+
+    await frame_manager.connect(websocket)
     try:
-        # Serve directly from in-memory cache
-        if frame_cache_memory["frame_data"]:
-            return {
-                "frame": frame_cache_memory["frame_data"],
-                "frame_count": frame_cache_memory["frame_counter"],
-                "timestamp": frame_cache_memory["timestamp"],
-                "status": "ok"
-            }
-        else:
-            # No frame available yet
-            return {
-                "frame": None,
-                "frame_count": 0,
-                "timestamp": time.time(),
-                "status": "no_frame"
-            }
-    except Exception as e:
-        return {
-            "frame": None,
-            "error": str(e),
-            "status": "error"
-        }
+        # Continuously send frames while connection is alive
+        while True:
+            try:
+                # Send latest frame if available (non-blocking check)
+                await frame_manager.send_latest_frame(websocket)
+
+                # Small sleep to avoid busy-waiting (check ~60 times per second)
+                await asyncio.sleep(0.016)  # ~60 FPS check rate
+
+            except WebSocketDisconnect:
+                break
+            except Exception as e:
+                logger.warning(f"Error in frame streaming: {e}")
+                break
+    finally:
+        frame_manager.disconnect(websocket)
 
 @app.post("/action")
 async def take_action(request: ActionRequest):
@@ -1135,35 +1192,56 @@ async def get_comprehensive_state():
             player_coords = (player_pos.get("x", 0), player_pos.get("y", 0))
         else:
             player_coords = None
-        
+
         # Add stitched map info to the map section
         if not "map" in state:
             state["map"] = {}
 
-        # PRIORITY 1: Check for agent's SLAM map first
+        # Check if we can use cached map data (location-based cache)
+        current_time = time.time()
+        cache_valid = (
+            _state_cache["location"] == current_location and
+            current_time - _state_cache["timestamp"] < _state_cache_ttl
+        )
+
+        # Initialize slam_map_loaded before the cache check
         slam_map_loaded = False
-        if current_location and current_location != "Unknown":
-            try:
-                # Path imported at top of file
-                maps_dir = Path(".pokeagent_cache/maps")
-                # Normalize case to title case for consistent filenames
-                normalized_location = current_location.title()
-                safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (' ', '_', '-')).strip()
-                safe_name = safe_name.replace(' ', '_')
-                slam_map_file = maps_dir / f"{safe_name}.txt"
 
-                logger.info(f"🗺️ Checking for SLAM map: location='{current_location}' (normalized: '{normalized_location}') → file='{slam_map_file}'")
+        if cache_valid and _state_cache["map_data"]:
+            # Use cached map data - skip expensive map generation!
+            state["map"] = _state_cache["map_data"].copy()
+            if _state_cache["portal_data"]:
+                state.update(_state_cache["portal_data"])
+            logger.debug(f"✅ Using cached map data for {current_location}")
+            # Skip map generation when using cache
+            slam_map_loaded = True  # Prevent re-generation below
+        else:
+            # Generate fresh map data
+            logger.debug(f"🔄 Generating fresh map data for {current_location}")
 
-                if slam_map_file.exists():
-                    slam_map_data = slam_map_file.read_text()
-                    state["map"]["visual_map"] = slam_map_data
-                    state["map"]["map_source"] = "agent_slam"
-                    logger.info(f"✅ Using SLAM map for {current_location} ({len(slam_map_data)} chars)")
-                    slam_map_loaded = True
-                else:
-                    logger.info(f"   No SLAM map found at {slam_map_file}")
-            except Exception as e:
-                logger.error(f"Error loading SLAM map: {e}")
+            # PRIORITY 1: Check for agent's SLAM map first
+            if current_location and current_location != "Unknown":
+                try:
+                    # Path imported at top of file
+                    maps_dir = Path(".pokeagent_cache/maps")
+                    # Normalize case to title case for consistent filenames
+                    normalized_location = current_location.title()
+                    safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (' ', '_', '-')).strip()
+                    safe_name = safe_name.replace(' ', '_')
+                    slam_map_file = maps_dir / f"{safe_name}.txt"
+
+                    logger.info(f"🗺️ Checking for SLAM map: location='{current_location}' (normalized: '{normalized_location}') → file='{slam_map_file}'")
+
+                    if slam_map_file.exists():
+                        slam_map_data = slam_map_file.read_text()
+                        state["map"]["visual_map"] = slam_map_data
+                        state["map"]["map_source"] = "agent_slam"
+                        logger.info(f"✅ Using SLAM map for {current_location} ({len(slam_map_data)} chars)")
+                        slam_map_loaded = True
+                    else:
+                        logger.info(f"   No SLAM map found at {slam_map_file}")
+                except Exception as e:
+                    logger.error(f"Error loading SLAM map: {e}")
 
         # PRIORITY 2: Check if visual_map was already generated by memory_reader
         # If so, preserve it as it has the proper accumulated map data
@@ -1328,7 +1406,13 @@ async def get_comprehensive_state():
         
         # Include action queue info for multiprocess coordination
         queue_length = len(action_queue)  # Action queue access is atomic for len()
-        
+
+        # Cache map data for this location (5 second TTL) - reduces load on subsequent requests
+        _state_cache["location"] = current_location
+        _state_cache["map_data"] = state.get("map", {}).copy()
+        _state_cache["portal_data"] = {"location_connections": state.get("location_connections", {})}
+        _state_cache["timestamp"] = time.time()
+
         return ComprehensiveStateResponse(
             visual=state["visual"],
             player=state["player"],
@@ -1340,7 +1424,7 @@ async def get_comprehensive_state():
             status="running",
             action_queue_length=queue_length
         )
-        
+
     except Exception as e:
         logger.error(f"Error getting comprehensive state: {e}")
         raise HTTPException(status_code=500, detail=str(e)) 

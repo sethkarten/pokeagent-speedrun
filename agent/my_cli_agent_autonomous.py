@@ -394,41 +394,41 @@ class AutonomousCLIAgent:
             },
 
             # Wiki Tools - NOW ENABLED
-            {
-                "name": "lookup_pokemon_info",
-                "description": "Look up Pokemon, moves, locations, items, NPCs from wikis (Bulbapedia, Serebii, PokemonDB, Marriland).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "topic": {"type_": "STRING", "description": "What to search (e.g., 'Mudkip', 'Route_101')"},
-                        "source": {
-                            "type_": "STRING",
-                            "enum": ["bulbapedia", "serebii", "pokemondb", "marriland"],
-                            "description": "Wiki source (default: bulbapedia)"
-                        }
-                    },
-                    "required": ["topic"]
-                }
-            },
-            {
-                "name": "list_wiki_sources",
-                "description": "List available Pokemon wiki sources.",
-                "parameters": {"type_": "OBJECT", "properties": {}, "required": []}
-            },
-            {
-                "name": "get_walkthrough",
-                "description": "Get official Emerald walkthrough (Parts 1-21). CRITICAL: Match your knowledge base to milestones. Part 1: Starter+Norman. Part 2: Roxanne (1st gym). Part 3: Brawly (2nd gym). Part 4: Slateport/Team Aqua. Part 5: Wattson (3rd gym). Part 6: Fallarbor. Part 7: Flannery (4th gym). ALWAYS call get_knowledge_summary() FIRST, match to milestones, use HIGHEST completed + 1. Example: Knowledge shows 'Defeated Roxanne, Stone Badge' → Past Part 2, use Part 3.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "part": {
-                            "type_": "INTEGER",
-                            "description": "Walkthrough part 1-21. Determine by: 1) Review knowledge_summary 2) Match to milestones 3) Use highest completed + 1. VERIFY the walkthrough against knowledge before creating objectives.",
-                        }
-                    },
-                    "required": ["part"]
-                }
-            },
+            # {
+            #     "name": "lookup_pokemon_info",
+            #     "description": "Look up Pokemon, moves, locations, items, NPCs from wikis (Bulbapedia, Serebii, PokemonDB, Marriland).",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "topic": {"type_": "STRING", "description": "What to search (e.g., 'Mudkip', 'Route_101')"},
+            #             "source": {
+            #                 "type_": "STRING",
+            #                 "enum": ["bulbapedia", "serebii", "pokemondb", "marriland"],
+            #                 "description": "Wiki source (default: bulbapedia)"
+            #             }
+            #         },
+            #         "required": ["topic"]
+            #     }
+            # },
+            # {
+            #     "name": "list_wiki_sources",
+            #     "description": "List available Pokemon wiki sources.",
+            #     "parameters": {"type_": "OBJECT", "properties": {}, "required": []}
+            # },
+            # {
+            #     "name": "get_walkthrough",
+            #     "description": "Get official Emerald walkthrough (Parts 1-21). CRITICAL: Match your knowledge base to milestones. Part 1: Starter+Norman. Part 2: Roxanne (1st gym). Part 3: Brawly (2nd gym). Part 4: Slateport/Team Aqua. Part 5: Wattson (3rd gym). Part 6: Fallarbor. Part 7: Flannery (4th gym). ALWAYS call get_knowledge_summary() FIRST, match to milestones, use HIGHEST completed + 1. Example: Knowledge shows 'Defeated Roxanne, Stone Badge' → Past Part 2, use Part 3.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "part": {
+            #                 "type_": "INTEGER",
+            #                 "description": "Walkthrough part 1-21. Determine by: 1) Review knowledge_summary 2) Match to milestones 3) Use highest completed + 1. VERIFY the walkthrough against knowledge before creating objectives.",
+            #             }
+            #         },
+            #         "required": ["part"]
+            #     }
+            # },
             {
                 "name": "create_direct_objectives",
                 "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition. This function will also increment the objective index to the first new objective created.",
@@ -463,15 +463,15 @@ class AutonomousCLIAgent:
                     "required": ["objectives", "reasoning"]
                 }
             },
-            {
-                "name": "get_progress_summary",
-                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary. Use this to understand what you've accomplished.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {},
-                    "required": []
-                }
-            },
+            # {
+            #     "name": "get_progress_summary",
+            #     "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary. Use this to understand what you've accomplished.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {},
+            #         "required": []
+            #     }
+            # },
 
             # ============================================================
             # BASELINE MCP TOOLS (File/Shell/Web) - NOW ALL DISABLED
@@ -1415,16 +1415,18 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         """
         # First, check initial queue length
         try:
-            response = requests.get(f"{self.server_url}/queue_status", timeout=2)
+            response = requests.get(f"{self.server_url}/queue_status", timeout=5)  # Increased from 2s to 5s
             if response.status_code == 200:
                 status = response.json()
                 initial_queue_len = status.get("queue_length", 0)
 
-                # If only 1 action or empty queue, just wait a fixed time
-                if initial_queue_len <= 1:
-                    logger.info(f"⏳ Single action queued, waiting 1.0s for game state to stabilize...")
-                    time.sleep(1.0)  # Fixed wait for game state stabilization
-                    logger.info("✅ Action completed (fixed wait)")
+                # If only 1-3 actions, use fixed wait instead of polling
+                # Avoids timeout errors when server is under load
+                if initial_queue_len <= 3:
+                    wait_time = max(1.0, initial_queue_len * 0.5)  # 0.5s per action + 0.5s buffer
+                    logger.info(f"⏳ {initial_queue_len} action(s) queued, waiting {wait_time:.1f}s (fixed wait)...")
+                    time.sleep(wait_time)
+                    logger.info("✅ Actions completed (fixed wait)")
                     return
 
                 logger.info(f"⏳ Waiting for {initial_queue_len} actions to complete...")
@@ -1434,12 +1436,16 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             time.sleep(1.0)
             return
 
-        # For multiple actions, poll the queue
+        # For 4+ actions, poll the queue with longer intervals
         start_time = time.time()
+        consecutive_errors = 0
+        max_consecutive_errors = 3
+
         while time.time() - start_time < timeout:
             try:
-                response = requests.get(f"{self.server_url}/queue_status", timeout=2)
+                response = requests.get(f"{self.server_url}/queue_status", timeout=5)  # Increased from 2s to 5s
                 if response.status_code == 200:
+                    consecutive_errors = 0  # Reset error counter on success
                     status = response.json()
                     if status.get("queue_empty", False):
                         logger.info("✅ All actions completed")
@@ -1447,13 +1453,20 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                     else:
                         queue_len = status.get("queue_length", 0)
                         logger.debug(f"   Queue: {queue_len} actions remaining...")
-                        time.sleep(0.5)
+                        time.sleep(1.0)  # Increased from 0.5s to 1.0s to reduce polling frequency
                 else:
                     logger.warning(f"Failed to get queue status: {response.status_code}")
-                    time.sleep(0.5)
+                    time.sleep(1.0)
             except Exception as e:
-                logger.warning(f"Error checking queue status: {e}")
-                time.sleep(0.5)
+                consecutive_errors += 1
+                logger.warning(f"Error checking queue status ({consecutive_errors}/{max_consecutive_errors}): {e}")
+
+                # If we get too many consecutive errors, assume actions completed
+                if consecutive_errors >= max_consecutive_errors:
+                    logger.warning(f"⚠️ Too many errors, assuming actions completed")
+                    return
+
+                time.sleep(1.0)
 
         logger.warning(f"⚠️ Timeout waiting for actions to complete after {timeout}s")
 
