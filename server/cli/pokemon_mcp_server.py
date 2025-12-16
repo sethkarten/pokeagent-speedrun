@@ -149,7 +149,7 @@ def press_buttons_direct(buttons, action_queue, reasoning="", source=None, metad
         return {"success": False, "error": str(e)}
 
 
-def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = None, consider_npcs: bool = False) -> dict:
+def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = None, consider_npcs: bool = True) -> dict:
     """
     Calculate path to coordinates without HTTP calls - for use by server endpoints.
     Returns buttons to be queued via take_action.
@@ -582,7 +582,7 @@ def press_buttons(
 
 
 @mcp.tool()
-def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consider_npcs: bool = False) -> dict:
+def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consider_npcs: bool = True) -> dict:
     """
     Automatically pathfind and move to a specific coordinate on the current map using A* algorithm.
     Handles collision detection and finds the optimal path. The pathfinding will be executed
@@ -593,7 +593,7 @@ def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consid
         y: Target Y coordinate
         variance: Path variance level ('low', 'medium', 'high', or 'none')
         reason: Why you're navigating to this location (optional context)
-        consider_npcs: Whether to avoid NPC positions during pathfinding (default False, NPCs ignored)
+        consider_npcs: Whether to avoid NPC positions during pathfinding (default True, NPCs avoided)
 
     Returns:
         Dictionary with success status, path information, and navigation result

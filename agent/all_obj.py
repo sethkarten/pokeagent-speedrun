@@ -355,7 +355,7 @@ ALL_OBJECTIVES = [
         description="Train team to Lv 13-14 for Roxanne",
         action_type="battle",
         target_location="Route 104 / Route 116",
-        navigation_hint="Grind in grass. Roxanne's ace is Lv 15 Nosepass. Need Lv 13+ minimum. Water/Grass types ideal.",
+        navigation_hint="Grind in grass. Roxanne's ace is Lv 15 Nosepass. Need Lv 13+ minimum. Water/Grass types ideal. Must be all Pokemon on team, not just lead. Make sure to switch.",
         completion_condition="team_level_13",
         priority=1
     ),
@@ -577,7 +577,7 @@ ALL_OBJECTIVES = [
         description="Train team to Lv 17-18 for Brawly",
         action_type="battle",
         target_location="Granite Cave / Route 106",
-        navigation_hint="Brawly's ace is Lv 19 Makuhita. Need Flying or Psychic types. Train Ralts/Taillow/Wingull.",
+        navigation_hint="Brawly's ace is Lv 19 Makuhita. Need Flying or Psychic types. Train Ralts/Taillow/Wingull. Lvl 17-18 must be all Pokemon on team, not just lead. Make sure to switch.",
         completion_condition="team_level_17",
         priority=1
     ),
@@ -784,7 +784,7 @@ ALL_OBJECTIVES = [
         description="Train team to Lv 22-24 for Wattson",
         action_type="battle",
         target_location="Route 110 / Route 117",
-        navigation_hint="Wattson's ace is Lv 24 Manectric. Ground types essential. Train Marshtomp if you have it.",
+        navigation_hint="Wattson's ace is Lv 24 Manectric. Ground types essential. Train Marshtomp if you have it. Train full team for the gym. Switch lead if necessary.",
         completion_condition="team_level_22",
         priority=1
     ),

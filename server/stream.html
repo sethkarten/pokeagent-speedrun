@@ -928,25 +928,69 @@
                 const milestonesList = document.getElementById('milestones-list');
                 milestonesList.innerHTML = '';
                 
-                // Filter and show only recent completed milestones (max 8)
+                // Display current objective first if available
+                if (data.objectives && data.objectives.current) {
+                    const currentObj = data.objectives.current;
+                    const item = document.createElement('div');
+                    item.className = 'milestone-item';
+                    item.style.borderLeft = '2px solid #ffa500';
+                    item.style.paddingLeft = '5px';
+                    item.style.marginBottom = '10px';
+
+                    // Truncate long descriptions
+                    const desc = currentObj.description.length > 50 ?
+                        currentObj.description.substring(0, 50) + '...' :
+                        currentObj.description;
+
+                    item.innerHTML = `
+                        <span class="milestone-category progress">NOW</span>
+                        <span class="milestone-name newest">${desc}</span>
+                        <span style="color: #ffa500;">[${currentObj.index + 1}/${data.objectives.total_in_sequence}]</span>
+                    `;
+                    milestonesList.appendChild(item);
+                }
+
+                // Display recently completed objectives
+                if (data.objectives && data.objectives.recently_completed && data.objectives.recently_completed.length > 0) {
+                    data.objectives.recently_completed.reverse().forEach((obj, index) => {
+                        const item = document.createElement('div');
+                        item.className = 'milestone-item';
+
+                        // Truncate long descriptions
+                        const desc = obj.description.length > 50 ?
+                            obj.description.substring(0, 50) + '...' :
+                            obj.description;
+
+                        const ageClass = index === 0 ? 'recent' : 'older';
+
+                        item.innerHTML = `
+                            <span class="milestone-category progress">OBJ</span>
+                            <span class="milestone-name ${ageClass}">${desc}</span>
+                            <span class="milestone-check">[OK]</span>
+                        `;
+                        milestonesList.appendChild(item);
+                    });
+                }
+
+                // Filter and show only recent completed milestones (max 4 to leave room for objectives)
                 if (data.milestones && data.milestones.length > 0) {
                     // Get only completed milestones, sorted by timestamp (most recent first)
                     const completedMilestones = data.milestones
                         .filter(milestone => milestone.completed)
                         .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                        .slice(0, 8); // Show max 8 recent milestones
-                    
+                        .slice(0, 4); // Show max 4 recent milestones (reduced from 8 to make room for objectives)
+
                     if (completedMilestones.length > 0) {
                         completedMilestones.forEach((milestone, index) => {
                             const item = document.createElement('div');
                             item.className = 'milestone-item';
-                            
+
                             const categoryClass = milestone.category || 'basic';
                             const categoryDisplay = categoryClass.toUpperCase().substring(0, 4);
-                            
+
                             // Add age indicator for visual feedback
-                            const ageClass = index === 0 ? 'newest' : index < 3 ? 'recent' : 'older';
-                            
+                            const ageClass = index === 0 ? 'newest' : index < 2 ? 'recent' : 'older';
+
                             item.innerHTML = `
                                 <span class="milestone-category ${categoryClass}">${categoryDisplay}</span>
                                 <span class="milestone-name ${ageClass}">${milestone.name}</span>
@@ -954,8 +998,8 @@
                             `;
                             milestonesList.appendChild(item);
                         });
-                    } else {
-                        // Show message if no completed milestones yet
+                    } else if (!data.objectives || !data.objectives.current) {
+                        // Show message if no completed milestones and no current objective
                         const noCompleted = document.createElement('div');
                         noCompleted.style.color = '#666';
                         noCompleted.style.fontStyle = 'italic';
@@ -963,8 +1007,8 @@
                         noCompleted.textContent = 'NO_MILESTONES_COMPLETED';
                         milestonesList.appendChild(noCompleted);
                     }
-                } else {
-                    // Show message if no milestones
+                } else if (!data.objectives || !data.objectives.current) {
+                    // Show message if no milestones and no current objective
                     const noMilestones = document.createElement('div');
                     noMilestones.style.color = '#666';
                     noMilestones.style.fontStyle = 'italic';
