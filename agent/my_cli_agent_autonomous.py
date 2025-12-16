@@ -305,9 +305,13 @@ class AutonomousCLIAgent:
                         "reason": {
                             "type_": "STRING",
                             "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current location, objective, destination details]' and 'PLAN: [why navigating here, what to do when arrive]'. Example: 'ANALYZE: Currently at Littleroot (8,10). Objective: Meet Prof Birch. Destination: Route 101 entrance at (15,5). PLAN: Navigate to encounter Birch being attacked. Will save him to progress story.'"
+                        },
+                        "consider_npcs": {
+                            "type_": "BOOLEAN",
+                            "description": "Whether to treat NPCs as obstacles during pathfinding. Set to true to avoid NPCs (recommended for most navigation). Set to false only if NPCs are wandering/moving and you want to ignore them."
                         }
                     },
-                    "required": ["x", "y", "variance", "reason"]
+                    "required": ["x", "y", "variance", "reason", "consider_npcs"]
                 }
             },
             {
@@ -1949,6 +1953,14 @@ AVAILABLE TOOLS - Use these function calls to interact with the game:
 - reflect(situation) - 🔄 SELF-CORRECTION TOOL: Use when stuck, repeating actions, or objectives seem wrong. Helps realign strategy and objectives.
 
 🗺️ **NAVIGATION**: Use navigate_to(x, y, variance, reason) to automatically pathfind to a coordinate.
+
+⚠️ **CRITICAL - UNREACHABLE WARPS**:
+When you see warps marked "⚠️ UNREACHABLE" in the game state:
+- These warps are on different elevation levels or blocked by walls
+- DO NOT try to navigate to them - pathfinding will FAIL
+- Look for reachable warps (marked with ✓) instead
+- If no reachable warps exist, you may need to find another path or complete other objectives first
+- Multi-level dungeons often have unreachable exits until you find the correct path through the dungeon
 
 📚 **INFORMATION TOOLS** (use when you need info or planning objectives):
 - lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis

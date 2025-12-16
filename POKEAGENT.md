@@ -146,12 +146,12 @@ press_buttons(["WAIT"], release_frames=60, reasoning="Wait exactly 60 frames for
 
 **IMPORTANT:** The game continues running while you think! Dialogue may advance during your decision-making.
 
-**When you see dialogue:**
+**When you see NPC/Story dialogue (NON-BATTLE):**
 1. Queue multiple fast A presses to advance through dialogue boxes
 2. Use `speed="fast"` for rapid advancement
 3. Don't worry about missing text - the game already advanced it while you were thinking
 
-**Example:**
+**Example (NPC dialogue):**
 ```python
 ANALYSIS: I see an NPC talking to me. There's dialogue text visible.
 
@@ -160,16 +160,24 @@ PLAN: The game has been running for 2-3 seconds while I thought about this, so t
 ACTION: press_buttons(["A", "A", "A", "A"], speed="fast", reasoning="Advancing through NPC dialogue")
 ```
 
+**⚠️ EXCEPTION - Battle Dialogue:**
+- **DO NOT spam A during battles!** See Battle Mechanics section below for proper battle dialogue handling
+- Battles require WAIT actions and deliberate move selection
+- Spamming A in battles can select wrong moves
+
 ### Advanced: Explicit Frame Control
 
 For precision timing, override frames explicitly:
 
 ```python
-# Ultra-fast dialogue spam (4 frames hold, 2 frames release)
-press_buttons(["A"]*10, hold_frames=4, release_frames=2, reasoning="Spamming through long dialogue")
+# Ultra-fast NPC dialogue advancement (4 frames hold, 2 frames release) - NON-BATTLE ONLY
+press_buttons(["A"]*10, hold_frames=4, release_frames=2, reasoning="Quickly advancing through long NPC cutscene dialogue")
 
 # Single precise tile movement (16 frames to complete one tile in Pokemon Emerald)
 press_buttons(["UP"], hold_frames=16, release_frames=5, reasoning="Move exactly 1 tile up")
+
+# Extended wait for battle dialogue to clear
+press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animation and dialogue to complete")
 ```
 
 ## 🎮 Game Boy Advance Button Controls
@@ -431,6 +439,35 @@ unnecessary wild battle - Pokemon adequately leveled and objective is navigation
    - Example: Press_Button["RIGHT"] -> Press_Button["DOWN"] -> Press_Button["A"] to select an attack. DO NOT DO Press_Button["QUICK ATTACK"]
 - **Type Advantages**: Use type matchups strategically (Water beats Fire, Fire beats Grass, Grass beats Water, etc.)
 - **PP Management**: Keep track of your move PP - if a move runs out, you can't use it until you visit a Pokemon Center. If a powerful move has low PP and you can finish off a foe Pokemon with a weaker move that has more PP, use the weaker move to conserve PP!
+
+**⚠️ CRITICAL - Battle Dialogue Handling:**
+
+**DO NOT spam A during battle dialogue!** Spamming A can cause you to accidentally select wrong moves or skip important information.
+
+**CORRECT approach during battles:**
+1. **WAIT for dialogue to clear** - Use `press_buttons(["WAIT"], speed="slow")` to let battle text finish displaying
+2. **Observe the battle menu** - Make sure you can see your move options clearly
+3. **Make deliberate move selection** - Navigate to the move you want, THEN press A once
+4. **One action at a time** - Don't queue multiple A presses during battles
+
+**Example - WRONG (spamming A):**
+```python
+❌ press_buttons(["A", "A", "A", "A"], speed="fast", reasoning="Attacking in battle")
+# This is DANGEROUS - might select wrong moves or skip critical information!
+```
+
+**Example - CORRECT (wait then act):**
+```python
+✅ press_buttons(["WAIT"], speed="slow", reasoning="Waiting for battle dialogue to clear")
+# Next turn: Observe battle state, then make deliberate move selection
+✅ press_buttons(["DOWN", "A"], speed="normal", reasoning="Selecting Tackle move")
+```
+
+**Why this matters:**
+- Battle dialogue shows important info (opponent's HP, move effectiveness, status changes)
+- Spamming A can make you use the wrong move
+- The game runs while you think (~1 second wait), so dialogue usually clears naturally
+- Better to WAIT and be deliberate than to spam and make mistakes
 
 ## Important Rules
 
