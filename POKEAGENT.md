@@ -8,13 +8,31 @@ Your goal is to play through Pokemon Emerald and eventually defeat the Elite Fou
 
 ## Direct Objectives System
 
-When you see a "DIRECT_OBJECTIVE" section in the game state, you are following a guided sequence of objectives. These provide specific step-by-step instructions for critical game phases.
+When you see a "DIRECT_OBJECTIVE" section in the game state, you are following a guided sequence of objectives. The system operates in either LEGACY mode (single sequence) or CATEGORIZED mode (three parallel sequences).
 
-**How to use Direct Objectives:**
-1. **Read the current objective** - Look for the "direct_objective" field in game state
-2. **Follow the guidance** - Use the navigation_hint and description to complete the task
-3. **Complete when done** - Call `complete_direct_objective` when you've successfully completed the current objective
-4. **Get next objective** - The system will automatically provide the next objective after completion
+### CATEGORIZED MODE - Three Objective Categories
+
+In categorized mode, you have **THREE INDEPENDENT objective sequences** running in parallel:
+
+1. **📖 STORY** - Main narrative progression (gym leaders, Team Aqua/Magma, Elite Four)
+   - These are the critical path objectives that advance the main story
+   - Example: "Defeat Gym Leader Roxanne", "Infiltrate Team Aqua hideout"
+
+2. **⚔️ BATTLING** - Team building and training objectives
+   - These help you build a strong team for upcoming challenges
+   - Grouped by prerequisite story objective (you get ~6 battling objectives per story milestone)
+   - Example: "Catch a Water-type Pokemon", "Train team to Level 15"
+
+3. **🎯 DYNAMICS** - Agent-created adaptive objectives
+   - **YOU CREATE THESE** when you identify needs not covered by story/battling
+   - These are optional objectives you add based on current situation
+   - Example: "Stock up on Potions before gym", "Learn about type advantages from NPC"
+
+**How to use Categorized Objectives:**
+1. **Work on all three categories** - Don't just focus on story objectives
+2. **Complete objectives appropriately** - Use the `category` parameter when calling `complete_direct_objective`
+3. **Create dynamic objectives** - When you see a need, create dynamic objectives for yourself
+4. **Balance your progress** - Mix story advancement with team building and situational needs
 
 **Example Direct Objective:**
 ```
@@ -32,6 +50,41 @@ DIRECT_OBJECTIVE: {
 - You have reached the target location (for navigation objectives)
 - You have completed the required interaction (for interaction objectives)
 - You have won the battle (for battle objectives)
+
+### Completing Objectives by Category
+
+**STORY objectives:**
+```python
+complete_direct_objective(
+    category="story",
+    reasoning="ANALYZE: Defeated Gym Leader Roxanne, obtained Stone Badge. PLAN: Story objective complete, advancing to next story milestone."
+)
+```
+
+**BATTLING objectives:**
+```python
+complete_direct_objective(
+    category="battling",
+    reasoning="ANALYZE: Caught Marill (Water-type) on Route 102, added to party. PLAN: Battling objective complete, team now has Water-type coverage."
+)
+```
+
+**DYNAMICS objectives:**
+```python
+# First, you might see a need and think about it
+# Example: "My Pokemon are low on HP and I need Potions"
+# Then you complete it when done:
+complete_direct_objective(
+    category="dynamics",
+    reasoning="ANALYZE: Purchased 5 Potions from Pokemart, inventory updated. PLAN: Dynamic objective complete, team prepared for upcoming battles."
+)
+```
+
+**CRITICAL: You must complete objectives in the correct category!**
+- ❌ WRONG: Completing a battling objective as "story"
+- ❌ WRONG: Ignoring battling objectives entirely
+- ❌ WRONG: Never creating or completing dynamic objectives
+- ✅ CORRECT: Completing each objective with its proper category parameter
 
 **CRITICAL - When completing objectives:**
 1. **BEFORE calling complete_direct_objective**, write important discoveries to knowledge base using add_knowledge()
@@ -263,9 +316,22 @@ The `pokemon-emerald` MCP server provides these tools:
    ```
 
 4. **complete_direct_objective** - Complete current direct objective
-   - Parameters: `reasoning` (string)
+   - Parameters: `reasoning` (string), `category` (string: "story", "battling", "dynamics")
    - Returns: Confirmation of completion and next objective
    - Use for: Marking completion of guided objectives
+   - **CRITICAL**: In CATEGORIZED mode, you MUST specify the category parameter
+   - Example: `complete_direct_objective(category="battling", reasoning="...")`
+
+4b. **create_dynamic_objective** - Create a new dynamic objective (CATEGORIZED mode only)
+   - Parameters: `description` (string), `reasoning` (string)
+   - Returns: Confirmation that dynamic objective was added to your sequence
+   - Use for: Adding adaptive objectives based on current needs
+   - **When to create dynamic objectives:**
+     - Your Pokemon are injured and need healing
+     - You need items (Potions, Pokeballs, Repels) before a challenge
+     - You want to explore an area or talk to NPCs for information
+     - You identify a strategic need not covered by story/battling objectives
+   - Example: `create_dynamic_objective(description="Visit Pokemon Center to heal team", reasoning="Team at 30% HP, need healing before gym battle")`
 
 ### Knowledge Management Tools
 
