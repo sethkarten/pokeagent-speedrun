@@ -202,7 +202,94 @@
         .milestone-name.older {
             color: #999;
         }
-        
+
+        /* 3-column categorized objectives layout */
+        .objectives-3col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            height: 140px;
+        }
+
+        .objective-column {
+            border: 1px solid #666;
+            background-color: #0a0a0a;
+            padding: 8px;
+            overflow-y: auto;
+        }
+
+        .objective-column::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .objective-column::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .objective-column::-webkit-scrollbar-thumb {
+            background: #666;
+            border-radius: 2px;
+        }
+
+        .objective-column.story {
+            border-color: #33ff33;
+        }
+
+        .objective-column.battling {
+            border-color: #ff6177;
+        }
+
+        .objective-column.dynamics {
+            border-color: #33ffff;
+        }
+
+        .objective-column-header {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #666;
+        }
+
+        .objective-column.story .objective-column-header {
+            color: #33ff33;
+        }
+
+        .objective-column.battling .objective-column-header {
+            color: #ff6177;
+        }
+
+        .objective-column.dynamics .objective-column-header {
+            color: #33ffff;
+        }
+
+        .objective-entry {
+            font-size: 10px;
+            margin: 4px 0;
+            padding: 3px 4px;
+            border-left: 2px solid #666;
+            padding-left: 6px;
+            word-wrap: break-word;
+            white-space: normal;
+            line-height: 1.3;
+        }
+
+        .objective-entry.current {
+            font-weight: bold;
+            border-left-color: #ffa500;
+            background-color: rgba(255, 165, 0, 0.1);
+        }
+
+        .objective-entry.completed {
+            color: #888;
+        }
+
+        .objective-id {
+            color: #666;
+            font-size: 9px;
+            margin-right: 4px;
+        }
+
         .brain-panel {
             width: 995px;
             height: 950px;
@@ -933,105 +1020,186 @@
                 const data = await response.json();
                 
                 console.log('Milestone data received:', data); // Debug log
-                
-                // Update progress bar and count (show recent out of completed)
-                const recentCount = Math.min(data.completed, 8);
-                document.getElementById('milestone-count').textContent = `${recentCount}/${data.completed} RECENT`;
-                document.getElementById('milestone-progress-fill').style.width = `${data.progress * 100}%`;
-                
+
                 // Update milestone list - GET ELEMENT FIRST!
                 const milestonesList = document.getElementById('milestones-list');
                 milestonesList.innerHTML = '';
-                
-                // Display current objective first if available
-                if (data.objectives && data.objectives.current) {
-                    const currentObj = data.objectives.current;
-                    const item = document.createElement('div');
-                    item.className = 'milestone-item';
-                    item.style.borderLeft = '2px solid #ffa500';
-                    item.style.paddingLeft = '5px';
-                    item.style.marginBottom = '10px';
 
-                    // Truncate long descriptions
-                    const desc = currentObj.description.length > 50 ?
-                        currentObj.description.substring(0, 50) + '...' :
-                        currentObj.description;
+                // Check if we're in categorized mode
+                if (data.objectives && data.objectives.mode === 'categorized') {
+                    // Update progress bar for categorized mode
+                    const storyStatus = data.objectives.categorized_status?.story;
+                    if (storyStatus) {
+                        document.getElementById('milestone-count').textContent = `STORY ${storyStatus.current_index + 1}/${storyStatus.total}`;
+                        document.getElementById('milestone-progress-fill').style.width = `${(storyStatus.current_index / storyStatus.total) * 100}%`;
+                    }
+                    // NEW: 3-column categorized layout
+                    const container = document.createElement('div');
+                    container.className = 'objectives-3col';
 
-                    item.innerHTML = `
-                        <span class="milestone-category progress">NOW</span>
-                        <span class="milestone-name newest">${desc}</span>
-                        <span style="color: #ffa500;">[${currentObj.index + 1}/${data.objectives.total_in_sequence}]</span>
-                    `;
-                    milestonesList.appendChild(item);
-                }
+                    // Helper function to create a column
+                    function createColumn(categoryName, objectives, status) {
+                        const column = document.createElement('div');
+                        column.className = `objective-column ${categoryName.toLowerCase()}`;
 
-                // Display recently completed objectives
-                if (data.objectives && data.objectives.recently_completed && data.objectives.recently_completed.length > 0) {
-                    data.objectives.recently_completed.reverse().forEach((obj, index) => {
+                        const header = document.createElement('div');
+                        header.className = 'objective-column-header';
+                        const prefix = categoryName === 'Story' ? '[STORY]' : categoryName === 'Battling' ? '[BATTLE]' : '[DYNAMIC]';
+                        header.textContent = prefix;
+                        if (status) {
+                            header.textContent += ` ${status.current_index + 1}/${status.total}`;
+                        }
+                        column.appendChild(header);
+
+                        if (objectives && objectives.length > 0) {
+                            objectives.slice(0, 6).forEach(obj => {  // Max 6 entries per column
+                                const entry = document.createElement('div');
+                                entry.className = 'objective-entry';
+                                if (obj.current) {
+                                    entry.classList.add('current');
+                                } else if (obj.completed) {
+                                    entry.classList.add('completed');
+                                }
+
+                                const id = document.createElement('span');
+                                id.className = 'objective-id';
+                                id.textContent = obj.id;
+
+                                const desc = document.createElement('span');
+                                desc.textContent = obj.description; // Show full description
+
+                                entry.appendChild(id);
+                                entry.appendChild(desc);
+
+                                if (obj.completed) {
+                                    const check = document.createElement('span');
+                                    check.style.color = '#666';
+                                    check.style.marginLeft = '4px';
+                                    check.textContent = '[OK]';
+                                    entry.appendChild(check);
+                                }
+
+                                column.appendChild(entry);
+                            });
+                        } else {
+                            const empty = document.createElement('div');
+                            empty.style.color = '#666';
+                            empty.style.fontStyle = 'italic';
+                            empty.style.fontSize = '9px';
+                            empty.style.marginTop = '8px';
+                            empty.textContent = 'No objectives';
+                            column.appendChild(empty);
+                        }
+
+                        return column;
+                    }
+
+                    // Create 3 columns
+                    container.appendChild(createColumn('Story', data.objectives.story, data.objectives.categorized_status?.story));
+                    container.appendChild(createColumn('Battling', data.objectives.battling, data.objectives.categorized_status?.battling));
+                    container.appendChild(createColumn('Dynamics', data.objectives.dynamics, data.objectives.categorized_status?.dynamics));
+
+                    milestonesList.appendChild(container);
+
+                } else {
+                    // LEGACY MODE: Display objectives and milestones the old way
+
+                    // Update progress bar for legacy mode
+                    const recentCount = Math.min(data.completed, 8);
+                    document.getElementById('milestone-count').textContent = `${recentCount}/${data.completed} RECENT`;
+                    document.getElementById('milestone-progress-fill').style.width = `${data.progress * 100}%`;
+
+                    if (data.objectives && data.objectives.current) {
+                        // Display current objective first if available
+                        const currentObj = data.objectives.current;
                         const item = document.createElement('div');
                         item.className = 'milestone-item';
+                        item.style.borderLeft = '2px solid #ffa500';
+                        item.style.paddingLeft = '5px';
+                        item.style.marginBottom = '10px';
 
                         // Truncate long descriptions
-                        const desc = obj.description.length > 50 ?
-                            obj.description.substring(0, 50) + '...' :
-                            obj.description;
-
-                        const ageClass = index === 0 ? 'recent' : 'older';
+                        const desc = currentObj.description.length > 50 ?
+                            currentObj.description.substring(0, 50) + '...' :
+                            currentObj.description;
 
                         item.innerHTML = `
-                            <span class="milestone-category progress">OBJ</span>
-                            <span class="milestone-name ${ageClass}">${desc}</span>
-                            <span class="milestone-check">[OK]</span>
+                            <span class="milestone-category progress">NOW</span>
+                            <span class="milestone-name newest">${desc}</span>
+                            <span style="color: #ffa500;">[${currentObj.index + 1}/${data.objectives.total_in_sequence}]</span>
                         `;
                         milestonesList.appendChild(item);
-                    });
-                }
+                    }
 
-                // Filter and show only recent completed milestones (max 4 to leave room for objectives)
-                if (data.milestones && data.milestones.length > 0) {
-                    // Get only completed milestones, sorted by timestamp (most recent first)
-                    const completedMilestones = data.milestones
-                        .filter(milestone => milestone.completed)
-                        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                        .slice(0, 4); // Show max 4 recent milestones (reduced from 8 to make room for objectives)
-
-                    if (completedMilestones.length > 0) {
-                        completedMilestones.forEach((milestone, index) => {
+                    // Display recently completed objectives
+                    if (data.objectives && data.objectives.recently_completed && data.objectives.recently_completed.length > 0) {
+                        data.objectives.recently_completed.reverse().forEach((obj, index) => {
                             const item = document.createElement('div');
                             item.className = 'milestone-item';
 
-                            const categoryClass = milestone.category || 'basic';
-                            const categoryDisplay = categoryClass.toUpperCase().substring(0, 4);
+                            // Truncate long descriptions
+                            const desc = obj.description.length > 50 ?
+                                obj.description.substring(0, 50) + '...' :
+                                obj.description;
 
-                            // Add age indicator for visual feedback
-                            const ageClass = index === 0 ? 'newest' : index < 2 ? 'recent' : 'older';
+                            const ageClass = index === 0 ? 'recent' : 'older';
 
                             item.innerHTML = `
-                                <span class="milestone-category ${categoryClass}">${categoryDisplay}</span>
-                                <span class="milestone-name ${ageClass}">${milestone.name}</span>
+                                <span class="milestone-category progress">OBJ</span>
+                                <span class="milestone-name ${ageClass}">${desc}</span>
                                 <span class="milestone-check">[OK]</span>
                             `;
                             milestonesList.appendChild(item);
                         });
-                    } else if (!data.objectives || !data.objectives.current) {
-                        // Show message if no completed milestones and no current objective
-                        const noCompleted = document.createElement('div');
-                        noCompleted.style.color = '#666';
-                        noCompleted.style.fontStyle = 'italic';
-                        noCompleted.style.textAlign = 'center';
-                        noCompleted.textContent = 'NO_MILESTONES_COMPLETED';
-                        milestonesList.appendChild(noCompleted);
                     }
-                } else if (!data.objectives || !data.objectives.current) {
-                    // Show message if no milestones and no current objective
-                    const noMilestones = document.createElement('div');
-                    noMilestones.style.color = '#666';
-                    noMilestones.style.fontStyle = 'italic';
-                    noMilestones.textContent = 'NO_MILESTONES_LOADED';
-                    milestonesList.appendChild(noMilestones);
-                }
-                
-                // Add debug info if available - AFTER milestones
+
+                    // Filter and show only recent completed milestones (max 4 to leave room for objectives)
+                    if (data.milestones && data.milestones.length > 0) {
+                        // Get only completed milestones, sorted by timestamp (most recent first)
+                        const completedMilestones = data.milestones
+                            .filter(milestone => milestone.completed)
+                            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                            .slice(0, 4); // Show max 4 recent milestones (reduced from 8 to make room for objectives)
+
+                        if (completedMilestones.length > 0) {
+                            completedMilestones.forEach((milestone, index) => {
+                                const item = document.createElement('div');
+                                item.className = 'milestone-item';
+
+                                const categoryClass = milestone.category || 'basic';
+                                const categoryDisplay = categoryClass.toUpperCase().substring(0, 4);
+
+                                // Add age indicator for visual feedback
+                                const ageClass = index === 0 ? 'newest' : index < 2 ? 'recent' : 'older';
+
+                                item.innerHTML = `
+                                    <span class="milestone-category ${categoryClass}">${categoryDisplay}</span>
+                                    <span class="milestone-name ${ageClass}">${milestone.name}</span>
+                                    <span class="milestone-check">[OK]</span>
+                                `;
+                                milestonesList.appendChild(item);
+                            });
+                        } else if (!data.objectives || !data.objectives.current) {
+                            // Show message if no completed milestones and no current objective
+                            const noCompleted = document.createElement('div');
+                            noCompleted.style.color = '#666';
+                            noCompleted.style.fontStyle = 'italic';
+                            noCompleted.style.textAlign = 'center';
+                            noCompleted.textContent = 'NO_MILESTONES_COMPLETED';
+                            milestonesList.appendChild(noCompleted);
+                        }
+                    } else if (!data.objectives || !data.objectives.current) {
+                        // Show message if no milestones and no current objective
+                        const noMilestones = document.createElement('div');
+                        noMilestones.style.color = '#666';
+                        noMilestones.style.fontStyle = 'italic';
+                        noMilestones.textContent = 'NO_MILESTONES_LOADED';
+                        milestonesList.appendChild(noMilestones);
+                    }
+
+                } // End of legacy mode block
+
+                // Add debug info if available - AFTER milestones/objectives
                 if (data.current_location || data.badges !== undefined) {
                     const debugInfo = document.createElement('div');
                     debugInfo.style.fontSize = '10px';

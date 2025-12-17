@@ -65,6 +65,8 @@ def start_server(args, run_id=None):
         server_cmd.extend(["--direct-objectives", args.direct_objectives])
         if args.direct_objectives_start > 0:
             server_cmd.extend(["--direct-objectives-start", str(args.direct_objectives_start)])
+        if args.direct_objectives_battling_start > 0:
+            server_cmd.extend(["--direct-objectives-battling-start", str(args.direct_objectives_battling_start)])
     
     # Server always runs headless - display handled by client
     
@@ -199,10 +201,12 @@ def main():
                        help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", default=True,
                        help="Disable OCR dialogue detection")
-    parser.add_argument("--direct-objectives", type=str, 
-                       help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival')")
+    parser.add_argument("--direct-objectives", type=str,
+                       help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival', 'categorized_full_game')")
     parser.add_argument("--direct-objectives-start", type=int, default=0,
-                       help="Start index for direct objectives (for resuming from checkpoints)")
+                       help="Start index for story objectives in legacy mode, or story objectives in categorized mode")
+    parser.add_argument("--direct-objectives-battling-start", type=int, default=0,
+                       help="Start index for battling objectives (only used in categorized mode)")
     parser.add_argument("--clear-knowledge-base", action="store_true",
                        help="Clear the knowledge_base.json file before starting the run")
     parser.add_argument("--run-name", type=str, default=None,

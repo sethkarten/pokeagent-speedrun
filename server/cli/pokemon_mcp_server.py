@@ -60,7 +60,7 @@ _screenshot_cache = {
 # HELPER FUNCTIONS FOR SERVER ENDPOINTS (NO HTTP CALLS)
 # ============================================================================
 
-def get_game_state_direct(env, state_formatter, action_history=None) -> dict:
+def get_game_state_direct(env, state_formatter, action_history=None, current_obs=None) -> dict:
     """
     Get game state without HTTP calls - for use by server endpoints.
 
@@ -68,6 +68,7 @@ def get_game_state_direct(env, state_formatter, action_history=None) -> dict:
         env: EmeraldEmulator instance
         state_formatter: format_state_for_llm function
         action_history: Optional list of recent actions with start/end positions
+        current_obs: Optional numpy array of current frame (from game loop)
 
     Returns:
         Dictionary with success status and state data including screenshot
@@ -76,40 +77,40 @@ def get_game_state_direct(env, state_formatter, action_history=None) -> dict:
         import base64
         import io
         from PIL import Image
+        import numpy as np
 
-        state = env.get_comprehensive_state()
+        # CRITICAL FIX: Use current_obs (latest frame from game loop) instead of env.get_screenshot()
+        # This ensures we get the frame that's synchronized with the most recent game loop tick
+        # Using env.get_screenshot() can cause desyncs between memory and visuals
+        screenshot = None
+        if current_obs is not None:
+            # Use the latest frame from game loop (most reliable - guaranteed latest)
+            screenshot = Image.fromarray(current_obs)
+            logger.debug("Using current_obs (latest frame from game loop)")
+        elif hasattr(env, 'current_frame') and env.current_frame is not None:
+            # Fallback: Use background-polled frame if available
+            screenshot = Image.fromarray(env.current_frame)
+            logger.debug("Using env.current_frame (background-polled)")
+        elif hasattr(env, 'get_screenshot'):
+            # Last resort: Direct screenshot (may be stale/desynced)
+            screenshot = env.get_screenshot()
+            logger.debug("Using env.get_screenshot() (direct video buffer - may be stale)")
+
+        # Get state WITH screenshot to ensure consistency
+        state = env.get_comprehensive_state(screenshot=screenshot)
         # Pass action history to state formatter
         state_text = state_formatter(state, action_history=action_history)
 
-        # Get screenshot as base64 for vision models (with caching)
+        # Get screenshot as base64 for vision models (NO CACHING - always fresh)
+        # CRITICAL: Caching was causing stale images to be sent to the agent
+        # The frame_count wasn't updating properly, causing the same image to be reused
         screenshot_b64 = None
-        if hasattr(env, 'get_screenshot'):
-            # Check if we can use cached screenshot
-            current_frame = getattr(env, 'frame_count', -1)
-
-            if current_frame == _screenshot_cache["frame_count"] and _screenshot_cache["base64"]:
-                # Use cached screenshot - no encoding needed!
-                screenshot_b64 = _screenshot_cache["base64"]
-                logger.debug(f"Using cached screenshot for frame {current_frame}")
-            else:
-                # Encode new screenshot and cache it
-                screenshot = env.get_screenshot()
-                if screenshot is not None:
-                    # Convert numpy array to PIL Image if needed
-                    if hasattr(screenshot, 'shape'):  # numpy array
-                        img = Image.fromarray(screenshot)
-                    else:
-                        img = screenshot
-
-                    # Convert to base64
-                    buffered = io.BytesIO()
-                    img.save(buffered, format="PNG")
-                    screenshot_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
-
-                    # Update cache
-                    _screenshot_cache["frame_count"] = current_frame
-                    _screenshot_cache["base64"] = screenshot_b64
-                    logger.debug(f"Cached new screenshot for frame {current_frame}")
+        if screenshot is not None:
+            # Always encode fresh screenshot - no caching
+            buffered = io.BytesIO()
+            screenshot.save(buffered, format="PNG")
+            screenshot_b64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            logger.debug("Encoded fresh screenshot (caching disabled)")
 
         return {
             "success": True,

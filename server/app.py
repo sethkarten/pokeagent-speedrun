@@ -73,6 +73,7 @@ running = True
 step_count = 0
 direct_objectives_sequence = None
 direct_objectives_start_index = 0
+direct_objectives_battling_start_index = 0
 direct_objectives_manager = None
 current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
@@ -1945,6 +1946,7 @@ def _update_objectives_cache():
     try:
         global direct_objectives_manager
         objectives_data = {
+            "mode": "legacy",
             "current": None,
             "recently_completed": [],
             "total_in_sequence": 0,
@@ -1952,40 +1954,110 @@ def _update_objectives_cache():
         }
 
         if direct_objectives_manager and direct_objectives_manager.is_sequence_active():
-            current_obj = direct_objectives_manager.get_current_objective()
+            logger.info(f"📊 Updating objectives cache - mode: {direct_objectives_manager.mode}")
+            if direct_objectives_manager.mode == "categorized":
+                # NEW: Categorized mode with 3 columns
+                objectives_data["mode"] = "categorized"
 
-            # Get recently completed objectives (last 5)
-            completed_objectives = []
-            if direct_objectives_manager.current_sequence:
-                for i in range(max(0, direct_objectives_manager.current_index - 5), direct_objectives_manager.current_index):
-                    if i < len(direct_objectives_manager.current_sequence):
-                        obj = direct_objectives_manager.current_sequence[i]
-                        completed_objectives.append({
-                            "id": obj.id,
-                            "description": obj.description,
-                            "completed": True,
-                            "index": i
+                # Helper function to get recent objectives for a category
+                def get_recent_for_category(category, sequence, index):
+                    items = []
+                    # Current objective (if exists)
+                    if index < len(sequence):
+                        current = sequence[index]
+                        items.append({
+                            "id": current.id,
+                            "description": current.description,
+                            "completed": False,
+                            "current": True
                         })
 
-            objectives_data = {
-                "current": {
-                    "id": current_obj.id,
-                    "description": current_obj.description,
-                    "index": direct_objectives_manager.current_index
-                } if current_obj else None,
-                "recently_completed": completed_objectives,
-                "total_in_sequence": len(direct_objectives_manager.current_sequence),
-                "current_index": direct_objectives_manager.current_index
-            }
+                    # Recently completed (last 5 completed before current, in reverse order - most recent first)
+                    for i in range(index - 1, max(-1, index - 6), -1):
+                        if i >= 0 and i < len(sequence) and sequence[i].completed:
+                            items.append({
+                                "id": sequence[i].id,
+                                "description": sequence[i].description,
+                                "completed": True,
+                                "current": False
+                            })
+
+                    return items
+
+                objectives_data["story"] = get_recent_for_category(
+                    "story",
+                    direct_objectives_manager.story_sequence,
+                    direct_objectives_manager.story_index
+                )
+
+                objectives_data["battling"] = get_recent_for_category(
+                    "battling",
+                    direct_objectives_manager.battling_sequence,
+                    direct_objectives_manager.battling_index
+                )
+
+                objectives_data["dynamics"] = get_recent_for_category(
+                    "dynamics",
+                    direct_objectives_manager.dynamics_sequence,
+                    direct_objectives_manager.dynamics_index
+                )
+
+                objectives_data["categorized_status"] = {
+                    "story": {
+                        "current_index": direct_objectives_manager.story_index,
+                        "total": len(direct_objectives_manager.story_sequence)
+                    },
+                    "battling": {
+                        "current_index": direct_objectives_manager.battling_index,
+                        "total": len(direct_objectives_manager.battling_sequence)
+                    },
+                    "dynamics": {
+                        "current_index": direct_objectives_manager.dynamics_index,
+                        "total": len(direct_objectives_manager.dynamics_sequence)
+                    }
+                }
+
+            else:
+                # LEGACY: Single objective mode
+                current_obj = direct_objectives_manager.get_current_objective()
+
+                # Get recently completed objectives (last 5)
+                completed_objectives = []
+                if direct_objectives_manager.current_sequence:
+                    for i in range(max(0, direct_objectives_manager.current_index - 5), direct_objectives_manager.current_index):
+                        if i < len(direct_objectives_manager.current_sequence):
+                            obj = direct_objectives_manager.current_sequence[i]
+                            completed_objectives.append({
+                                "id": obj.id,
+                                "description": obj.description,
+                                "completed": True,
+                                "index": i
+                            })
+
+                objectives_data = {
+                    "mode": "legacy",
+                    "current": {
+                        "id": current_obj.id,
+                        "description": current_obj.description,
+                        "index": direct_objectives_manager.current_index
+                    } if current_obj else None,
+                    "recently_completed": completed_objectives,
+                    "total_in_sequence": len(direct_objectives_manager.current_sequence),
+                    "current_index": direct_objectives_manager.current_index
+                }
 
         # Write to cache file
         os.makedirs(".pokeagent_cache", exist_ok=True)
         cache_file = ".pokeagent_cache/current_objective.json"
         with open(cache_file, 'w') as f:
-            json.dump(objectives_data, f)
+            json.dump(objectives_data, f, indent=2)
+
+        logger.info(f"✅ Updated objectives cache: mode={objectives_data.get('mode')}, story={len(objectives_data.get('story', []))}, battling={len(objectives_data.get('battling', []))}, dynamics={len(objectives_data.get('dynamics', []))}")
 
     except Exception as e:
-        logger.debug(f"Failed to update objectives cache: {e}")
+        logger.error(f"Failed to update objectives cache: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 # Milestone checking is now handled by the emulator
 
@@ -2192,10 +2264,19 @@ async def mcp_get_game_state():
         from agent.direct_objectives import DirectObjectiveManager
 
         # Get recent button presses with position history
-        global recent_button_presses
-        
-        # Use helper function from pokemon_mcp_server with action history
-        result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm, action_history=recent_button_presses)
+        global recent_button_presses, current_obs
+
+        # Get latest frame from game loop to ensure sync between memory and visuals
+        with obs_lock:
+            obs_copy = current_obs.copy() if current_obs is not None else None
+
+        # Use helper function from pokemon_mcp_server with action history and current frame
+        result = pokemon_mcp_server.get_game_state_direct(
+            env,
+            format_state_for_llm,
+            action_history=recent_button_presses,
+            current_obs=obs_copy  # Pass latest frame from game loop
+        )
         
         # Add direct objectives information
         if result.get("success", False):
@@ -2207,12 +2288,33 @@ async def mcp_get_game_state():
             
             # Load direct objectives sequence if specified
             if direct_objectives_sequence:
-                if not direct_objectives_manager.is_sequence_active():
+                # Check if we need to load objectives
+                needs_loading = not direct_objectives_manager.is_sequence_active()
+                logger.info(f"🔍 Checking if objectives need loading:")
+                logger.info(f"   - is_active: {direct_objectives_manager.is_sequence_active()}")
+                logger.info(f"   - current mode: {direct_objectives_manager.mode}")
+                logger.info(f"   - current sequence_name: '{direct_objectives_manager.sequence_name}'")
+                logger.info(f"   - requested sequence: '{direct_objectives_sequence}'")
+                logger.info(f"   - needs_loading (initial): {needs_loading}")
+
+                # Force reload if the requested sequence doesn't match the loaded sequence
+                if direct_objectives_manager.is_sequence_active():
+                    if direct_objectives_manager.sequence_name != direct_objectives_sequence:
+                        logger.warning(f"⚠️ Sequence mismatch: loaded='{direct_objectives_manager.sequence_name}', requested='{direct_objectives_sequence}' - forcing reload")
+                        needs_loading = True
+                    # Also force reload if requesting categorized but manager is in legacy mode
+                    elif direct_objectives_sequence == "categorized_full_game" and direct_objectives_manager.mode == "legacy":
+                        logger.warning(f"⚠️ Requesting categorized mode but manager is in legacy mode - forcing reload")
+                        needs_loading = True
+
+                logger.info(f"   - needs_loading (final): {needs_loading}")
+
+                if needs_loading:
                     # Use run_data agent_scratch_space for objectives
                     from utils.run_data_manager import get_run_data_manager
                     run_manager = get_run_data_manager()
                     objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
-                    
+
                     if direct_objectives_sequence == "tutorial_to_rival":
                         direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                     elif direct_objectives_sequence == "tutorial_to_rustboro_city":
@@ -2223,21 +2325,67 @@ async def mcp_get_game_state():
                         direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                     elif direct_objectives_sequence == "full_game":
                         direct_objectives_manager.load_full_game_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                    elif direct_objectives_sequence == "categorized_full_game":
+                        direct_objectives_manager.load_categorized_full_game_sequence(
+                            start_story_index=direct_objectives_start_index,
+                            start_battling_index=direct_objectives_battling_start_index,
+                            run_dir=objectives_run_dir
+                        )
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
-            
+
+                    # Update objectives cache after loading
+                    _update_objectives_cache()
+
             # Get current objective guidance
             if direct_objectives_manager.is_sequence_active():
                 game_state = result.get("raw_state", {})
-                current_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
-                if current_guidance:
-                    result["direct_objective"] = current_guidance
-                    result["direct_objective_status"] = direct_objectives_manager.get_sequence_status()
-                
-                # Add objective context (previous, current, next)
-                objective_context = direct_objectives_manager.get_objective_context(game_state)
-                if objective_context:
-                    result["direct_objective_context"] = objective_context
+
+                # DEBUG: Log manager state
+                logger.info(f"📊 Objectives manager state:")
+                logger.info(f"   - mode: {direct_objectives_manager.mode}")
+                logger.info(f"   - sequence_name: '{direct_objectives_manager.sequence_name}'")
+                logger.info(f"   - is_active: {direct_objectives_manager.is_sequence_active()}")
+
+                # Use categorized guidance if in categorized mode
+                if direct_objectives_manager.mode == "categorized":
+                    result["objectives_mode"] = "categorized"
+
+                    categorized_guidance = direct_objectives_manager.get_categorized_objective_guidance(game_state)
+                    if categorized_guidance:
+                        result["categorized_objectives"] = categorized_guidance
+
+                    # Add categorized status
+                    result["categorized_status"] = {
+                        "story": {
+                            "current_index": direct_objectives_manager.story_index,
+                            "total": len(direct_objectives_manager.story_sequence),
+                            "completed": sum(1 for obj in direct_objectives_manager.story_sequence if obj.completed)
+                        },
+                        "battling": {
+                            "current_index": direct_objectives_manager.battling_index,
+                            "total": len(direct_objectives_manager.battling_sequence),
+                            "completed": sum(1 for obj in direct_objectives_manager.battling_sequence if obj.completed)
+                        },
+                        "dynamics": {
+                            "current_index": direct_objectives_manager.dynamics_index,
+                            "total": len(direct_objectives_manager.dynamics_sequence),
+                            "completed": sum(1 for obj in direct_objectives_manager.dynamics_sequence if obj.completed)
+                        }
+                    }
+                else:
+                    # Legacy mode
+                    result["objectives_mode"] = "legacy"
+
+                    current_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+                    if current_guidance:
+                        result["direct_objective"] = current_guidance
+                        result["direct_objective_status"] = direct_objectives_manager.get_sequence_status()
+
+                    # Add objective context (previous, current, next) - legacy only
+                    objective_context = direct_objectives_manager.get_objective_context(game_state)
+                    if objective_context:
+                        result["direct_objective_context"] = objective_context
         
         return result
     except Exception as e:
@@ -2361,12 +2509,25 @@ async def mcp_complete_direct_objective(request: dict):
         
         # Load direct objectives sequence if specified
         if direct_objectives_sequence:
-            if not direct_objectives_manager.is_sequence_active():
+            # Check if we need to load objectives
+            needs_loading = not direct_objectives_manager.is_sequence_active()
+
+            # Force reload if the requested sequence doesn't match the loaded sequence
+            if direct_objectives_manager.is_sequence_active():
+                if direct_objectives_manager.sequence_name != direct_objectives_sequence:
+                    logger.warning(f"⚠️ Sequence mismatch: loaded='{direct_objectives_manager.sequence_name}', requested='{direct_objectives_sequence}' - forcing reload")
+                    needs_loading = True
+                # Also force reload if requesting categorized but manager is in legacy mode
+                elif direct_objectives_sequence == "categorized_full_game" and direct_objectives_manager.mode == "legacy":
+                    logger.warning(f"⚠️ Requesting categorized mode but manager is in legacy mode - forcing reload")
+                    needs_loading = True
+
+            if needs_loading:
                 # Use run_data agent_scratch_space for objectives
                 from utils.run_data_manager import get_run_data_manager
                 run_manager = get_run_data_manager()
                 objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
-                
+
                 if direct_objectives_sequence == "tutorial_to_rival":
                     direct_objectives_manager.load_tutorial_to_rival_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 elif direct_objectives_sequence == "tutorial_to_rustboro_city":
@@ -2377,21 +2538,62 @@ async def mcp_complete_direct_objective(request: dict):
                     direct_objectives_manager.load_autonomous_objective_creation_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
                 elif direct_objectives_sequence == "full_game":
                     direct_objectives_manager.load_full_game_sequence(direct_objectives_start_index, run_dir=objectives_run_dir)
+                elif direct_objectives_sequence == "categorized_full_game":
+                    direct_objectives_manager.load_categorized_full_game_sequence(
+                        start_story_index=direct_objectives_start_index,
+                        start_battling_index=direct_objectives_battling_start_index,
+                        run_dir=objectives_run_dir
+                    )
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
-        
+
+                # Update objectives cache after loading
+                _update_objectives_cache()
+
         # Check if sequence is active
         if not direct_objectives_manager.is_sequence_active():
             return {"success": False, "error": "No direct objective sequence active"}
-        
-        # Get current objective
-        current_obj = direct_objectives_manager.get_current_objective()
-        if not current_obj:
-            return {"success": False, "error": "No current objective to complete"}
-        
-        # Mark objective as completed
-        direct_objectives_manager._mark_objective_completed(current_obj)
-        direct_objectives_manager.current_index += 1
+
+        # Extract category parameter if provided
+        category = request.get("category")
+
+        # Check if we're in categorized mode
+        if direct_objectives_manager.mode == "categorized":
+            # Categorized mode - category parameter is required
+            if not category:
+                return {"success": False, "error": "Category parameter required in categorized mode (story, battling, or dynamics)"}
+
+            if category not in ["story", "battling", "dynamics"]:
+                return {"success": False, "error": f"Invalid category: {category}. Must be story, battling, or dynamics"}
+
+            # Get current objective for the specified category
+            current_obj = direct_objectives_manager._get_current_objective_for_category(category)
+            if not current_obj:
+                return {"success": False, "error": f"No current {category} objective to complete"}
+
+            # Mark objective as completed
+            direct_objectives_manager._mark_objective_completed(current_obj)
+
+            # Advance the appropriate index
+            if category == "story":
+                direct_objectives_manager.story_index += 1
+                logger.info(f"✅ Completed story objective: {current_obj.id} (advanced to story index {direct_objectives_manager.story_index})")
+            elif category == "battling":
+                direct_objectives_manager.battling_index += 1
+                logger.info(f"✅ Completed battling objective: {current_obj.id} (advanced to battling index {direct_objectives_manager.battling_index})")
+            elif category == "dynamics":
+                direct_objectives_manager.dynamics_index += 1
+                logger.info(f"✅ Completed dynamics objective: {current_obj.id} (advanced to dynamics index {direct_objectives_manager.dynamics_index})")
+        else:
+            # Legacy mode - ignore category parameter
+            current_obj = direct_objectives_manager.get_current_objective()
+            if not current_obj:
+                return {"success": False, "error": "No current objective to complete"}
+
+            # Mark objective as completed
+            direct_objectives_manager._mark_objective_completed(current_obj)
+            direct_objectives_manager.current_index += 1
+            logger.info(f"✅ Completed objective: {current_obj.id} (advanced to index {direct_objectives_manager.current_index})")
 
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
@@ -3546,18 +3748,23 @@ def main():
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", help="Disable OCR dialogue detection")
-    parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival')")
-    parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for direct objectives (for resuming from checkpoints)")
+    parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival', 'categorized_full_game')")
+    parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for story objectives in legacy mode, or story objectives in categorized mode (for resuming from checkpoints)")
+    parser.add_argument("--direct-objectives-battling-start", type=int, default=0, help="Start index for battling objectives (only used in categorized mode)")
     # Server always runs headless - display handled by client
     
     args = parser.parse_args()
     
     # Set global direct objectives sequence
-    global direct_objectives_sequence, direct_objectives_start_index
+    global direct_objectives_sequence, direct_objectives_start_index, direct_objectives_battling_start_index
     if args.direct_objectives:
         direct_objectives_sequence = args.direct_objectives
         direct_objectives_start_index = args.direct_objectives_start
-        print(f"🎯 Direct objectives sequence: {direct_objectives_sequence} (starting at index {direct_objectives_start_index})")
+        direct_objectives_battling_start_index = args.direct_objectives_battling_start
+        if direct_objectives_battling_start_index > 0:
+            print(f"🎯 Direct objectives sequence: {direct_objectives_sequence} (story index: {direct_objectives_start_index}, battling index: {direct_objectives_battling_start_index})")
+        else:
+            print(f"🎯 Direct objectives sequence: {direct_objectives_sequence} (starting at index {direct_objectives_start_index})")
     
     # Check for environment variables from multiprocess mode
     env_load_state = os.environ.get("LOAD_STATE")

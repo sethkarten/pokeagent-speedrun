@@ -261,15 +261,15 @@ class AutonomousCLIAgent:
             # ============================================================
 
             # Game Control Tools
-            {
-                "name": "get_game_state",
-                "description": "Get the current game state including player position, party Pokemon, map, items, and a screenshot. Use this to understand where you are and what you can do.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {},
-                    "required": []
-                }
-            },
+            # {
+            #     "name": "get_game_state",
+            #     "description": "Get the current game state including player position, party Pokemon, map, items, and a screenshot. Use this to understand where you are and what you can do.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {},
+            #         "required": []
+            #     }
+            # },
             {
                 "name": "press_buttons",
                 "description": "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT. Use WAIT to observe without pressing any button.",
@@ -316,13 +316,18 @@ class AutonomousCLIAgent:
             },
             {
                 "name": "complete_direct_objective",
-                "description": "Complete the current direct objective and advance to the next one. Use this when you have successfully completed the current objective's task.",
+                "description": "Complete the current direct objective and advance to the next one. In CATEGORIZED mode, you must specify which category objective to complete (story, battling, or dynamics). In LEGACY mode, category is ignored.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
                         "reasoning": {
                             "type_": "STRING",
                             "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current state, objective requirements, completion evidence]' and 'PLAN: [confirm completion, next objective]'. Example: 'ANALYZE: Objective was to reach Route 101. Current location shows Route 101 at (15,5). Evidence: Game text shows \"Route 101\". PLAN: Objective complete, marking as done. Next: Talk to Prof Birch.'"
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["story", "battling", "dynamics"],
+                            "description": "Which category objective to complete (required in CATEGORIZED mode). 'story' for narrative objectives, 'battling' for team objectives, 'dynamics' for agent-created objectives."
                         }
                     },
                     "required": ["reasoning"]
@@ -392,46 +397,9 @@ class AutonomousCLIAgent:
                     "required": []
                 }
             },
-
-            # Wiki Tools - NOW ENABLED
-            # {
-            #     "name": "lookup_pokemon_info",
-            #     "description": "Look up Pokemon, moves, locations, items, NPCs from wikis (Bulbapedia, Serebii, PokemonDB, Marriland).",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "topic": {"type_": "STRING", "description": "What to search (e.g., 'Mudkip', 'Route_101')"},
-            #             "source": {
-            #                 "type_": "STRING",
-            #                 "enum": ["bulbapedia", "serebii", "pokemondb", "marriland"],
-            #                 "description": "Wiki source (default: bulbapedia)"
-            #             }
-            #         },
-            #         "required": ["topic"]
-            #     }
-            # },
-            # {
-            #     "name": "list_wiki_sources",
-            #     "description": "List available Pokemon wiki sources.",
-            #     "parameters": {"type_": "OBJECT", "properties": {}, "required": []}
-            # },
-            # {
-            #     "name": "get_walkthrough",
-            #     "description": "Get official Emerald walkthrough (Parts 1-21). CRITICAL: Match your knowledge base to milestones. Part 1: Starter+Norman. Part 2: Roxanne (1st gym). Part 3: Brawly (2nd gym). Part 4: Slateport/Team Aqua. Part 5: Wattson (3rd gym). Part 6: Fallarbor. Part 7: Flannery (4th gym). ALWAYS call get_knowledge_summary() FIRST, match to milestones, use HIGHEST completed + 1. Example: Knowledge shows 'Defeated Roxanne, Stone Badge' → Past Part 2, use Part 3.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "part": {
-            #                 "type_": "INTEGER",
-            #                 "description": "Walkthrough part 1-21. Determine by: 1) Review knowledge_summary 2) Match to milestones 3) Use highest completed + 1. VERIFY the walkthrough against knowledge before creating objectives.",
-            #             }
-            #         },
-            #         "required": ["part"]
-            #     }
-            # },
             {
                 "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition. This function will also increment the objective index to the first new objective created.",
+                "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, creates objectives for the 'dynamics' category (agent-created objectives). Use this after consulting get_walkthrough() or wiki sources to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -455,6 +423,11 @@ class AutonomousCLIAgent:
                             },
                             "description": "Array of exactly 3 objectives to create next"
                         },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["dynamics", "story", "battling"],
+                            "description": "Category for objectives: 'dynamics' (default, agent-created), 'story' (narrative), or 'battling' (team building/training). Usually you should use 'dynamics'."
+                        },
                         "reasoning": {
                             "type_": "STRING",
                             "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
@@ -463,124 +436,6 @@ class AutonomousCLIAgent:
                     "required": ["objectives", "reasoning"]
                 }
             },
-            # {
-            #     "name": "get_progress_summary",
-            #     "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary. Use this to understand what you've accomplished.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {},
-            #         "required": []
-            #     }
-            # },
-
-            # ============================================================
-            # BASELINE MCP TOOLS (File/Shell/Web) - NOW ALL DISABLED
-            # ============================================================
-
-            # {
-            #     "name": "read_file",
-            #     "description": "Read file contents. Supports text, images, PDFs. Returns content or base64 for binary files.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "file_path": {"type_": "STRING", "description": "Absolute path to file"}
-            #         },
-            #         "required": ["file_path"]
-            #     }
-            # },
-            # {
-            #     "name": "write_file",
-            #     "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
-            #             "content": {"type_": "STRING", "description": "File content"}
-            #         },
-            #         "required": ["file_path", "content"]
-            #     }
-            # },
-            # {
-            #     "name": "list_directory",
-            #     "description": "List files and directories at path.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "path": {"type_": "STRING", "description": "Directory path"}
-            #         },
-            #         "required": ["path"]
-            #     }
-            # },
-            # {
-            #     "name": "glob",
-            #     "description": "Find files matching glob pattern (e.g., '**/*.py', 'src/*.md').",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "pattern": {"type_": "STRING", "description": "Glob pattern"},
-            #             "path": {"type_": "STRING", "description": "Starting directory (optional)"}
-            #         },
-            #         "required": ["pattern"]
-            #     }
-            # },
-            # {
-            #     "name": "search_file_content",
-            #     "description": "Search files for regex pattern. Returns matching lines.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "pattern": {"type_": "STRING", "description": "Regex pattern"},
-            #             "path": {"type_": "STRING", "description": "Directory to search"},
-            #             "file_pattern": {"type_": "STRING", "description": "File glob (e.g., '*.py')"}
-            #         },
-            #         "required": ["pattern", "path"]
-            #     }
-            # },
-            # {
-            #     "name": "run_shell_command",
-            #     "description": "Run shell command (42 safe commands allowed: ls, cat, grep, python, npm, etc. NO git, rm, sudo).",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "command": {"type_": "STRING", "description": "Shell command"},
-            #             "description": {"type_": "STRING", "description": "What this command does"}
-            #         },
-            #         "required": ["command", "description"]
-            #     }
-            # },
-            # {
-            #     "name": "web_fetch",
-            #     "description": "Fetch and parse web pages (up to 20 URLs). Extracts text content.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "prompt": {"type_": "STRING", "description": "Prompt with URLs and instructions"}
-            #         },
-            #         "required": ["prompt"]
-            #     }
-            # },
-            # {
-            #     "name": "google_web_search",
-            #     "description": "Search web using DuckDuckGo (privacy-friendly, no API key). Returns 10 results.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "query": {"type_": "STRING", "description": "Search query"}
-            #         },
-            #         "required": ["query"]
-            #     }
-            # },
-            # {
-            #     "name": "save_memory",
-            #     "description": "Save facts to remember across sessions (stored in .pokeagent_cache/cli/AGENT.md).",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "fact": {"type_": "STRING", "description": "Clear, self-contained fact"}
-            #         },
-            #         "required": ["fact"]
-            #     }
-            # },
         ]
 
         logger.info(f"✅ Created {len(tools)} tool declarations (ALL TOOLS ENABLED)")
@@ -1655,41 +1510,138 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         if is_title_sequence:
             state_text = self._strip_map_info(state_text)
 
-        direct_objective = game_state_data.get("direct_objective", "")
-        direct_objective_status = game_state_data.get("direct_objective_status", "")
-        direct_objective_context = game_state_data.get("direct_objective_context", "")
-        
-        # Format direct objective nicely if it's a dict - show ALL fields
-        if isinstance(direct_objective, dict):
-            obj_id = direct_objective.get("id", "")
-            desc = direct_objective.get("description", "")
-            action_type = direct_objective.get("action_type", "")
-            target_location = direct_objective.get("target_location")
-            target_coords = direct_objective.get("target_coords")
-            hint = direct_objective.get("navigation_hint", "")
-            completion_condition = direct_objective.get("completion_condition", "")
-            
-            formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
-            if action_type:
-                formatted_obj += f"\n  Action Type: {action_type}"
-            if target_location:
-                formatted_obj += f"\n  Target Location: {target_location}"
-            if target_coords:
-                formatted_obj += f"\n  Target Coordinates: {target_coords}"
-            if hint:
-                formatted_obj += f"\n  Navigation Hint: {hint}"
-            if completion_condition:
-                formatted_obj += f"\n  Completion Condition: {completion_condition}"
-            direct_objective = formatted_obj
-        
-        # Format status nicely if it's a dict
-        if isinstance(direct_objective_status, dict):
-            seq = direct_objective_status.get("sequence_name", "")
-            total = direct_objective_status.get("total_objectives", 0)
-            current_idx = direct_objective_status.get("current_index", 0)
-            completed = direct_objective_status.get("completed_count", 0)
-            direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
-        
+        # Check if we're in categorized mode
+        objectives_mode = game_state_data.get("objectives_mode", "legacy")
+        logger.info(f"🎯 Objectives mode: {objectives_mode}")
+
+        if objectives_mode == "categorized":
+            # NEW: Handle 3-category objectives
+            categorized_objs = game_state_data.get("categorized_objectives", {})
+            story_obj = categorized_objs.get("story")
+            battling_group = categorized_objs.get("battling_group", [])
+            dynamics_obj = categorized_objs.get("dynamics")
+            recommended_battling = categorized_objs.get("recommended_battling_objectives", [])
+            categorized_status = game_state_data.get("categorized_status", {})
+
+            # DEBUG: Log what we received
+            logger.info(f"📊 Categorized objectives received:")
+            logger.info(f"   - story_obj: {'Yes' if story_obj else 'None'}")
+            logger.info(f"   - battling_group: {len(battling_group)} objectives")
+            logger.info(f"   - dynamics_obj: {'Yes' if dynamics_obj else 'None'}")
+            logger.info(f"   - recommended: {len(recommended_battling)} IDs")
+
+            # Format single objective
+            def format_objective(obj_dict, category_emoji, category_name):
+                if not obj_dict:
+                    return f"{category_emoji} {category_name.upper()} OBJECTIVE: None"
+
+                obj_id = obj_dict.get("id", "")
+                desc = obj_dict.get("description", "")
+                action_type = obj_dict.get("action_type", "")
+                target_location = obj_dict.get("target_location")
+                target_coords = obj_dict.get("target_coords")
+                hint = obj_dict.get("navigation_hint", "")
+                completion_condition = obj_dict.get("completion_condition", "")
+
+                formatted = f"{category_emoji} {category_name.upper()} OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+                if action_type:
+                    formatted += f"\n  Action Type: {action_type}"
+                if target_location:
+                    formatted += f"\n  Target Location: {target_location}"
+                if target_coords:
+                    formatted += f"\n  Target Coordinates: {target_coords}"
+                if hint:
+                    formatted += f"\n  Navigation Hint: {hint}"
+                if completion_condition:
+                    formatted += f"\n  Completion Condition: {completion_condition}"
+                return formatted
+
+            # Format battling objectives group
+            def format_battling_group(group_list):
+                if not group_list:
+                    return "⚔️  BATTLING OBJECTIVES: None"
+
+                formatted = f"⚔️  BATTLING OBJECTIVES ({len(group_list)} in current group):"
+                for i, obj_dict in enumerate(group_list, 1):
+                    obj_id = obj_dict.get("id", "")
+                    desc = obj_dict.get("description", "")
+                    formatted += f"\n  [{i}] {obj_id}: {desc}"
+
+                    # Add details for first objective only to keep prompt concise
+                    if i == 1:
+                        target_location = obj_dict.get("target_location")
+                        hint = obj_dict.get("navigation_hint", "")
+                        if target_location:
+                            formatted += f"\n      Target Location: {target_location}"
+                        if hint:
+                            formatted += f"\n      Hint: {hint}"
+
+                formatted += "\n\n  💡 TIP: Complete these in any order. Use complete_direct_objective(category=\"battling\") for each."
+                return formatted
+
+            # Format recommended battling objectives if they exist
+            recommended_text = ""
+            if recommended_battling:
+                recommended_text = f"\n\n💡 RECOMMENDED PREPARATION:\n  Complete these battling objectives before the story objective:\n  → {', '.join(recommended_battling)}"
+
+            direct_objective = f"""{format_objective(story_obj, "📖", "story")}{recommended_text}
+
+{format_battling_group(battling_group)}
+
+{format_objective(dynamics_obj, "🎯", "dynamics")}"""
+
+            # Format categorized status
+            if categorized_status:
+                story_status = categorized_status.get("story", {})
+                battling_status = categorized_status.get("battling", {})
+                dynamics_status = categorized_status.get("dynamics", {})
+
+                direct_objective_status = f"""📊 PROGRESS (3 Categories):
+  📖 Story: {story_status.get('current_index', 0) + 1}/{story_status.get('total', 0)} ({story_status.get('completed', 0)} completed)
+  ⚔️  Battling: {battling_status.get('current_index', 0) + 1}/{battling_status.get('total', 0)} ({battling_status.get('completed', 0)} completed)
+  🎯 Dynamics: {dynamics_status.get('current_index', 0) + 1}/{dynamics_status.get('total', 0)} ({dynamics_status.get('completed', 0)} completed)"""
+            else:
+                direct_objective_status = ""
+
+            direct_objective_context = ""  # No context needed in categorized mode
+
+        else:
+            # LEGACY: Single objective mode (backward compatible)
+            direct_objective = game_state_data.get("direct_objective", "")
+            direct_objective_status = game_state_data.get("direct_objective_status", "")
+            direct_objective_context = game_state_data.get("direct_objective_context", "")
+
+            # Format direct objective nicely if it's a dict - show ALL fields
+            if isinstance(direct_objective, dict):
+                obj_id = direct_objective.get("id", "")
+                desc = direct_objective.get("description", "")
+                action_type = direct_objective.get("action_type", "")
+                target_location = direct_objective.get("target_location")
+                target_coords = direct_objective.get("target_coords")
+                hint = direct_objective.get("navigation_hint", "")
+                completion_condition = direct_objective.get("completion_condition", "")
+
+                formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+                if action_type:
+                    formatted_obj += f"\n  Action Type: {action_type}"
+                if target_location:
+                    formatted_obj += f"\n  Target Location: {target_location}"
+                if target_coords:
+                    formatted_obj += f"\n  Target Coordinates: {target_coords}"
+                if hint:
+                    formatted_obj += f"\n  Navigation Hint: {hint}"
+                if completion_condition:
+                    formatted_obj += f"\n  Completion Condition: {completion_condition}"
+                direct_objective = formatted_obj
+
+            # Format status nicely if it's a dict
+            if isinstance(direct_objective_status, dict):
+                seq = direct_objective_status.get("sequence_name", "")
+                total = direct_objective_status.get("total_objectives", 0)
+                current_idx = direct_objective_status.get("current_index", 0)
+                completed = direct_objective_status.get("completed_count", 0)
+                direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
+
         # Build action history summary for better context
         action_history = self._format_action_history()
 
@@ -1805,41 +1757,138 @@ Step {step_count}"""
         if is_title_sequence:
             state_text = self._strip_map_info(state_text)
 
-        direct_objective = game_state_data.get("direct_objective", "")
-        direct_objective_status = game_state_data.get("direct_objective_status", "")
-        direct_objective_context = game_state_data.get("direct_objective_context", "")
-        
-        # Format direct objective nicely if it's a dict - show ALL fields
-        if isinstance(direct_objective, dict):
-            obj_id = direct_objective.get("id", "")
-            desc = direct_objective.get("description", "")
-            action_type = direct_objective.get("action_type", "")
-            target_location = direct_objective.get("target_location")
-            target_coords = direct_objective.get("target_coords")
-            hint = direct_objective.get("navigation_hint", "")
-            completion_condition = direct_objective.get("completion_condition", "")
-            
-            formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
-            if action_type:
-                formatted_obj += f"\n  Action Type: {action_type}"
-            if target_location:
-                formatted_obj += f"\n  Target Location: {target_location}"
-            if target_coords:
-                formatted_obj += f"\n  Target Coordinates: {target_coords}"
-            if hint:
-                formatted_obj += f"\n  Navigation Hint: {hint}"
-            if completion_condition:
-                formatted_obj += f"\n  Completion Condition: {completion_condition}"
-            direct_objective = formatted_obj
-        
-        # Format status nicely if it's a dict
-        if isinstance(direct_objective_status, dict):
-            seq = direct_objective_status.get("sequence_name", "")
-            total = direct_objective_status.get("total_objectives", 0)
-            current_idx = direct_objective_status.get("current_index", 0)
-            completed = direct_objective_status.get("completed_count", 0)
-            direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
-        
+        # Check if we're in categorized mode
+        objectives_mode = game_state_data.get("objectives_mode", "legacy")
+        logger.info(f"🎯 Objectives mode: {objectives_mode}")
+
+        if objectives_mode == "categorized":
+            # NEW: Handle 3-category objectives
+            categorized_objs = game_state_data.get("categorized_objectives", {})
+            story_obj = categorized_objs.get("story")
+            battling_group = categorized_objs.get("battling_group", [])
+            dynamics_obj = categorized_objs.get("dynamics")
+            recommended_battling = categorized_objs.get("recommended_battling_objectives", [])
+            categorized_status = game_state_data.get("categorized_status", {})
+
+            # DEBUG: Log what we received
+            logger.info(f"📊 Categorized objectives received:")
+            logger.info(f"   - story_obj: {'Yes' if story_obj else 'None'}")
+            logger.info(f"   - battling_group: {len(battling_group)} objectives")
+            logger.info(f"   - dynamics_obj: {'Yes' if dynamics_obj else 'None'}")
+            logger.info(f"   - recommended: {len(recommended_battling)} IDs")
+
+            # Format single objective
+            def format_objective(obj_dict, category_emoji, category_name):
+                if not obj_dict:
+                    return f"{category_emoji} {category_name.upper()} OBJECTIVE: None"
+
+                obj_id = obj_dict.get("id", "")
+                desc = obj_dict.get("description", "")
+                action_type = obj_dict.get("action_type", "")
+                target_location = obj_dict.get("target_location")
+                target_coords = obj_dict.get("target_coords")
+                hint = obj_dict.get("navigation_hint", "")
+                completion_condition = obj_dict.get("completion_condition", "")
+
+                formatted = f"{category_emoji} {category_name.upper()} OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+                if action_type:
+                    formatted += f"\n  Action Type: {action_type}"
+                if target_location:
+                    formatted += f"\n  Target Location: {target_location}"
+                if target_coords:
+                    formatted += f"\n  Target Coordinates: {target_coords}"
+                if hint:
+                    formatted += f"\n  Navigation Hint: {hint}"
+                if completion_condition:
+                    formatted += f"\n  Completion Condition: {completion_condition}"
+                return formatted
+
+            # Format battling objectives group
+            def format_battling_group(group_list):
+                if not group_list:
+                    return "⚔️  BATTLING OBJECTIVES: None"
+
+                formatted = f"⚔️  BATTLING OBJECTIVES ({len(group_list)} in current group):"
+                for i, obj_dict in enumerate(group_list, 1):
+                    obj_id = obj_dict.get("id", "")
+                    desc = obj_dict.get("description", "")
+                    formatted += f"\n  [{i}] {obj_id}: {desc}"
+
+                    # Add details for first objective only to keep prompt concise
+                    if i == 1:
+                        target_location = obj_dict.get("target_location")
+                        hint = obj_dict.get("navigation_hint", "")
+                        if target_location:
+                            formatted += f"\n      Target Location: {target_location}"
+                        if hint:
+                            formatted += f"\n      Hint: {hint}"
+
+                formatted += "\n\n  💡 TIP: Complete these in any order. Use complete_direct_objective(category=\"battling\") for each."
+                return formatted
+
+            # Format recommended battling objectives if they exist
+            recommended_text = ""
+            if recommended_battling:
+                recommended_text = f"\n\n💡 RECOMMENDED PREPARATION:\n  Complete these battling objectives before the story objective:\n  → {', '.join(recommended_battling)}"
+
+            direct_objective = f"""{format_objective(story_obj, "📖", "story")}{recommended_text}
+
+{format_battling_group(battling_group)}
+
+{format_objective(dynamics_obj, "🎯", "dynamics")}"""
+
+            # Format categorized status
+            if categorized_status:
+                story_status = categorized_status.get("story", {})
+                battling_status = categorized_status.get("battling", {})
+                dynamics_status = categorized_status.get("dynamics", {})
+
+                direct_objective_status = f"""📊 PROGRESS (3 Categories):
+  📖 Story: {story_status.get('current_index', 0) + 1}/{story_status.get('total', 0)} ({story_status.get('completed', 0)} completed)
+  ⚔️  Battling: {battling_status.get('current_index', 0) + 1}/{battling_status.get('total', 0)} ({battling_status.get('completed', 0)} completed)
+  🎯 Dynamics: {dynamics_status.get('current_index', 0) + 1}/{dynamics_status.get('total', 0)} ({dynamics_status.get('completed', 0)} completed)"""
+            else:
+                direct_objective_status = ""
+
+            direct_objective_context = ""  # No context needed in categorized mode
+
+        else:
+            # LEGACY: Single objective mode (backward compatible)
+            direct_objective = game_state_data.get("direct_objective", "")
+            direct_objective_status = game_state_data.get("direct_objective_status", "")
+            direct_objective_context = game_state_data.get("direct_objective_context", "")
+
+            # Format direct objective nicely if it's a dict - show ALL fields
+            if isinstance(direct_objective, dict):
+                obj_id = direct_objective.get("id", "")
+                desc = direct_objective.get("description", "")
+                action_type = direct_objective.get("action_type", "")
+                target_location = direct_objective.get("target_location")
+                target_coords = direct_objective.get("target_coords")
+                hint = direct_objective.get("navigation_hint", "")
+                completion_condition = direct_objective.get("completion_condition", "")
+
+                formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+                if action_type:
+                    formatted_obj += f"\n  Action Type: {action_type}"
+                if target_location:
+                    formatted_obj += f"\n  Target Location: {target_location}"
+                if target_coords:
+                    formatted_obj += f"\n  Target Coordinates: {target_coords}"
+                if hint:
+                    formatted_obj += f"\n  Navigation Hint: {hint}"
+                if completion_condition:
+                    formatted_obj += f"\n  Completion Condition: {completion_condition}"
+                direct_objective = formatted_obj
+
+            # Format status nicely if it's a dict
+            if isinstance(direct_objective_status, dict):
+                seq = direct_objective_status.get("sequence_name", "")
+                total = direct_objective_status.get("total_objectives", 0)
+                current_idx = direct_objective_status.get("current_index", 0)
+                completed = direct_objective_status.get("completed_count", 0)
+                direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
+
         # Build action history summary
         action_history = self._format_action_history()
 
