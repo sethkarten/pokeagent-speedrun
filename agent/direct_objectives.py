@@ -20,12 +20,26 @@ logger = logging.getLogger(__name__)
 
 
 class DirectObjectiveManager:
-    """Manages hardcoded objective sequences for specific game states"""
-    
+    """Manages objective sequences across 3 categories: story, battling, and dynamics"""
+
     def __init__(self):
+        # Legacy single sequence (kept for backward compatibility)
         self.current_sequence: List[DirectObjective] = []
         self.current_index: int = 0
         self.sequence_name: str = ""
+
+        # New: 3 category-specific sequences
+        self.story_sequence: List[DirectObjective] = []
+        self.story_index: int = 0
+
+        self.battling_sequence: List[DirectObjective] = []
+        self.battling_index: int = 0
+
+        self.dynamics_sequence: List[DirectObjective] = []
+        self.dynamics_index: int = 0
+
+        # Track which mode we're in: "legacy" or "categorized"
+        self.mode: str = "legacy"
         
     def load_birch_to_rival_sequence(self):
         """Load the hardcoded sequence for transitioning from birch state to rival state.
@@ -2944,17 +2958,17 @@ class DirectObjectiveManager:
         
     def get_current_objective_guidance(self, game_state: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
         """Get guidance for the current objective.
-        
+
         Note: This method does NOT automatically check completion. The LLM must call
         complete_direct_objective() endpoint to mark objectives as complete.
-        
+
         Args:
             game_state: Optional game state (kept for backward compatibility, not used)
         """
         current_obj = self.get_current_objective()
         if not current_obj:
             return None
-                
+
         # Return guidance for current objective
         return {
             "id": current_obj.id,
@@ -2964,6 +2978,83 @@ class DirectObjectiveManager:
             "target_coords": current_obj.target_coords,
             "navigation_hint": current_obj.navigation_hint,
             "completion_condition": current_obj.completion_condition
+        }
+
+    def get_categorized_objective_guidance(self, game_state: Dict[str, Any] = None) -> Optional[Dict[str, Any]]:
+        """Get guidance for all current objectives in categorized mode.
+
+        Returns guidance for story, battling (as a group), and dynamics objectives.
+        Battling objectives are returned as a list showing all incomplete objectives
+        in the current preparation group.
+
+        Args:
+            game_state: Optional game state (kept for backward compatibility, not used)
+
+        Returns:
+            Dict with keys:
+                - story: Dict with story objective data (or None)
+                - battling_group: List of dicts with battling objective data (or empty list)
+                - dynamics: Dict with dynamics objective data (or None)
+                - recommended_battling_objectives: List of battling IDs recommended for current story objective
+        """
+        if self.mode != "categorized":
+            logger.warning("get_categorized_objective_guidance() called but mode is 'legacy'")
+            return None
+
+        # Get current objectives for each category
+        objectives = self.get_current_objectives_by_category()
+        story_obj = objectives.get("story")
+        dynamics_obj = objectives.get("dynamics")
+
+        # Get all battling objectives in current group
+        battling_group = self.get_current_battling_group()
+
+        # Format story objective
+        story_data = None
+        recommended_battling = []
+        if story_obj:
+            story_data = {
+                "id": story_obj.id,
+                "description": story_obj.description,
+                "action_type": story_obj.action_type,
+                "target_location": story_obj.target_location,
+                "target_coords": story_obj.target_coords,
+                "navigation_hint": story_obj.navigation_hint,
+                "completion_condition": story_obj.completion_condition
+            }
+            recommended_battling = story_obj.recommended_battling_objectives
+
+        # Format battling group
+        battling_data = []
+        for obj in battling_group:
+            battling_data.append({
+                "id": obj.id,
+                "description": obj.description,
+                "action_type": obj.action_type,
+                "target_location": obj.target_location,
+                "target_coords": obj.target_coords,
+                "navigation_hint": obj.navigation_hint,
+                "completion_condition": obj.completion_condition
+            })
+
+        # Format dynamics objective
+        dynamics_data = None
+        if dynamics_obj:
+            dynamics_data = {
+                "id": dynamics_obj.id,
+                "description": dynamics_obj.description,
+                "action_type": dynamics_obj.action_type,
+                "target_location": dynamics_obj.target_location,
+                "target_coords": dynamics_obj.target_coords,
+                "navigation_hint": dynamics_obj.navigation_hint,
+                "completion_condition": dynamics_obj.completion_condition
+            }
+
+        return {
+            "story": story_data,
+            "battling_group": battling_data,
+            "dynamics": dynamics_data,
+            "recommended_battling_objectives": recommended_battling
         }
         
     def _is_objective_completed(self, objective: DirectObjective, game_state: Dict[str, Any]) -> bool:
@@ -3110,7 +3201,14 @@ class DirectObjectiveManager:
         
     def is_sequence_active(self) -> bool:
         """Check if a sequence is currently active"""
-        return len(self.current_sequence) > 0 and self.current_index < len(self.current_sequence)
+        if self.mode == "categorized":
+            # In categorized mode, check if any category has objectives
+            return (len(self.story_sequence) > 0 or
+                    len(self.battling_sequence) > 0 or
+                    len(self.dynamics_sequence) > 0)
+        else:
+            # Legacy mode - check legacy sequence
+            return len(self.current_sequence) > 0 and self.current_index < len(self.current_sequence)
     
     def get_objective_context(self, game_state: Dict[str, Any] = None) -> str:
         """Get previous objective context for better agent understanding.
@@ -3135,5 +3233,405 @@ class DirectObjectiveManager:
         # NEXT objective removed - it was confusing the agent
         
         return "\n".join(context_parts)
+
+    # ========== CATEGORIZED OBJECTIVES METHODS ==========
+
+    def enable_categorized_mode(self):
+        """Enable categorized objectives mode with 3 separate sequences"""
+        self.mode = "categorized"
+        self.sequence_name = "categorized_full_game"
+        logger.info("📊 Enabled categorized objectives mode (story, battling, dynamics)")
+
+    def load_categorized_full_game_sequence(self, start_story_index: int = 0, start_battling_index: int = 0, run_dir: Optional[str] = None):
+        """Load the full game sequence split into story and battling categories
+
+        Args:
+            start_story_index: Starting index for story objectives (0-211, default 0)
+            start_battling_index: Starting index for battling objectives (0-56, default 0)
+            run_dir: Optional run directory for saving progress
+
+        Index Reference:
+            Story objectives: 212 total (indices 0-211)
+                - Index 0: tutorial_001 (Exit moving truck)
+                - Index 33: rustboro_040 (Battle Roxanne - Gym 1)
+                - Index 54: dewford_064 (Battle Brawly - Gym 2)
+                - Index 74: mauville_087 (Battle Wattson - Gym 3)
+                - Index 97: chimney_112 (Battle Flannery - Gym 4)
+                - Index 104: norman_122 (Battle Norman - Gym 5)
+                - Index 128: fortree_148 (Battle Winona - Gym 6)
+                - Index 148: mossdeep_177 (Battle Tate & Liza - Gym 7)
+                - Index 166: sootopolis_215 (Battle Juan - Gym 8)
+                - Index 180+: Elite Four + Champion
+
+            Battling objectives: 57 total (indices 0-56)
+                - Grouped by prerequisite story objective
+                - Index 0-3: Early game (prerequisite: early_012)
+                - Index 4-7: Petalburg area (prerequisite: petalburg_022)
+                - Index 8-10: Rustboro prep (prerequisite: rustboro_035)
+                - Index 11-14: Dewford prep (prerequisite: dewford_050)
+                - Index 15-20: Mauville prep (prerequisite: mauville_078)
+                - Index 21-25: Lavaridge prep (prerequisite: chimney_091)
+                - Index 26-31: Norman prep (prerequisite: norman_115)
+                - Index 32-35: Fortree prep (prerequisite: fortree_126)
+                - Index 36-42: Mossdeep prep (prerequisite: mossdeep_168)
+                - Index 43-44: Sootopolis prep (prerequisite: sootopolis_211)
+                - Index 45-50: Elite Four prep (prerequisite: league_219)
+                - Index 51-56: Post-game (prerequisite: post_237)
+        """
+        from agent.all_obj_categorized import STORY_OBJECTIVES, BATTLING_OBJECTIVES
+
+        # Enable categorized mode
+        self.enable_categorized_mode()
+
+        # Convert objectives to dict format for add_objectives_to_category
+        def obj_to_dict(obj):
+            result = {
+                "id": obj.id,
+                "description": obj.description,
+                "action_type": obj.action_type,
+                "target_location": obj.target_location,
+                "target_coords": obj.target_coords,
+                "navigation_hint": obj.navigation_hint,
+                "completion_condition": obj.completion_condition,
+                "priority": obj.priority,
+                "optional": obj.optional
+            }
+            # Add category-specific fields
+            if hasattr(obj, 'recommended_battling_objectives') and obj.recommended_battling_objectives:
+                result["recommended_battling_objectives"] = obj.recommended_battling_objectives
+            if hasattr(obj, 'prerequisite_story_objective') and obj.prerequisite_story_objective:
+                result["prerequisite_story_objective"] = obj.prerequisite_story_objective
+            return result
+
+        # Load story objectives
+        story_dicts = [obj_to_dict(obj) for obj in STORY_OBJECTIVES]
+        self.add_objectives_to_category("story", story_dicts, run_dir=run_dir)
+
+        # Mark objectives before start_story_index as completed
+        story_completed_count = 0
+        for i in range(min(start_story_index, len(self.story_sequence))):
+            self.story_sequence[i].completed = True
+            self.story_sequence[i].completed_at = datetime.now()
+            story_completed_count += 1
+
+        self.story_index = min(start_story_index, len(self.story_sequence))
+
+        # Load battling objectives
+        battling_dicts = [obj_to_dict(obj) for obj in BATTLING_OBJECTIVES]
+        self.add_objectives_to_category("battling", battling_dicts, run_dir=run_dir)
+
+        # Mark objectives before start_battling_index as completed
+        battling_completed_count = 0
+        for i in range(min(start_battling_index, len(self.battling_sequence))):
+            self.battling_sequence[i].completed = True
+            self.battling_sequence[i].completed_at = datetime.now()
+            battling_completed_count += 1
+
+        self.battling_index = min(start_battling_index, len(self.battling_sequence))
+
+        # Dynamics starts empty (populated only by agent via create_direct_objectives)
+        self.dynamics_sequence = []
+        self.dynamics_index = 0
+
+        logger.info(f"✅ Loaded categorized full game sequence:")
+        logger.info(f"   📖 Story: {len(self.story_sequence)} objectives (starting at index {self.story_index}, {story_completed_count} pre-completed)")
+        logger.info(f"   ⚔️  Battling: {len(self.battling_sequence)} objectives (starting at index {self.battling_index}, {battling_completed_count} pre-completed)")
+        logger.info(f"   🎯 Dynamics: 0 objectives (agent will create as needed)")
+
+        # Save initial state
+        if run_dir:
+            try:
+                filename = os.path.join(run_dir, "categorized_objectives_state.json")
+                state = {
+                    "loaded_at": datetime.now().isoformat(),
+                    "mode": "categorized",
+                    "story_count": len(self.story_sequence),
+                    "story_index": self.story_index,
+                    "story_completed": story_completed_count,
+                    "battling_count": len(self.battling_sequence),
+                    "battling_index": self.battling_index,
+                    "battling_completed": battling_completed_count,
+                    "dynamics_count": 0,
+                    "dynamics_index": 0
+                }
+                with open(filename, 'w') as f:
+                    json.dump(state, f, indent=2)
+                logger.info(f"💾 Saved categorized objectives initial state to {filename}")
+            except Exception as e:
+                logger.warning(f"Failed to save initial state: {e}")
+
+    def get_current_objectives_by_category(self) -> Dict[str, Optional[DirectObjective]]:
+        """Get current objectives for all 3 categories
+
+        Returns:
+            Dict with keys "story", "battling", "dynamics" -> DirectObjective or None
+        """
+        if self.mode != "categorized":
+            logger.warning("get_current_objectives_by_category() called but mode is 'legacy'")
+            return {"story": None, "battling": None, "dynamics": None}
+
+        return {
+            "story": self._get_current_objective_for_category("story"),
+            "battling": self._get_current_objective_for_category("battling"),
+            "dynamics": self._get_current_objective_for_category("dynamics")
+        }
+
+    def _get_current_objective_for_category(self, category: str) -> Optional[DirectObjective]:
+        """Get current objective for a specific category
+
+        For battling objectives, filters based on prerequisite_story_objective to ensure
+        battling objectives only appear after reaching the required story milestone.
+        """
+        if category == "story":
+            if self.story_index < len(self.story_sequence):
+                return self.story_sequence[self.story_index]
+        elif category == "battling":
+            # Filter battling objectives by prerequisite
+            current_story_obj = self.story_sequence[self.story_index] if self.story_index < len(self.story_sequence) else None
+            current_story_id = current_story_obj.id if current_story_obj else None
+
+            # Find the first battling objective whose prerequisite has been reached
+            for i in range(self.battling_index, len(self.battling_sequence)):
+                battling_obj = self.battling_sequence[i]
+
+                # Check if prerequisite is met
+                if battling_obj.prerequisite_story_objective:
+                    # Find the prerequisite story objective in the sequence
+                    prereq_index = next((idx for idx, obj in enumerate(self.story_sequence)
+                                       if obj.id == battling_obj.prerequisite_story_objective), None)
+
+                    # Only show if we've reached or passed the prerequisite story objective
+                    if prereq_index is not None and self.story_index >= prereq_index:
+                        if i != self.battling_index:
+                            # Update index to this objective
+                            self.battling_index = i
+                            logger.info(f"⚔️  Advanced battling index to {i} (prerequisite {battling_obj.prerequisite_story_objective} reached)")
+                        return battling_obj
+                else:
+                    # No prerequisite - show immediately
+                    if i != self.battling_index:
+                        self.battling_index = i
+                    return battling_obj
+
+            return None  # No available battling objective
+        elif category == "dynamics":
+            if self.dynamics_index < len(self.dynamics_sequence):
+                return self.dynamics_sequence[self.dynamics_index]
+        return None
+
+    def get_current_battling_group(self) -> List[DirectObjective]:
+        """Get all battling objectives in the current group (same prerequisite)
+
+        Returns all incomplete battling objectives that share the same prerequisite
+        as the current battling objective. This allows the agent to see the full
+        preparation checklist for the current milestone.
+
+        Returns:
+            List of DirectObjective instances in the current group (empty if none available)
+        """
+        if self.mode != "categorized":
+            return []
+
+        # Get the current battling objective
+        current_obj = self._get_current_objective_for_category("battling")
+        if not current_obj:
+            return []
+
+        # Get the prerequisite of the current objective
+        current_prereq = current_obj.prerequisite_story_objective
+
+        # Collect all objectives with the same prerequisite that are not yet completed
+        group = []
+        for i in range(self.battling_index, len(self.battling_sequence)):
+            obj = self.battling_sequence[i]
+
+            # Stop when we hit a different prerequisite
+            if obj.prerequisite_story_objective != current_prereq:
+                break
+
+            # Only include incomplete objectives
+            if not obj.completed:
+                group.append(obj)
+
+        logger.info(f"⚔️  Battling group: {len(group)} objectives with prerequisite '{current_prereq}'")
+        return group
+
+    def add_objectives_to_category(self, category: str, objectives_data: List[Dict[str, Any]], run_dir: Optional[str] = None):
+        """Add objectives to a specific category
+
+        Args:
+            category: "story", "battling", or "dynamics"
+            objectives_data: List of dicts with objective properties
+            run_dir: Optional run directory for saving dynamics objectives backup
+        """
+        if self.mode != "categorized":
+            logger.warning(f"add_objectives_to_category() called but mode is 'legacy'. Switching to categorized mode.")
+            self.enable_categorized_mode()
+
+        # Validate category for dynamics - only allow via agent's create_direct_objectives
+        if category == "dynamics":
+            logger.info(f"🎯 Adding {len(objectives_data)} DYNAMICS objectives (agent-created)")
+
+        for obj_data in objectives_data:
+            obj = DirectObjective(
+                id=obj_data.get("id", f"{category}_{len(self._get_sequence_for_category(category)) + 1}"),
+                description=obj_data["description"],
+                action_type=obj_data.get("action_type", "navigate"),
+                category=category,
+                target_location=obj_data.get("target_location"),
+                target_coords=obj_data.get("target_coords"),
+                navigation_hint=obj_data.get("navigation_hint"),
+                completion_condition=obj_data.get("completion_condition"),
+                priority=obj_data.get("priority", 1),
+                optional=obj_data.get("optional", False),
+                recommended_battling_objectives=obj_data.get("recommended_battling_objectives", []),
+                prerequisite_story_objective=obj_data.get("prerequisite_story_objective")
+            )
+
+            if category == "story":
+                self.story_sequence.append(obj)
+            elif category == "battling":
+                self.battling_sequence.append(obj)
+            elif category == "dynamics":
+                self.dynamics_sequence.append(obj)
+            else:
+                logger.error(f"Unknown category: {category}")
+                return
+
+        logger.info(f"➕ Added {len(objectives_data)} objectives to '{category}' category")
+
+        # Auto-save dynamics objectives to backup file
+        if category == "dynamics":
+            self._save_dynamics_objectives_backup(run_dir)
+
+    def _get_sequence_for_category(self, category: str) -> List[DirectObjective]:
+        """Helper to get sequence list for a category"""
+        if category == "story":
+            return self.story_sequence
+        elif category == "battling":
+            return self.battling_sequence
+        elif category == "dynamics":
+            return self.dynamics_sequence
+        return []
+
+    def complete_objective_in_category(self, category: str, reasoning: str = ""):
+        """Mark current objective in specified category as complete and advance index
+
+        Args:
+            category: "story", "battling", or "dynamics"
+            reasoning: Why the objective is complete
+        """
+        if self.mode != "categorized":
+            logger.warning(f"complete_objective_in_category() called but mode is 'legacy'")
+            return
+
+        current_obj = self._get_current_objective_for_category(category)
+        if not current_obj:
+            logger.warning(f"No current objective to complete in category '{category}'")
+            return
+
+        # Mark as completed
+        self._mark_objective_completed(current_obj)
+
+        # Advance index
+        if category == "story":
+            self.story_index += 1
+            logger.info(f"✅ Story objective #{self.story_index - 1} completed: {current_obj.description}")
+        elif category == "battling":
+            self.battling_index += 1
+            logger.info(f"✅ Battling objective #{self.battling_index - 1} completed: {current_obj.description}")
+        elif category == "dynamics":
+            self.dynamics_index += 1
+            logger.info(f"✅ Dynamics objective #{self.dynamics_index - 1} completed: {current_obj.description}")
+
+        if reasoning:
+            logger.info(f"   Reasoning: {reasoning}")
+
+    def get_categorized_status(self) -> Dict[str, Any]:
+        """Get status summary for all 3 categories
+
+        Returns:
+            Dict with status for story, battling, and dynamics categories
+        """
+        return {
+            "mode": self.mode,
+            "story": {
+                "total": len(self.story_sequence),
+                "current_index": self.story_index,
+                "completed": sum(1 for obj in self.story_sequence if obj.completed),
+                "current_objective": self.story_sequence[self.story_index].description if self.story_index < len(self.story_sequence) else None
+            },
+            "battling": {
+                "total": len(self.battling_sequence),
+                "current_index": self.battling_index,
+                "completed": sum(1 for obj in self.battling_sequence if obj.completed),
+                "current_objective": self.battling_sequence[self.battling_index].description if self.battling_index < len(self.battling_sequence) else None
+            },
+            "dynamics": {
+                "total": len(self.dynamics_sequence),
+                "current_index": self.dynamics_index,
+                "completed": sum(1 for obj in self.dynamics_sequence if obj.completed),
+                "current_objective": self.dynamics_sequence[self.dynamics_index].description if self.dynamics_index < len(self.dynamics_sequence) else None
+            }
+        }
+
+    def _save_dynamics_objectives_backup(self, run_dir: Optional[str] = None):
+        """Save dynamics objectives history to backup file (similar to all_obj.py format)
+
+        Args:
+            run_dir: Optional run directory path. If None, tries to use run_data manager.
+        """
+        if not run_dir:
+            # Try to use run_data manager if available
+            try:
+                from utils.run_data_manager import get_run_data_manager
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    run_dir = str(run_manager.get_scratch_space_dir())
+                else:
+                    logger.warning("Cannot save dynamics objectives: run_data_manager not initialized")
+                    return
+            except ImportError:
+                logger.warning("Cannot save dynamics objectives: run_data_manager module not available")
+                return
+
+        try:
+            filename = os.path.join(run_dir, "dynamics_objectives_history.json")
+
+            # Convert dynamics objectives to dict format
+            dynamics_data = []
+            for obj in self.dynamics_sequence:
+                obj_dict = {
+                    "id": obj.id,
+                    "description": obj.description,
+                    "action_type": obj.action_type,
+                    "category": "dynamics",
+                    "target_location": obj.target_location,
+                    "target_coords": obj.target_coords,
+                    "navigation_hint": obj.navigation_hint,
+                    "completion_condition": obj.completion_condition,
+                    "priority": obj.priority,
+                    "completed": obj.completed,
+                    "optional": obj.optional
+                }
+                if hasattr(obj, 'completed_at') and obj.completed_at:
+                    obj_dict["completed_at"] = obj.completed_at.isoformat()
+                dynamics_data.append(obj_dict)
+
+            # Save with metadata
+            backup_data = {
+                "created_at": datetime.now().isoformat(),
+                "total_objectives": len(dynamics_data),
+                "completed_count": sum(1 for obj in self.dynamics_sequence if obj.completed),
+                "current_index": self.dynamics_index,
+                "objectives": dynamics_data
+            }
+
+            with open(filename, 'w') as f:
+                json.dump(backup_data, f, indent=2)
+
+            logger.info(f"💾 Saved {len(dynamics_data)} dynamics objectives to {filename}")
+        except Exception as e:
+            logger.warning(f"Failed to save dynamics objectives backup: {e}")
 
 
