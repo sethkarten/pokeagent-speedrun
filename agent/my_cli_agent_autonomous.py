@@ -1684,7 +1684,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 {direct_objective_status}
 
 ⚠️ **CRITICAL**: When you complete the objective, IMMEDIATELY call:
-   complete_direct_objective(reasoning="<explain why it's complete>")
+   complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>")
 
 ### CURRENT GAME STATE:
 {state_text}
@@ -1941,7 +1941,7 @@ ACTION HISTORY (last steps with thinking):
 1. FIRST: Call add_knowledge() to store what you learned (NPCs, items, locations, strategies)
    - Use importance=4 or 5 for critical information
    - Example: add_knowledge(category="npc", title="Gym Leader Norman", content="...", importance=5)
-2. THEN: Call complete_direct_objective(reasoning="<explain why it's complete>")
+2. THEN: Call complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>")
 
 This ensures your discoveries are remembered for future gameplay!
 
@@ -2009,7 +2009,7 @@ CURRENT GAME STATE:
 AVAILABLE TOOLS - Use these function calls to interact with the game:
 
 🎮 **PRIMARY GAME TOOLS** :
-- complete_direct_objective(reasoning) - Mark current direct objective as complete. Provide strict justification before completing the objective.
+- complete_direct_objective(category, reasoning) - Mark current direct objective as complete. MUST specify category ("story", "battling", or "dynamics"). Provide strict justification before completing the objective.
 - press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
 - navigate_to(x, y, variance, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data.
 - reflect(situation) - 🔄 SELF-CORRECTION TOOL: Use when stuck, repeating actions, or objectives seem wrong. Helps realign strategy and objectives.
@@ -2051,7 +2051,7 @@ When you see warps marked "⚠️ UNREACHABLE" in the game state:
 STRATEGY - PRIORITY ORDER:
 1. **CHECK OBJECTIVE COMPLETION FIRST**: Before doing ANYTHING, check if your current direct objective is complete. If yes:
    a. Call add_knowledge() to store what you learned
-   b. THEN call complete_direct_objective(reasoning="...")
+   b. THEN call complete_direct_objective(category="<story/battling/dynamics>", reasoning="...")
 2. **CREATE OBJECTIVES IF NEEDED**: If you have no objectives or sequence is complete, use the tools above to research and create new objectives
 3. **SELF-REFLECT WHEN STUCK/LOOPING**: If you notice you're repeating the same actions, not making progress, or objectives don't match reality:
    a. CALL reflect(situation="...") to analyze the situation
@@ -2090,7 +2090,8 @@ After calling reflect(), you'll receive guidance on whether to:
 
 🔴 **REMEMBER**:
 - You MUST create objectives yourself when needed!
-- You MUST call complete_direct_objective() when objectives are done!
+- You MUST call complete_direct_objective(category="<story/battling/dynamics>") when objectives are done!
+- You MUST work on ALL THREE categories: story, battling, AND dynamics!
 - You are autonomous - think, plan, and execute!
 
 IMPORTANT: Always check the game screen for dialogue boxes before planning movement!
