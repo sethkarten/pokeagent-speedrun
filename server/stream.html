@@ -290,6 +290,93 @@
             margin-right: 4px;
         }
 
+        /* Party section container */
+        .party-box-section {
+            padding-left: 15px;
+        }
+
+        /* Horizontal party layout */
+        .party-horizontal {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            padding: 8px;
+            background-color: #0a0a0a;
+            border: 1px solid #33ff33;
+            min-height: 120px;
+        }
+
+        .party-box {
+            background-color: #1a1a1a;
+            border: 1px solid #666;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .party-box.active {
+            border-color: #33ff33;
+            box-shadow: 0 0 5px #33ff33;
+        }
+
+        .party-sprite {
+            width: 64px;
+            height: 64px;
+            background-color: #1a1a1a;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2px;
+            image-rendering: pixelated;
+        }
+
+        .party-sprite img {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            object-fit: contain;
+            /* Remove backgrounds - screen mode works well for dark UI */
+            filter: brightness(1.1) contrast(1.1);
+        }
+
+        .party-box .pokemon-name {
+            font-size: 11px;
+            font-weight: bold;
+            color: #ff6177;
+            text-align: center;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .party-box .pokemon-level {
+            font-size: 10px;
+            color: #33ff33;
+        }
+
+        .party-box .pokemon-hp {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            width: 100%;
+            font-size: 9px;
+        }
+
+        .party-box .hp-bar {
+            width: 100%;
+            height: 6px;
+        }
+
+        .party-box .hp-text {
+            font-size: 8px;
+            color: #999;
+            text-align: center;
+        }
+
         .brain-panel {
             width: 995px;
             height: 950px;
@@ -595,10 +682,10 @@
                 </div>
             </div>
             
-            <div class="action-section">
-                <div class="section-title"># ACTION_QUEUE</div>
-                <div id="action-queue" class="action-queue">
-                    <!-- Recent button presses will appear here -->
+            <div class="party-box-section">
+                <div class="section-title"># PARTY</div>
+                <div id="party-horizontal" class="party-horizontal">
+                    <!-- Pokemon party will appear here -->
                 </div>
             </div>
         </div>
@@ -610,28 +697,16 @@
             </div>
 
             <div class="brain-section">
-                <div class="section-title">◈ MAP & PARTY</div>
+                <div class="section-title">◈ MAP & ACTIONS</div>
                 <div class="combined-container">
                     <div class="map-section">
                         <div class="subsection-title">MAP</div>
                         <div id="map-visualization" class="map-visualization">LOADING MAP...</div>
                     </div>
                     <div class="party-section">
-                        <div class="subsection-title">PARTY</div>
-                        <div id="party-status" class="game-state">
-                            <div class="party-pokemon">
-                                <div class="pokemon-header">
-                                    <span class="pokemon-name">LOADING...</span>
-                                    <span class="pokemon-level">Lv.??</span>
-                                </div>
-                                <div class="pokemon-hp">
-                                    <span>HP:</span>
-                                    <div class="hp-bar">
-                                        <div class="hp-fill" style="width: 0%"></div>
-                                    </div>
-                                    <span>--/--</span>
-                                </div>
-                            </div>
+                        <div class="subsection-title">ACTION QUEUE</div>
+                        <div id="action-queue" class="action-queue">
+                            <!-- Action queue buttons will appear here -->
                         </div>
                     </div>
                 </div>
@@ -1249,73 +1324,47 @@
             try {
                 const response = await fetch(`${serverUrl}/state`);
                 const data = await response.json();
-                
-                const partyContainer = document.getElementById('party-status');
+
+                const partyContainer = document.getElementById('party-horizontal');
                 partyContainer.innerHTML = '';
-                
+
                 if (data.player && data.player.party && data.player.party.length > 0) {
-                    data.player.party.forEach(pokemon => {
+                    data.player.party.forEach((pokemon, index) => {
                         if (pokemon && pokemon.species_name && pokemon.species_name.trim() !== '') {
                             const pokemonDiv = document.createElement('div');
-                            pokemonDiv.className = 'party-pokemon';
+                            pokemonDiv.className = 'party-box';
+                            if (index === 0) pokemonDiv.classList.add('active');
                             
-                            const hpPercent = pokemon.current_hp && pokemon.max_hp ? 
+                            const hpPercent = pokemon.current_hp && pokemon.max_hp ?
                                 (pokemon.current_hp / pokemon.max_hp) * 100 : 0;
-                            
+
                             let hpClass = 'hp-fill';
                             if (hpPercent < 25) hpClass += ' critical';
                             else if (hpPercent < 50) hpClass += ' low';
-                            
-                            let movesHtml = '';
-                            if (pokemon.moves && pokemon.moves.length > 0) {
-                                const validMoves = pokemon.moves.filter((moveName, index) => {
-                                    if (!moveName) return false;
-                                    const cleanName = moveName.toString().trim().toLowerCase();
-                                    return cleanName !== '' && 
-                                           cleanName !== '(none)' && 
-                                           cleanName !== 'none' && 
-                                           cleanName !== 'null' &&
-                                           cleanName !== 'undefined';
-                                });
-                                
-                                if (validMoves.length > 0) {
-                                    movesHtml = '<div class="pokemon-moves">';
-                                    pokemon.moves.forEach((moveName, index) => {
-                                        if (moveName) {
-                                            const cleanName = moveName.toString().trim().toLowerCase();
-                                            if (cleanName !== '' && 
-                                                cleanName !== '(none)' && 
-                                                cleanName !== 'none' && 
-                                                cleanName !== 'null' &&
-                                                cleanName !== 'undefined') {
-                                                const currentPp = pokemon.move_pp && pokemon.move_pp[index] !== undefined ? pokemon.move_pp[index] : '?';
-                                                movesHtml += `<div class="move-item">
-                                                    <span class="move-name">${moveName.toUpperCase()}</span>
-                                                    <span>${currentPp} PP</span>
-                                                </div>`;
-                                            }
-                                        }
-                                    });
-                                    movesHtml += '</div>';
-                                }
-                            }
-                            
-                            const displayName = (pokemon.nickname && pokemon.nickname.trim() !== '') ? 
+
+                            const displayName = (pokemon.nickname && pokemon.nickname.trim() !== '') ?
                                 pokemon.nickname.toUpperCase() : pokemon.species_name.toUpperCase();
-                            
+
+                            // Pokemon Showdown animated sprites (use species name, lowercase)
+                            const spriteUrl = pokemon.species_name ?
+                                `https://play.pokemonshowdown.com/sprites/ani/${pokemon.species_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.gif` : '';
+
+                            // Fallback to PokeAPI static Emerald sprites (use species_id = National Dex)
+                            const fallbackSpriteUrl = pokemon.species_id ?
+                                `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.species_id}.png` : '';
+
                             pokemonDiv.innerHTML = `
-                                <div class="pokemon-header">
-                                    <span class="pokemon-name">${displayName}</span>
-                                    <span class="pokemon-level">Lv.${pokemon.level || '??'}</span>
+                                <div class="party-sprite">
+                                    ${spriteUrl ? `<img src="${spriteUrl}" onerror="this.src='${fallbackSpriteUrl}'" alt="${displayName}">` : '<span style="color: #666;">?</span>'}
                                 </div>
+                                <span class="pokemon-name">${displayName}</span>
+                                <span class="pokemon-level">Lv.${pokemon.level || '??'}</span>
                                 <div class="pokemon-hp">
-                                    <span>HP:</span>
                                     <div class="hp-bar">
                                         <div class="${hpClass}" style="width: ${hpPercent}%"></div>
                                     </div>
-                                    <span>${pokemon.current_hp || '??'}/${pokemon.max_hp || '??'}</span>
+                                    <div class="hp-text">${pokemon.current_hp || '??'}/${pokemon.max_hp || '??'}</div>
                                 </div>
-                                ${movesHtml}
                             `;
                             
                             partyContainer.appendChild(pokemonDiv);
@@ -1324,17 +1373,17 @@
                 } else {
                     // Fallback if no party data
                     partyContainer.innerHTML = `
-                        <div class="party-pokemon">
-                            <div class="pokemon-header">
-                                <span class="pokemon-name">NO_PARTY_DATA</span>
-                                <span class="pokemon-level">Lv.--</span>
+                        <div class="party-box">
+                            <div class="party-sprite">
+                                <span style="color: #666;">?</span>
                             </div>
+                            <span class="pokemon-name">NO_PARTY_DATA</span>
+                            <span class="pokemon-level">Lv.--</span>
                             <div class="pokemon-hp">
-                                <span>HP:</span>
                                 <div class="hp-bar">
                                     <div class="hp-fill" style="width: 0%"></div>
                                 </div>
-                                <span>--/--</span>
+                                <div class="hp-text">--/--</div>
                             </div>
                         </div>
                     `;
