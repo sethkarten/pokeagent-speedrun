@@ -2549,6 +2549,7 @@ class PokemonEmeraldReader:
                 logger.info(f"Party data: {party}")
                 state["player"]["party"] = [
                     {
+                        "species_id": pokemon.species_id,
                         "species_name": pokemon.species_name,
                         "level": pokemon.level,
                         "current_hp": pokemon.current_hp,
