@@ -76,13 +76,14 @@ class Pathfinder:
     def __init__(self, collision_map: Optional[Dict] = None, allow_diagonal: bool = False):
         """
         Initialize the pathfinder.
-        
+
         Args:
             collision_map: Dictionary containing collision data for the current map
             allow_diagonal: Whether to allow diagonal movement (default False for Pokemon)
         """
         self.collision_map = collision_map or {}
         self.allow_diagonal = allow_diagonal
+        self.tile_connectivity = {}  # Cache of valid movement directions per tile
         
     def find_path(
         self,
@@ -130,6 +131,24 @@ class Pathfinder:
         location_name = game_state.get('player', {}).get('location', 'Unknown')
         logger.info(f"Pathfinding: {start} -> {goal} in {location_name}")
         logger.debug(f"Map type: {map_data.get('type')}, dimensions: {map_data.get('width', '?')}x{map_data.get('height', '?')}")
+
+        # DEBUG: Check what tiles are around goal
+        grid = map_data.get('grid', [])
+        raw_tiles = map_data.get('raw_tiles', [])
+        gx, gy = goal
+        logger.info(f"DEBUG: Checking tiles around goal ({gx}, {gy}):")
+        for dy in range(-1, 2):
+            for dx in range(-1, 2):
+                x, y = gx + dx, gy + dy
+                if 0 <= y < len(grid) and 0 <= x < len(grid[0]):
+                    sym = grid[y][x]
+                    if raw_tiles and 0 <= y < len(raw_tiles) and 0 <= x < len(raw_tiles[y]):
+                        tile = raw_tiles[y][x]
+                        elev = tile[3] if len(tile) >= 4 else '?'
+                    else:
+                        elev = '?'
+                    marker = " ← GOAL" if dx == 0 and dy == 0 else ""
+                    logger.info(f"  ({x:2d}, {y:2d}) '{sym}' E{elev}{marker}")
         
         # Normalize variance level (None when disabled)
         variance_level = None
@@ -141,6 +160,11 @@ class Pathfinder:
                 variance_level = None
             else:
                 logger.debug(f"Ignoring unrecognized variance level '{variance}'")
+
+        # Build per-tile connectivity map (caches valid movement directions)
+        logger.debug(f"Building tile connectivity map for {location_name}")
+        self.tile_connectivity = self._build_tile_connectivity(map_data)
+        logger.debug(f"Built connectivity for {len(self.tile_connectivity)} tiles")
 
         # Get blocked positions (walls, NPCs, water, etc.)
         # CRITICAL: Exclude start position - player is there so it must be walkable
@@ -261,8 +285,6 @@ class Pathfinder:
             # A* returned (None, best_node) - no complete path but found closest point
             path, best_node = result
             if best_node and (best_node.x, best_node.y) != start:
-                logger.warning(f"Pathfinding failed: {start} -> {goal} in {location_name}")
-                logger.warning(f"  Blocked count: {len(blocked)}, Map: {map_data.get('type', 'unknown')}")
                 logger.info(f"Using partial path to closest point: {(best_node.x, best_node.y)} (distance {best_node.h_cost:.1f} from goal)")
                 
                 # Return partial path (up to 25 steps) toward the goal
@@ -357,7 +379,51 @@ class Pathfinder:
         
         # No porymap data available - return None (no fallback)
         return None
-    
+
+    def _build_tile_connectivity(self, map_data: Dict) -> Dict[Tuple[int, int], Dict[str, bool]]:
+        """
+        Build a connectivity map showing which directions are valid from each tile.
+
+        Returns dict: {(x, y): {'up': bool, 'down': bool, 'left': bool, 'right': bool}}
+        """
+        connectivity = {}
+
+        if 'grid' not in map_data or 'raw_tiles' not in map_data:
+            return connectivity
+
+        grid = map_data['grid']
+        raw_tiles = map_data['raw_tiles']
+        height = len(grid)
+        width = len(grid[0]) if height > 0 else 0
+
+        # For each tile, check if movement in each direction is valid
+        for y in range(height):
+            for x in range(width):
+                pos = (x, y)
+                connectivity[pos] = {
+                    'up': False,
+                    'down': False,
+                    'left': False,
+                    'right': False
+                }
+
+                # Check each direction
+                neighbors = [
+                    ('up', (x, y - 1)),
+                    ('down', (x, y + 1)),
+                    ('left', (x - 1, y)),
+                    ('right', (x + 1, y))
+                ]
+
+                for direction, (nx, ny) in neighbors:
+                    # Check bounds
+                    if 0 <= nx < width and 0 <= ny < height:
+                        # Use _can_move_to to check if movement is valid
+                        if self._can_move_to(pos, (nx, ny), map_data):
+                            connectivity[pos][direction] = True
+
+        return connectivity
+
     def _get_blocked_positions(
         self,
         game_state: Dict,
@@ -620,22 +686,86 @@ class Pathfinder:
                     # Calculate elevation difference
                     elev_diff = abs(from_elevation - to_elevation)
 
-                    # Only block SIGNIFICANT elevation differences (>= 3)
-                    # Small differences (0-2) are cosmetic in Pokemon Emerald
-                    if elev_diff >= 3:
-                        # Check if there's a special connector (stairs, warp, etc.)
-                        # that explicitly allows movement between these elevations
+                    # Check if elevations differ (ANY difference, not just >= 3)
+                    if from_elevation != to_elevation:
+                        # Only allow elevation changes through valid connectors:
+                        # 1. Destination is stairs/door/warp (check both symbol AND behavior)
+                        # 2. Source is stairs/door (exiting to different elevation)
+                        # 3. Destination is a ledge (one-way jump down)
 
-                        # Allow movement if destination is a warp/door/stairs symbol
-                        if dest_symbol in ['S', 'D', 'W']:
-                            return True  # Warps/doors/stairs explicitly connect elevations
+                        # Check if destination tile has stair/ladder/door behavior
+                        # Tiles can be walkable '.' but still be stairs based on behavior
+                        to_behavior = to_tile[1] if len(to_tile) > 1 else 0
+                        from_behavior = from_tile[1] if len(from_tile) > 1 else 0
+
+                        # Get behavior names
+                        to_behavior_name = ""
+                        from_behavior_name = ""
+                        try:
+                            from pokemon_env.enums import MetatileBehavior
+                            if isinstance(to_behavior, int):
+                                to_behavior_name = MetatileBehavior(to_behavior).name
+                            if isinstance(from_behavior, int):
+                                from_behavior_name = MetatileBehavior(from_behavior).name
+                        except:
+                            pass
+
+                        # Check if destination has stair/ladder/door behavior
+                        is_dest_connector = (
+                            dest_symbol in ['S', 'D'] or
+                            "LADDER" in to_behavior_name or
+                            "STAIRS" in to_behavior_name or
+                            "DOOR" in to_behavior_name or
+                            "WARP" in to_behavior_name
+                        )
+
+                        # Check if source has stair/ladder/door behavior
+                        is_source_connector = (
+                            from_symbol in ['S', 'D'] or
+                            "LADDER" in from_behavior_name or
+                            "STAIRS" in from_behavior_name or
+                            "DOOR" in from_behavior_name or
+                            "WARP" in from_behavior_name
+                        )
+
+                        # Allow movement if destination is a warp/door/stairs (symbol or behavior)
+                        if is_dest_connector:
+                            logger.debug(f"Allowing movement to stairs/door/ladder: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (behavior: {to_behavior_name})")
+                            return True  # Warps/doors/stairs/ladders explicitly connect elevations
+
+                        # Allow movement if SOURCE is stairs/door/ladder (moving away from connector to different elevation)
+                        if is_source_connector:
+                            logger.debug(f"Allowing movement from stairs/door/ladder: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (behavior: {from_behavior_name})")
+                            return True  # Can exit stairs/doors/ladders to any elevation
 
                         # Allow movement if it's a directional ledge (one-way jump down)
                         if dest_symbol in ['→', '←', '↑', '↓', '↗', '↖', '↘', '↙']:
+                            logger.debug(f"Allowing movement to ledge: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation}")
                             return True  # Ledges explicitly allow elevation changes
 
-                        # Block all other movement across significant elevation differences
-                        logger.debug(f"Blocking movement from ({from_x}, {from_y}) elev {from_elevation} to ({to_x}, {to_y}) elev {to_elevation}: elevation diff = {elev_diff}")
+                        # Allow movement between adjacent walkable tiles ONLY through E0 connector tiles
+                        # Pokemon uses E0 tiles as invisible stairs between elevation areas
+                        # ALL elevation changes between non-E0 tiles must be blocked
+                        walkable_behaviors = ['NORMAL', 'MOUNTAIN_TOP', 'INDOOR', 'CAVE', 'TALL_GRASS', 'LONG_GRASS', 'SHORT_GRASS']
+                        both_walkable = any(b in from_behavior_name for b in walkable_behaviors) and any(b in to_behavior_name for b in walkable_behaviors)
+                        both_walkable_symbols = dest_symbol in ['.', '~'] and from_symbol in ['.', '~']
+
+                        if both_walkable and both_walkable_symbols:
+                            elev_diff = to_elevation - from_elevation  # Positive = going up, negative = going down
+
+                            # ONLY allow elevation changes if one tile is E0 (connector/stair)
+                            if from_elevation == 0 or to_elevation == 0:
+                                logger.debug(f"Allowing E0 connector transition: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (Δ{elev_diff:+d})")
+                                return True
+
+                            # Block ALL other elevation changes between non-E0 tiles
+                            # This includes E3->E4, E4->E3, E3->E1, etc.
+                            # Must use E0 connector tiles as stairs
+                            logger.info(f"🚫 Blocking non-E0 elevation change: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (Δ{elev_diff:+d}) - must use E0 stairs")
+                            return False
+
+                        # Block all other movement between different elevations
+                        logger.info(f"🚫 Blocking elevation change: ({from_x}, {from_y}) '{from_symbol}' E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation}")
                         return False
             except (IndexError, TypeError, AttributeError) as e:
                 # If we can't get elevation data, fall through to symbol-based checks
@@ -854,21 +984,38 @@ class Pathfinder:
         return (None, best_node)
     
     def _get_neighbors(self, node: Node, blocked: Set[Tuple[int, int]]) -> List[Tuple[int, int]]:
-        """Get valid neighbor positions for a node."""
+        """Get valid neighbor positions for a node using connectivity map."""
         neighbors = []
-        
-        # Cardinal directions (up, down, left, right)
-        directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-        
-        if self.allow_diagonal:
-            # Add diagonal directions
-            directions.extend([(-1, -1), (1, -1), (-1, 1), (1, 1)])
-        
-        for dx, dy in directions:
-            new_x, new_y = node.x + dx, node.y + dy
-            if (new_x, new_y) not in blocked:
-                neighbors.append((new_x, new_y))
-        
+        current_pos = (node.x, node.y)
+
+        # Use pre-computed connectivity map if available
+        if current_pos in self.tile_connectivity:
+            connectivity = self.tile_connectivity[current_pos]
+
+            # Check each direction based on connectivity
+            direction_map = {
+                'up': (node.x, node.y - 1),
+                'down': (node.x, node.y + 1),
+                'left': (node.x - 1, node.y),
+                'right': (node.x + 1, node.y)
+            }
+
+            for direction, neighbor_pos in direction_map.items():
+                # Only add if connectivity allows AND not blocked
+                if connectivity.get(direction, False) and neighbor_pos not in blocked:
+                    neighbors.append(neighbor_pos)
+        else:
+            # Fallback to old behavior if no connectivity map
+            directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+
+            if self.allow_diagonal:
+                directions.extend([(-1, -1), (1, -1), (-1, 1), (1, 1)])
+
+            for dx, dy in directions:
+                new_x, new_y = node.x + dx, node.y + dy
+                if (new_x, new_y) not in blocked:
+                    neighbors.append((new_x, new_y))
+
         return neighbors
     
     def _heuristic(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:

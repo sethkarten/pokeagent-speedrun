@@ -197,7 +197,7 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
     # tile_id 1023 (0x3FF) is usually invalid/out-of-bounds
     if tile_id == 1023:
         return "#"  # Always show as blocked/wall
-    elif behavior_name == "NORMAL":
+    elif behavior_name == "NORMAL" or behavior_name == "MOUNTAIN_TOP":
         return "." if collision == 0 else "#"
     # Fix for reversed door/stairs mapping in Brendan's house
     # NON_ANIMATED_DOOR (96) appears at top and should show as 'S' 
@@ -207,9 +207,11 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
     elif behavior == 101 or "SOUTH_ARROW_WARP" in behavior_name:
         return "D"  # This is actually the exit door
     elif "DOOR" in behavior_name:
-        return "D"  # Other doors remain as doors
-    elif "STAIRS" in behavior_name or "WARP" in behavior_name:
-        return "S"  # Other stairs/warps remain as stairs
+        # Check collision for doors - gym puzzles have hidden warp tiles that are blocked
+        return "D" if collision == 0 else "#"
+    elif "STAIRS" in behavior_name or "WARP" in behavior_name or "LADDER" in behavior_name:
+        # Check collision for stairs/warps - some are blocked until activated
+        return "S" if collision == 0 else "#"
     elif "SHALLOW_WATER" in behavior_name:
         return "."  # Shallow water is walkable
     elif "WATER" in behavior_name:

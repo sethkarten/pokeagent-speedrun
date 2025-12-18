@@ -678,6 +678,11 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
             map_info['porymap']['objects'] = porymap_data.get('objects', [])
             map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
             map_info['porymap']['raw_tiles'] = porymap_data.get('raw_tiles')  # Include raw tiles with elevation
+
+            # Debug: Verify the grid was stored
+            stored_grid = map_info['porymap'].get('grid')
+            if stored_grid:
+                logger.debug(f"Stored elevation-filtered porymap grid: {len(stored_grid)}x{len(stored_grid[0]) if stored_grid else 0}")
     elif porymap_result:
         context_parts.extend(porymap_result)
     
@@ -1232,6 +1237,7 @@ ROM_TO_PORYMAP_MAP = {
     "FALLARBOR TOWN POKEMON CENTER 1F": "FallarborTown_PokemonCenter_1F",  # 100.0% match, verified
     "FALLARBOR TOWN POKEMON CENTER 2F": "FallarborTown_PokemonCenter_2F",  # 100.0% match, verified
     "FIERY PATH": "FieryPath",  # 100.0% match, verified
+    "FIERY PATH INTERIOR": "FieryPath",  # Same location, different name variant
     "FORTREE CITY DECORATION SHOP": "FortreeCity_DecorationShop",  # 100.0% match, verified
     "FORTREE CITY GYM": "FortreeCity_Gym",  # 100.0% match, verified
     "FORTREE CITY HOUSE1": "FortreeCity_House1",  # 100.0% match, verified
@@ -1375,6 +1381,7 @@ ROM_TO_PORYMAP_MAP = {
     "ROUTE 111 WINSTRATE FAMILYS HOUSE": "Route111_WinstrateFamilysHouse",  # 100.0% match, verified
     "ROUTE 112 CABLE CAR STATION": "Route112_CableCarStation",  # 100.0% match, verified
     "ROUTE 113 GLASS WORKSHOP": "Route113_GlassWorkshop",  # 100.0% match, verified
+    "ROUTE_113_GLASS_WORKSHOP": "Route113_GlassWorkshop",  # Enum name variant
     "ROUTE 114 FOSSIL MANIACS HOUSE": "Route114_FossilManiacsHouse",  # 100.0% match, verified
     "ROUTE 114 FOSSIL MANIACS TUNNEL": "Route114_FossilManiacsTunnel",  # 100.0% match, verified
     "ROUTE 114 LANETTES HOUSE": "Route114_LanettesHouse",  # 100.0% match, verified
@@ -1512,7 +1519,11 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         
         # Convert ROM location name to porymap map name using mapping
         porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
-        
+
+        # Debug log for Glass Workshop issue
+        if "GLASS" in location_name.upper() or "WORKSHOP" in location_name.upper():
+            logger.warning(f"DEBUG: Glass Workshop mapping - ROM location: '{location_name}' -> porymap: '{porymap_map_name}'")
+
         # If not in direct mapping, try fuzzy matching
         if not porymap_map_name:
             map_loader = PokeemeraldMapLoader(pokeemerald_root)
@@ -1528,12 +1539,16 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             
             rom_normalized = normalize_for_matching(location_name)
             maps_dir = pokeemerald_root / "data" / "maps"
-            
+
+            # Debug log for Glass Workshop fuzzy matching
+            if "GLASS" in location_name.upper() or "WORKSHOP" in location_name.upper():
+                logger.warning(f"DEBUG: Fuzzy matching Glass Workshop - normalized: '{rom_normalized}'")
+
             if maps_dir.exists():
                 # Try direct directory name match
                 best_match = None
                 best_match_score = 0
-                
+
                 for map_dir in maps_dir.iterdir():
                     if not map_dir.is_dir() or map_dir.name == "map_groups.json":
                         continue
@@ -1584,10 +1599,99 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                     json_map['grid'] = json_map_with_grid['grid']
             except ValueError as e:
                 logger.error(f"Porymap: Failed to rebuild grid for '{porymap_map_name}': {e}")
-        
+
         if not json_map:
             logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
             return context_parts
+
+        # Filter grid based on player elevation to handle multi-level maps
+        # For caves/dungeons with multiple connected levels, be more permissive
+        # For buildings/bridges with truly separate floors, be strict
+        if player_coords and json_map.get('raw_tiles') and json_map.get('grid'):
+            try:
+                px, py = player_coords[0], player_coords[1]
+                raw_tiles = json_map['raw_tiles']
+
+                # Get player's current elevation from the tile they're standing on
+                if 0 <= py < len(raw_tiles) and 0 <= px < len(raw_tiles[py]):
+                    player_tile = raw_tiles[py][px]
+                    if len(player_tile) >= 4:
+                        player_elevation = player_tile[3]  # elevation is 4th element
+
+                        # Check if this is a cave/dungeon (has elevation variety but connected paths)
+                        # vs a multi-floor building (strict separation)
+                        elevations_in_map = set()
+                        for row in raw_tiles:
+                            for tile in row:
+                                if len(tile) >= 4:
+                                    elevations_in_map.add(tile[3])
+
+                        # NO tolerance - only allow exact elevation matches
+                        # Elevation changes ONLY through stairs/doors/ledges (handled separately)
+                        elevation_tolerance = 0  # Must be exact same elevation
+
+                        # First pass: Find all stair and warp positions (S and D)
+                        grid = json_map['grid']
+                        warp_positions = set()
+                        for y in range(len(grid)):
+                            for x in range(len(grid[y])):
+                                if grid[y][x] in ['S', 'D']:  # Stairs and Doors are both warps
+                                    warp_positions.add((x, y))
+
+                        # Filter the grid based on elevation
+                        filtered_grid = []
+
+                        for y in range(len(grid)):
+                            filtered_row = []
+                            for x in range(len(grid[y])):
+                                original_char = grid[y][x]
+
+                                # Always preserve special markers (warps, doors, NPCs, items)
+                                if original_char in ['D', 'S', 'T', 'K', 'N', 'I', '←', '→', '↑', '↓']:
+                                    filtered_row.append(original_char)
+                                elif y < len(raw_tiles) and x < len(raw_tiles[y]):
+                                    tile = raw_tiles[y][x]
+                                    if len(tile) >= 4:
+                                        tile_elevation = tile[3]
+                                        elevation_diff = abs(tile_elevation - player_elevation)
+
+                                        # Check if tile is adjacent to stairs (immediate neighbors only)
+                                        is_adjacent_to_stairs = False
+                                        for warp_x, warp_y in warp_positions:
+                                            if abs(x - warp_x) + abs(y - warp_y) == 1:
+                                                is_adjacent_to_stairs = True
+                                                break
+
+                                        # Adjacent to stairs: keep WALKABLE tiles accessible regardless of elevation
+                                        # But still block walls/cliffs!
+                                        if is_adjacent_to_stairs and original_char in ['.', '~', '←', '→', '↑', '↓']:
+                                            filtered_row.append(original_char)  # Walkable tiles near stairs stay walkable
+                                        # Block tiles beyond elevation tolerance
+                                        elif elevation_diff > elevation_tolerance:
+                                            filtered_row.append('#')  # Block tiles at very different elevations
+                                        else:
+                                            filtered_row.append(original_char)  # Keep original tile
+                                    else:
+                                        filtered_row.append(original_char)
+                                else:
+                                    filtered_row.append(original_char)
+                            filtered_grid.append(filtered_row)
+
+                        # Update the grid and ASCII map
+                        json_map['grid'] = filtered_grid
+
+                        # Regenerate ASCII map from filtered grid
+                        ascii_lines = [''.join(row) for row in filtered_grid]
+                        json_map['ascii'] = '\n'.join(ascii_lines)
+
+                        # Count how many tiles were blocked by elevation filtering
+                        blocked_count = sum(1 for row in filtered_grid for cell in row if cell == '#')
+                        original_blocked_count = sum(1 for row in grid for cell in row if cell == '#')
+                        newly_blocked = blocked_count - original_blocked_count
+
+                        logger.info(f"Elevation filtering: player at ({px}, {py}) elevation {player_elevation} - map has elevations {sorted(elevations_in_map)} - tolerance: {elevation_tolerance} - blocked {newly_blocked} additional tiles")
+            except Exception as e:
+                logger.warning(f"Failed to filter map by elevation: {e}")
         
         # Format for LLM
         context_parts.append("\n=== PORYMAP GROUND TRUTH MAP ===")
@@ -1932,10 +2036,18 @@ def get_movement_preview(state_data):
     current_y = int(player_position['y'])
     
     # Get map and tile data
+    # IMPORTANT: Use the elevation-filtered porymap grid if available, not raw memory tiles
     map_info = state_data.get('map', {})
+
+    # Try to use porymap grid first (elevation-filtered and more accurate)
+    porymap = map_info.get('porymap', {})
+    porymap_grid = porymap.get('grid')
+    raw_tiles_for_elevation = porymap.get('raw_tiles') if porymap else None
+
+    # Fallback to memory-read tiles if porymap not available
     raw_tiles = map_info.get('tiles', [])
-    
-    if not raw_tiles:
+
+    if not raw_tiles and not porymap_grid:
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
@@ -1991,14 +2103,65 @@ def get_movement_preview(state_data):
                 break
         
         # Check if the target position is within the grid bounds
-        if (0 <= grid_y < len(raw_tiles) and 
+        # Use porymap grid if available (elevation-aware), otherwise fall back to raw tiles
+        if porymap_grid and 0 <= new_world_y < len(porymap_grid) and 0 <= new_world_x < len(porymap_grid[new_world_y] if porymap_grid[new_world_y] else []):
+            # Use porymap grid (already filtered by elevation)
+            try:
+                tile_symbol = porymap_grid[new_world_y][new_world_x]
+                target_tile = None  # Don't have the raw tile data when using porymap grid
+
+                # Determine if movement is blocked by terrain (using porymap symbols)
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'X']  # Walls, water, out of bounds
+
+                # Check if movement is blocked by NPC
+                is_blocked_by_npc = False
+                if npc_at_position and npc_at_position.get('is_blocking', True):
+                    is_blocked_by_npc = True
+
+                # Overall blocking status
+                is_blocked = is_blocked_by_terrain or is_blocked_by_npc
+
+                # Set tile description based on symbol
+                if tile_symbol == 'D':
+                    tile_description = 'Door/Exit'
+                elif tile_symbol == 'S':
+                    tile_description = 'Stairs/Warp'
+                elif tile_symbol == '.':
+                    tile_description = 'Walkable'
+                elif tile_symbol == '~':
+                    tile_description = 'Grass'
+                elif tile_symbol == '#':
+                    tile_description = 'Wall'
+                elif tile_symbol == 'W':
+                    tile_description = 'Water'
+                else:
+                    tile_description = f'Tile ({tile_symbol})'
+
+                # Update preview info
+                preview_info['blocked'] = is_blocked
+                preview_info['tile_symbol'] = tile_symbol
+                preview_info['tile_description'] = tile_description
+                preview_info['npc_at_position'] = npc_at_position is not None
+                if npc_at_position:
+                    preview_info['npc_info'] = {
+                        'graphics_id': npc_at_position.get('graphics_id', 'Unknown'),
+                        'x': npc_at_position.get('x', 0),
+                        'y': npc_at_position.get('y', 0)
+                    }
+
+            except (IndexError, TypeError):
+                tile_symbol = '#'
+                target_tile = None
+                # Keep defaults (blocked=True)
+
+        elif (0 <= grid_y < len(raw_tiles) and
             0 <= grid_x < len(raw_tiles[grid_y]) and
             raw_tiles[grid_y]):
-            
+
             try:
-                # Get the tile at the target position
+                # Get the tile at the target position from memory-read tiles
                 target_tile = raw_tiles[grid_y][grid_x]
-                
+
                 # Get tile symbol and check if walkable
                 tile_symbol = format_tile_to_symbol(target_tile)
                 

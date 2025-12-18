@@ -501,34 +501,14 @@ def setup_environment(skip_initial_state=False):
         anticheat_tracker.initialize_submission_log("SERVER_MODE")
         print("AntiCheat tracker initialized for submission logging")
         
-        # Log initial GAME_RUNNING milestone at startup (STEP=0, time=0)
-        # Skip this if we're going to load a state anyway
+        # Mark GAME_RUNNING milestone as completed at startup
+        # But defer the expensive state logging - it will happen on first state request
         if not skip_initial_state:
             try:
-                # Mark GAME_RUNNING milestone as completed immediately
                 env.milestone_tracker.mark_completed("GAME_RUNNING")
-                
-                # Get initial game state for logging
-                initial_state = env.get_comprehensive_state()
-                
-                # Create state hash
-                state_str = str(initial_state)
-                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
-                
-                # Log initial entry with GAME_RUNNING milestone
-                anticheat_tracker.log_submission_data(
-                    step=0,
-                    state_data=initial_state,
-                    action_taken="INIT",
-                    decision_time=0.0,
-                    state_hash=state_hash,
-                    manual_mode=True,
-                    milestone_override="GAME_RUNNING"
-                )
-                print("Initial GAME_RUNNING milestone logged at startup")
-                
+                print("GAME_RUNNING milestone marked - initial state logging deferred")
             except Exception as e:
-                print(f"Warning: Could not log initial milestone: {e}")
+                print(f"Warning: Could not mark initial milestone: {e}")
         
         screenshot = env.get_screenshot()
         if screenshot:
@@ -702,21 +682,33 @@ def game_loop(manual_mode=False):
                 action_frames_remaining -= 1
                 if action_frames_remaining == 0:
                     # Action finished, start release delay
-                    # Record ending position for this action
+                    # Record ending position for this action (skip if queue is large for performance)
                     global recent_button_presses
-                    current_state = env.get_comprehensive_state()
-                    player_data = current_state.get('player', {})
-                    position = player_data.get('position', {})
-                    location = player_data.get('location', 'Unknown')
-                    end_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
 
-                    # Find and update the most recent incomplete action matching current_action
-                    for i in range(len(recent_button_presses) - 1, -1, -1):
-                        if (recent_button_presses[i]["button"] == current_action and
-                            not recent_button_presses[i]["completed"]):
-                            recent_button_presses[i]["end_pos"] = end_pos
-                            recent_button_presses[i]["completed"] = True
-                            break
+                    # Only update position tracking if queue is small (<10 actions)
+                    # This prevents expensive state reads during batch action processing
+                    if len(action_queue) < 10:
+                        current_state = env.get_comprehensive_state()
+                        player_data = current_state.get('player', {})
+                        position = player_data.get('position', {})
+                        location = player_data.get('location', 'Unknown')
+                        end_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
+
+                        # Find and update the most recent incomplete action matching current_action
+                        for i in range(len(recent_button_presses) - 1, -1, -1):
+                            if (recent_button_presses[i]["button"] == current_action and
+                                not recent_button_presses[i]["completed"]):
+                                recent_button_presses[i]["end_pos"] = end_pos
+                                recent_button_presses[i]["completed"] = True
+                                break
+                    else:
+                        # For large queues, just mark as completed without position update
+                        for i in range(len(recent_button_presses) - 1, -1, -1):
+                            if (recent_button_presses[i]["button"] == current_action and
+                                not recent_button_presses[i]["completed"]):
+                                recent_button_presses[i]["end_pos"] = (None, None, "Unknown")
+                                recent_button_presses[i]["completed"] = True
+                                break
 
                     current_action = None
                     release_frames_remaining = current_action_release_delay
@@ -1000,17 +992,23 @@ async def take_action(request: ActionRequest):
                 action_queue.append(action_data)
 
             print(f"📋 Action queue after extend: {len(action_queue)} actions")
-            
+
             # Track button presses for recent actions display with position tracking
             current_time = time.time()
 
-            # Get current player position (use cached state - 100ms cache in emulator)
-            current_state = env.get_comprehensive_state()  # Already cached internally
-            player_data = current_state.get('player', {})
-            position = player_data.get('position', {})
-            location = player_data.get('location', 'Unknown')
-            start_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
-            
+            # Only read position if queue is small (<20 actions) to avoid performance impact
+            # For large queues, skip position tracking to maintain FPS
+            if len(action_queue) < 20:
+                # Get current player position (use cached state - 100ms cache in emulator)
+                current_state = env.get_comprehensive_state()  # Already cached internally
+                player_data = current_state.get('player', {})
+                position = player_data.get('position', {})
+                location = player_data.get('location', 'Unknown')
+                start_pos = (position.get('x'), position.get('y'), location) if position else (None, None, location)
+            else:
+                # Skip expensive state read for large queues
+                start_pos = (None, None, "Unknown")
+
             source = request.source
             metadata = request.metadata or {}
             sequence_length = len(request.buttons)
@@ -1037,14 +1035,25 @@ async def take_action(request: ActionRequest):
             # Update total actions count in metrics
             with step_lock:
                 latest_metrics["total_actions"] = latest_metrics.get("total_actions", 0) + len(request.buttons)
-                
-                # Also update the LLM logger's action count for checkpoint persistence
+
+                # Also update the LLM logger's action count and gameplay time for checkpoint persistence
                 try:
                     from utils.llm_logger import get_llm_logger
                     llm_logger = get_llm_logger()
                     if llm_logger:
                         llm_logger.cumulative_metrics["total_actions"] = latest_metrics["total_actions"]
-                        
+
+                        # Update gameplay time for button presses too
+                        current_time = time.time()
+                        time_since_last_update = current_time - llm_logger.cumulative_metrics.get("last_update_time", current_time)
+                        # Only add time if it's reasonable (less than 5 minutes since last interaction)
+                        if time_since_last_update < 300:  # 5 minutes
+                            llm_logger.cumulative_metrics["total_run_time"] = llm_logger.cumulative_metrics.get("total_run_time", 0) + time_since_last_update
+                        llm_logger.cumulative_metrics["last_update_time"] = current_time
+
+                        # Save metrics to cache file
+                        llm_logger.save_cumulative_metrics()
+
                         # Sync LLM logger's cumulative metrics back to latest_metrics
                         # This ensures token usage and costs from LLM interactions are displayed
                         cumulative_metrics_to_sync = ["total_tokens", "prompt_tokens", "completion_tokens", "total_cost", "total_llm_calls", "total_run_time"]
@@ -1078,44 +1087,50 @@ async def take_action(request: ActionRequest):
                 else:
                     decision_time = 0.0  # First action
                 last_action_time = current_time
-                
-                # Get current game state for logging
-                game_state = env.get_comprehensive_state()
-                action_taken = request.buttons[0] if request.buttons else "NONE"  # Log first action
-                
-                # Create simple state hash
-                import hashlib
-                state_str = str(game_state)
-                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
-                
-                # Determine if this is manual mode (from client) or agent mode
-                # For now, assume manual mode if coming through API
-                manual_mode = request.source == "manual" if hasattr(request, 'source') else True
-                
-                # Get the latest milestone from the emulator's milestone tracker
-                # First, trigger an immediate milestone check to ensure current state is detected
-                latest_milestone = "NONE"
-                if env and hasattr(env, 'milestone_tracker'):
-                    try:
-                        # Force an immediate milestone check before logging
-                        env.check_and_update_milestones(game_state)
-                    except Exception as e:
-                        logger.debug(f"Error during immediate milestone check: {e}")
-                    
-                    milestone_name, split_time, total_time = env.milestone_tracker.get_latest_milestone_info()
-                    latest_milestone = milestone_name if milestone_name != "NONE" else "NONE"
-                
-                # Log the action
-                step_counter += 1
-                anticheat_tracker.log_submission_data(
-                    step=step_counter,
-                    state_data=game_state,
-                    action_taken=action_taken,
-                    decision_time=decision_time,
-                    state_hash=state_hash,
-                    manual_mode=manual_mode,
-                    milestone_override=latest_milestone
-                )
+
+                # Skip expensive state reads and logging when queue is large (>30 actions)
+                # This prevents FPS drops during batch action processing
+                if len(action_queue) < 30:
+                    # Get current game state for logging
+                    game_state = env.get_comprehensive_state()
+                    action_taken = request.buttons[0] if request.buttons else "NONE"  # Log first action
+
+                    # Create simple state hash
+                    import hashlib
+                    state_str = str(game_state)
+                    state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+
+                    # Determine if this is manual mode (from client) or agent mode
+                    # For now, assume manual mode if coming through API
+                    manual_mode = request.source == "manual" if hasattr(request, 'source') else True
+
+                    # Get the latest milestone from the emulator's milestone tracker
+                    # First, trigger an immediate milestone check to ensure current state is detected
+                    latest_milestone = "NONE"
+                    if env and hasattr(env, 'milestone_tracker'):
+                        try:
+                            # Force an immediate milestone check before logging
+                            env.check_and_update_milestones(game_state)
+                        except Exception as e:
+                            logger.debug(f"Error during immediate milestone check: {e}")
+
+                        milestone_name, split_time, total_time = env.milestone_tracker.get_latest_milestone_info()
+                        latest_milestone = milestone_name if milestone_name != "NONE" else "NONE"
+
+                    # Log the action
+                    step_counter += 1
+                    anticheat_tracker.log_submission_data(
+                        step=step_counter,
+                        state_data=game_state,
+                        action_taken=action_taken,
+                        decision_time=decision_time,
+                        state_hash=state_hash,
+                        manual_mode=manual_mode,
+                        milestone_override=latest_milestone
+                    )
+                else:
+                    # For large queues, skip detailed logging to maintain FPS
+                    logger.debug(f"Skipping submission logging - queue size: {len(action_queue)}")
                 
             except Exception as e:
                 logger.warning(f"Error logging to submission.log: {e}")
@@ -1402,9 +1417,80 @@ async def get_comprehensive_state():
             # Remove the PIL image object to avoid serialization issues
             del state["visual"]["screenshot"]
         
+        # Add porymap ground truth data with elevation filtering for frontend display
+        # Skip during queued actions to avoid FPS slowdown
+        current_queue_length = len(action_queue)  # Check queue before expensive porymap operations
+        if current_location and current_location != "Unknown" and current_location != "TITLE_SEQUENCE" and current_queue_length == 0:
+            try:
+                from utils.state_formatter import _format_porymap_info
+                porymap_result = _format_porymap_info(current_location, player_coords)
+                if isinstance(porymap_result, tuple):
+                    _, porymap_data = porymap_result
+                    if porymap_data and porymap_data.get('grid'):
+                        if 'porymap' not in state['map']:
+                            state['map']['porymap'] = {}
+                        state['map']['porymap']['grid'] = porymap_data.get('grid')
+                        state['map']['porymap']['objects'] = porymap_data.get('objects', [])
+                        state['map']['porymap']['dimensions'] = porymap_data.get('dimensions', {})
+                        state['map']['porymap']['warps'] = porymap_data.get('warps', [])
+                        logger.debug(f"Added elevation-filtered porymap data to /state for {current_location}")
+
+                        # Generate visual_map from porymap grid with player position marker
+                        # Extract 15x15 window around player for stream.html display
+                        porymap_grid = porymap_data.get('grid')
+                        if porymap_grid and player_coords:
+                            px, py = player_coords[0], player_coords[1]
+
+                            # Extract 15x15 window centered on player
+                            window_size = 15
+                            half_window = window_size // 2
+
+                            # Calculate window bounds
+                            start_y = max(0, py - half_window)
+                            end_y = min(len(porymap_grid), py + half_window + 1)
+                            start_x = max(0, px - half_window)
+
+                            # Extract window
+                            visual_grid = []
+                            for y in range(start_y, end_y):
+                                if y < len(porymap_grid):
+                                    row = porymap_grid[y]
+                                    end_x = min(len(row), px + half_window + 1)
+                                    window_row = row[start_x:end_x]
+
+                                    # Pad row if needed to maintain 15 width
+                                    while len(window_row) < window_size:
+                                        window_row.append('#')
+
+                                    visual_grid.append(window_row[:])
+                                else:
+                                    # Pad with blocked tiles if beyond map bounds
+                                    visual_grid.append(['#'] * window_size)
+
+                            # Pad height if needed to maintain 15x15
+                            while len(visual_grid) < window_size:
+                                visual_grid.append(['#'] * window_size)
+
+                            # Add player marker at center of window
+                            player_y_in_window = py - start_y
+                            player_x_in_window = px - start_x
+                            if 0 <= player_y_in_window < len(visual_grid) and 0 <= player_x_in_window < len(visual_grid[player_y_in_window]):
+                                visual_grid[player_y_in_window][player_x_in_window] = 'P'
+
+                            # Convert grid to visual_map string format
+                            visual_map_lines = []
+                            for row in visual_grid:
+                                visual_map_lines.append(' '.join(row))
+
+                            state['map']['visual_map'] = '\n'.join(visual_map_lines)
+                            state['map']['map_source'] = 'porymap_with_player_15x15'
+                            logger.debug(f"Generated 15x15 visual_map from porymap with player at ({px}, {py})")
+            except Exception as e:
+                logger.warning(f"Failed to add porymap data to /state: {e}")
+
         with step_lock:
             current_step = step_count
-        
+
         # Include action queue info for multiprocess coordination
         queue_length = len(action_queue)  # Action queue access is atomic for len()
 
@@ -1428,7 +1514,134 @@ async def get_comprehensive_state():
 
     except Exception as e:
         logger.error(f"Error getting comprehensive state: {e}")
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/whole_map")
+async def get_whole_map():
+    """Get complete map data including full grid, raw tiles, and elevation info for debugging"""
+    if env is None:
+        raise HTTPException(status_code=400, detail="Emulator not initialized")
+
+    try:
+        # Get current location
+        state = env.get_comprehensive_state()
+        location_name = state.get('player', {}).get('location', 'Unknown')
+        player_pos = state.get('player', {}).get('position', {})
+        px, py = player_pos.get('x', 0), player_pos.get('y', 0)
+
+        if not location_name or location_name in ['Unknown', 'TITLE_SEQUENCE']:
+            raise HTTPException(status_code=400, detail="No valid location loaded")
+
+        # Load porymap data with raw tiles
+        from utils.porymap_json_builder import build_json_map_for_llm
+        from utils.pokeemerald_parser import PokeemeraldMapLoader
+        from utils.state_formatter import ROM_TO_PORYMAP_MAP
+        from pathlib import Path
+
+        # Get pokeemerald root
+        pokeemerald_root = None
+        root = os.environ.get('POKEEMERALD_ROOT')
+        if root:
+            root_path = Path(root).resolve()
+            if (root_path / "data" / "maps").exists():
+                pokeemerald_root = root_path
+
+        if not pokeemerald_root:
+            current_dir = Path(__file__).parent.parent
+            porymap_path = current_dir / "porymap_data"
+            if (porymap_path / "data" / "maps").exists():
+                pokeemerald_root = porymap_path.resolve()
+
+        if not pokeemerald_root:
+            raise HTTPException(status_code=500, detail="Could not find pokeemerald root")
+
+        # Get porymap name
+        porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
+
+        if not porymap_map_name:
+            raise HTTPException(status_code=404, detail=f"Could not find porymap for location: {location_name}")
+
+        # Build complete map
+        json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+
+        if not json_map:
+            raise HTTPException(status_code=500, detail=f"Failed to build map for {porymap_map_name}")
+
+        # Get player elevation
+        raw_tiles = json_map.get('raw_tiles', [])
+        player_elevation = 0
+        if raw_tiles and 0 <= py < len(raw_tiles) and 0 <= px < len(raw_tiles[py]):
+            player_tile = raw_tiles[py][px]
+            if len(player_tile) >= 4:
+                player_elevation = player_tile[3]
+
+        # Build elevation map
+        elevation_map = []
+        behavior_map = []
+        if raw_tiles:
+            from pokemon_env.enums import MetatileBehavior
+            for row in raw_tiles:
+                elev_row = []
+                behav_row = []
+                for tile in row:
+                    if len(tile) >= 4:
+                        elev_row.append(tile[3])  # elevation
+                        behavior_id = tile[1]
+                        try:
+                            behavior_name = MetatileBehavior(behavior_id).name
+                        except:
+                            behavior_name = f"UNKNOWN_{behavior_id}"
+                        behav_row.append(behavior_name)
+                    else:
+                        elev_row.append(0)
+                        behav_row.append("UNKNOWN")
+                elevation_map.append(elev_row)
+                behavior_map.append(behav_row)
+
+        # Count special behaviors
+        from pokemon_env.enums import MetatileBehavior
+        special_tiles = {}
+        for y, row in enumerate(raw_tiles):
+            for x, tile in enumerate(row):
+                if len(tile) >= 4:
+                    behavior_id = tile[1]
+                    elevation = tile[3]
+                    try:
+                        behavior_name = MetatileBehavior(behavior_id).name
+                        if any(keyword in behavior_name for keyword in ['LADDER', 'STAIRS', 'DOOR', 'WARP']):
+                            if behavior_name not in special_tiles:
+                                special_tiles[behavior_name] = []
+                            special_tiles[behavior_name].append({
+                                "x": x,
+                                "y": y,
+                                "elevation": elevation,
+                                "behavior_id": behavior_id
+                            })
+                    except:
+                        pass
+
+        return {
+            "location": location_name,
+            "porymap_name": porymap_map_name,
+            "player_position": {"x": px, "y": py},
+            "player_elevation": player_elevation,
+            "dimensions": json_map.get('dimensions', {}),
+            "grid": json_map.get('grid', []),
+            "raw_tiles": raw_tiles,
+            "elevation_map": elevation_map,
+            "behavior_map": behavior_map,
+            "special_tiles": special_tiles,
+            "warps": json_map.get('warps', []),
+            "objects": json_map.get('objects', [])
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting whole map: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/debug/memory")
 async def debug_memory():
@@ -1778,11 +1991,10 @@ async def get_metrics():
                         if "cumulative_metrics" in checkpoint_data:
                             checkpoint_metrics = checkpoint_data["cumulative_metrics"]
                             metrics.update(checkpoint_metrics)
-                            
-                            # Recalculate total_run_time based on original start_time
-                            if "start_time" in checkpoint_metrics:
-                                metrics["total_run_time"] = time.time() - checkpoint_metrics["start_time"]
-                            
+
+                            # Don't recalculate total_run_time - use the saved value which tracks actual gameplay time
+                            # The saved total_run_time only counts time between interactions (not idle time)
+
                             # Update agent step count from checkpoint
                             if "agent_step_count" in checkpoint_data:
                                 metrics["agent_step_count"] = checkpoint_data["agent_step_count"]
@@ -3735,8 +3947,8 @@ async def load_checkpoint():
 def main():
     """Main function"""
     import argparse
-    
-    global running, state_update_running, state_update_thread
+
+    global running, state_update_running, state_update_thread, latest_metrics, agent_step_count
     
     # Set up signal handlers
     signal.signal(signal.SIGINT, signal_handler)
@@ -3794,19 +4006,25 @@ def main():
         if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
             checkpoint_file = "checkpoint_llm.txt"
         
+        # First try to load lightweight cumulative metrics
+        metrics_loaded = llm_logger.load_cumulative_metrics() if llm_logger else False
+
+        # Then load full checkpoint for LLM history
         if llm_logger and os.path.exists(checkpoint_file):
             restored_step_count = llm_logger.load_checkpoint(checkpoint_file)
             if restored_step_count is not None:
-                global agent_step_count
                 agent_step_count = restored_step_count
                 print(f"✅ Server startup: restored LLM checkpoint with step count {restored_step_count}")
-                
+
                 # Sync latest_metrics with loaded cumulative metrics
-                global latest_metrics
                 latest_metrics.update(llm_logger.cumulative_metrics)
-                print(f"✅ Server startup: synced metrics - actions: {latest_metrics.get('total_actions', 0)}, cost: {latest_metrics.get('total_cost', 0)}")
+                print(f"✅ Server startup: synced metrics - actions: {latest_metrics.get('total_actions', 0)}, cost: ${latest_metrics.get('total_cost', 0):.4f}, time: {latest_metrics.get('total_run_time', 0):.0f}s")
             else:
                 print("❌ Server startup: failed to load LLM checkpoint")
+        elif metrics_loaded:
+            # Only metrics file loaded (no checkpoint)
+            latest_metrics.update(llm_logger.cumulative_metrics)
+            print(f"✅ Server startup: loaded cumulative metrics - actions: {latest_metrics.get('total_actions', 0)}, cost: ${latest_metrics.get('total_cost', 0):.4f}, time: {latest_metrics.get('total_run_time', 0):.0f}s")
         else:
             print("ℹ️ Server startup: no checkpoint_llm.txt file found")
     elif env_load_checkpoint_mode == "false":
@@ -3816,6 +4034,19 @@ def main():
         # Default behavior: allow checkpoint loading unless explicitly disabled
         checkpoint_loading_enabled = True
         print("🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available")
+
+    # ALWAYS try to load cumulative metrics, regardless of checkpoint mode
+    # This ensures tokens/cost/actions are preserved even if checkpoint loading is off
+    if env_load_checkpoint_mode != "true":
+        from utils.llm_logger import get_llm_logger
+        llm_logger = get_llm_logger()
+        if llm_logger:
+            # Only load if we didn't already load above
+            metrics_loaded = llm_logger.load_cumulative_metrics()
+            if metrics_loaded:
+                # latest_metrics is already declared global above, so we can use it here
+                latest_metrics.update(llm_logger.cumulative_metrics)
+                print(f"✅ Server startup: loaded cumulative metrics - tokens: {latest_metrics.get('total_tokens', 0):,}, cost: ${latest_metrics.get('total_cost', 0):.2f}, actions: {latest_metrics.get('total_actions', 0):,}")
     
     print("Starting Fixed Simple Pokemon Emerald Server")
     # Initialize run data manager for structured data collection
@@ -3905,53 +4136,13 @@ def main():
             if env.memory_reader and env.memory_reader._map_buffer_addr:
                 print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
                 
-            # Now log the initial GAME_RUNNING milestone after state is loaded
+            # Mark GAME_RUNNING milestone after state load
+            # Defer expensive state logging - it will happen on first state request
             try:
                 env.milestone_tracker.mark_completed("GAME_RUNNING")
-                initial_state = env.get_comprehensive_state()
-                
-                import hashlib
-                state_str = str(initial_state)
-                state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
-                
-                anticheat_tracker.log_submission_data(
-                    step=0,
-                    state_data=initial_state,
-                    action_taken="INIT",
-                    decision_time=0.0,
-                    state_hash=state_hash,
-                    manual_mode=True,
-                    milestone_override="GAME_RUNNING"
-                )
-                print("Initial GAME_RUNNING milestone logged after state load")
-                
-                # Trigger a map stitcher update to ensure visual map is ready
-                try:
-                    if env.memory_reader and env.memory_reader._map_stitcher:
-                        # Check if map stitcher is empty and collect initial map data if needed
-                        map_areas = env.memory_reader._map_stitcher.map_areas
-                        if not map_areas:
-                            print("🗺️ Map stitcher is empty, collecting initial map data...")
-                            # Collect initial map data
-                            tiles = env.memory_reader.read_map_around_player(radius=7)
-                            if tiles:
-                                print(f"🗺️ Collected {len(tiles)} tiles, updating map stitcher")
-                                # Create minimal state for stitcher update
-                                initial_state = {"map": {}}
-                                env.memory_reader._update_map_stitcher(tiles, initial_state)
-                                print("✅ Initial map data collection completed")
-                            else:
-                                print("❌ Could not collect initial map data")
-                        
-                        # Get current state for map stitcher update
-                        current_state = env.get_comprehensive_state()
-                        # The map stitcher should now have data
-                        # This just ensures the visual_map is generated
-                        print("Ensuring map stitcher visual data is ready after state load")
-                except Exception as e:
-                    print(f"Note: Could not update map stitcher after state load: {e}")
+                print("GAME_RUNNING milestone marked after state load - initial logging deferred")
             except Exception as e:
-                print(f"Warning: Could not log initial milestone: {e}")
+                print(f"Warning: Could not mark initial milestone: {e}")
         except Exception as e:
             print(f"Failed to load state from {args.load_state}: {e}")
             print("Continuing with fresh game state...")

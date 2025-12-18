@@ -652,9 +652,9 @@
         <div class="header-title">PROTOCOL_EMERALD // AGENT = PLAYER</div>
         <div style="flex: 1;"></div>
         <div id="metrics-display" style="color: #33ff33; margin-right: 20px; font-size: 14px;">
-            <span id="cost-metric">Cost: $0.00</span> | 
-            <span id="tokens-metric">0 tokens</span> | 
-            <span id="actions-metric">Actions: 0</span> | 
+            <!-- <span id="cost-metric">Cost: $0.00</span> |
+            <span id="tokens-metric">0 tokens</span> |
+            <span id="actions-metric">Actions: 0</span> |  -->
             <span id="time-metric">Time: 00:00:00</span>
         </div>
         <div style="width: 10px; height: 10px; background-color: #33ff33; border-radius: 50%; box-shadow: 0 0 10px #33ff33;"></div>
@@ -798,60 +798,65 @@
         // Track session start time for continuous timer
         let sessionStartTime = null;
         let savedRunTime = 0;
-        
+        let lastMetricsUpdate = null;
+
         // Function to update metrics display
         async function updateMetrics() {
             try {
                 const response = await fetch(`${serverUrl}/metrics`);
                 if (response.ok) {
                     const metrics = await response.json();
-                    
-                    // Update cost display
-                    const cost = metrics.total_cost || 0;
-                    document.getElementById('cost-metric').textContent = `Cost: $${cost.toFixed(4)}`;
-                    
-                    // Update tokens display
-                    const tokens = metrics.total_tokens || 0;
-                    document.getElementById('tokens-metric').textContent = `${tokens.toLocaleString()} tokens`;
-                    
-                    // Update actions display
-                    const actions = metrics.total_actions || 0;
-                    document.getElementById('actions-metric').textContent = `Actions: ${actions.toLocaleString()}`;
-                    
-                    // Handle start time - detect fresh start if metrics are all zero
-                    const isNewSession = metrics.total_llm_calls === 0 && metrics.total_actions === 0 && metrics.total_cost === 0;
-                    
-                    if (isNewSession) {
-                        // Fresh start - reset timer and force immediate update
-                        sessionStartTime = null;
-                        savedRunTime = 0;
-                        console.log('Detected fresh session - resetting timer');
-                        
-                        // Force an immediate metrics update in case server cache is stale
-                        setTimeout(() => {
-                            updateMetrics();
-                        }, 500);
-                    } else if (metrics.start_time && !sessionStartTime) {
-                        // Restore from checkpoint or first metrics update
-                        sessionStartTime = metrics.start_time * 1000; // Convert to milliseconds
+
+                    // Cost, tokens, and actions hidden for now
+                    // const cost = metrics.total_cost || 0;
+                    // document.getElementById('cost-metric').textContent = `Cost: $${cost.toFixed(4)}`;
+                    // const tokens = metrics.total_tokens || 0;
+                    // document.getElementById('tokens-metric').textContent = `${tokens.toLocaleString()} tokens`;
+                    // const actions = metrics.total_actions || 0;
+                    // document.getElementById('actions-metric').textContent = `Actions: ${actions.toLocaleString()}`;
+
+                    // Initialize time tracking on first load
+                    if (!sessionStartTime) {
+                        // Get the cumulative run time from server
                         savedRunTime = metrics.total_run_time || 0;
-                        console.log('Initialized timer from metrics:', {
-                            startTime: metrics.start_time,
-                            savedRunTime: savedRunTime
+                        // Start the local timer from now
+                        sessionStartTime = Date.now();
+
+                        console.log('Initialized cumulative metrics from server:', {
+                            totalCost: metrics.total_cost,
+                            totalTokens: metrics.total_tokens,
+                            totalActions: metrics.total_actions,
+                            savedRunTime: savedRunTime,
+                            formattedTime: formatTime(savedRunTime)
                         });
+                    } else {
+                        // On subsequent updates, sync with server's total_run_time
+                        // Only sync if there's a significant change (>5 seconds difference)
+                        // This means the agent actually ran and updated the time
+                        const serverRunTime = metrics.total_run_time || 0;
+                        const currentLocalTime = savedRunTime + Math.floor((Date.now() - sessionStartTime) / 1000);
+                        const timeDiff = Math.abs(serverRunTime - currentLocalTime);
+
+                        if (timeDiff > 5) {
+                            // Significant difference - server updated, sync with it
+                            console.log(`Syncing time: server=${serverRunTime}s, local=${currentLocalTime}s, diff=${timeDiff}s`);
+                            savedRunTime = serverRunTime;
+                            sessionStartTime = Date.now();
+                        }
                     }
                 }
             } catch (error) {
                 console.error('Error fetching metrics:', error);
             }
         }
-        
-        // Function to update time continuously
+
+        // Function to update time continuously (ticks up locally)
         function updateTime() {
             if (sessionStartTime) {
                 const currentTime = Date.now();
-                const elapsedSeconds = Math.floor((currentTime - sessionStartTime) / 1000) + savedRunTime;
-                document.getElementById('time-metric').textContent = `Time: ${formatTime(elapsedSeconds)}`;
+                const elapsedSinceUpdate = Math.floor((currentTime - sessionStartTime) / 1000);
+                const totalSeconds = savedRunTime + elapsedSinceUpdate;
+                document.getElementById('time-metric').textContent = `Time: ${formatTime(totalSeconds)}`;
             } else {
                 // No session started yet - show 00:00:00
                 document.getElementById('time-metric').textContent = `Time: 00:00:00`;
@@ -859,9 +864,14 @@
         }
         
         // Poll for metrics updates - reduced frequency for better performance
-        setInterval(updateMetrics, 2000);  // Update metrics every 2 seconds (reduced from 1s)
-        setInterval(updateTime, 500);  // Update timer every 500ms (reduced from 100ms)
+        console.log('[Stream] Starting polling intervals...');
+        setInterval(() => {
+            console.log('[Stream] Polling metrics...');
+            updateMetrics();
+        }, 2000);  // Update metrics every 2 seconds
+        setInterval(updateTime, 500);  // Update timer every 500ms
         updateMetrics();  // Initial metrics load
+        console.log('[Stream] Initial metrics loaded');
 
         // Connect to WebSocket for real-time frame streaming (no polling needed!)
         connectFrameWebSocket();
@@ -1085,8 +1095,8 @@
             }
         }
 
-        // Function to fetch and update milestones
-        async function updateMilestones() {
+        // Function to fetch and update objectives (categorized mode)
+        async function updateObjectives() {
             try {
                 const response = await fetch(`${serverUrl}/milestones`);
                 if (!response.ok) {
@@ -1397,7 +1407,8 @@
         // Function to fetch and update map visualization
         async function updateMapVisualization() {
             try {
-                const response = await fetch(`${serverUrl}/state`);
+                // Add cache busting to ensure fresh data
+                const response = await fetch(`${serverUrl}/state?t=${Date.now()}`);
                 const data = await response.json();
 
                 const mapContainer = document.getElementById('map-visualization');
@@ -1442,14 +1453,14 @@
             updateMapVisualization();
         }, 2000); // Update every 2 seconds (reduced from 1s)
 
-        // Less frequent updates for milestones
+        // Poll objectives every 10 seconds
         setInterval(() => {
-            updateMilestones();
-        }, 10000); // Update every 10 seconds (reduced from 5s)
+            updateObjectives();
+        }, 10000);
 
         // Call the update functions initially (except agent thinking which streams)
         updateRecentActions();
-        updateMilestones();
+        updateObjectives(); // Update objectives display
         updatePartyStatus();
         updateMapVisualization();
     </script>
