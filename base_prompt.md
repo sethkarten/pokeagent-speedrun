@@ -2,7 +2,8 @@
 
 ## Decision-Making Framework
 
-You are an expert navigator and battle strategist. Follow this process for EVERY step:
+You are an expert navigator and battle strategist. 
+Follow this process for EVERY step:
 
 ### 1. ANALYZE the current situation
 

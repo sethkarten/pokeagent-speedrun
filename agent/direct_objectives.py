@@ -2826,16 +2826,37 @@ class DirectObjectiveManager:
             # ),
 
 
-            # gemini 2.5 - flash, autonomous objective creation... fix bug in pathfinding
-            DirectObjective(
-                id="set_clock_in_rival_player_bedroom",
-                description="Set the clock in the player's bedroom to 12:00 PM",
-                action_type="interact",
-                target_location="Player's Bedroom",
-                navigation_hint="Go to the player's bedroom and set the clock. navigate to the clock via navigate_to(5, 1) and directly face it by pressing up. Interact with it by pressing A.",
-                completion_condition="clock_set",
-                priority=1
-            ),
+
+
+            # ------------------------------
+            # gemini 2.5 - flash
+            # DirectObjective(
+            #     id="battle_rival_in_route_103",
+            #     description="Battle your rival May in Route 103",
+            #     action_type="battle",
+            #     target_location="Route 103",
+            #     navigation_hint="Navigate to Route 103 and battle your rival May/Brendan. Use your starter's basic attack move to defeat them. This should be an easy first battle.",
+            #     completion_condition="battle_ends_and_rival_says_theyre_returning_to_lab",
+            #     priority=1
+            # ),
+            # DirectObjective(
+            #     id="visit_birch_lab_to_collect_pokedex",
+            #     description="Visit Professor Birch's Lab to collect the Pokedex",
+            #     action_type="navigate",
+            #     target_location="Professor Birch's Lab",
+            #     navigation_hint="Navigate to Professor Birch's Lab and collect the Pokedex. The Pokedex is located in the Lab.",
+            #     completion_condition="pokedex_collected",
+            #     priority=1
+            # ),
+            # DirectObjective(
+            #     id="visit_petalbug_city_gym",
+            #     description="Enter the Petalburg City Gym",
+            #     action_type="interact",
+            #     target_location="Petalburg City Gym",
+            #     navigation_hint="Navigate to Petalburg City Gym and enter through the front door. Talk to Norman who is currently standing in the lobby at (4, 107). Align youself to face him by looking at the visual frame and interact with him by pressing A.",
+            #     completion_condition="location_contains_petalburg_city_gym_and_talked_to_norman",
+            #     priority=1
+            # ),
             DirectObjective(
                 id="autonomous_01_create_next_objectives",
                 description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
