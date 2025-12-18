@@ -52,7 +52,9 @@ class LLMLogger:
             "total_cost": 0.0,
             "total_actions": 0,
             "start_time": time.time(),
-            "total_llm_calls": 0
+            "total_llm_calls": 0,
+            "total_run_time": 0,  # Actual gameplay time in seconds
+            "last_update_time": time.time()  # Track when we last updated
         }
         
         # Model pricing (per 1K tokens) - Updated January 2025
@@ -75,7 +77,15 @@ class LLMLogger:
         
         # Initialize log file with session info
         self._log_session_start()
-        
+
+        # ALWAYS try to load cumulative metrics immediately on initialization
+        # This prevents overwriting with zeros before metrics are loaded
+        metrics_loaded = self.load_cumulative_metrics()
+        if metrics_loaded:
+            logger.info(f"✅ LLM Logger initialized with loaded cumulative metrics: tokens={self.cumulative_metrics.get('total_tokens', 0):,}, cost=${self.cumulative_metrics.get('total_cost', 0):.2f}")
+        else:
+            logger.warning(f"⚠️  LLM Logger initialized WITHOUT cumulative metrics - starting fresh")
+
         logger.info(f"LLM Logger initialized: {self.log_file}")
     
     def _log_session_start(self):
@@ -117,9 +127,21 @@ class LLMLogger:
         }
         
         self._write_log_entry(log_entry)
-        
+
         # Update cumulative metrics
         self.cumulative_metrics["total_llm_calls"] += 1
+
+        # Update gameplay time (only count time when actually interacting)
+        current_time = time.time()
+        time_since_last_update = current_time - self.cumulative_metrics["last_update_time"]
+        # Only add time if it's reasonable (less than 5 minutes since last interaction)
+        # This prevents counting idle/stopped time
+        if time_since_last_update < 300:  # 5 minutes
+            self.cumulative_metrics["total_run_time"] += time_since_last_update
+        self.cumulative_metrics["last_update_time"] = current_time
+
+        # Save metrics to cache file after every interaction
+        self.save_cumulative_metrics()
         
         # Track token usage if available
         if metadata and "token_usage" in metadata:
@@ -312,12 +334,11 @@ class LLMLogger:
     
     def get_cumulative_metrics(self) -> Dict[str, Any]:
         """Get cumulative metrics for the session
-        
+
         Returns:
             Dictionary with cumulative metrics
         """
-        # Update runtime
-        self.cumulative_metrics["total_run_time"] = time.time() - self.cumulative_metrics["start_time"]
+        # Don't recalculate runtime - it's tracked per-interaction now
         return self.cumulative_metrics.copy()
     
     def get_session_summary(self) -> Dict[str, Any]:
@@ -358,6 +379,63 @@ class LLMLogger:
             logger.error(f"Failed to get session summary: {e}")
             return {"error": str(e)}
     
+    def save_cumulative_metrics(self, metrics_file: str = None):
+        """Save just the cumulative metrics to a lightweight cache file
+
+        Args:
+            metrics_file: Path to save metrics (defaults to cache folder)
+        """
+        try:
+            # Determine metrics file path
+            if metrics_file is None:
+                cache_dir = ".pokeagent_cache"
+                os.makedirs(cache_dir, exist_ok=True)
+                metrics_file = os.path.join(cache_dir, "cumulative_metrics.json")
+
+            # Save metrics
+            with open(metrics_file, 'w', encoding='utf-8') as f:
+                json.dump(self.cumulative_metrics, f, indent=2)
+
+            logger.debug(f"Saved cumulative metrics to {metrics_file}")
+
+        except Exception as e:
+            logger.error(f"Failed to save cumulative metrics: {e}")
+
+    def load_cumulative_metrics(self, metrics_file: str = None) -> bool:
+        """Load cumulative metrics from cache file
+
+        Args:
+            metrics_file: Path to load metrics from (defaults to cache folder)
+
+        Returns:
+            True if loaded successfully, False otherwise
+        """
+        try:
+            # Determine metrics file path
+            if metrics_file is None:
+                cache_dir = ".pokeagent_cache"
+                metrics_file = os.path.join(cache_dir, "cumulative_metrics.json")
+
+            if not os.path.exists(metrics_file):
+                logger.debug(f"No cumulative metrics file found at {metrics_file}")
+                return False
+
+            # Load metrics
+            with open(metrics_file, 'r', encoding='utf-8') as f:
+                saved_metrics = json.load(f)
+
+            # Update current metrics
+            self.cumulative_metrics.update(saved_metrics)
+
+            logger.info(f"✅ Loaded cumulative metrics: {saved_metrics.get('total_llm_calls', 0)} calls, {saved_metrics.get('total_actions', 0)} actions, ${saved_metrics.get('total_cost', 0):.4f}, {saved_metrics.get('total_run_time', 0):.0f}s runtime")
+            logger.info(f"   - Total tokens: {saved_metrics.get('total_tokens', 0):,}")
+            logger.info(f"   - Total cost: ${saved_metrics.get('total_cost', 0):.4f}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to load cumulative metrics: {e}")
+            return False
+
     def save_checkpoint(self, checkpoint_file: str = None, agent_step_count: int = None):
         """Save current LLM interaction history to checkpoint file
         
@@ -381,9 +459,8 @@ class LLMLogger:
                         except json.JSONDecodeError:
                             continue
             
-            # Update run time in metrics
-            self.cumulative_metrics["total_run_time"] = time.time() - self.cumulative_metrics["start_time"]
-            
+            # Don't recalculate run time - it's already tracked accurately per-interaction
+
             # Add checkpoint metadata
             checkpoint_data = {
                 "checkpoint_timestamp": datetime.now().isoformat(),

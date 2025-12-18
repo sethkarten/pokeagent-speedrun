@@ -96,7 +96,10 @@ class MCPToolAdapter:
                            for k, v in arguments.items()}
             logger.info(f"   Args: {args_for_log}")
 
-            response = requests.post(url, json=arguments, timeout=30)
+            # Use longer timeout for initial MCP calls that may need to load data from disk
+            # (knowledge base, porymap data, etc.)
+            timeout = 90  # Increased from 30 to handle startup initialization
+            response = requests.post(url, json=arguments, timeout=timeout)
             response.raise_for_status()
 
             result = response.json()
@@ -105,9 +108,9 @@ class MCPToolAdapter:
             # Special handling for get_game_state - print the actual formatted text
             if tool_name == "get_game_state" and result.get("success") and "state_text" in result:
                 logger.info("   Game State:")
-                print("\n" + "="*70)
-                print(result["state_text"])
-                print("="*70 + "\n")
+                logger.info("\n" + "="*70)
+                logger.info(result["state_text"])
+                logger.info("="*70 + "\n")
                 if "screenshot_base64" in result:
                     logger.info(f"   Screenshot: <{len(result['screenshot_base64'])} bytes>")
             else:
@@ -137,7 +140,7 @@ class AutonomousCLIAgent:
         enable_prompt_optimization: bool = False,
         optimization_frequency: int = 10
     ):
-        print(f"🚀 Initializing AutonomousCLIAgent with backend={backend}, model={model}, server={server_url}")
+        logger.info(f"🚀 Initializing AutonomousCLIAgent with backend={backend}, model={model}, server={server_url}")
         self.server_url = server_url
         self.model = model
         self.backend = backend
@@ -177,9 +180,9 @@ class AutonomousCLIAgent:
             tools=self.tools,
             system_instruction=self.system_instructions
         )
-        print(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
-        print(f"✅ {len(self.tools)} tools available")
-        print(f"✅ System instructions loaded ({len(self.system_instructions)} chars)")
+        logger.info(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
+        logger.info(f"✅ {len(self.tools)} tools available")
+        logger.info(f"✅ System instructions loaded ({len(self.system_instructions)} chars)")
 
         # Initialize LLM logger
         self.llm_logger = get_llm_logger()
@@ -195,7 +198,7 @@ class AutonomousCLIAgent:
                     run_data_manager=run_manager,
                     base_prompt_path="base_prompt.md"
                 )
-                print(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
+                logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
             else:
                 logger.warning("⚠️ Prompt optimization requested but run_data_manager not available")
                 self.optimization_enabled = False
@@ -347,6 +350,20 @@ class AutonomousCLIAgent:
                     "required": ["situation"]
                 }
             },
+            {
+                "name": "gym_puzzle_agent",
+                "description": "Get expert guidance on solving gym puzzles. Use this when you're in a gym and need help understanding the puzzle mechanics or finding the solution. Provides specific strategies for floor puzzles, ice puzzles, warp mazes, etc. Works for all 8 Pokemon Emerald gyms.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "gym_name": {
+                            "type_": "STRING",
+                            "description": "Name of the gym you're currently in (e.g., 'LAVARIDGE_TOWN_GYM_1F', 'MOSSDEEP_CITY_GYM'). Look at your current location in the game state."
+                        }
+                    },
+                    "required": ["gym_name"]
+                }
+            },
 
             # Knowledge Base Tools - NOW ENABLED
             {
@@ -447,6 +464,10 @@ class AutonomousCLIAgent:
         # Special handling for reflect tool - use agent's own VLM for analysis
         if function_name == "reflect":
             return self._execute_reflect(arguments)
+
+        # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
+        if function_name == "gym_puzzle_agent":
+            return self._execute_gym_puzzle_agent(arguments)
 
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -613,6 +634,128 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
+    def _execute_gym_puzzle_agent(self, arguments: dict) -> str:
+        """Execute gym puzzle solving using agent's own VLM to analyze puzzle."""
+        try:
+            # Get current game state directly
+            game_state = self.mcp_adapter.call_tool("get_game_state", {})
+            if not game_state.get("success"):
+                return json.dumps({"success": False, "error": "Failed to get game state"})
+
+            state_text = game_state.get("state_text", "")
+
+            # Extract gym name from arguments or current location
+            gym_name = arguments.get("gym_name")
+            if not gym_name:
+                # Try to extract from state_text
+                import re
+                location_match = re.search(r'Current Location: ([^\n]+)', state_text)
+                gym_name = location_match.group(1) if location_match else "Unknown"
+
+            # Load gym puzzle knowledge
+            from agent.puzzle_solver import GYM_PUZZLES
+            gym_info = GYM_PUZZLES.get(gym_name, {
+                "type": "unknown",
+                "description": "Unknown gym - no specific puzzle guidance available",
+                "strategy": "Navigate through the gym and defeat trainers to reach the gym leader."
+            })
+
+            gym_type = gym_info.get("type", "unknown")
+            description = gym_info.get("description", "")
+            base_strategy = gym_info.get("strategy", "")
+
+            puzzle_prompt = f"""You are analyzing a Pokemon Emerald gym puzzle to help the agent solve it.
+
+GYM: {gym_name}
+TYPE: {gym_type}
+DESCRIPTION: {description}
+
+GENERAL STRATEGY:
+{base_strategy}
+
+CURRENT GAME STATE:
+{state_text}
+
+Provide your analysis in this format:
+
+**PUZZLE ANALYSIS**:
+[Explain how this specific puzzle works based on the map and your current position]
+
+**SPECIFIC SOLUTION STEPS**:
+1. [First concrete action with coordinates if applicable]
+2. [Second action]
+3. [Continue...]
+
+**NAVIGATION TIPS**:
+[Any important details about tile types, warps, or obstacles to watch for]
+
+**IMPORTANT**: Look at the porymap ground truth map in the game state. Tiles marked '#' are walls, '.' are walkable, 'D' are doors/warps, 'S' are stairs.
+Be specific and actionable. Reference actual coordinates from the porymap when possible."""
+
+            logger.info(f"🧩 Agent analyzing gym puzzle: {gym_name}")
+
+            # Get current frame from game state
+            frame_b64 = game_state.get("screenshot_base64")
+            if not frame_b64:
+                return json.dumps({"success": False, "error": "No frame available in game state"})
+
+            # Use agent's own VLM for puzzle analysis with current frame
+            # IMPORTANT: We need to create a separate VLM instance WITHOUT tools to avoid recursive function calling
+            # The agent's self.vlm has gym_puzzle_agent in its tools, which causes it to try calling the tool
+            # instead of providing text analysis when asked about gym puzzles
+            from utils.vlm import VLM
+
+            # Create a temporary VLM instance without tools (tools=None)
+            puzzle_vlm = VLM(
+                model_name=self.model,
+                backend=self.backend,
+                tools=None  # No function calling - pure text analysis
+            )
+
+            puzzle_response = puzzle_vlm.get_query(frame_b64, puzzle_prompt, "Gym_Puzzle_Analysis")
+
+            # Extract text from response - same logic as VLM backends use
+            puzzle_text = ""
+            if hasattr(puzzle_response, 'candidates') and puzzle_response.candidates:
+                # Gemini/Vertex response with function calling enabled
+                candidate = puzzle_response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    content = candidate.content
+                    if hasattr(content, 'parts'):
+                        text_parts = []
+                        for part in content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                text_parts.append(part.text)
+                            elif hasattr(part, 'function_call'):
+                                # VLM tried to call a function instead of providing text
+                                logger.warning(f"⚠️ VLM returned function call for puzzle analysis: {part.function_call.name}")
+                                logger.warning(f"   This is unexpected - puzzle analysis should be text-only")
+                        puzzle_text = "\n".join(text_parts)
+            elif isinstance(puzzle_response, str):
+                # Already a string (OpenAI/other backends)
+                puzzle_text = puzzle_response
+            elif hasattr(puzzle_response, 'text'):
+                # Has .text attribute (some backends)
+                puzzle_text = puzzle_response.text
+
+            if not puzzle_text:
+                logger.error(f"❌ No text extracted from VLM response")
+                logger.error(f"   Response type: {type(puzzle_response)}")
+                return json.dumps({"success": False, "error": "VLM did not return text analysis"}, indent=2)
+
+            logger.info(f"✅ Gym puzzle analysis complete ({len(puzzle_text)} chars)")
+
+            return json.dumps({
+                "success": True,
+                "gym": gym_name,
+                "analysis": puzzle_text
+            }, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in solve_gym_puzzle execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
     def _convert_protobuf_value(self, value):
         """Recursively convert a protobuf value to JSON-serializable Python types."""
         # Handle None
@@ -747,6 +890,10 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
         if function_name == "reflect":
             return self._execute_reflect(arguments)
 
+        # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
+        if function_name == "gym_puzzle_agent":
+            return self._execute_gym_puzzle_agent(arguments)
+
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
 
@@ -837,21 +984,23 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
 
         # Check if server is running
         logger.info(f"Checking if game server is ready at {self.server_url}...")
-        max_retries = 5
-        retry_delay = 2
+        max_retries = 20  # Increased from 10 to allow more time for server initialization
+        retry_delay = 5  # Increased from 3 to give server more time between checks
 
         for attempt in range(max_retries):
             try:
-                response = requests.get(f"{self.server_url}/status", timeout=15)
+                # Use /health endpoint for faster startup checks (doesn't trigger state reads)
+                response = requests.get(f"{self.server_url}/health", timeout=10)  # Increased from 5 to 10
                 if response.status_code == 200:
                     logger.info(f"✅ Game server is ready")
                     break
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
                     logger.info(f"⏳ Server not ready yet (attempt {attempt + 1}/{max_retries}), waiting {retry_delay}s...")
+                    logger.info(f"   (Server may be loading porymap data, knowledge base, etc.)")
                     time.sleep(retry_delay)
                 else:
-                    logger.error(f"Game server not running at {self.server_url}: {e}")
+                    logger.error(f"Game server not running at {self.server_url} after {max_retries * retry_delay}s: {e}")
                     return False
 
         logger.info("✅ All prerequisites met")
@@ -982,7 +1131,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                         future = None
                         try:
                             future = executor.submit(call_vlm_with_image)
-                            response = future.result(timeout=45)  # 45 second timeout for slower models
+                            response = future.result(timeout=70)  # 70 second timeout for slower models
                             vlm_duration = time.time() - vlm_call_start
                             logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
                             break
@@ -1012,7 +1161,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                         future = None
                         try:
                             future = executor.submit(call_vlm_with_text)
-                            response = future.result(timeout=45)  # 45 second timeout for slower models
+                            response = future.result(timeout=70)  # 70 second timeout for slower models
                             vlm_duration = time.time() - vlm_call_start
                             logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
                             break
@@ -1167,6 +1316,19 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                         action_details = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_pos[0]}, {final_pos[1]})"
                     else:
                         action_details = f"navigate_to({target_x}, {target_y}, variance={variance})"
+                elif last_tool_call['name'] == "gym_puzzle_agent":
+                    # Extract gym puzzle analysis to include in history
+                    try:
+                        result_data = json_module.loads(last_tool_call['result'])
+                        if result_data.get("success"):
+                            gym = result_data.get("gym", "Unknown")
+                            analysis = result_data.get("analysis", "")
+                            action_details = f"gym_puzzle_agent({gym})\nAnalysis: {analysis}"
+                        else:
+                            action_details = f"gym_puzzle_agent failed: {result_data.get('error', 'Unknown error')}"
+                    except Exception as e:
+                        logger.debug(f"Could not extract gym_puzzle_agent details: {e}")
+                        action_details = "Executed gym_puzzle_agent"
                 else:
                     action_details = f"Executed {last_tool_call['name']}"
 

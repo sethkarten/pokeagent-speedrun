@@ -932,11 +932,14 @@ class MapLocation(IntEnum):
     ROUTE_117_POKEMON_DAY_CARE = 0x1700
     
     # Indoor Route 121 (Group 24)
-    ROUTE_121_SAFARI_ZONE_ENTRANCE = 0x1800
+    METEOR_FALLS_1F_1R = 0x1800
     GRANITE_CAVE_1F_ALT = 0x1807  # Same as GRANITE_CAVE_1F (0x1907)
     GRANITE_CAVE_B1F_ALT = 0x1808  # Alternative B1F map (same as 0x1908)
     GRANITE_CAVE_B2F_ALT = 0x1809  # Alternative B2F map (same as 0x1909)
     PETALBURG_WOODS = 0x180B  # Petalburg Woods (Group 24, Map 11)
+    MT_CHIMNEY = 0x180C  # Mt. Chimney (Group 24, Map 12)
+    JAGGED_PASS = 0x180D  # Jagged Pass (Group 24, Map 13)
+    FIERY_PATH_INTERIOR = 0x180E  # Fiery Path interior cave (Group 24, Map 14)
 
     # Indoor Fortree (Group 12)
     FORTREE_CITY_HOUSE1 = 0xC00
@@ -1028,7 +1031,7 @@ class MapLocation(IntEnum):
     ROUTE_104_MR_BRINEYS_HOUSE_ALT = 0x1100  # Workaround: memory reads this instead of 0x1200
 
     # Dungeons (Group 25)
-    METEOR_FALLS_1F_1R = 0x1900
+    ROUTE_121_SAFARI_ZONE_ENTRANCE = 0x1900
     METEOR_FALLS_1F_2R = 0x1901
     METEOR_FALLS_B1F_1R = 0x1902
     METEOR_FALLS_B1F_2R = 0x1903
@@ -1040,8 +1043,6 @@ class MapLocation(IntEnum):
     GRANITE_CAVE_B2F = 0x1909
     GRANITE_CAVE_STEVENS_ROOM = 0x1B0A
     PETALBURG_WOODS_ALT = 0x1B0B  # Alternative map ID (not commonly used)
-    MT_CHIMNEY = 0x1B0C
-    JAGGED_PASS = 0x1B0D
     FIERY_PATH = 0x1B0E
     MT_PYRE_1F = 0x1B0F
     MT_PYRE_2F = 0x1B10
@@ -1137,9 +1138,6 @@ class MapLocation(IntEnum):
     ALTERING_CAVE = 0x196A
     METEOR_FALLS_STEVENS_CAVE = 0x196B
     
-    # Indoor Route 109 (Group 26)
-    ROUTE_109_SEASHORE_HOUSE = 0x1A00
-    
     # Indoor Route 110 (Group 27)
     ROUTE_110_TRICK_HOUSE_ENTRANCE = 0x1B00
     ROUTE_110_TRICK_HOUSE_END = 0x1B01
@@ -1155,19 +1153,22 @@ class MapLocation(IntEnum):
     ROUTE_110_SEASIDE_CYCLING_ROAD_SOUTH_ENTRANCE = 0x1B0B
     ROUTE_110_SEASIDE_CYCLING_ROAD_NORTH_ENTRANCE = 0x1B0C
     
-    # Indoor Route 113 (Group 28)
-    ROUTE_113_GLASS_WORKSHOP = 0x1C00
-    
-    # Indoor Route 123 (Group 29)
-    ROUTE_123_BERRY_MASTERS_HOUSE = 0x1D00
-    
-    # Indoor Route 119 (Group 30)
-    ROUTE_119_WEATHER_INSTITUTE_1F = 0x1E00
-    ROUTE_119_WEATHER_INSTITUTE_2F = 0x1E01
-    ROUTE_119_HOUSE = 0x1E02
-    
-    # Indoor Route 124 (Group 31)
-    ROUTE_124_DIVING_TREASURE_HUNTERS_HOUSE = 0x1F00
+    # Indoor Route 109 (Group 28)
+    ROUTE_109_SEASHORE_HOUSE = 0x1C00
+
+    # Indoor Route 113 (Group 30)
+    ROUTE_113_GLASS_WORKSHOP = 0x1E00
+
+    # Indoor Route 123 (Group 31)
+    ROUTE_123_BERRY_MASTERS_HOUSE = 0x1F00
+
+    # Indoor Route 119 (Group 32)
+    ROUTE_119_WEATHER_INSTITUTE_1F = 0x2000
+    ROUTE_119_WEATHER_INSTITUTE_2F = 0x2001
+    ROUTE_119_HOUSE = 0x2002
+
+    # Indoor Route 124 (Group 33)
+    ROUTE_124_DIVING_TREASURE_HUNTERS_HOUSE = 0x2100
     
     # Special Areas (Group 27)
     SAFARI_ZONE_NORTHWEST = 0x1B00
