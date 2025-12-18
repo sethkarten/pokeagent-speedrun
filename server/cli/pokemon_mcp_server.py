@@ -257,40 +257,6 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
                     
                     porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
                     
-                    # Try fuzzy matching if not in direct mapping (use fuzzywuzzy like state_formatter)
-                    if not porymap_map_name:
-                        try:
-                            from fuzzywuzzy import process
-                            map_loader = PokeemeraldMapLoader(pokeemerald_root)
-                            maps_dir = pokeemerald_root / "data" / "maps"
-                            if maps_dir.exists():
-                                available_maps = [d.name for d in maps_dir.iterdir() if d.is_dir() and d.name != "map_groups.json"]
-                                best_match, best_match_score = process.extractOne(location_name, available_maps)
-                                # Only accept matches with score >= 70 to avoid bad matches
-                                if best_match_score >= 70:
-                                    porymap_map_name = best_match
-                                    logger.debug(f"Fuzzy matched '{location_name}' to '{porymap_map_name}' (score: {best_match_score})")
-                        except ImportError:
-                            # Fallback: use simple substring matching but prefer exact substring matches
-                            # and prefer longer matches (more specific)
-                            map_loader = PokeemeraldMapLoader(pokeemerald_root)
-                            maps_dir = pokeemerald_root / "data" / "maps"
-                            if maps_dir.exists():
-                                location_normalized = location_name.lower().replace(" ", "").replace("_", "")
-                                best_candidate = None
-                                best_match_len = 0
-                                for map_dir in maps_dir.iterdir():
-                                    if map_dir.is_dir() and map_dir.name != "map_groups.json":
-                                        map_normalized = map_dir.name.lower().replace(" ", "").replace("_", "")
-                                        # Check if location is a substring of map name (prefer longer matches)
-                                        if location_normalized in map_normalized:
-                                            match_len = len(map_normalized)
-                                            if match_len > best_match_len:
-                                                best_candidate = map_dir.name
-                                                best_match_len = match_len
-                                if best_candidate:
-                                    porymap_map_name = best_candidate
-                    
                     if porymap_map_name:
                         # Build JSON map with grid for pathfinding
                         try:
@@ -300,17 +266,48 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
                             json_map = None
                         
                         if json_map and 'grid' in json_map:
+                            # Apply elevation filtering (same logic as state_formatter.py)
+                            raw_tiles = json_map.get('raw_tiles')
+                            grid = json_map['grid']
+                            player_pos = state.get('player', {}).get('position', {})
+                            px = player_pos.get('x', 0)
+                            py = player_pos.get('y', 0)
+
+                            if raw_tiles and 0 <= py < len(raw_tiles) and 0 <= px < len(raw_tiles[py]):
+                                player_tile = raw_tiles[py][px]
+                                if len(player_tile) >= 4:
+                                    player_elevation = player_tile[3]
+
+                                    # Check if cave-like (elevation variety)
+                                    elevations_in_map = set()
+                                    for row in raw_tiles:
+                                        for tile in row:
+                                            if len(tile) >= 4:
+                                                elevations_in_map.add(tile[3])
+
+                                    # NO ELEVATION FILTERING - pathfinding handles elevation changes via E0 connectors
+                                    # The pathfinding algorithm in utils/pathfinding.py now enforces that elevation
+                                    # changes can ONLY happen through E0 connector tiles (lines 730-749).
+                                    # We don't filter by elevation here because pathfinding needs to see all tiles
+                                    # to navigate through E0 connectors to reach different elevation areas.
+                                    logger.info(f"Skipping elevation filtering - pathfinding handles elevation via E0 connectors (player at elevation {player_elevation})")
+
                             # Ensure map dict exists
                             if 'map' not in state:
                                 state['map'] = {}
                             if 'porymap' not in state['map']:
                                 state['map']['porymap'] = {}
-                            
-                            # Add porymap data for pathfinding
+
+                            # Add porymap data for pathfinding (UNFILTERED grid for pathfinding to navigate via E0)
                             state['map']['porymap']['grid'] = json_map['grid']
                             state['map']['porymap']['objects'] = json_map.get('objects', [])
                             state['map']['porymap']['dimensions'] = json_map.get('dimensions', {})
                             state['map']['porymap']['warps'] = json_map.get('warps', [])
+                            state['map']['porymap']['raw_tiles'] = raw_tiles  # Include for pathfinding elevation checks
+
+                            # Debug: verify grid is unfiltered
+                            grid_dims = f"{len(json_map['grid'][0])}x{len(json_map['grid'])}" if json_map.get('grid') else "None"
+                            logger.info(f"Loaded UNFILTERED porymap for pathfinding: '{porymap_map_name}' (ROM: '{location_name}'), grid: {grid_dims}")
                             logger.debug(f"Loaded porymap data for '{porymap_map_name}' (ROM: '{location_name}')")
                         else:
                             logger.warning(f"Porymap data for '{porymap_map_name}' missing grid data")

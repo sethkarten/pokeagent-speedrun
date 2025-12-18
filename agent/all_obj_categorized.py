@@ -898,31 +898,31 @@ STORY_OBJECTIVES = [
     ),
     DirectObjective(
         id="chimney_088",
-        description="Battle through Team Aqua Grunts at summit",
+        description="Battle through Team Magma Grunts at summit",
         action_type="battle",
         category="story",
         target_location="Mt. Chimney Summit",
-        navigation_hint="Multiple Aqua grunts. Water and Dark types. Clear path to leaders.",
+        navigation_hint="Multiple Magma grunts. Water and Dark types. Clear path to leaders.",
         completion_condition="summit_grunts_defeated",
         priority=1
     ),
     DirectObjective(
         id="chimney_089",
-        description="Battle Team Aqua Admin Matt",
+        description="Battle Team Magma Admin Maxie",
         action_type="battle",
         category="story",
         target_location="Mt. Chimney Summit",
-        navigation_hint="Matt guards Archie. Has Carvanha, Mightyena. Admin-level difficulty.",
-        completion_condition="matt_chimney_defeated",
+        navigation_hint="Maxie guards Archie. Has Carvanha, Mightyena. Admin-level difficulty.",
+        completion_condition="maxie_chimney_defeated",
         priority=1
     ),
     DirectObjective(
         id="chimney_090",
-        description="Watch Archie's plan fail and Team Aqua retreat",
+        description="Watch Archie's plan fail and Team Magma retreat",
         action_type="dialogue",
         category="story",
         target_location="Mt. Chimney Summit",
-        navigation_hint="After defeating Matt, Archie's Meteorite plan fails. Team Aqua retreats.",
+        navigation_hint="After defeating Maxie, Archie's Meteorite plan fails. Team Magma retreats.",
         completion_condition="archie_chimney_fled",
         priority=1
     ),
