@@ -605,11 +605,18 @@ def _format_party_info(player_data, game_data):
             context_parts.append(f"Pokemon Party ({party_size} pokemon):")
             for i, pokemon in enumerate(pokemon_list[:6]):
                 if pokemon:
-                    species = pokemon.get('species_name', pokemon.get('species', 'Unknown'))
-                    level = pokemon.get('level', '?')
+                    # Check if it's an egg
+                    is_egg = pokemon.get('is_egg', False)
+                    if is_egg:
+                        species = "Egg"
+                        level = "?"
+                        status = "Egg"
+                    else:
+                        species = pokemon.get('species_name', pokemon.get('species', 'Unknown'))
+                        level = pokemon.get('level', '?')
+                        status = pokemon.get('status', 'Normal')
                     hp = pokemon.get('current_hp', '?')
                     max_hp = pokemon.get('max_hp', '?')
-                    status = pokemon.get('status', 'Normal')
                     context_parts.append(f"  {i+1}. {species} (Lv.{level}) HP: {hp}/{max_hp} Status: {status}")
         else:
             context_parts.append("No Pokemon in party")
@@ -1165,6 +1172,7 @@ ROM_TO_PORYMAP_MAP = {
     # Buildings (common patterns)
     "PETALBURG WOODS": "PetalburgWoods",
     "RUSTURF TUNNEL": "RusturfTunnel",
+    "RUSTURF TUNNEL ALT": "RusturfTunnel",  # Alternative map ID 0x1804
 
     # Professor Birch's Lab
     "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
@@ -1701,17 +1709,17 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         # Add ASCII map with player position marked
         if json_map.get('ascii'):
             ascii_map = json_map['ascii']
-            
+
             # Insert player position 'P' if provided
             if player_coords and json_map.get('grid'):
                 px, py = player_coords[0], player_coords[1]
                 grid = json_map['grid']
-                
+
                 # Check if player position is within map bounds
                 if 0 <= py < len(grid) and 0 <= px < len(grid[0]) if grid else False:
                     # Split ASCII map into lines
                     ascii_lines = ascii_map.split('\n')
-                    
+
                     # Find the line corresponding to player's Y coordinate
                     if py < len(ascii_lines):
                         line = list(ascii_lines[py])
@@ -1738,6 +1746,17 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             if player_coords and json_map.get('grid'):
                 global _warp_reachability_cache
                 from utils.pathfinding import Pathfinder
+                from utils.ascii_map_loader import has_corrected_map
+
+                # Clear cache for corrected maps to ensure fresh pathfinding results
+                map_name = json_map.get('name', '')
+                if map_name and has_corrected_map(map_name):
+                    # Clear all cache entries for this location
+                    keys_to_remove = [k for k in _warp_reachability_cache.keys() if k[0] == location_name]
+                    for key in keys_to_remove:
+                        del _warp_reachability_cache[key]
+                    if keys_to_remove:
+                        logger.info(f"Cleared {len(keys_to_remove)} cached warp reachability entries for corrected map {map_name}")
 
                 # Round player coords to nearest tile for cache efficiency
                 # (slight sub-tile movements shouldn't invalidate cache)
@@ -1773,7 +1792,8 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                             warp_pos,
                             temp_state,
                             max_distance=150,
-                            consider_npcs=False
+                            consider_npcs=False,
+                            allow_partial=False  # Only exact paths for reachability checks
                         )
                         is_reachable = bool(path)
 
@@ -1785,9 +1805,11 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                         else:
                             unreachable_warps.append(warp)
                     except Exception as e:
-                        # If pathfinding fails, assume reachable and don't cache
-                        logger.debug(f"Warp reachability check failed for {warp_pos}: {e}")
-                        reachable_warps.append(warp)
+                        # If pathfinding fails, mark as unreachable and don't cache
+                        logger.warning(f"Warp reachability check failed for {warp_pos}: {e}")
+                        import traceback
+                        logger.warning(f"  Traceback: {traceback.format_exc()}")
+                        unreachable_warps.append(warp)
 
                 # Clean up old cache entries if cache gets too large (keep last 100 entries)
                 if len(_warp_reachability_cache) > 100:
@@ -1798,17 +1820,14 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                     logger.debug(f"Cleaned warp reachability cache, removed {len(keys_to_remove)} old entries")
 
                 # Display reachable warps first
-                for warp in reachable_warps[:8]:
+                for warp in reachable_warps:
                     dest = warp.get('dest_map', '?')
                     context_parts.append(f"  ✓ At ({warp.get('x', 0)}, {warp.get('y', 0)}) → {dest}")
 
                 # Display unreachable warps with warning
-                for warp in unreachable_warps[:5]:
+                for warp in unreachable_warps:
                     dest = warp.get('dest_map', '?')
                     context_parts.append(f"  ⚠️ UNREACHABLE: ({warp.get('x', 0)}, {warp.get('y', 0)}) → {dest} (blocked by elevation/walls)")
-
-                if len(warps) > 13:
-                    context_parts.append(f"  ... and {len(warps) - 13} more warps")
             else:
                 # No player coords, just list warps normally
                 for warp in warps[:10]:

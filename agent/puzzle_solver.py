@@ -54,7 +54,9 @@ Common path patterns:
 - Start at the entrance
 - Navigate the platforms avoiding the holes
 - Defeat trainers to potentially open new paths
-- Reach the back where Flannery is located"""
+- Reach the back where Flannery is located
+
+Use the knowledge base to write notes about which geysers led where and any possible routes or deadends"""
     },
     "PETALBURG_CITY_GYM": {
         "type": "door_puzzle",

@@ -73,40 +73,56 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     
     # Get layout name
     layout_name = map_loader.get_layout_name_from_map(map_name)
-    
+
     # Parse tile data if layout available
     grid = None
     ascii_map = None
     dimensions = {"width": 0, "height": 0}
-    
-    if layout_name:
+
+    # Check for corrected ASCII ground truth first
+    from utils.ascii_map_loader import load_corrected_map, has_corrected_map
+
+    metatiles = None
+    if has_corrected_map(map_name):
+        corrected_data = load_corrected_map(map_name)
+        if corrected_data:
+            metatiles = corrected_data['raw_tiles']
+            dimensions = corrected_data['dimensions']
+
+    # Fall back to binary map.bin files if no corrected map
+    if metatiles is None and layout_name:
         # Get metatiles with behavior
         metatiles = layout_parser.get_metatiles_with_behavior(layout_name)
-        
+
         if metatiles:
             height = len(metatiles)
             width = len(metatiles[0]) if height > 0 else 0
             dimensions = {"width": width, "height": height}
-            
-            # Build grid
-            if include_grid:
-                grid = []
-                for row in metatiles:
-                    grid_row = []
-                    for tile in row:
-                        symbol = tile_to_symbol(tile, map_name)
-                        grid_row.append(symbol)
-                    grid.append(grid_row)
-            
-            # Store raw tiles with elevation for pathfinding
-            raw_tiles = metatiles  # Already in format (tile_id, behavior, collision, elevation)
-            
-            # Build ASCII representation
-            if include_ascii:
-                ascii_lines = []
-                for row in metatiles:
-                    line = "".join(tile_to_symbol(tile, map_name) for tile in row)
-                    ascii_lines.append(line)
+
+    # Build grid and ASCII for any metatiles (corrected or binary)
+    if metatiles:
+        height = len(metatiles)
+        width = len(metatiles[0]) if height > 0 else 0
+
+        # Build grid
+        if include_grid:
+            grid = []
+            for row in metatiles:
+                grid_row = []
+                for tile in row:
+                    symbol = tile_to_symbol(tile, map_name)
+                    grid_row.append(symbol)
+                grid.append(grid_row)
+
+        # Store raw tiles with elevation for pathfinding
+        raw_tiles = metatiles  # Already in format (tile_id, behavior, collision, elevation)
+
+        # Build ASCII representation
+        if include_ascii:
+            ascii_lines = []
+            for row in metatiles:
+                line = "".join(tile_to_symbol(tile, map_name) for tile in row)
+                ascii_lines.append(line)
 
                 # Overlay special object markers (TV, Clock, etc.)
                 # This must be done BEFORE joining ascii_lines into ascii_map
@@ -163,7 +179,8 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
 
         # Adjust warps that are AT map edges (detected by blocked tiles beyond them)
         # Map edge warps need offset since players transition from adjacent maps
-        if layout_name and metatiles and include_grid and grid:
+        # BUT: Skip adjustment for corrected maps since coordinates are already exact
+        if layout_name and metatiles and include_grid and grid and not has_corrected_map(map_name):
             height = len(grid)
             width = len(grid[0]) if height > 0 else 0
 

@@ -664,6 +664,10 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             description = gym_info.get("description", "")
             base_strategy = gym_info.get("strategy", "")
 
+            # Get action history and function results for context
+            action_history = self._format_action_history()
+            function_results = self._get_function_results_context()
+
             puzzle_prompt = f"""You are analyzing a Pokemon Emerald gym puzzle to help the agent solve it.
 
 GYM: {gym_name}
@@ -673,6 +677,11 @@ DESCRIPTION: {description}
 GENERAL STRATEGY:
 {base_strategy}
 
+RECENT ACTION HISTORY:
+{action_history}
+
+{function_results}
+
 CURRENT GAME STATE:
 {state_text}
 
@@ -680,6 +689,9 @@ Provide your analysis in this format:
 
 **PUZZLE ANALYSIS**:
 [Explain how this specific puzzle works based on the map and your current position]
+
+**WHAT WE'VE TRIED**:
+[Based on the action history above, summarize what approaches have been attempted and what worked/didn't work]
 
 **SPECIFIC SOLUTION STEPS**:
 1. [First concrete action with coordinates if applicable]
@@ -689,7 +701,10 @@ Provide your analysis in this format:
 **NAVIGATION TIPS**:
 [Any important details about tile types, warps, or obstacles to watch for]
 
-**IMPORTANT**: Look at the porymap ground truth map in the game state. Tiles marked '#' are walls, '.' are walkable, 'D' are doors/warps, 'S' are stairs.
+**IMPORTANT**:
+- Look at the porymap ground truth map in the game state. Tiles marked '#' are walls, '.' are walkable, 'D' are doors/warps, 'S' are stairs.
+- Review the action history to avoid repeating failed attempts.
+- Learn from previous outputs and function results to refine your strategy.
 Be specific and actionable. Reference actual coordinates from the porymap when possible."""
 
             logger.info(f"🧩 Agent analyzing gym puzzle: {gym_name}")
