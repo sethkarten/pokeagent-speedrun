@@ -73,15 +73,36 @@
   ],
   "warp_events": [
     {
-      "x": 10,
-      "y": 18,
+      "x": 7,
+      "y": 2,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
       "dest_warp_id": "2"
     },
     {
+      "x": 2,
+      "y": 3,
+      "elevation": 3,
+      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
+      "dest_warp_id": "3"
+    },
+    {
+      "x": 12,
+      "y": 3,
+      "elevation": 3,
+      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
+      "dest_warp_id": "4"
+    },
+    {
       "x": 0,
-      "y": 17,
+      "y": 6,
+      "elevation": 3,
+      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
+      "dest_warp_id": "5"
+    },
+    {
+      "x": 3,
+      "y": 6,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
       "dest_warp_id": "6"
@@ -91,39 +112,18 @@
       "y": 9,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "3"
-    },
-    {
-      "x": 5,
-      "y": 14,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "5"
-    },
-    {
-      "x": 4,
-      "y": 18,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "4"
-    },
-    {
-      "x": 5,
-      "y": 9,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
       "dest_warp_id": "7"
     },
     {
-      "x": 2,
-      "y": 15,
+      "x": 0,
+      "y": 10,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
       "dest_warp_id": "8"
     },
     {
-      "x": 3,
-      "y": 14,
+      "x": 12,
+      "y": 12,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
       "dest_warp_id": "9"
@@ -136,109 +136,39 @@
       "dest_warp_id": "10"
     },
     {
-      "x": 0,
-      "y": 10,
+      "x": 5,
+      "y": 14,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
       "dest_warp_id": "11"
-    },
-    {
-      "x": 3,
-      "y": 10,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "12"
-    },
-    {
-      "x": 0,
-      "y": 6,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "13"
-    },
-    {
-      "x": 3,
-      "y": 6,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "14"
-    },
-    {
-      "x": 5,
-      "y": 6,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "15"
-    },
-    {
-      "x": 2,
-      "y": 3,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "16"
-    },
-    {
-      "x": 5,
-      "y": 2,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "17"
-    },
-    {
-      "x": 7,
-      "y": 2,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "18"
-    },
-    {
-      "x": 8,
-      "y": 6,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "19"
-    },
-    {
-      "x": 10,
-      "y": 6,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "20"
-    },
-    {
-      "x": 12,
-      "y": 3,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "22"
     },
     {
       "x": 4,
       "y": 16,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "21"
+      "dest_warp_id": "12"
     },
     {
-      "x": 14,
-      "y": 6,
-      "elevation": 3,
-      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "23"
-    },
-    {
-      "x": 13,
+      "x": 0,
       "y": 17,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "24"
+      "dest_warp_id": "13"
     },
     {
-      "x": 12,
-      "y": 12,
+      "x": 4,
+      "y": 18,
       "elevation": 3,
       "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
-      "dest_warp_id": "25"
+      "dest_warp_id": "14"
+    },
+    {
+      "x": 10,
+      "y": 18,
+      "elevation": 3,
+      "dest_map": "MAP_LAVARIDGE_TOWN_GYM_1F",
+      "dest_warp_id": "15"
     }
   ],
   "coord_events": [],

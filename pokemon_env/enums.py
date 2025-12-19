@@ -933,6 +933,7 @@ class MapLocation(IntEnum):
     
     # Indoor Route 121 (Group 24)
     METEOR_FALLS_1F_1R = 0x1800
+    RUSTURF_TUNNEL_ALT = 0x1804  # Alternative Rusturf Tunnel map (same as 0x1904)
     GRANITE_CAVE_1F_ALT = 0x1807  # Same as GRANITE_CAVE_1F (0x1907)
     GRANITE_CAVE_B1F_ALT = 0x1808  # Alternative B1F map (same as 0x1908)
     GRANITE_CAVE_B2F_ALT = 0x1809  # Alternative B2F map (same as 0x1909)

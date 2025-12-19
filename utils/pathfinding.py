@@ -92,7 +92,8 @@ class Pathfinder:
         game_state: Dict,
         max_distance: int = 150,
         variance: Optional[str] = None,
-        consider_npcs: bool = False
+        consider_npcs: bool = False,
+        allow_partial: bool = True
     ) -> Optional[List[str]]:
         """
         Find a path from start to goal using A* algorithm.
@@ -106,6 +107,7 @@ class Pathfinder:
                 how many initial moves must differ when sampling alternative paths.
                 When None or invalid, pathfinding remains deterministic.
             consider_npcs: Whether to consider NPC positions as blocked (default False)
+            allow_partial: Whether to allow partial paths to closest reachable point (default True)
 
         Returns:
             List of button commands to reach the goal, or None if no path found
@@ -129,8 +131,6 @@ class Pathfinder:
         
         # Get current location for debugging
         location_name = game_state.get('player', {}).get('location', 'Unknown')
-        logger.info(f"Pathfinding: {start} -> {goal} in {location_name}")
-        logger.debug(f"Map type: {map_data.get('type')}, dimensions: {map_data.get('width', '?')}x{map_data.get('height', '?')}")
 
         # DEBUG: Check what tiles are around goal
         grid = map_data.get('grid', [])
@@ -169,7 +169,7 @@ class Pathfinder:
         # Get blocked positions (walls, NPCs, water, etc.)
         # CRITICAL: Exclude start position - player is there so it must be walkable
         blocked = self._get_blocked_positions(game_state, map_data, start_pos=start, goal_pos=goal, consider_npcs=consider_npcs)
-        
+
         # Get warp positions and ensure they're walkable (doors/stairs)
         warps = self._get_warp_positions(game_state, map_data)
         logger.debug(f"Found {len(warps)} warp positions: {list(warps)[:10]}")  # Show first 10
@@ -284,6 +284,11 @@ class Pathfinder:
         if isinstance(result, tuple):
             # A* returned (None, best_node) - no complete path but found closest point
             path, best_node = result
+
+            # Only use partial paths if allowed
+            if not allow_partial:
+                return None
+
             if best_node and (best_node.x, best_node.y) != start:
                 logger.info(f"Using partial path to closest point: {(best_node.x, best_node.y)} (distance {best_node.h_cost:.1f} from goal)")
                 
@@ -300,31 +305,7 @@ class Pathfinder:
                 return None
         else:
             path = result
-        
-        logger.info(f"Path found: {len(path)} steps from {start} to {goal}")
-        
-        # Warn if path is significantly longer than Manhattan distance (suggests suboptimal pathfinding)
-        manhattan_dist = abs(start[0] - goal[0]) + abs(start[1] - goal[1])
-        if len(path) > manhattan_dist * 1.5:
-            logger.warning(f"⚠️ Suboptimal path detected: {len(path)} steps (expected ~{manhattan_dist} for straight line)")
-            logger.debug(f"Path positions (first 10): {path[:10]}")
-            # Log what's blocking the direct path
-            direct_path_blocked = []
-            if start[0] == goal[0]:  # Vertical path
-                for y in range(min(start[1], goal[1]), max(start[1], goal[1]) + 1):
-                    pos = (start[0], y)
-                    if pos in blocked:
-                        direct_path_blocked.append(pos)
-                if direct_path_blocked:
-                    logger.warning(f"Direct vertical path blocked at: {direct_path_blocked[:5]}")
-            elif start[1] == goal[1]:  # Horizontal path
-                for x in range(min(start[0], goal[0]), max(start[0], goal[0]) + 1):
-                    pos = (x, start[1])
-                    if pos in blocked:
-                        direct_path_blocked.append(pos)
-                if direct_path_blocked:
-                    logger.warning(f"Direct horizontal path blocked at: {direct_path_blocked[:5]}")
-        
+
         base_buttons = self._path_to_buttons(path)
 
         if variance_level:
@@ -1303,7 +1284,8 @@ def find_path(
     game_state: Dict,
     max_distance: int = 150,
     variance: Optional[str] = None,
-    consider_npcs: bool = False
+    consider_npcs: bool = False,
+    allow_partial: bool = True
 ) -> Optional[List[str]]:
     """
     Find a path from start to goal position.
@@ -1315,9 +1297,10 @@ def find_path(
         max_distance: Maximum distance to search (default 150)
         variance: Optional variance level ('low', 'medium', 'high')
         consider_npcs: Whether to consider NPC positions as blocked (default False)
+        allow_partial: Whether to allow partial paths to closest reachable point (default True)
 
     Returns:
         List of button commands to reach the goal, or None if no path found
     """
     pathfinder = Pathfinder()
-    return pathfinder.find_path(start, goal, game_state, max_distance=max_distance, variance=variance, consider_npcs=consider_npcs)
+    return pathfinder.find_path(start, goal, game_state, max_distance=max_distance, variance=variance, consider_npcs=consider_npcs, allow_partial=allow_partial)

@@ -494,7 +494,8 @@ def parse_pokemon(data):
         move_pp=box['substructs'][1]['pp'],
         trainer_id=box['otId'],
         nickname=box['nickname'],
-        experience=box['substructs'][0]['experience']
+        experience=box['substructs'][0]['experience'],
+        is_egg=bool(box['substructs'][3]['isEgg'])
     )
 
 
