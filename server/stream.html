@@ -1344,7 +1344,10 @@
                             const pokemonDiv = document.createElement('div');
                             pokemonDiv.className = 'party-box';
                             if (index === 0) pokemonDiv.classList.add('active');
-                            
+
+                            // Check if it's an egg
+                            const isEgg = pokemon.is_egg || false;
+
                             const hpPercent = pokemon.current_hp && pokemon.max_hp ?
                                 (pokemon.current_hp / pokemon.max_hp) * 100 : 0;
 
@@ -1352,23 +1355,31 @@
                             if (hpPercent < 25) hpClass += ' critical';
                             else if (hpPercent < 50) hpClass += ' low';
 
-                            const displayName = (pokemon.nickname && pokemon.nickname.trim() !== '') ?
+                            // Display "EGG" for eggs, otherwise use nickname or species name
+                            const displayName = isEgg ? 'EGG' :
+                                (pokemon.nickname && pokemon.nickname.trim() !== '') ?
                                 pokemon.nickname.toUpperCase() : pokemon.species_name.toUpperCase();
 
-                            // Pokemon Showdown animated sprites (use species name, lowercase)
-                            const spriteUrl = pokemon.species_name ?
-                                `https://play.pokemonshowdown.com/sprites/ani/${pokemon.species_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.gif` : '';
+                            // Use egg sprite for eggs, otherwise use regular Pokemon sprites
+                            const spriteUrl = isEgg ?
+                                'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/egg.png' :
+                                (pokemon.species_name ?
+                                `https://play.pokemonshowdown.com/sprites/ani/${pokemon.species_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.gif` : '');
 
                             // Fallback to PokeAPI static Emerald sprites (use species_id = National Dex)
-                            const fallbackSpriteUrl = pokemon.species_id ?
-                                `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.species_id}.png` : '';
+                            const fallbackSpriteUrl = isEgg ?
+                                'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/egg.png' :
+                                (pokemon.species_id ?
+                                `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.species_id}.png` : '');
+
+                            const level = isEgg ? '??' : (pokemon.level || '??');
 
                             pokemonDiv.innerHTML = `
                                 <div class="party-sprite">
                                     ${spriteUrl ? `<img src="${spriteUrl}" onerror="this.src='${fallbackSpriteUrl}'" alt="${displayName}">` : '<span style="color: #666;">?</span>'}
                                 </div>
                                 <span class="pokemon-name">${displayName}</span>
-                                <span class="pokemon-level">Lv.${pokemon.level || '??'}</span>
+                                <span class="pokemon-level">Lv.${level}</span>
                                 <div class="pokemon-hp">
                                     <div class="hp-bar">
                                         <div class="${hpClass}" style="width: ${hpPercent}%"></div>
@@ -1376,7 +1387,7 @@
                                     <div class="hp-text">${pokemon.current_hp || '??'}/${pokemon.max_hp || '??'}</div>
                                 </div>
                             `;
-                            
+
                             partyContainer.appendChild(pokemonDiv);
                         }
                     });
