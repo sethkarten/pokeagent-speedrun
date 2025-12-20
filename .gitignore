@@ -192,6 +192,7 @@ cython_debug/
 test_gemini.py
 run_data/*
 out.txt
+out_2.txt
 *.sh
 # Agent cache backups
 backups/
