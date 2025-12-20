@@ -388,9 +388,8 @@ class LLMLogger:
         try:
             # Determine metrics file path
             if metrics_file is None:
-                cache_dir = ".pokeagent_cache"
-                os.makedirs(cache_dir, exist_ok=True)
-                metrics_file = os.path.join(cache_dir, "cumulative_metrics.json")
+                from utils.run_data_manager import get_cache_path
+                metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
             # Save metrics
             with open(metrics_file, 'w', encoding='utf-8') as f:
@@ -413,8 +412,8 @@ class LLMLogger:
         try:
             # Determine metrics file path
             if metrics_file is None:
-                cache_dir = ".pokeagent_cache"
-                metrics_file = os.path.join(cache_dir, "cumulative_metrics.json")
+                from utils.run_data_manager import get_cache_path
+                metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
             if not os.path.exists(metrics_file):
                 logger.debug(f"No cumulative metrics file found at {metrics_file}")
@@ -446,9 +445,8 @@ class LLMLogger:
         try:
             # Use cache folder by default
             if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
-                cache_dir = ".pokeagent_cache"
-                os.makedirs(cache_dir, exist_ok=True)
-                checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
+                from utils.run_data_manager import get_cache_path
+                checkpoint_file = str(get_cache_path("checkpoint_llm.txt"))
             # Read all current log entries
             log_entries = []
             if os.path.exists(self.log_file):
@@ -500,8 +498,8 @@ class LLMLogger:
         try:
             # Use cache folder by default
             if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
-                cache_dir = ".pokeagent_cache"
-                checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
+                from utils.run_data_manager import get_cache_path
+                checkpoint_file = str(get_cache_path("checkpoint_llm.txt"))
             
             if not os.path.exists(checkpoint_file):
                 logger.info(f"No checkpoint file found at {checkpoint_file}")
