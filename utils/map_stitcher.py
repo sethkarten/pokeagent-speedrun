@@ -75,7 +75,8 @@ class MapStitcher:
     
     def __init__(self, save_file: str = None):
         # Setup cache directory
-        self.cache_dir = ".pokeagent_cache"
+        from utils.run_data_manager import get_cache_directory
+        self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Use cache folder for default save file
