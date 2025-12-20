@@ -45,18 +45,21 @@ last_update = time.time()
 
 # Frame cache for shared memory communication
 # Use cache directory instead of /tmp
-CACHE_DIR = ".pokeagent_cache"
-os.makedirs(CACHE_DIR, exist_ok=True)
-FRAME_CACHE_FILE = os.path.join(CACHE_DIR, "frame_cache.json")
 FRAME_UPDATE_INTERVAL = 0.025  # 40 FPS
+
+def get_frame_cache_file():
+    """Get the frame cache file path based on current run_id"""
+    from utils.run_data_manager import get_cache_path
+    return str(get_cache_path("frame_cache.json"))
 
 def load_frame_from_cache():
     """Load the latest frame from shared cache file"""
     global current_frame, frame_counter, last_update
     
     try:
-        if os.path.exists(FRAME_CACHE_FILE):
-            with open(FRAME_CACHE_FILE, 'r') as f:
+        frame_cache_file = get_frame_cache_file()
+        if os.path.exists(frame_cache_file):
+            with open(frame_cache_file, 'r') as f:
                 data = json.load(f)
                 
             # Check if frame is newer
@@ -130,11 +133,12 @@ async def get_frame():
 @app.get("/status")
 async def get_status():
     """Get frame server status"""
+    frame_cache_file = get_frame_cache_file()
     return {
         "frame_count": frame_counter,
         "last_update": last_update,
-        "cache_file": FRAME_CACHE_FILE,
-        "cache_exists": os.path.exists(FRAME_CACHE_FILE)
+        "cache_file": frame_cache_file,
+        "cache_exists": os.path.exists(frame_cache_file)
     }
 
 if __name__ == "__main__":
@@ -145,7 +149,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     print(f"🖼️ Starting Pokemon Frame Server on {args.host}:{args.port}")
-    print(f"📁 Frame cache: {FRAME_CACHE_FILE}")
+    print(f"📁 Frame cache: {get_frame_cache_file()}")
     
     # Start background frame updater
     frame_thread = threading.Thread(target=frame_updater, daemon=True)

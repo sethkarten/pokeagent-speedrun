@@ -1583,13 +1583,13 @@ def get_simple_agent(vlm) -> SimpleAgent:
         import os
         if os.environ.get("LOAD_CHECKPOINT_MODE") == "true":
             # Check cache folder first, then fall back to old location
-            cache_dir = ".pokeagent_cache"
-            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
-            if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
-                checkpoint_file = "checkpoint_llm.txt"
-            if os.path.exists(checkpoint_file):
+            from utils.run_data_manager import get_cache_path
+            checkpoint_file = get_cache_path("checkpoint_llm.txt")
+            if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
+                checkpoint_file = Path("checkpoint_llm.txt")
+            if checkpoint_file.exists():
                 logger.info(f"🔄 Loading SimpleAgent history from {checkpoint_file}")
-                _global_simple_agent.load_history_from_llm_checkpoint(checkpoint_file)
+                _global_simple_agent.load_history_from_llm_checkpoint(str(checkpoint_file))
             else:
                 logger.info(f"⚠️ No checkpoint file found: {checkpoint_file}")
                 
@@ -1601,13 +1601,13 @@ def get_simple_agent(vlm) -> SimpleAgent:
         import os
         if os.environ.get("LOAD_CHECKPOINT_MODE") == "true":
             # Check cache folder first, then fall back to old location
-            cache_dir = ".pokeagent_cache"
-            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
-            if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
-                checkpoint_file = "checkpoint_llm.txt"
-            if os.path.exists(checkpoint_file):
+            from utils.run_data_manager import get_cache_path
+            checkpoint_file = get_cache_path("checkpoint_llm.txt")
+            if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
+                checkpoint_file = Path("checkpoint_llm.txt")
+            if checkpoint_file.exists():
                 logger.info(f"🔄 Loading SimpleAgent history from {checkpoint_file}")
-                _global_simple_agent.load_history_from_llm_checkpoint(checkpoint_file)
+                _global_simple_agent.load_history_from_llm_checkpoint(str(checkpoint_file))
                 
     return _global_simple_agent
 

@@ -56,7 +56,9 @@ class AntiCheatTracker:
         
         # Only add handler if none exists
         if not self.submission_logger.handlers:
-            submission_handler = logging.FileHandler('submission.log', mode='a')
+            from utils.run_data_manager import get_cache_path
+            submission_log_path = str(get_cache_path("submission.log"))
+            submission_handler = logging.FileHandler(submission_log_path, mode='a')
             submission_handler.setLevel(logging.INFO)  # Explicitly set handler level
             submission_formatter = logging.Formatter('%(message)s')
             submission_handler.setFormatter(submission_formatter)
@@ -363,7 +365,9 @@ class AntiCheatTracker:
         self.start_time = time.time()  # Store start time for total runtime calculation
         
         # Clear the file first by writing directly
-        with open('submission.log', 'w') as f:
+        from utils.run_data_manager import get_cache_path
+        submission_log_path = str(get_cache_path("submission.log"))
+        with open(submission_log_path, 'w') as f:
             f.write("")
         
         self.submission_logger.info("=== POKEMON EMERALD AGENT SUBMISSION LOG ===")
