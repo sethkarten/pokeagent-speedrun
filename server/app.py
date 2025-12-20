@@ -111,9 +111,9 @@ video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
 
 # Frame cache for separate frame server
 # Use cache directory instead of /tmp
-CACHE_DIR = ".pokeagent_cache"
-os.makedirs(CACHE_DIR, exist_ok=True)
-FRAME_CACHE_FILE = os.path.join(CACHE_DIR, "frame_cache.json")
+# Note: CACHE_DIR is now dynamic based on run_id - use get_cache_directory() when needed
+# For frame cache, we'll initialize it dynamically
+FRAME_CACHE_FILE = None  # Will be set dynamically based on run_id
 frame_cache_counter = 0
 frame_cache_skip_frames = 30  # Only update cache every 30 frames (4x/sec at 120 FPS)
 
@@ -199,9 +199,15 @@ def init_video_recording(record_enabled=False):
         return
     
     try:
-        # Create video filename with timestamp
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        video_filename = f"pokegent_recording_{timestamp}.mp4"
+        # Create video filename using run_id for consistency
+        from utils.run_data_manager import get_run_data_manager
+        run_manager = get_run_data_manager()
+        if run_manager:
+            video_filename = f"{run_manager.run_id}.mp4"
+        else:
+            # Fallback to timestamp if no run manager
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            video_filename = f"pokegent_recording_{timestamp}.mp4"
         
         # Video settings (GBA resolution is 240x160)
         # Record at 30 FPS (skip every 4th frame from 120 FPS emulator)
@@ -1360,7 +1366,8 @@ async def get_comprehensive_state():
             
             # Also include location connections directly for backward compatibility
             try:
-                cache_file = ".pokeagent_cache/map_stitcher_data.json"
+                from utils.run_data_manager import get_cache_path
+                cache_file = str(get_cache_path("map_stitcher_data.json"))
                 if os.path.exists(cache_file):
                     with open(cache_file, 'r') as f:
                         map_data = json.load(f)
@@ -1980,11 +1987,11 @@ async def get_metrics():
         # BUT only if checkpoint loading is enabled (not for fresh starts with --load-state)
         if metrics.get("total_llm_calls", 0) == 0 and checkpoint_loading_enabled:
             # Check cache folder first, then fall back to old location
-            cache_dir = ".pokeagent_cache"
-            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
-            if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
-                checkpoint_file = "checkpoint_llm.txt"
-            if os.path.exists(checkpoint_file):
+            from utils.run_data_manager import get_cache_path
+            checkpoint_file = get_cache_path("checkpoint_llm.txt")
+            if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
+                checkpoint_file = Path("checkpoint_llm.txt")
+            if checkpoint_file.exists():
                 try:
                     with open(checkpoint_file, 'r', encoding='utf-8') as f:
                         checkpoint_data = json.load(f)
@@ -2259,8 +2266,8 @@ def _update_objectives_cache():
                 }
 
         # Write to cache file
-        os.makedirs(".pokeagent_cache", exist_ok=True)
-        cache_file = ".pokeagent_cache/current_objective.json"
+        from utils.run_data_manager import get_cache_path
+        cache_file = get_cache_path("current_objective.json")
         with open(cache_file, 'w') as f:
             json.dump(objectives_data, f, indent=2)
 
@@ -2292,8 +2299,9 @@ async def get_milestones():
         }
 
         try:
-            objectives_cache_file = ".pokeagent_cache/current_objective.json"
-            if os.path.exists(objectives_cache_file):
+            from utils.run_data_manager import get_cache_path
+            objectives_cache_file = get_cache_path("current_objective.json")
+            if objectives_cache_file.exists():
                 with open(objectives_cache_file, 'r') as f:
                     objectives_data = json.load(f)
         except Exception as e:
@@ -3691,7 +3699,8 @@ async def mcp_save_map(request: dict):
             return {"success": False, "error": "map_data is required"}
 
         # Create maps directory (Path imported at top of file)
-        maps_dir = Path(".pokeagent_cache/maps")
+        from utils.run_data_manager import get_cache_path
+        maps_dir = get_cache_path("maps")
         maps_dir.mkdir(parents=True, exist_ok=True)
 
         # Normalize case to title case for consistent filenames
@@ -3728,7 +3737,8 @@ async def mcp_load_map(request: dict):
             return {"success": False, "error": "location_name is required"}
 
         # Create maps directory if it doesn't exist (Path imported at top of file)
-        maps_dir = Path(".pokeagent_cache/maps")
+        from utils.run_data_manager import get_cache_path
+        maps_dir = get_cache_path("maps")
         maps_dir.mkdir(parents=True, exist_ok=True)
 
         # Normalize case to title case for consistent filenames
@@ -3780,8 +3790,9 @@ async def stop_server():
 async def save_state_endpoint(request: dict):
     """Save the current emulator state to a file"""
     try:
-        os.makedirs(".pokeagent_cache", exist_ok=True)
-        filepath = request.get("filepath", ".pokeagent_cache/manual_save.state")
+        from utils.run_data_manager import get_cache_path
+        default_filepath = str(get_cache_path("manual_save.state"))
+        filepath = request.get("filepath", default_filepath)
         if env:
             env.save_state(filepath)
             logger.info(f"💾 State saved to: {filepath}")
@@ -3796,8 +3807,9 @@ async def save_state_endpoint(request: dict):
 async def load_state_endpoint(request: dict):
     """Load an emulator state from a file"""
     try:
-        os.makedirs(".pokeagent_cache", exist_ok=True)
-        filepath = request.get("filepath", ".pokeagent_cache/manual_save.state")
+        from utils.run_data_manager import get_cache_path
+        default_filepath = str(get_cache_path("manual_save.state"))
+        filepath = request.get("filepath", default_filepath)
         if env:
             if not os.path.exists(filepath):
                 return JSONResponse(status_code=404, content={"error": f"State file not found: {filepath}"})
@@ -3814,11 +3826,11 @@ async def load_state_endpoint(request: dict):
 async def save_checkpoint(request_data: dict = None):
     """Save checkpoint - called by client when step count reaches checkpoint interval"""
     try:
+        from utils.run_data_manager import get_cache_path
         step_count = request_data.get("step_count", 0) if request_data else 0
         
         # Save emulator state
-        os.makedirs(".pokeagent_cache", exist_ok=True)
-        checkpoint_state = ".pokeagent_cache/checkpoint.state"
+        checkpoint_state = str(get_cache_path("checkpoint.state"))
         if env:
             env.save_state(checkpoint_state)
             logger.info(f"💾 Server: Saved checkpoint state at step {step_count}")
@@ -3833,8 +3845,8 @@ async def save_checkpoint(request_data: dict = None):
                 "step_count": step_count,
                 "files": {
                     "state": checkpoint_state,
-                    "milestones": f".pokeagent_cache/checkpoint_milestones.json",
-                    "map": f".pokeagent_cache/checkpoint_grids.json"
+                    "milestones": str(get_cache_path("checkpoint_milestones.json")),
+                    "map": str(get_cache_path("checkpoint_grids.json"))
                 }
             }
         else:
@@ -3912,10 +3924,11 @@ async def save_agent_history():
 async def load_checkpoint():
     """Load checkpoint state - called by client on startup if --load-checkpoint flag is used"""
     try:
-        checkpoint_state = ".pokeagent_cache/checkpoint.state"
+        from utils.run_data_manager import get_cache_path
+        checkpoint_state = str(get_cache_path("checkpoint.state"))
         
         if not os.path.exists(checkpoint_state):
-            return {"status": "no_checkpoint", "message": "No .pokeagent_cache/checkpoint.state file found"}
+            return {"status": "no_checkpoint", "message": f"No {checkpoint_state} file found"}
         
         if env:
             env.load_state(checkpoint_state)
@@ -3933,8 +3946,8 @@ async def load_checkpoint():
                 "status": "checkpoint_loaded",
                 "files": {
                     "state": checkpoint_state,
-                    "milestones": f".pokeagent_cache/checkpoint_milestones.json",
-                    "map": f".pokeagent_cache/checkpoint_grids.json"
+                    "milestones": str(get_cache_path("checkpoint_milestones.json")),
+                    "map": str(get_cache_path("checkpoint_grids.json"))
                 }
             }
         else:
@@ -3984,10 +3997,12 @@ def main():
         args.load_state = env_load_state
         print(f"📂 Using load state from environment: {env_load_state}")
         if env_load_state == ".pokeagent_cache/checkpoint.state":
-            if os.path.exists(".pokeagent_cache/checkpoint.state"):
-                print(f"✅ Server startup: .pokeagent_cache/checkpoint.state file exists")
+            from utils.run_data_manager import get_cache_path
+            checkpoint_state = get_cache_path("checkpoint.state")
+            if checkpoint_state.exists():
+                print(f"✅ Server startup: {checkpoint_state} file exists")
             else:
-                print(f"❌ Server startup: .pokeagent_cache/checkpoint.state file MISSING!")
+                print(f"❌ Server startup: {checkpoint_state} file MISSING!")
     
     # Set checkpoint loading flag based on whether this is a true checkpoint load
     global checkpoint_loading_enabled
@@ -3999,19 +4014,19 @@ def main():
         
         # Initialize LLM logger and load checkpoint immediately during server startup
         from utils.llm_logger import get_llm_logger
+        from utils.run_data_manager import get_cache_path
         llm_logger = get_llm_logger()
         # Check both cache folder and old location
-        cache_dir = ".pokeagent_cache"
-        checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
-        if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
-            checkpoint_file = "checkpoint_llm.txt"
+        checkpoint_file = get_cache_path("checkpoint_llm.txt")
+        if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
+            checkpoint_file = Path("checkpoint_llm.txt")
         
         # First try to load lightweight cumulative metrics
         metrics_loaded = llm_logger.load_cumulative_metrics() if llm_logger else False
 
         # Then load full checkpoint for LLM history
-        if llm_logger and os.path.exists(checkpoint_file):
-            restored_step_count = llm_logger.load_checkpoint(checkpoint_file)
+        if llm_logger and checkpoint_file.exists():
+            restored_step_count = llm_logger.load_checkpoint(str(checkpoint_file))
             if restored_step_count is not None:
                 agent_step_count = restored_step_count
                 print(f"✅ Server startup: restored LLM checkpoint with step count {restored_step_count}")
@@ -4089,9 +4104,9 @@ def main():
     # Initialize run directory for this execution (deprecated, will be moved)
     global current_run_dir
     if current_run_dir is None:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        current_run_dir = os.path.join(CACHE_DIR, f"run_{timestamp}")
-        os.makedirs(current_run_dir, exist_ok=True)
+        from utils.run_data_manager import get_cache_directory
+        # Use the cache directory directly instead of creating nested subdirectory
+        current_run_dir = str(get_cache_directory())
         print(f"📁 Legacy run directory (deprecated): {current_run_dir}")
     
     # Initialize video recording if requested

@@ -35,8 +35,9 @@ _warp_reachability_cache = {}
 def _get_location_connections_from_cache():
     """Read location connections from MapStitcher's cache file"""
     try:
-        cache_file = '.pokeagent_cache/map_stitcher_data.json'
-        if os.path.exists(cache_file):
+        from utils.run_data_manager import get_cache_path
+        cache_file = get_cache_path("map_stitcher_data.json")
+        if cache_file.exists():
             with open(cache_file, 'r') as f:
                 data = json.load(f)
                 return data.get('location_connections', {})
