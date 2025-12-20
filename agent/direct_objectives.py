@@ -19,6 +19,51 @@ from agent.objective_types import DirectObjective
 logger = logging.getLogger(__name__)
 
 
+def get_first_objective_info(sequence_name: str, start_index: int = 0) -> tuple:
+    """Get first objective ID and description from a sequence without loading it
+    
+    Args:
+        sequence_name: Name of the direct objectives sequence
+        start_index: Starting index in the sequence
+    
+    Returns:
+        tuple: (objective_id, objective_description) or (None, None) if not found
+    """
+    try:
+        if sequence_name == "autonomous_objective_creation":
+            # For autonomous mode, use a generic name
+            return ("autonomous", "autonomous_objective_creation")
+        elif sequence_name == "categorized_full_game":
+            # Load the first story objective
+            from agent.all_obj_categorized import STORY_OBJECTIVES
+            if start_index < len(STORY_OBJECTIVES):
+                obj = STORY_OBJECTIVES[start_index]
+                return (obj.id, obj.description)
+        elif sequence_name in ["tutorial_to_rival", "tutorial_to_rustboro_city", "part_1_walkthrough_claude_4_5", "full_game"]:
+            # For legacy sequences with inline objectives, create a temp manager
+            temp_manager = DirectObjectiveManager()
+            
+            if sequence_name == "tutorial_to_rustboro_city":
+                temp_manager.load_tutorial_to_rustboro_city_sequence(start_index=0)
+            elif sequence_name == "tutorial_to_rival":
+                temp_manager.load_birch_to_rival_sequence()
+            elif sequence_name == "part_1_walkthrough_claude_4_5":
+                temp_manager.load_part_1_walkthrough_claude_4_5_sequence(start_index=0)
+            elif sequence_name == "full_game":
+                temp_manager.load_full_game_sequence(start_index=0)
+            
+            if start_index < len(temp_manager.current_sequence):
+                obj = temp_manager.current_sequence[start_index]
+                return (obj.id, obj.description)
+        
+        return (None, None)
+    except Exception as e:
+        logger.warning(f"Could not get first objective info for {sequence_name}: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return (None, None)
+
+
 class DirectObjectiveManager:
     """Manages objective sequences across 3 categories: story, battling, and dynamics"""
 

@@ -886,9 +886,8 @@ class VertexBackend(VLMBackend):
         # Save debug copy to see what it looks like
         try:
             from pathlib import Path
-
-            debug_dir = Path(".pokeagent_cache")
-            debug_dir.mkdir(exist_ok=True)
+            from utils.run_data_manager import get_cache_directory
+            debug_dir = get_cache_directory()
             debug_path = debug_dir / "debug_upscaled_frame.png"
             upscaled_image.save(debug_path)
             logger.debug(f"Image upscaled: {original_size} → {upscaled_size} (4x) [saved to {debug_path}]")
