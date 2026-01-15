@@ -29,7 +29,9 @@ MAP_STITCHER_SAVE_CALLBACK = None  # Callback to save map stitcher when location
 MAP_STITCHER_INSTANCE = None  # Reference to the MapStitcher instance
 
 # Cache for warp reachability checks to avoid redundant pathfinding
-# Format: {(location_name, player_x, player_y, warp_x, warp_y): is_reachable}
+# Format: {(cache_version, location_name, player_x, player_y, warp_x, warp_y): is_reachable}
+# Increment CACHE_VERSION when elevation/pathfinding logic changes to invalidate old entries
+_WARP_CACHE_VERSION = 3  # v3: Fixed pathfinding to respect filtered grid (trust elevation connectivity)
 _warp_reachability_cache = {}
 
 def _get_location_connections_from_cache():
@@ -1174,6 +1176,21 @@ ROM_TO_PORYMAP_MAP = {
     "RUSTURF TUNNEL": "RusturfTunnel",
     "RUSTURF TUNNEL ALT": "RusturfTunnel",  # Alternative map ID 0x1804
 
+    # Route 110 Trick House (Group 29 = 0x1D)
+    "ROUTE 110 TRICK HOUSE ENTRANCE ALT": "Route110_TrickHouseEntrance",
+    "ROUTE 110 TRICK HOUSE END ALT": "Route110_TrickHouseEnd",
+    "ROUTE 110 TRICK HOUSE CORRIDOR ALT": "Route110_TrickHouseCorridor",
+    "ROUTE 110 TRICK HOUSE PUZZLE1 ALT": "Route110_TrickHousePuzzle1",
+    "ROUTE 110 TRICK HOUSE PUZZLE2 ALT": "Route110_TrickHousePuzzle2",
+    "ROUTE 110 TRICK HOUSE PUZZLE3 ALT": "Route110_TrickHousePuzzle3",
+    "ROUTE 110 TRICK HOUSE PUZZLE4 ALT": "Route110_TrickHousePuzzle4",
+    "ROUTE 110 TRICK HOUSE PUZZLE5 ALT": "Route110_TrickHousePuzzle5",
+    "ROUTE 110 TRICK HOUSE PUZZLE6 ALT": "Route110_TrickHousePuzzle6",
+    "ROUTE 110 TRICK HOUSE PUZZLE7 ALT": "Route110_TrickHousePuzzle7",
+    "ROUTE 110 TRICK HOUSE PUZZLE8 ALT": "Route110_TrickHousePuzzle8",
+    "ROUTE 110 SEASIDE CYCLING ROAD SOUTH ENTRANCE ALT": "Route110_SeasideCyclingRoadSouthEntrance",
+    "ROUTE 110 SEASIDE CYCLING ROAD NORTH ENTRANCE ALT": "Route110_SeasideCyclingRoadNorthEntrance",
+
     # Professor Birch's Lab
     "LITTLEROOT TOWN PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
     "PROFESSOR BIRCHS LAB": "LittlerootTown_ProfessorBirchsLab",
@@ -1638,13 +1655,77 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                         # Elevation changes ONLY through stairs/doors/ledges (handled separately)
                         elevation_tolerance = 0  # Must be exact same elevation
 
-                        # First pass: Find all stair and warp positions (S and D)
+                        # First pass: Find all stair and warp positions (S, D, arrow tiles, and ladders)
                         grid = json_map['grid']
                         warp_positions = set()
+                        arrow_positions = set()  # Non-warp stairs (directional arrows - ledges)
+                        ladder_positions = set()  # Ladder tiles that connect elevations
                         for y in range(len(grid)):
                             for x in range(len(grid[y])):
                                 if grid[y][x] in ['S', 'D']:  # Stairs and Doors are both warps
                                     warp_positions.add((x, y))
+                                elif grid[y][x] in ['←', '→', '↑', '↓']:  # Arrow tiles (ledges)
+                                    arrow_positions.add((x, y))
+                                elif grid[y][x] == '&':  # Ladder/bridge tiles
+                                    ladder_positions.add((x, y))
+
+                        # Combine all types of elevation connectors
+                        # Ladders (&) connect different elevations vertically
+                        all_stair_positions = warp_positions | arrow_positions | ladder_positions
+
+                        # Build elevation connectivity graph from ladders AND adjacent walkable tiles
+                        # Ladders (&) connect elevations, but also regular tiles at adjacent different elevations (slopes)
+                        connected_elevations = set([player_elevation])  # Start with player's elevation
+
+                        # Iteratively find all connected elevations (BFS)
+                        prev_size = 0
+                        max_iterations = 10  # Prevent infinite loops
+                        iteration = 0
+                        while len(connected_elevations) != prev_size and iteration < max_iterations:
+                            prev_size = len(connected_elevations)
+                            iteration += 1
+
+                            # Detect direct walkable connections (slopes between elevations)
+                            # Check for adjacent walkable tiles at different elevations
+                            for y in range(len(grid)):
+                                for x in range(len(grid[y])):
+                                    if y < len(raw_tiles) and x < len(raw_tiles[y]):
+                                        tile = raw_tiles[y][x]
+                                        if len(tile) >= 4 and grid[y][x] in ['.', '~']:
+                                            tile_elev = tile[3]
+                                            if tile_elev in connected_elevations:
+                                                # Check adjacent tiles in all 4 directions
+                                                for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                                                    nx, ny = x + dx, y + dy
+                                                    if 0 <= ny < len(raw_tiles) and 0 <= nx < len(raw_tiles[ny]):
+                                                        neighbor_tile = raw_tiles[ny][nx]
+                                                        if len(neighbor_tile) >= 4:
+                                                            neighbor_elev = neighbor_tile[3]
+                                                            if ny < len(grid) and nx < len(grid[ny]):
+                                                                neighbor_char = grid[ny][nx]
+                                                                # If adjacent tile is walkable and at different elevation, connect them
+                                                                if neighbor_char in ['.', '~', 'S', 'D'] and neighbor_elev != tile_elev:
+                                                                    connected_elevations.add(neighbor_elev)
+
+                            # Also check ladder tiles for connections
+                            for lx, ly in ladder_positions:
+                                if ly < len(raw_tiles) and lx < len(raw_tiles[ly]):
+                                    ladder_tile = raw_tiles[ly][lx]
+                                    if len(ladder_tile) >= 4:
+                                        ladder_elev = ladder_tile[3]
+                                        if ladder_elev in connected_elevations:
+                                            # Check tiles in all 4 directions (ladders can connect up/down/left/right)
+                                            for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                                                nx, ny = lx + dx, ly + dy
+                                                if 0 <= ny < len(raw_tiles) and 0 <= nx < len(raw_tiles[ny]):
+                                                    neighbor_tile = raw_tiles[ny][nx]
+                                                    if len(neighbor_tile) >= 4:
+                                                        neighbor_elev = neighbor_tile[3]
+                                                        # Add elevation from walkable tiles OR other ladders
+                                                        if ny < len(grid) and nx < len(grid[ny]):
+                                                            neighbor_char = grid[ny][nx]
+                                                            if neighbor_char in ['.', '~', 'S', 'D', '&']:
+                                                                connected_elevations.add(neighbor_elev)
 
                         # Filter the grid based on elevation
                         filtered_grid = []
@@ -1664,9 +1745,10 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                                         elevation_diff = abs(tile_elevation - player_elevation)
 
                                         # Check if tile is adjacent to stairs (immediate neighbors only)
+                                        # This includes both warps (S/D) and arrow tiles (←/→/↑/↓)
                                         is_adjacent_to_stairs = False
-                                        for warp_x, warp_y in warp_positions:
-                                            if abs(x - warp_x) + abs(y - warp_y) == 1:
+                                        for stair_x, stair_y in all_stair_positions:
+                                            if abs(x - stair_x) + abs(y - stair_y) == 1:
                                                 is_adjacent_to_stairs = True
                                                 break
 
@@ -1674,9 +1756,74 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                                         # But still block walls/cliffs!
                                         if is_adjacent_to_stairs and original_char in ['.', '~', '←', '→', '↑', '↓']:
                                             filtered_row.append(original_char)  # Walkable tiles near stairs stay walkable
+                                        # Handle bridge tiles (&) based on whether there's a path underneath
+                                        elif original_char == '&':
+                                            # Check if bridge has adjacent walkable tiles (. & & & . pattern)
+                                            # This indicates a ground path underneath the bridge
+                                            # Need to search through consecutive & tiles to find ground at both ends
+                                            has_ground_path = False
+                                            if 0 <= y < len(grid):
+                                                # Search left through consecutive bridge tiles to find ground
+                                                left_walkable = False
+                                                search_x = x - 1
+                                                while search_x >= 0 and search_x < len(grid[y]):
+                                                    search_char = grid[y][search_x]
+                                                    if search_char == '&':
+                                                        # Continue searching left through bridge
+                                                        search_x -= 1
+                                                    elif search_char in ['.', '~']:
+                                                        # Found walkable ground - check elevation
+                                                        if search_x < len(raw_tiles[y]):
+                                                            search_tile = raw_tiles[y][search_x]
+                                                            if len(search_tile) >= 4:
+                                                                search_elev = search_tile[3]
+                                                                if abs(search_elev - player_elevation) <= elevation_tolerance:
+                                                                    left_walkable = True
+                                                        break
+                                                    else:
+                                                        # Hit a non-ground, non-bridge tile
+                                                        break
+
+                                                # Search right through consecutive bridge tiles to find ground
+                                                right_walkable = False
+                                                search_x = x + 1
+                                                while search_x < len(grid[y]):
+                                                    search_char = grid[y][search_x]
+                                                    if search_char == '&':
+                                                        # Continue searching right through bridge
+                                                        search_x += 1
+                                                    elif search_char in ['.', '~']:
+                                                        # Found walkable ground - check elevation
+                                                        if search_x < len(raw_tiles[y]):
+                                                            search_tile = raw_tiles[y][search_x]
+                                                            if len(search_tile) >= 4:
+                                                                search_elev = search_tile[3]
+                                                                if abs(search_elev - player_elevation) <= elevation_tolerance:
+                                                                    right_walkable = True
+                                                        break
+                                                    else:
+                                                        # Hit a non-ground, non-bridge tile
+                                                        break
+
+                                                # Ground path exists if BOTH left and right ends are walkable at player elevation
+                                                has_ground_path = left_walkable and right_walkable
+
+                                            # If there's a ground path underneath, show as walkable
+                                            if has_ground_path and tile_elevation > player_elevation:
+                                                filtered_row.append('.')  # Can walk under bridge
+                                            else:
+                                                filtered_row.append('&')  # Keep bridge visible for pathfinding
                                         # Block tiles beyond elevation tolerance
                                         elif elevation_diff > elevation_tolerance:
-                                            filtered_row.append('#')  # Block tiles at very different elevations
+                                            # Check if tile's elevation is connected via ladders
+                                            if tile_elevation in connected_elevations:
+                                                filtered_row.append(original_char)  # Allow tiles at connected elevations
+                                            # Special case: If player is in water, allow ground/grass tiles to show
+                                            # (player can surf to shore, but shore players can't access water - handled by pathfinding)
+                                            elif 0 <= py < len(grid) and 0 <= px < len(grid[py]) and grid[py][px] == 'W' and original_char in ['.', '~']:
+                                                filtered_row.append(original_char)  # Allow ground tiles from water
+                                            else:
+                                                filtered_row.append('#')  # Block tiles at very different elevations
                                         else:
                                             filtered_row.append(original_char)  # Keep original tile
                                     else:
@@ -1743,8 +1890,15 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             reachable_warps = []
             unreachable_warps = []
 
+            # Clear old cache entries with wrong version
+            global _warp_reachability_cache
+            keys_to_remove = [k for k in _warp_reachability_cache.keys() if k[0] != _WARP_CACHE_VERSION]
+            if keys_to_remove:
+                for key in keys_to_remove:
+                    del _warp_reachability_cache[key]
+                logger.info(f"Cleared {len(keys_to_remove)} old warp cache entries (wrong version)")
+
             if player_coords and json_map.get('grid'):
-                global _warp_reachability_cache
                 from utils.pathfinding import Pathfinder
                 from utils.ascii_map_loader import has_corrected_map
 
@@ -1773,8 +1927,8 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                 for warp in warps:
                     warp_pos = (warp.get('x', 0), warp.get('y', 0))
 
-                    # Create cache key
-                    cache_key = (location_name, player_tile[0], player_tile[1], warp_pos[0], warp_pos[1])
+                    # Create cache key (includes version to invalidate old entries)
+                    cache_key = (_WARP_CACHE_VERSION, location_name, player_tile[0], player_tile[1], warp_pos[0], warp_pos[1])
 
                     # Check cache first
                     if cache_key in _warp_reachability_cache:
