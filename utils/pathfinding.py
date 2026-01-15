@@ -449,6 +449,13 @@ class Pathfinder:
         grid = map_data['grid']
         raw_tiles = map_data.get('raw_tiles', None)
 
+        # Check if player is in water (surfing)
+        player_in_water = False
+        if start_pos and 0 <= start_pos[1] < len(grid):
+            start_row = grid[start_pos[1]]
+            if start_pos[0] < len(start_row):
+                player_in_water = start_row[start_pos[0]] == 'W'
+
         for y, row in enumerate(grid):
             if isinstance(row, list):
                 for x, cell in enumerate(row):
@@ -460,39 +467,220 @@ class Pathfinder:
 
                     pos = (x, y)
 
-                    # Always block walls, out of bounds, and water
-                    if cell in ['#', 'X', 'W']:
+                    # Always block walls and out of bounds
+                    if cell in ['#', 'X']:
                         # CRITICAL: Never block the starting position - player is there so it must be walkable
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
                         blocked.add(pos)
-                    # Never block doors, stairs, or cycling road (all walkable)
-                    elif cell in ['D', 'S', '&']:
+                    # Water: block if player is NOT in water (can't surf without Surf ability)
+                    # Allow if player IS in water (can navigate water freely while surfing)
+                    elif cell == 'W':
+                        if start_pos and pos == start_pos:
+                            # Starting position is always walkable
+                            continue
+                        if not player_in_water:
+                            # Player on ground can't access water
+                            blocked.add(pos)
+                        # else: player in water, don't block other water tiles
+                    # Never block doors or stairs
+                    elif cell in ['D', 'S']:
                         continue
+                    # Block cycling road tiles if at a different elevation from start
+                    # UNLESS there's a walkable path underneath (. & & & . pattern)
+                    # OR it's a ladder connecting different elevations (check adjacent tiles)
+                    elif cell == '&' and start_elevation is not None and raw_tiles:
+                        if 0 <= y < len(raw_tiles) and 0 <= x < len(raw_tiles[y]):
+                            tile = raw_tiles[y][x]
+                            if tile and len(tile) >= 4:
+                                tile_elevation = tile[3] if len(tile) > 3 else 0
+                                # If at same elevation, it's walkable (don't block)
+                                if tile_elevation == start_elevation:
+                                    continue
+
+                                # Check if this is a ladder (has walkable tiles nearby, including other ladders)
+                                is_ladder = False
+                                for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                                    nx, ny = x + dx, y + dy
+                                    if 0 <= ny < len(grid) and 0 <= nx < len(row if isinstance(row, str) else row):
+                                        neighbor_char = (grid[ny][nx] if isinstance(grid[ny], str) else grid[ny][nx]) if ny < len(grid) else '#'
+                                        # Check for walkable tiles OR other ladder tiles (for chaining)
+                                        if neighbor_char in ['.', '~', 'S', 'D', '&']:
+                                            # Found walkable/ladder neighbor - check its elevation
+                                            if 0 <= ny < len(raw_tiles) and 0 <= nx < len(raw_tiles[ny]):
+                                                neighbor_tile = raw_tiles[ny][nx]
+                                                if neighbor_tile and len(neighbor_tile) >= 4:
+                                                    neighbor_elev = neighbor_tile[3] if len(neighbor_tile) > 3 else 0
+                                                    # If neighbor is at start elevation OR is another ladder, this is part of a ladder chain
+                                                    if neighbor_elev == start_elevation or neighbor_char == '&':
+                                                        is_ladder = True
+                                                        break
+
+                                # If it's a ladder, don't block it
+                                if is_ladder:
+                                    continue
+
+                                # If bridge is at HIGHER elevation, check for ground path underneath
+                                if tile_elevation > start_elevation:
+                                    # Check for . & & & . pattern (ground path under bridge)
+                                    has_ground_path = False
+
+                                    # Search left through consecutive bridge tiles to find ground
+                                    left_walkable = False
+                                    search_x = x - 1
+                                    while search_x >= 0 and search_x < len(row):
+                                        search_char = row[search_x]
+                                        if search_char == '&':
+                                            search_x -= 1
+                                        elif search_char in ['.', '~']:
+                                            # Found walkable ground - check elevation
+                                            if search_x < len(raw_tiles[y]):
+                                                search_tile = raw_tiles[y][search_x]
+                                                if search_tile and len(search_tile) >= 4:
+                                                    search_elev = search_tile[3] if len(search_tile) > 3 else 0
+                                                    if search_elev == start_elevation:
+                                                        left_walkable = True
+                                            break
+                                        else:
+                                            break
+
+                                    # Search right through consecutive bridge tiles to find ground
+                                    right_walkable = False
+                                    search_x = x + 1
+                                    while search_x < len(row):
+                                        search_char = row[search_x]
+                                        if search_char == '&':
+                                            search_x += 1
+                                        elif search_char in ['.', '~']:
+                                            # Found walkable ground - check elevation
+                                            if search_x < len(raw_tiles[y]):
+                                                search_tile = raw_tiles[y][search_x]
+                                                if search_tile and len(search_tile) >= 4:
+                                                    search_elev = search_tile[3] if len(search_tile) > 3 else 0
+                                                    if search_elev == start_elevation:
+                                                        right_walkable = True
+                                            break
+                                        else:
+                                            break
+
+                                    has_ground_path = left_walkable and right_walkable
+
+                                    # Only block if NO ground path underneath
+                                    if not has_ground_path:
+                                        blocked.add(pos)
+                                # Block cycling road if at different elevation (not ladder, not bridge with underpass)
+                                else:
+                                    blocked.add(pos)
 
             elif isinstance(row, str):
                 # Handle string rows (each character is a cell)
                 for x, cell in enumerate(row):
                     pos = (x, y)
 
-                    # CRITICAL: 'D' (door) and 'S' (stairs) tiles are ALWAYS walkable
-                    if cell in ['#', 'X', 'W']:
+                    # Always block walls and out of bounds
+                    if cell in ['#', 'X']:
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
                         blocked.add(pos)
+                    # Water: block if player is NOT in water (can't surf without Surf ability)
+                    # Allow if player IS in water (can navigate water freely while surfing)
+                    elif cell == 'W':
+                        if start_pos and pos == start_pos:
+                            # Starting position is always walkable
+                            continue
+                        if not player_in_water:
+                            # Player on ground can't access water
+                            blocked.add(pos)
+                        # else: player in water, don't block other water tiles
                     # Never block doors or stairs
                     elif cell in ['D', 'S']:
                         continue
                     # Block cycling road tiles if at a different elevation from start
+                    # UNLESS there's a walkable path underneath (. & & & . pattern)
+                    # OR it's a ladder connecting different elevations (check adjacent tiles)
                     elif cell == '&' and start_elevation is not None and raw_tiles:
                         if 0 <= y < len(raw_tiles) and 0 <= x < len(raw_tiles[y]):
                             tile = raw_tiles[y][x]
                             if tile and len(tile) >= 4:
                                 tile_elevation = tile[3] if len(tile) > 3 else 0
-                                # Block cycling road if at different elevation (player can't access it)
-                                if start_elevation != tile_elevation:
+                                # If at same elevation, it's walkable (don't block)
+                                if tile_elevation == start_elevation:
+                                    continue
+
+                                # Check if this is a ladder (has walkable tiles nearby, including other ladders)
+                                is_ladder = False
+                                for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                                    nx, ny = x + dx, y + dy
+                                    if 0 <= ny < len(grid) and 0 <= nx < len(grid[ny] if ny < len(grid) else ""):
+                                        neighbor_char = grid[ny][nx] if isinstance(grid[ny], str) else grid[ny][nx]
+                                        # Check for walkable tiles OR other ladder tiles (for chaining)
+                                        if neighbor_char in ['.', '~', 'S', 'D', '&']:
+                                            # Found walkable/ladder neighbor - check its elevation
+                                            if 0 <= ny < len(raw_tiles) and 0 <= nx < len(raw_tiles[ny]):
+                                                neighbor_tile = raw_tiles[ny][nx]
+                                                if neighbor_tile and len(neighbor_tile) >= 4:
+                                                    neighbor_elev = neighbor_tile[3] if len(neighbor_tile) > 3 else 0
+                                                    # If neighbor is at start elevation OR is another ladder, this is part of a ladder chain
+                                                    if neighbor_elev == start_elevation or neighbor_char == '&':
+                                                        is_ladder = True
+                                                        break
+
+                                # If it's a ladder, don't block it
+                                if is_ladder:
+                                    continue
+
+                                # If bridge is at HIGHER elevation, check for ground path underneath
+                                if tile_elevation > start_elevation:
+                                    # Check for . & & & . pattern (ground path under bridge)
+                                    has_ground_path = False
+
+                                    # Search left through consecutive bridge tiles to find ground
+                                    left_walkable = False
+                                    search_x = x - 1
+                                    while search_x >= 0 and search_x < len(row):
+                                        search_char = row[search_x] if isinstance(row, str) else row[search_x]
+                                        if search_char == '&':
+                                            search_x -= 1
+                                        elif search_char in ['.', '~']:
+                                            # Found walkable ground - check elevation
+                                            if search_x < len(raw_tiles[y]):
+                                                search_tile = raw_tiles[y][search_x]
+                                                if search_tile and len(search_tile) >= 4:
+                                                    search_elev = search_tile[3] if len(search_tile) > 3 else 0
+                                                    if search_elev == start_elevation:
+                                                        left_walkable = True
+                                            break
+                                        else:
+                                            break
+
+                                    # Search right through consecutive bridge tiles to find ground
+                                    right_walkable = False
+                                    search_x = x + 1
+                                    while search_x < len(row):
+                                        search_char = row[search_x] if isinstance(row, str) else row[search_x]
+                                        if search_char == '&':
+                                            search_x += 1
+                                        elif search_char in ['.', '~']:
+                                            # Found walkable ground - check elevation
+                                            if search_x < len(raw_tiles[y]):
+                                                search_tile = raw_tiles[y][search_x]
+                                                if search_tile and len(search_tile) >= 4:
+                                                    search_elev = search_tile[3] if len(search_tile) > 3 else 0
+                                                    if search_elev == start_elevation:
+                                                        right_walkable = True
+                                            break
+                                        else:
+                                            break
+
+                                    has_ground_path = left_walkable and right_walkable
+
+                                    # Only block if NO ground path underneath
+                                    if not has_ground_path:
+                                        blocked.add(pos)
+                                # Block cycling road if at different elevation (not ladder, not bridge with underpass)
+                                else:
                                     blocked.add(pos)
 
         # Add NPC/object positions as blocked (from porymap objects)
@@ -611,12 +799,12 @@ class Pathfinder:
         1. One-way ledges: can only move in the direction of the ledge
         2. Elevation differences: cannot move between tiles at different elevations
            unless there's a special behavior (ledge, slide, stairs, etc.) connecting them
-        
+
         Args:
             from_pos: Source position (x, y)
             to_pos: Destination position (x, y)
             map_data: Map data dictionary with grid and optionally raw_tiles
-            
+
         Returns:
             True if movement is valid, False otherwise
         """
@@ -624,24 +812,39 @@ class Pathfinder:
             return True
 
         grid = map_data['grid']
-        
+
         # Check bounds
         to_y, to_x = to_pos[1], to_pos[0]  # grid is [y][x]
         from_y, from_x = from_pos[1], from_pos[0]
-        
+
         if to_y < 0 or to_y >= len(grid) or to_x < 0 or to_x >= len(grid[0]):
             return False
         if from_y < 0 or from_y >= len(grid) or from_x < 0 or from_x >= len(grid[0]):
             return False
-        
+
         # Get symbol at destination
         dest_symbol = grid[to_y][to_x]
         from_symbol = grid[from_y][from_x]
-        
+
         # Calculate movement direction
         dx = to_pos[0] - from_pos[0]  # positive = moving east, negative = moving west
         dy = to_pos[1] - from_pos[1]  # positive = moving south, negative = moving north
-        
+
+        # ========================================================================
+        # CRITICAL: Trust the filtered grid from state_formatter
+        # ========================================================================
+        # If both tiles are marked as walkable in the grid, trust the grid filtering
+        # which already handled elevation connectivity. This allows pathfinding through
+        # ladders and slopes that connect different elevations.
+        # ========================================================================
+        walkable_symbols = ['.', '~', 'S', 'D', '←', '→', '↑', '↓', '&']
+        both_walkable = from_symbol in walkable_symbols and dest_symbol in walkable_symbols
+
+        # Skip elevation blocking if both tiles are walkable - trust the filtered grid
+        if both_walkable:
+            # Still need to handle ledge directionality and cycling road patterns below
+            # but skip the elevation difference blocking
+            pass
         # ========================================================================
         # Elevation Checking Logic (Re-enabled 2025-12-15 for bridges)
         # ========================================================================
@@ -651,8 +854,7 @@ class Pathfinder:
         # This prevents pathfinding through bridges (e.g., Cycling Road on Route 110
         # at elevation 3) while the player is on the ground underneath (elevation 0).
         # ========================================================================
-
-        if 'raw_tiles' in map_data:
+        elif 'raw_tiles' in map_data:
             raw_tiles = map_data['raw_tiles']
             try:
                 # Get elevation from raw tiles
@@ -669,85 +871,88 @@ class Pathfinder:
 
                     # Check if elevations differ (ANY difference, not just >= 3)
                     if from_elevation != to_elevation:
+                        # Skip elevation check for cycling road tiles - they have special handling later
+                        if from_symbol == '&' or dest_symbol == '&':
+                            pass  # Let cycling road special handling deal with it
                         # Only allow elevation changes through valid connectors:
                         # 1. Destination is stairs/door/warp (check both symbol AND behavior)
                         # 2. Source is stairs/door (exiting to different elevation)
                         # 3. Destination is a ledge (one-way jump down)
+                        else:
+                            # Check if destination tile has stair/ladder/door behavior
+                            # Tiles can be walkable '.' but still be stairs based on behavior
+                            to_behavior = to_tile[1] if len(to_tile) > 1 else 0
+                            from_behavior = from_tile[1] if len(from_tile) > 1 else 0
 
-                        # Check if destination tile has stair/ladder/door behavior
-                        # Tiles can be walkable '.' but still be stairs based on behavior
-                        to_behavior = to_tile[1] if len(to_tile) > 1 else 0
-                        from_behavior = from_tile[1] if len(from_tile) > 1 else 0
+                            # Get behavior names
+                            to_behavior_name = ""
+                            from_behavior_name = ""
+                            try:
+                                from pokemon_env.enums import MetatileBehavior
+                                if isinstance(to_behavior, int):
+                                    to_behavior_name = MetatileBehavior(to_behavior).name
+                                if isinstance(from_behavior, int):
+                                    from_behavior_name = MetatileBehavior(from_behavior).name
+                            except:
+                                pass
 
-                        # Get behavior names
-                        to_behavior_name = ""
-                        from_behavior_name = ""
-                        try:
-                            from pokemon_env.enums import MetatileBehavior
-                            if isinstance(to_behavior, int):
-                                to_behavior_name = MetatileBehavior(to_behavior).name
-                            if isinstance(from_behavior, int):
-                                from_behavior_name = MetatileBehavior(from_behavior).name
-                        except:
-                            pass
+                            # Check if destination has stair/ladder/door behavior
+                            is_dest_connector = (
+                                dest_symbol in ['S', 'D'] or
+                                "LADDER" in to_behavior_name or
+                                "STAIRS" in to_behavior_name or
+                                "DOOR" in to_behavior_name or
+                                "WARP" in to_behavior_name
+                            )
 
-                        # Check if destination has stair/ladder/door behavior
-                        is_dest_connector = (
-                            dest_symbol in ['S', 'D'] or
-                            "LADDER" in to_behavior_name or
-                            "STAIRS" in to_behavior_name or
-                            "DOOR" in to_behavior_name or
-                            "WARP" in to_behavior_name
-                        )
+                            # Check if source has stair/ladder/door behavior
+                            is_source_connector = (
+                                from_symbol in ['S', 'D'] or
+                                "LADDER" in from_behavior_name or
+                                "STAIRS" in from_behavior_name or
+                                "DOOR" in from_behavior_name or
+                                "WARP" in from_behavior_name
+                            )
 
-                        # Check if source has stair/ladder/door behavior
-                        is_source_connector = (
-                            from_symbol in ['S', 'D'] or
-                            "LADDER" in from_behavior_name or
-                            "STAIRS" in from_behavior_name or
-                            "DOOR" in from_behavior_name or
-                            "WARP" in from_behavior_name
-                        )
+                            # Allow movement if destination is a warp/door/stairs (symbol or behavior)
+                            if is_dest_connector:
+                                logger.debug(f"Allowing movement to stairs/door/ladder: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (behavior: {to_behavior_name})")
+                                return True  # Warps/doors/stairs/ladders explicitly connect elevations
 
-                        # Allow movement if destination is a warp/door/stairs (symbol or behavior)
-                        if is_dest_connector:
-                            logger.debug(f"Allowing movement to stairs/door/ladder: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (behavior: {to_behavior_name})")
-                            return True  # Warps/doors/stairs/ladders explicitly connect elevations
+                            # Allow movement if SOURCE is stairs/door/ladder (moving away from connector to different elevation)
+                            if is_source_connector:
+                                logger.debug(f"Allowing movement from stairs/door/ladder: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (behavior: {from_behavior_name})")
+                                return True  # Can exit stairs/doors/ladders to any elevation
 
-                        # Allow movement if SOURCE is stairs/door/ladder (moving away from connector to different elevation)
-                        if is_source_connector:
-                            logger.debug(f"Allowing movement from stairs/door/ladder: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (behavior: {from_behavior_name})")
-                            return True  # Can exit stairs/doors/ladders to any elevation
+                            # Allow movement if it's a directional ledge (one-way jump down)
+                            if dest_symbol in ['→', '←', '↑', '↓', '↗', '↖', '↘', '↙']:
+                                logger.debug(f"Allowing movement to ledge: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation}")
+                                return True  # Ledges explicitly allow elevation changes
 
-                        # Allow movement if it's a directional ledge (one-way jump down)
-                        if dest_symbol in ['→', '←', '↑', '↓', '↗', '↖', '↘', '↙']:
-                            logger.debug(f"Allowing movement to ledge: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation}")
-                            return True  # Ledges explicitly allow elevation changes
+                            # Allow movement between adjacent walkable tiles ONLY through E0 connector tiles
+                            # Pokemon uses E0 tiles as invisible stairs between elevation areas
+                            # ALL elevation changes between non-E0 tiles must be blocked
+                            walkable_behaviors = ['NORMAL', 'MOUNTAIN_TOP', 'INDOOR', 'CAVE', 'TALL_GRASS', 'LONG_GRASS', 'SHORT_GRASS']
+                            both_walkable = any(b in from_behavior_name for b in walkable_behaviors) and any(b in to_behavior_name for b in walkable_behaviors)
+                            both_walkable_symbols = dest_symbol in ['.', '~'] and from_symbol in ['.', '~']
 
-                        # Allow movement between adjacent walkable tiles ONLY through E0 connector tiles
-                        # Pokemon uses E0 tiles as invisible stairs between elevation areas
-                        # ALL elevation changes between non-E0 tiles must be blocked
-                        walkable_behaviors = ['NORMAL', 'MOUNTAIN_TOP', 'INDOOR', 'CAVE', 'TALL_GRASS', 'LONG_GRASS', 'SHORT_GRASS']
-                        both_walkable = any(b in from_behavior_name for b in walkable_behaviors) and any(b in to_behavior_name for b in walkable_behaviors)
-                        both_walkable_symbols = dest_symbol in ['.', '~'] and from_symbol in ['.', '~']
+                            if both_walkable and both_walkable_symbols:
+                                elev_diff = to_elevation - from_elevation  # Positive = going up, negative = going down
 
-                        if both_walkable and both_walkable_symbols:
-                            elev_diff = to_elevation - from_elevation  # Positive = going up, negative = going down
+                                # ONLY allow elevation changes if one tile is E0 (connector/stair)
+                                if from_elevation == 0 or to_elevation == 0:
+                                    logger.debug(f"Allowing E0 connector transition: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (Δ{elev_diff:+d})")
+                                    return True
 
-                            # ONLY allow elevation changes if one tile is E0 (connector/stair)
-                            if from_elevation == 0 or to_elevation == 0:
-                                logger.debug(f"Allowing E0 connector transition: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (Δ{elev_diff:+d})")
-                                return True
+                                # Block ALL other elevation changes between non-E0 tiles
+                                # This includes E3->E4, E4->E3, E3->E1, etc.
+                                # Must use E0 connector tiles as stairs
+                                logger.info(f"🚫 Blocking non-E0 elevation change: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (Δ{elev_diff:+d}) - must use E0 stairs")
+                                return False
 
-                            # Block ALL other elevation changes between non-E0 tiles
-                            # This includes E3->E4, E4->E3, E3->E1, etc.
-                            # Must use E0 connector tiles as stairs
-                            logger.info(f"🚫 Blocking non-E0 elevation change: ({from_x}, {from_y}) E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation} (Δ{elev_diff:+d}) - must use E0 stairs")
+                            # Block all other movement between different elevations
+                            logger.info(f"🚫 Blocking elevation change: ({from_x}, {from_y}) '{from_symbol}' E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation}")
                             return False
-
-                        # Block all other movement between different elevations
-                        logger.info(f"🚫 Blocking elevation change: ({from_x}, {from_y}) '{from_symbol}' E{from_elevation} -> ({to_x}, {to_y}) E{to_elevation}")
-                        return False
             except (IndexError, TypeError, AttributeError) as e:
                 # If we can't get elevation data, fall through to symbol-based checks
                 logger.debug(f"Could not check elevation: {e}")
@@ -756,7 +961,7 @@ class Pathfinder:
         # Cycling road (&) - special handling for cross-elevation movement
         # When moving between different elevations (ground <-> bridge):
         #   - Allow horizontal movement (crossing under/over the bridge)
-        #   - Allow vertical movement ONLY if there's a '.' tile adjacent (left/right) to the & tile
+        #   - Allow vertical movement ONLY if there's a ground path pattern (. & & & .)
         #     (indicating you're on the ground path underneath, not trying to climb onto the bridge)
         # When on the same elevation (e.g., both on bridge), allow all directions
         if (from_symbol == '&' or dest_symbol == '&') and 'raw_tiles' in map_data:
@@ -774,28 +979,59 @@ class Pathfinder:
                         # Horizontal movement always allowed (crossing under/over the bridge)
                         if dx != 0:  # Moving horizontally
                             pass  # Allow
-                        # Vertical movement only allowed if there's a '.' adjacent to the & tile
+                        # Vertical movement only allowed if there's a ground path pattern
                         elif dx == 0:  # Trying to move vertically
                             # Check which tile is the & tile
                             if from_symbol == '&':
                                 check_x, check_y = from_x, from_y
+                                player_elev = to_elev  # Moving from bridge, player at destination elevation
                             else:  # dest_symbol == '&'
                                 check_x, check_y = to_x, to_y
+                                player_elev = from_elev  # Moving to bridge, player at source elevation
 
-                            # Check left and right neighbors for '.' tiles
-                            has_ground_adjacent = False
-                            if 0 <= check_y < len(grid):
-                                # Check left
-                                if check_x > 0 and check_x - 1 < len(grid[check_y]):
-                                    if grid[check_y][check_x - 1] == '.':
-                                        has_ground_adjacent = True
-                                # Check right
-                                if check_x + 1 < len(grid[check_y]):
-                                    if grid[check_y][check_x + 1] == '.':
-                                        has_ground_adjacent = True
+                            # Check for . & & & . pattern (ground path underneath bridge)
+                            # Search left through consecutive bridge tiles to find ground
+                            left_walkable = False
+                            search_x = check_x - 1
+                            while search_x >= 0 and search_x < len(grid[check_y]):
+                                search_char = grid[check_y][search_x]
+                                if search_char == '&':
+                                    search_x -= 1
+                                elif search_char in ['.', '~']:
+                                    # Found walkable ground - check elevation
+                                    if search_x < len(raw_tiles[check_y]):
+                                        search_tile = raw_tiles[check_y][search_x]
+                                        if search_tile and len(search_tile) >= 4:
+                                            search_elev = search_tile[3] if len(search_tile) > 3 else 0
+                                            if search_elev == player_elev:
+                                                left_walkable = True
+                                    break
+                                else:
+                                    break
 
-                            # Block vertical movement if no ground tile adjacent
-                            if not has_ground_adjacent:
+                            # Search right through consecutive bridge tiles to find ground
+                            right_walkable = False
+                            search_x = check_x + 1
+                            while search_x < len(grid[check_y]):
+                                search_char = grid[check_y][search_x]
+                                if search_char == '&':
+                                    search_x += 1
+                                elif search_char in ['.', '~']:
+                                    # Found walkable ground - check elevation
+                                    if search_x < len(raw_tiles[check_y]):
+                                        search_tile = raw_tiles[check_y][search_x]
+                                        if search_tile and len(search_tile) >= 4:
+                                            search_elev = search_tile[3] if len(search_tile) > 3 else 0
+                                            if search_elev == player_elev:
+                                                right_walkable = True
+                                    break
+                                else:
+                                    break
+
+                            has_ground_path = left_walkable and right_walkable
+
+                            # Block vertical movement if no ground path underneath
+                            if not has_ground_path:
                                 return False
             except (IndexError, TypeError, AttributeError):
                 pass  # Fall through if we can't get elevation data

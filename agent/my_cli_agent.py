@@ -1,2387 +1,378 @@
 #!/usr/bin/env python3
-"""
-My Custom CLI Agent for Pokemon Emerald
-Based on the existing CLIAgent but with custom modifications.
-Uses Gemini API (or VertexAI) directly with MCP tools exposed as function declarations.
-Maintains conversation history with automatic compaction over time.
-"""
-
 import os
 import sys
 import time
 import json
 import logging
 import requests
+import base64
+import io
+import threading
+import re
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
 import numpy as np
+from PIL import Image
 
-# Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
 import google.generativeai as genai
-
-# Local imports
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
 from utils.vlm import VLM
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 class MCPToolAdapter:
-    """Adapter to call MCP server tools via HTTP."""
-
     def __init__(self, server_url: str):
         self.server_url = server_url
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
-        """Call an MCP tool via HTTP request to the game server."""
         try:
-            # Map tool names to server endpoints
             endpoint_map = {
-                # Pokemon MCP tools
                 "get_game_state": "/mcp/get_game_state",
                 "press_buttons": "/mcp/press_buttons",
-                "navigate_to": "/mcp/navigate_to", # Modified by Tersoo
+                "navigate_to": "/mcp/navigate_to",
                 "add_knowledge": "/mcp/add_knowledge",
                 "search_knowledge": "/mcp/search_knowledge",
                 "get_knowledge_summary": "/mcp/get_knowledge_summary",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
-                # Created by Tersoo
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
-
-                # Baseline MCP tools (file/shell/web)
-                "read_file": "/mcp/read_file",
-                "write_file": "/mcp/write_file",
-                "list_directory": "/mcp/list_directory",
-                "glob": "/mcp/glob",
-                "search_file_content": "/mcp/search_file_content",
-                "replace": "/mcp/replace",
-                "read_many_files": "/mcp/read_many_files",
-                "run_shell_command": "/mcp/run_shell_command",
-                "web_fetch": "/mcp/web_fetch",
-                "google_web_search": "/mcp/google_web_search",
                 "save_memory": "/mcp/save_memory",
             }
-
             endpoint = endpoint_map.get(tool_name)
             if not endpoint:
                 return {"success": False, "error": f"Unknown tool: {tool_name}"}
-
             url = f"{self.server_url}{endpoint}"
             logger.info(f"🔧 Calling MCP tool: {tool_name}")
-            logger.debug(f"   URL: {url}")
-
-            # Log arguments, but exclude large base64 data
-            args_for_log = {k: f"<{len(v)} bytes>" if k == "screenshot_base64" and isinstance(v, str) and len(v) > 100 else v
-                           for k, v in arguments.items()}
-            logger.info(f"   Args: {args_for_log}")
-
             response = requests.post(url, json=arguments, timeout=30)
             response.raise_for_status()
-
-            result = response.json()
-            logger.info(f"✅ Tool {tool_name} completed")
-
-            # Special handling for get_game_state - print the actual formatted text
-            if tool_name == "get_game_state" and result.get("success") and "state_text" in result:
-                logger.info("   Game State:")
-                print("\n" + "="*70)
-                print(result["state_text"])
-                print("="*70 + "\n")
-                if "screenshot_base64" in result:
-                    logger.info(f"   Screenshot: <{len(result['screenshot_base64'])} bytes>")
-            else:
-                # Log result, but exclude large base64 data
-                result_for_log = {k: f"<{len(v)} bytes>" if k == "screenshot_base64" and isinstance(v, str) and len(v) > 100 else v
-                                 for k, v in result.items()}
-                logger.info(f"   Result: {result_for_log}")
-            return result
-
+            return response.json()
         except Exception as e:
             logger.error(f"❌ Tool {tool_name} failed: {e}")
             return {"success": False, "error": str(e)}
 
 
 class MyCLIAgent:
-    """My Custom CLI Agent using Gemini API directly with MCP tools."""
-
     def __init__(
         self,
-        server_url: str = "http://localhost:8000",
-        model: str = "gemini-2.5-flash",
-        backend: str = "gemini",
-        max_steps: Optional[int] = None,
-        system_instructions_file: str = None,  # Will be set based on optimization flag
-        max_context_chars: int = 100000,  # ~25k tokens for gemini-2.5-flash
-        target_context_chars: int = 50000,  # Compact down to this when exceeded
-        enable_prompt_optimization: bool = False,
-        optimization_frequency: int = 10
+        server_url="http://localhost:8000",
+        model="gemini-2.5-flash",
+        backend="gemini",
+        max_steps=None,
+        system_instructions_file="POKEAGENT.md",
+        max_context_chars=100000,
+        target_context_chars=50000,
+        enable_prompt_optimization=False,
+        optimization_frequency=10,
     ):
         print(f"🚀 Initializing MyCLIAgent with backend={backend}, model={model}, server={server_url}")
-        self.server_url = server_url
-        self.model = model
-        self.backend = backend
-        self.max_steps = max_steps
-        self.step_count = 0
-        self.max_context_chars = max_context_chars
-        self.target_context_chars = target_context_chars
-        self.optimization_enabled = enable_prompt_optimization
-        self.optimization_frequency = optimization_frequency
-
-        # Conversation history for tracking and compaction
-        self.conversation_history = []
-
-        # Recent function call results to add to next step's context
-        # Format: [(function_name, result_json_string, timestamp), ...]
+        self.server_url, self.model, self.backend, self.max_steps = server_url, model, backend, max_steps
+        self.step_count, self.max_context_chars, self.target_context_chars = 0, max_context_chars, target_context_chars
+        self.optimization_enabled, self.optimization_frequency = enable_prompt_optimization, optimization_frequency
+        self.conversation_history, self.frame_buffer, self.max_frame_buffer_size = [], [], 15
+        self.frame_buffer_lock, self.sampling_interval, self.stop_sampling = threading.Lock(), 1.0, threading.Event()
         self.recent_function_results = []
-
-        # Determine which system instructions file to use
-        if system_instructions_file is None:
-            if self.optimization_enabled:
-                system_instructions_file = "system_prompt.md"  # Lean: just tools + core objective
-            else:
-                system_instructions_file = "POKEAGENT.md"  # Full: everything included
-
-        # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
-
-        # Initialize MCP tool adapter
         self.mcp_adapter = MCPToolAdapter(server_url)
-
-        # Initialize VLM for ALL backends (unified interface)
-        # Create tool declarations for function calling
         self.tools = self._create_tool_declarations()
         self.vlm = VLM(
-            backend=self.backend,
-            model_name=self.model,
-            tools=self.tools,
-            system_instruction=self.system_instructions
+            backend=self.backend, model_name=self.model, tools=self.tools, system_instruction=self.system_instructions
         )
-        print(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
-        print(f"✅ {len(self.tools)} tools available")
-        print(f"✅ System instructions loaded ({len(self.system_instructions)} chars)")
-
-        # Initialize LLM logger
-        from utils.llm_logger import get_llm_logger
         self.llm_logger = get_llm_logger()
-        
-        # Initialize prompt optimizer if enabled
-        self.prompt_optimizer = None
-        if self.optimization_enabled:
-            from utils.run_data_manager import get_run_data_manager
-            from utils.prompt_optimizer import create_prompt_optimizer
-            
-            run_manager = get_run_data_manager()
-            if run_manager:
-                self.prompt_optimizer = create_prompt_optimizer(
-                    vlm=self.vlm,
-                    run_data_manager=run_manager,
-                    base_prompt_path="base_prompt.md"
-                )
-                print(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
-            else:
-                logger.warning("⚠️ Prompt optimization requested but run_data_manager not available")
-                self.optimization_enabled = False
+        self.sampling_thread = threading.Thread(target=self._sample_frames_loop, daemon=True)
+        self.sampling_thread.start()
 
-    def _load_system_instructions(self, filename: str) -> str:
-        """Load system instructions from file."""
-        filepath = Path(__file__).parent.parent / filename
-        if not filepath.exists():
-            logger.warning(f"System instructions file not found: {filepath}")
-            return "You are an AI agent playing Pokemon Emerald. Use the available tools to progress through the game."
+    def _load_system_instructions(self, f):
+        p = Path(__file__).parent.parent / f
+        return p.read_text() if p.exists() else "AI agent playing Pokemon Emerald."
 
-        with open(filepath, 'r') as f:
-            content = f.read()
+    def _load_base_prompt(self):
+        p = Path(__file__).parent.parent / "base_prompt.md"
+        return p.read_text() if p.exists() else "Make intelligent decisions."
 
-        logger.info(f"✅ Loaded system instructions from {filename} ({len(content)} chars)")
-        return content
-    
-    def _load_base_prompt(self) -> str:
-        """Load base prompt (strategic guidance) from file.
-        
-        This prompt can be optimized by the prompt optimizer.
-        If prompt optimization is enabled, this will load the optimized version.
-        """
-        # Check if we have an optimizer with a current prompt
-        if hasattr(self, 'prompt_optimizer') and self.prompt_optimizer:
-            prompt = self.prompt_optimizer.get_current_prompt()
-            logger.debug(f"📋 Loaded base prompt from optimizer ({len(prompt)} chars)")
-            return prompt
-        
-        # Otherwise load from file
-        filepath = Path(__file__).parent.parent / "base_prompt.md"
-        if not filepath.exists():
-            logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
-            return """# Strategic Guidance
-## Make intelligent decisions to progress through Pokemon Emerald.
-- Think step-by-step
-- Use tools effectively
-- Store knowledge
-- Complete objectives"""
-        
-        with open(filepath, 'r') as f:
-            content = f.read()
-        
-        logger.debug(f"📋 Loaded base prompt from file ({len(content)} chars)")
-        return content
+    def _sample_frames_loop(self):
+        while not self.stop_sampling.is_set():
+            try:
+                r = requests.get(f"{self.server_url}/screenshot", timeout=2)
+                if r.status_code == 200:
+                    b64 = r.json().get("screenshot_base64")
+                    if b64:
+                        img = Image.open(io.BytesIO(base64.b64decode(b64)))
+                        with self.frame_buffer_lock:
+                            self.frame_buffer.append(img)
+                            if len(self.frame_buffer) > self.max_frame_buffer_size:
+                                self.frame_buffer.pop(0)
+                time.sleep(self.sampling_interval)
+            except:
+                time.sleep(2)
 
     def _create_tool_declarations(self):
-        """Create Gemini function declarations for ALL MCP tools (Pokemon + Baseline)."""
-
-        # Use Gemini's declaration format with proper types
-        import google.generativeai.types as genai_types
-
-        tools = [
-            # ============================================================
-            # POKEMON MCP TOOLS
-            # ============================================================
-
-            # Game Control Tools
+        return [
             {
                 "name": "get_game_state",
-                "description": "Get the current game state including player position, party Pokemon, map, items, and a screenshot. Use this to understand where you are and what you can do.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {},
-                    "required": []
-                }
+                "description": "Get state",
+                "parameters": {"type_": "OBJECT", "properties": {}, "required": []},
             },
             {
                 "name": "press_buttons",
-                "description": "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT. Use WAIT to observe without pressing any button.",
+                "description": "Press buttons",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "buttons": {
-                            "type_": "ARRAY",
-                            "items": {"type_": "STRING"},
-                            "description": "List of buttons to press (e.g., ['A'], ['UP'])"
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "Explain why you are pressing these buttons"
-                        }
+                        "buttons": {"type_": "ARRAY", "items": {"type_": "STRING"}},
+                        "reasoning": {"type_": "STRING"},
                     },
-                    "required": ["buttons", "reasoning"]
-                }
+                    "required": ["buttons", "reasoning"],
+                },
             },
             {
                 "name": "navigate_to",
-                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium', 'high', or 'extreme' to explore alternative paths.",
+                "description": "Navigate",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "x": {"type_": "INTEGER", "description": "Target X coordinate"},
-                        "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
-                        "variance": {
-                            "type_": "STRING", 
-                            "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if very stuck), 'extreme' (8-step variation, use as last resort). Default: 'none'",
-                            "enum": ["none", "low", "medium", "high", "extreme"]
-                        },
-                        "reason": {"type_": "STRING", "description": "Why you are navigating here"}
+                        "x": {"type_": "INTEGER"},
+                        "y": {"type_": "INTEGER"},
+                        "variance": {"type_": "STRING"},
+                        "reason": {"type_": "STRING"},
                     },
-                    "required": ["x", "y", "variance", "reason"]
-                }
+                    "required": ["x", "y", "variance", "reason"],
+                },
             },
             {
                 "name": "complete_direct_objective",
-                "description": "Complete the current direct objective and advance to the next one. Use this when you have successfully completed the current objective's task.",
+                "description": "Complete objective",
                 "parameters": {
                     "type_": "OBJECT",
-                    "properties": {
-                        "reasoning": {"type_": "STRING", "description": "Brief explanation of why the current direct objective is complete"}
-                    },
-                    "required": ["reasoning"]
-                }
+                    "properties": {"reasoning": {"type_": "STRING"}},
+                    "required": ["reasoning"],
+                },
             },
-            # Knowledge Base Tools
-            {
-                "name": "add_knowledge",
-                "description": "Store important discoveries in your knowledge base.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "category": {
-                            "type_": "STRING",
-                            "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
-                            "description": "Category of knowledge"
-                        },
-                        "title": {"type_": "STRING", "description": "Short title"},
-                        "content": {"type_": "STRING", "description": "Detailed content"},
-                        "location": {"type_": "STRING", "description": "Map name (optional)"},
-                        "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
-                        "importance": {
-                            "type_": "INTEGER",
-                            "description": "Importance 1-5",
-                        }
-                    },
-                    "required": ["category", "title", "content", "importance"]
-                }
-            },
-            {
-                "name": "search_knowledge",
-                "description": "Search your knowledge base for stored information.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "category": {"type_": "STRING", "description": "Category (optional)"},
-                        "query": {"type_": "STRING", "description": "Text to search (optional)"},
-                        "location": {"type_": "STRING", "description": "Map name filter (optional)"},
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"}
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "get_knowledge_summary",
-                "description": "Get a summary of the most important things you've learned.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance (default 3)"}
-                    },
-                    "required": []
-                }
-            },
-
-            # # Wiki Tools
-            {
-                "name": "lookup_pokemon_info",
-                "description": "Look up Pokemon, moves, locations, items, NPCs from wikis (Bulbapedia, Serebii, PokemonDB, Marriland).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "topic": {"type_": "STRING", "description": "What to search (e.g., 'Mudkip', 'Route_101')"},
-                        "source": {
-                            "type_": "STRING",
-                            "enum": ["bulbapedia", "serebii", "pokemondb", "marriland"],
-                            "description": "Wiki source (default: bulbapedia)"
-                        }
-                    },
-                    "required": ["topic"]
-                }
-            },
-            {
-                "name": "list_wiki_sources",
-                "description": "List available Pokemon wiki sources.",
-                "parameters": {"type_": "OBJECT", "properties": {}, "required": []}
-            },
-            {
-                "name": "get_walkthrough",
-                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "part": {
-                            "type_": "INTEGER",
-                            "description": "Walkthrough part 1-21",
-                        }
-                    },
-                    "required": ["part"]
-                }
-            },
-            {
-                "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() and get_progress_summary() to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition at a medium level of granularity (not too specific like \"walk_left_to_oldale_town\" but not too vague either like \"complete_route_102\"). This function will also increment the objective index to the first new objective created.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "objectives": {
-                            "type_": "ARRAY",
-                            "items": {
-                                "type_": "OBJECT",
-                                "properties": {
-                                    "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
-                                    "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
-                                    "action_type": {
-                                        "type_": "STRING",
-                                        "enum": ["navigate", "interact", "battle", "wait"],
-                                        "description": "Type of action"
-                                    },
-                                    "target_location": {"type_": "STRING", "description": "Target location/map name"},
-                                    "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
-                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
-                                },
-                                "required": ["id", "description", "action_type"]
-                            },
-                            "description": "Array of exactly 3 objectives to create next"
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
-                        }
-                    },
-                    "required": ["objectives", "reasoning"]
-                }
-            },
-            {
-                "name": "get_progress_summary",
-                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary. Use this when a sequence completes to understand what you've accomplished before creating next objectives.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {},
-                    "required": []
-                }
-            },
-            # ============================================================
-            # BASELINE MCP TOOLS (File/Shell/Web)
-            # ============================================================
-
-            # {
-            #     "name": "read_file",
-            #     "description": "Read file contents. Supports text, images, PDFs. Returns content or base64 for binary files.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "file_path": {"type_": "STRING", "description": "Absolute path to file"}
-            #         },
-            #         "required": ["file_path"]
-            #     }
-            # },
-            # {
-            #     "name": "write_file",
-            #     "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
-            #             "content": {"type_": "STRING", "description": "File content"}
-            #         },
-            #         "required": ["file_path", "content"]
-            #     }
-            # },
-            # {
-            #     "name": "list_directory",
-            #     "description": "List files and directories at path.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "path": {"type_": "STRING", "description": "Directory path"}
-            #         },
-            #         "required": ["path"]
-            #     }
-            # },
-            # {
-            #     "name": "glob",
-            #     "description": "Find files matching glob pattern (e.g., '**/*.py', 'src/*.md').",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "pattern": {"type_": "STRING", "description": "Glob pattern"},
-            #             "path": {"type_": "STRING", "description": "Starting directory (optional)"}
-            #         },
-            #         "required": ["pattern"]
-            #     }
-            # },
-            # {
-            #     "name": "search_file_content",
-            #     "description": "Search files for regex pattern. Returns matching lines.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "pattern": {"type_": "STRING", "description": "Regex pattern"},
-            #             "path": {"type_": "STRING", "description": "Directory to search"},
-            #             "file_pattern": {"type_": "STRING", "description": "File glob (e.g., '*.py')"}
-            #         },
-            #         "required": ["pattern", "path"]
-            #     }
-            # },
-            # {
-            #     "name": "run_shell_command",
-            #     "description": "Run shell command (42 safe commands allowed: ls, cat, grep, python, npm, etc. NO git, rm, sudo).",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "command": {"type_": "STRING", "description": "Shell command"},
-            #             "description": {"type_": "STRING", "description": "What this command does"}
-            #         },
-            #         "required": ["command", "description"]
-            #     }
-            # },
-            # {
-            #     "name": "web_fetch",
-            #     "description": "Fetch and parse web pages (up to 20 URLs). Extracts text content.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "prompt": {"type_": "STRING", "description": "Prompt with URLs and instructions"}
-            #         },
-            #         "required": ["prompt"]
-            #     }
-            # },
-            # {
-            #     "name": "google_web_search",
-            #     "description": "Search web using DuckDuckGo (privacy-friendly, no API key). Returns 10 results.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "query": {"type_": "STRING", "description": "Search query"}
-            #         },
-            #         "required": ["query"]
-            #     }
-            # },
-            # {
-            #     "name": "save_memory",
-            #     "description": "Save facts to remember across sessions (stored in .pokeagent_cache/cli/AGENT.md).",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "fact": {"type_": "STRING", "description": "Clear, self-contained fact"}
-            #         },
-            #         "required": ["fact"]
-            #     }
-            # },
         ]
 
-        logger.info(f"✅ Created {len(tools)} tool declarations (9 Pokemon + 11 Baseline)")
-        return tools
+    def _execute_function_call_by_name(self, n, a):
+        return json.dumps(self.mcp_adapter.call_tool(n, a))
 
-    def _execute_function_call_by_name(self, function_name: str, arguments: dict) -> str:
-        """Execute a function by name with given arguments and return result as JSON string."""
-        # Call the tool via MCP adapter
-        result = self.mcp_adapter.call_tool(function_name, arguments)
-        # Return as JSON string
-        return json.dumps(result, indent=2)
+    def _execute_function_call(self, fc):
+        return self._execute_function_call_by_name(fc.name, self._convert_protobuf_args(fc.args))
 
-    def _convert_protobuf_args(self, proto_args) -> dict:
-        """Convert protobuf arguments to JSON-serializable Python types.
+    def _convert_protobuf_args(self, pa):
+        return {k: (list(v) if hasattr(v, "__iter__") and not isinstance(v, (str, dict)) else v) for k, v in pa.items()}
 
-        This recursively converts RepeatedComposite, RepeatedScalar, and other
-        protobuf types to native Python lists and dicts.
-        """
-        arguments = {}
-        for key, value in proto_args.items():
-            # Convert protobuf types to native Python types
-            if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
-                # Check if it's a list-like type first (RepeatedComposite, RepeatedScalar)
-                if hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
-                    # It's a list/array - convert to Python list
-                    try:
-                        arguments[key] = list(value)
-                    except:
-                        arguments[key] = value
-                else:
-                    # It's a dict-like type - convert via dict
-                    try:
-                        arguments[key] = dict(value)
-                    except:
-                        arguments[key] = value
-            else:
-                arguments[key] = value
-        return arguments
-
-    def _execute_function_call(self, function_call) -> str:
-        """Execute a function call and return the result as JSON string."""
-        function_name = function_call.name
-
-        # navigate_to is now enabled with porymap ground truth pathfinding
-
-        # Parse arguments - convert protobuf types to native Python types
-        try:
-            arguments = self._convert_protobuf_args(function_call.args)
-        except Exception as e:
-            logger.error(f"Failed to parse function arguments: {e}")
-            return json.dumps({"success": False, "error": f"Invalid arguments: {e}"})
-
-        # Call the tool via MCP adapter
-        result = self.mcp_adapter.call_tool(function_name, arguments)
-
-        # Return as JSON string
-        return json.dumps(result, indent=2)
-
-    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None, player_coords: tuple = None):
-        """Add interaction to conversation history - ONLY stores LLM responses and actions."""
-        # CRITICAL: Do NOT store full prompts! They contain game state + screenshot + previous history
-        # Only store: LLM thinking (truncated), action taken, and player coordinates
-
-        # Strip whitespace from response to save tokens
-        response_stripped = response.strip() if response else ""
-
-        # CRITICAL SAFEGUARD: If response contains our prompt header, skip it entirely
-        # This means the LLM echoed back the prompt or we have corrupted data
-        if "You are an expert navigator and battle strategist" in response_stripped:
-            logger.warning(f"⚠️ Skipping corrupted history entry at step {self.step_count} (contains prompt echo)")
-            return  # Don't store corrupted data
-
-        entry = {
-            "step": self.step_count,
-            "llm_response": response_stripped,  # LLM thinking only, max 500 chars
-            "timestamp": time.time()
-        }
-
-        logger.debug(f"📝 Storing history entry for step {self.step_count}: {response_stripped[:100]}...")
-
-        # Extract action and action_details from tool_calls
-        if tool_calls:
-            last_call = tool_calls[-1]
-            entry["action"] = last_call.get("name", "unknown")
-            if action_details:
-                entry["action_details"] = action_details
-            elif last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get("args", {}):
-                variance = last_call['args'].get('variance', 'none')
-                entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
-            elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
-                entry["action_details"] = f"press_buttons({last_call['args']['buttons']})"
-            else:
-                entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
-
-        # Store player coordinates if available
-        if player_coords:
-            entry["player_coords"] = player_coords
-
-        self.conversation_history.append(entry)
-
-        # Keep only last 10 entries to prevent unbounded growth
+    def _add_to_history(self, p, r, tc=None, ad=None, pc=None):
+        self.conversation_history.append(
+            {"step": self.step_count, "llm_response": r, "action_details": ad, "player_coords": pc}
+        )
         if len(self.conversation_history) > 10:
-            self.conversation_history = self.conversation_history[-10:]
+            self.conversation_history.pop(0)
 
-        logger.debug(f"✅ History now has {len(self.conversation_history)} entries")
+    def _store_function_result_for_context(self, n, r):
+        self.recent_function_results.append({"name": n, "result": r})
+        if len(self.recent_function_results) > 3:
+            self.recent_function_results.pop(0)
 
-    def _calculate_context_size(self) -> int:
-        """Calculate total character count of conversation history."""
-        total_chars = 0
-        for entry in self.conversation_history:
-            total_chars += len(entry.get("prompt", ""))
-            total_chars += len(entry.get("response", ""))
-            # Also count tool call strings
-            for tool_call in entry.get("tool_calls", []):
-                total_chars += len(str(tool_call))
-        return total_chars
+    def _get_function_results_context(self):
+        return "\n".join([f"🔧 {r['name']}: {r['result'][:500]}" for r in self.recent_function_results])
 
-    def _format_history_for_display(self) -> str:
-        """Format conversation history for display."""
-        if not self.conversation_history:
-            return "No conversation history yet."
-
-        lines = [f"\n{'='*70}", "CONVERSATION HISTORY", '='*70]
-
-        for entry in self.conversation_history[-10:]:  # Show last 10
-            try:
-                lines.append(f"\nStep {entry['step']}:")
-                lines.append(f"  Prompt: {entry['prompt'][:100]}...")
-                if entry.get('tool_calls'):
-                    lines.append(f"  Tools called: {', '.join(t['name'] for t in entry['tool_calls'])}")
-                lines.append(f"  Response: {entry['response'][:100]}...")
-            except:
-                print("Error my_cli_agent.py L642")
-                continue
-
-        lines.append('='*70)
-        return '\n'.join(lines)
-
-    def check_prerequisites(self) -> bool:
-        """Check if prerequisites are met."""
-        # Check if API key is set (only required for Gemini backend)
-        if self.backend == "gemini" and not os.environ.get("GEMINI_API_KEY"):
-            logger.error("GEMINI_API_KEY environment variable not set")
-            return False
-
-        # Check if server is running
-        logger.info(f"Checking if game server is ready at {self.server_url}...")
-        max_retries = 5
-        retry_delay = 2
-
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(f"{self.server_url}/status", timeout=5)
-                if response.status_code == 200:
-                    logger.info(f"✅ Game server is ready")
-                    break
-            except requests.exceptions.RequestException as e:
-                if attempt < max_retries - 1:
-                    logger.info(f"⏳ Server not ready yet (attempt {attempt + 1}/{max_retries}), waiting {retry_delay}s...")
-                    time.sleep(retry_delay)
-                else:
-                    logger.error(f"Game server not running at {self.server_url}: {e}")
-                    return False
-
-        logger.info("✅ All prerequisites met")
-        return True
-
-    def _send_thinking_to_server(self, thinking_text: str, step_num: int):
-        """Send agent thinking to server for display in stream."""
+    def run_step(self, prompt, max_tool_calls=5, screenshot_b64=None):
         try:
-            if thinking_text:
-                logger.debug(f"Sending thinking to server ({len(thinking_text)} chars)")
-                response = requests.post(
-                    f"{self.server_url}/agent_step",
-                    json={
-                        "metrics": {},
-                        "thinking": thinking_text,
-                        "step": step_num
-                    },
-                    timeout=1
-                )
-                logger.debug(f"Server response: {response.status_code}")
-        except Exception as e:
-            logger.debug(f"Could not send thinking to server: {e}")
+            gs = self.mcp_adapter.call_tool("get_game_state", {})
+            loc = gs.get("location", "Unknown")
+            is_gym = "Gym" in loc or "GYM" in loc
+            logger.info(f"📍 Current location: {loc} (is_gym={is_gym})")
 
-    def run_step(self, prompt: str, max_tool_calls: int = 5, screenshot_b64: str = None) -> tuple[bool, str]:
-        """Run a single agent step.
+            at = [t for t in self.tools if t["name"] != "navigate_to"] if is_gym else self.tools
+            if is_gym:
+                logger.info(f"🚫 Disabled navigate_to tool for {loc}")
 
-        Args:
-            prompt: The prompt to send to Gemini
-            max_tool_calls: Maximum number of tool calls allowed per step (default: 5)
-            screenshot_b64: Optional base64-encoded screenshot to include with prompt
+            self.vlm.backend.tools = at
 
-        Returns:
-            Tuple of (success: bool, response: str)
-        """
-        try:
-            # Capture pre-state for trajectory logging
-            from utils.run_data_manager import get_run_data_manager
-            run_manager = get_run_data_manager()
-            
-            # DEBUG: Log run_manager availability
-            if not run_manager:
-                logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None - trajectory logging will be skipped")
-                # Try to initialize if not available
-                import os
-                run_id = os.environ.get("RUN_DATA_ID")
-                if run_id:
-                    logger.info(f"🔍 [DEBUG] Attempting to initialize run_manager with run_id: {run_id}")
-                    from utils.run_data_manager import initialize_run_data_manager
-                    run_manager = initialize_run_data_manager(run_id=run_id)
-                    if run_manager:
-                        logger.info(f"🔍 [DEBUG] Successfully initialized run_manager")
-                    else:
-                        logger.error(f"🔍 [DEBUG] Failed to initialize run_manager")
-                else:
-                    logger.warning(f"🔍 [DEBUG] RUN_DATA_ID environment variable not set")
-            else:
-                logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager available: {run_manager.run_id}")
-            
-            pre_state = None
-            if run_manager:
-                # Get current game state for pre-state snapshot
-                try:
-                    game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
-                    if isinstance(game_state_result, str):
-                        import json
-                        game_state_result = json.loads(game_state_result)
-                    if game_state_result.get("success"):
-                        raw_state = game_state_result.get("raw_state", {})
-                        pre_state = run_manager.create_state_snapshot(raw_state)
-                        logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: pre_state captured: {pre_state.get('location', 'Unknown')}")
-                    else:
-                        logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: get_game_state returned success=False")
-                except Exception as e:
-                    logger.error(f"🔍 [DEBUG] Step {self.step_count + 1}: Could not capture pre-state: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-            else:
-                logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None, skipping pre_state capture")
-            
-            logger.info(f"📤 Sending prompt to {self.backend}...")
-            logger.info(f"   Model: {self.model}")
-            # Don't log the full prompt - it's too long with game state
-            logger.info(f"   Prompt length: {len(prompt)} chars")
-            if screenshot_b64:
-                logger.info(f"   Including screenshot ({len(screenshot_b64)} bytes)")
-
-            tool_calls_made = []
-            reasoning_text = ""  # Capture any text reasoning before tool calls
-            enforcement_retry_count = 0  # Track how many times we've tried to enforce action tool
-            max_enforcement_retries = 3
-
-            # Track duration
-            start_time = time.time()
-            vlm_call_start = time.time()
-            try:
-                # Add timeout wrapper to prevent indefinite hangs
-                from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
-                
+            if hasattr(self.vlm.backend, "_setup_function_calling"):
+                self.vlm.backend._setup_function_calling()
+            with self.frame_buffer_lock:
+                frames = list(self.frame_buffer)
                 if screenshot_b64:
-                    import PIL.Image as PILImage
-                    import io
-                    import base64
-
-                    # Decode base64 to image
-                    image_data = base64.b64decode(screenshot_b64)
-                    image = PILImage.open(io.BytesIO(image_data))
-
-                    # CRITICAL: Validate frame before any VLM processing
-                    if image is None:
-                        logger.error("🚫 CRITICAL: run_step called with None image - cannot proceed")
-                        return False, "ERROR: No valid image provided"
-
-                    # Validate frame is a proper image
-                    if not (hasattr(image, 'save') or hasattr(image, 'shape')):
-                        logger.error(f"🚫 CRITICAL: run_step called with invalid image type {type(image)} - cannot proceed")
-                        return False, "ERROR: Invalid image type"
-
-                    # Additional PIL Image validation
-                    if hasattr(image, 'size'):
-                        width, height = image.size
-                        if width <= 0 or height <= 0:
-                            logger.error(f"🚫 CRITICAL: run_step called with invalid image size {width}x{height} - cannot proceed")
-                            return False, "ERROR: Invalid image dimensions"
-
-                    # Check for black frame (transition screen)
-                    if self._is_black_frame(image):
-                        logger.info("⏳ Black frame detected (likely a transition), waiting for next frame...")
-                        return True, "WAIT"  # Return success but with WAIT action
-
-                    # Define function after image is created and validated
-                    def call_vlm_with_image():
-                        return self.vlm.get_query(image, prompt, "CLI_Agent")
-                    
-                    # Use VLM with image - log start time for timeout detection
-                    # Use longer timeout for preview models which are much slower
-                    timeout = 180 if 'preview' in self.model or '3-pro' in self.model else 60
-                    logger.info(f"📡 Calling VLM API with image (prompt: {len(prompt)} chars, image: {len(screenshot_b64)} bytes)")
-                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to {timeout}s...")
-
-                    # Retry loop for timeouts
-                    max_retries = 3
-                    retry_count = 0
-                    response = None
-
-                    while retry_count < max_retries:
-                        # Execute with timeout (60s for fast models, 180s for preview models)
-                        executor = ThreadPoolExecutor(max_workers=1)
-                        future = None
+                    frames.append(Image.open(io.BytesIO(base64.b64decode(screenshot_b64))))
+            if not frames:
+                return False, "No frames"
+            if self._is_black_frame(frames[-1]):
+                return True, "WAIT"
+            res = self.vlm.get_query(frames, prompt, "CLI_Agent")
+            if self.backend == "gemini":
+                parts = res.candidates[0].content.parts if hasattr(res, "candidates") else []
+                for p in parts:
+                    if hasattr(p, "function_call"):
+                        fr = self._execute_function_call(p.function_call)
+                        self._store_function_result_for_context(p.function_call.name, fr)
                         try:
-                            future = executor.submit(call_vlm_with_image)
-                            response = future.result(timeout=timeout)
-                            vlm_duration = time.time() - vlm_call_start
-                            logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
-                            break  # Success - exit retry loop
-                        except FutureTimeoutError:
-                            retry_count += 1
-                            vlm_duration = time.time() - vlm_call_start
-                            logger.error(f"   ⏱️ VLM call TIMED OUT after {vlm_duration:.1f}s (attempt {retry_count}/{max_retries})")
-                            logger.error(f"   ⚠️  Abandoning timed-out thread and retrying immediately...")
-                            # Don't wait for the hung thread - immediately retry
-                            if retry_count >= max_retries:
-                                logger.error(f"   ❌ Max retries ({max_retries}) reached - giving up")
-                                raise TimeoutError(f"VLM call timed out after {max_retries} attempts")
-                        finally:
-                            # Always shutdown executor without waiting - critical to prevent hang
-                            executor.shutdown(wait=False)
-                else:
-                    # Define function for text-only call
-                    def call_vlm_with_text():
-                        return self.vlm.get_text_query(prompt, "CLI_Agent")
-                    
-                    # Use VLM with text only
-                    # Use longer timeout for preview models which are much slower
-                    timeout = 180 if 'preview' in self.model or '3-pro' in self.model else 60
-                    logger.info(f"📡 Calling VLM API with text only (prompt: {len(prompt)} chars)")
-                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to {timeout}s...")
-
-                    # Retry loop for timeouts
-                    max_retries = 3
-                    retry_count = 0
-                    response = None
-
-                    while retry_count < max_retries:
-                        # Execute with timeout (60s for fast models, 180s for preview models)
-                        executor = ThreadPoolExecutor(max_workers=1)
-                        future = None
-                        try:
-                            future = executor.submit(call_vlm_with_text)
-                            response = future.result(timeout=timeout)
-                            vlm_duration = time.time() - vlm_call_start
-                            logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
-                            break  # Success - exit retry loop
-                        except FutureTimeoutError:
-                            retry_count += 1
-                            vlm_duration = time.time() - vlm_call_start
-                            logger.error(f"   ⏱️ VLM call TIMED OUT after {vlm_duration:.1f}s (attempt {retry_count}/{max_retries})")
-                            logger.error(f"   ⚠️  Abandoning timed-out thread and retrying immediately...")
-                            # Don't wait for the hung thread - immediately retry
-                            if retry_count >= max_retries:
-                                logger.error(f"   ❌ Max retries ({max_retries}) reached - giving up")
-                                raise TimeoutError(f"VLM call timed out after {max_retries} attempts")
-                        finally:
-                            # Always shutdown executor without waiting - critical to prevent hang
-                            executor.shutdown(wait=False)
-                
-                # Determine if response is a GenerationResponse object (function calling) or string (text)
-                is_function_calling = hasattr(response, 'candidates')
-                
-            except KeyboardInterrupt:
-                # Re-raise KeyboardInterrupt so it can be handled at the run() level
-                vlm_duration = time.time() - vlm_call_start
-                logger.warning(f"⚠️ VLM call interrupted by user after {vlm_duration:.1f}s")
-                raise
-            except TimeoutError as e:
-                # This should never be reached now since we wait indefinitely on timeout
-                # But keep it for safety
-                vlm_duration = time.time() - vlm_call_start
-                logger.error(f"❌ VLM call TIMED OUT after {vlm_duration:.1f}s")
-                logger.error(f"   This should not be reached - execution should hang above")
-                return False, f"VLM API timeout after {vlm_duration:.1f}s: {str(e)}"
-            except Exception as e:
-                # Catch network errors, timeouts, API errors, etc.
-                vlm_duration = time.time() - vlm_call_start
-                error_type = type(e).__name__
-                error_msg = str(e)
-                logger.error(f"❌ VLM call failed after {vlm_duration:.1f}s")
-                logger.error(f"   Error type: {error_type}")
-                logger.error(f"   Error message: {error_msg[:500]}")
-                import traceback
-                logger.error(f"   Full traceback:")
-                traceback.print_exc()
-                # Return failure but don't crash - let the run loop handle retry
-                return False, f"VLM API error ({error_type}) after {vlm_duration:.1f}s: {error_msg[:200]}"
-
-            # Process response - handle function calls
-            # Limit the number of tool calls per step to prevent infinite loops
-            tool_call_count = 0
-            
-            # For VLM backends with native function calling support
-            if self.backend != "gemini":
-                # Handle native function calls from VLM backends (VertexAI, etc.)
-                function_calls_executed = self._handle_vertex_function_calls(
-                    response, tool_calls_made, tool_call_count, max_tool_calls
-                )
-                
-                # If function calls were found and executed, end the step
-                if function_calls_executed:
-                    # END THE STEP IMMEDIATELY after action execution
-                    duration = time.time() - start_time
-                    
-                    # Extract reasoning from the last tool call
-                    tool_reasoning = ""
-                    if tool_calls_made:
-                        last_tool_call = tool_calls_made[-1]
-                        try:
-                            if last_tool_call['name'] == "navigate_to" and "reason" in last_tool_call["args"]:
-                                tool_reasoning = last_tool_call["args"]["reason"]
-                            elif last_tool_call['name'] == "press_buttons" and "reasoning" in last_tool_call["args"]:
-                                tool_reasoning = last_tool_call["args"]["reasoning"]
-                        except Exception as e:
-                            logger.debug(f"Could not extract tool reasoning: {e}")
-                    
-                    # Build full response including reasoning + action summary
-                    full_response = self._extract_text_from_response(response)
-                    if tool_reasoning:
-                        if full_response:
-                            full_response += f"\n\n{tool_reasoning}"
-                        else:
-                            full_response = tool_reasoning
-                    
-                    if full_response:
-                        full_response += f"\n\nAction executed: {last_tool_call['name']}"
-                    else:
-                        full_response = f"Executed {last_tool_call['name']}"
-                    
-                    # Display the reasoning to user
-                    display_text = self._extract_text_from_response(response)
-                    if tool_reasoning:
-                        if display_text:
-                            display_text += f"\n\n{tool_reasoning}"
-                        else:
-                            display_text = tool_reasoning
-                    
-                    logger.info(f"✅ Step completed in {duration:.2f}s")
-                    logger.info(f"📝 Response: {display_text}")
-
-                    # Extract action details for better tracking
-                    action_taken = last_tool_call['name']
-                    action_details = ""
-                    if last_tool_call['name'] == "press_buttons" and "buttons" in last_tool_call["args"]:
-                        action_details = f"Pressed {last_tool_call['args']['buttons']}"
-                    elif last_tool_call['name'] == "navigate_to" and "x" in last_tool_call["args"] and "y" in last_tool_call["args"]:
-                        target_x = last_tool_call["args"]["x"]
-                        target_y = last_tool_call["args"]["y"]
-                        # Wait for actions to complete first, then get final position
-                        self._wait_for_actions_complete()
-                        final_pos = None
-                        # Get state to find final position after navigation completes
-                        final_state_result = self._execute_function_call_by_name("get_game_state", {})
-                        import json as json_module
-                        final_state_data = json_module.loads(final_state_result)
-                        if final_state_data.get("success"):
-                            player_pos = final_state_data.get("player_position", {})
-                            if player_pos:
-                                final_pos = (player_pos.get("x"), player_pos.get("y"))
-                        
-                        variance = last_tool_call.get('args', {}).get('variance', 'none')
-                        if final_pos:
-                            action_details = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_pos[0]}, {final_pos[1]})"
-                        else:
-                            action_details = f"navigate_to({target_x}, {target_y}, variance={variance})"
-                    elif last_tool_call['name'] == "complete_direct_objective":
-                        action_details = "Completed direct objective"
-                    else:
-                        action_details = f"Executed {last_tool_call['name']}"
-
-                    # Store in history
-                    self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details)
-                    
-                    # Log trajectory for this step
-                    if run_manager and pre_state:
-                        logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: Attempting to log trajectory (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
-                        self._log_trajectory_for_step(
-                            run_manager=run_manager,
-                            step_num=self.step_count + 1,  # Use step_count + 1 since we increment after
-                            pre_state=pre_state,
-                            prompt=prompt,
-                            reasoning=tool_reasoning or full_response,
-                            tool_calls=tool_calls_made,
-                            response=full_response
-                        )
-                    else:
-                        logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
-
-                    # Check if prompt optimization should run
-                    if self.optimization_enabled and self.prompt_optimizer:
-                        if self.prompt_optimizer.should_optimize(self.step_count + 1, self.optimization_frequency):
-                            logger.info(f"🔄 Triggering prompt optimization at step {self.step_count + 1}")
-                            try:
-                                new_base_prompt = self.prompt_optimizer.optimize_prompt(
-                                    current_step=self.step_count + 1,
-                                    num_trajectory_steps=self.optimization_frequency
-                                )
-                                logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
-                            except Exception as e:
-                                logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
-
-                    return True, full_response
-                else:
-                    # No function calls found - this might indicate an issue with function calling setup
-                    if self.backend != "gemini":
-                        logger.warning(f"⚠️  No function calls found from {self.backend} backend. This might indicate:")
-                        logger.warning(f"   - Function calling not properly configured")
-                        logger.warning(f"   - Model not generating function calls")
-                        logger.warning(f"   - Response format not as expected")
-                    
-                    # Treat as text response
-                    text_content = self._extract_text_from_response(response)
-                    if not text_content:
-                        text_content = str(response)
-                    
-                    logger.info(f"📥 Received text response from {self.backend}:")
-                    logger.info(f"   {text_content}")
-                    
-                    # For VLM backends, we can't enforce action tools like we do with Gemini
-                    # Just return the text response
-                    duration = time.time() - start_time
-                    
-                    logger.info(f"✅ Step completed in {duration:.2f}s")
-
-                    # Store in history (text-only response, no tool calls)
-                    self._add_to_history(prompt, text_content, tool_calls=[])
-                    
-                    # Log trajectory for this step (text response, no tool calls)
-                    if run_manager and pre_state:
-                        logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: Attempting to log trajectory (text response)")
-                        self._log_trajectory_for_step(
-                            run_manager=run_manager,
-                            step_num=self.step_count + 1,  # Use step_count + 1 since we increment after
-                            pre_state=pre_state,
-                            prompt=prompt,
-                            reasoning=text_content,
-                            tool_calls=[],
-                            response=text_content
-                        )
-                    else:
-                        logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (text response, run_manager={run_manager is not None}, pre_state={pre_state is not None})")
-
-                    # Check if prompt optimization should run
-                    if self.optimization_enabled and self.prompt_optimizer:
-                        if self.prompt_optimizer.should_optimize(self.step_count + 1, self.optimization_frequency):
-                            logger.info(f"🔄 Triggering prompt optimization at step {self.step_count + 1}")
-                            try:
-                                new_base_prompt = self.prompt_optimizer.optimize_prompt(
-                                    current_step=self.step_count + 1,
-                                    num_trajectory_steps=self.optimization_frequency
-                                )
-                                logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
-                            except Exception as e:
-                                logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
-
-                    return True, text_content
-            else:
-                # Original Gemini function calling logic
-                part = None  # Initialize to avoid UnboundLocalError
-                function_call = None  # Initialize to avoid UnboundLocalError
-                function_result = None  # Initialize to avoid UnboundLocalError
-
-                # Extract parts from Gemini response structure
-                parts = None
-                if hasattr(response, 'candidates') and response.candidates:
-                    candidate = response.candidates[0]
-                    if hasattr(candidate, 'content') and candidate.content:
-                        if hasattr(candidate.content, 'parts'):
-                            parts = candidate.content.parts
-
-                logger.info(f"🔍 Gemini response has {len(parts) if parts else 0} parts")
-
-                if not parts:
-                    logger.error("❌ No parts found in Gemini response - cannot extract function call")
-                    logger.error(f"   Response type: {type(response)}")
-                    logger.error(f"   Has candidates: {hasattr(response, 'candidates')}")
-                    if hasattr(response, 'candidates') and response.candidates:
-                        logger.error(f"   Candidate has content: {hasattr(response.candidates[0], 'content')}")
-
-                # Process function calls from parts
-                if parts and tool_call_count < max_tool_calls:
-                    # First, extract any text parts for reasoning
-                    for part in parts:
-                        if hasattr(part, 'text') and part.text:
-                            reasoning_text += part.text + "\n"
-
-                    # Check each part for function calls
-                    for part in parts:
-                        if hasattr(part, 'function_call') and part.function_call:
-                            function_call = part.function_call
-                            tool_call_count += 1
-                            logger.info(f"🔧 Gemini wants to call: {function_call.name} ({tool_call_count}/{max_tool_calls})")
-
-                            # Execute the function
-                            function_result = self._execute_function_call(function_call)
-                            logger.info(f"📥 Function result: {function_result[:200]}...")
-
-                            # Track tool call with result (convert protobuf args to JSON-serializable types)
-                            tool_calls_made.append({
-                                "name": function_call.name,
-                                "args": self._convert_protobuf_args(function_call.args),
-                                "result": function_result
-                            })
-
-                            # Store function result for next step's context
-                            self._store_function_result_for_context(function_call.name, function_result)
-
-                            # Wait for action queue to complete if this was a button press or navigation
-                            # Note: Function results are already being tracked in conversation_history,
-                            # so no need to send them back to a chat session (VLM is stateless)
-
-                            # Now wait for actions to complete
-                            self._wait_for_actions_complete()
-
-                            # END THE STEP IMMEDIATELY after action execution
-                            # Calculate duration
-                            duration = time.time() - start_time
-
-                            # Extract reasoning from function arguments
-                            tool_reasoning = ""
-                            final_position = None
-                            try:
-                                # Get args from the tool call that was made
-                                if tool_calls_made:
-                                    last_call = tool_calls_made[-1]
-                                    if function_call.name == "navigate_to" and "reason" in last_call["args"]:
-                                        tool_reasoning = last_call["args"]["reason"]
-                                        # Get final position after navigation
-                                        try:
-                                            final_state = self._execute_function_call_by_name("get_game_state", {})
-                                            import json as json_module
-                                            final_state_data = json_module.loads(final_state)
-                                            if final_state_data.get("success"):
-                                                player_pos = final_state_data.get("player_position", {})
-                                                if player_pos:
-                                                    final_position = (player_pos.get("x"), player_pos.get("y"))
-                                        except Exception as e:
-                                            logger.debug(f"Could not get final position after navigate_to: {e}")
-                                    elif function_call.name == "press_buttons" and "reasoning" in last_call["args"]:
-                                        tool_reasoning = last_call["args"]["reasoning"]
-                            except Exception as e:
-                                logger.debug(f"Could not extract tool reasoning: {e}")
-
-                            # Build full response including reasoning + action summary
-                            full_response = reasoning_text.strip()
-                            if tool_reasoning:
-                                if full_response:
-                                    full_response += f"\n\n{tool_reasoning}"
-                                else:
-                                    full_response = tool_reasoning
-
-                            if full_response:
-                                full_response += f"\n\nAction executed: {function_call.name}"
-                            else:
-                                full_response = f"Executed {function_call.name}"
-
-                            # Display the reasoning to user
-                            display_text = reasoning_text.strip()
-                            if tool_reasoning:
-                                if display_text:
-                                    display_text += f"\n\n{tool_reasoning}"
-                                else:
-                                    display_text = tool_reasoning
-
-                            if display_text:
-                                logger.info("📥 Gemini reasoning:")
-                                print("\n" + "="*70)
-                                print(display_text)
-                                print("="*70 + "\n")
-
-                            # Build action_details for navigate_to showing final position
-                            action_details_str = None
-                            if function_call.name == "navigate_to" and tool_calls_made:
-                                last_call = tool_calls_made[-1]
-                                if "x" in last_call["args"] and "y" in last_call["args"]:
-                                    target_x = last_call["args"]["x"]
-                                    target_y = last_call["args"]["y"]
-                                    variance = last_call["args"].get("variance", "none")
-                                    if final_position:
-                                        final_x, final_y = final_position
-                                        action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_x}, {final_y})"
-                                    else:
-                                        action_details_str = f"navigate_to({target_x}, {target_y}, variance={variance})"
-                            
-                            # Extract player coordinates from final position or game state
-                            player_coords = final_position if final_position else None
-
-                            # Add to history with action details and coordinates
-                            self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details_str, player_coords=player_coords)
-
-                            # Log to LLM logger
-                            # self._log_thinking(prompt, full_response, duration, tool_calls_made)
-
-                            # Send reasoning to server for display in stream
-                            thinking_to_send = display_text if display_text else full_response
-                            self._send_thinking_to_server(thinking_to_send, self.step_count + 1)
-
-                            logger.info(f"✅ Step ended after {function_call.name} - will observe results in next step")
-                            return True, full_response
-
-                    # Check if we've hit the limit
-                    # Note: This code is currently unreachable due to early return above
-                    # Commenting out chat.send_message() calls as VLM doesn't support stateful chat
-                    if function_call is not None and function_result is not None:
-                        if tool_call_count >= max_tool_calls:
-                            logger.warning(f"⚠️ Reached max tool calls ({max_tool_calls}).")
-                            # TODO: Implement for VLM if needed (currently unreachable)
-                            pass
-                        else:
-                            # TODO: Implement multi-turn function calling for VLM if needed
-                            pass
-
-                # Check if we got a text response instead of function call
-                if part is not None and (not hasattr(part, 'function_call') or not part.function_call):
-                    # Check if any part has text
-                    if parts:
-                        for part in parts:
-                            if hasattr(part, 'text') and part.text:
-                                # Got text response
-                                text_response = part.text
-                                logger.info("📥 Received response from Gemini:")
-                                print("\n" + "="*70)
-                                print(text_response)
-                                print("="*70 + "\n")
-
-                                # Check if this is a text-only response without action tools
-                                has_action_tool = any(
-                                    call["name"] == "press_buttons"
-                                    for call in tool_calls_made
-                                )
-
-                                if not has_action_tool:
-                                    enforcement_retry_count += 1
-
-                                    if enforcement_retry_count > max_enforcement_retries:
-                                        logger.error(f"❌ Gemini failed to call action tool after {max_enforcement_retries} retries!")
-                                        logger.error(f"   Reasoning provided: {reasoning_text[:200]}...")
-                                        logger.error(f"   Falling back to WAIT action")
-
-                                        # Force a WAIT action to avoid getting stuck
-                                        tool_calls_made.append({
-                                            "name": "press_buttons",
-                                            "args": {"buttons": ["WAIT"], "reasoning": "Fallback: Agent stuck in text loop"},
-                                            "result": "Forced WAIT action due to agent text loop"
-                                        })
-
-                                        # Don't continue the loop - break out and return
-                                        break
-
-                                    logger.warning(f"⚠️ Gemini provided text but no action tool! (Retry {enforcement_retry_count}/{max_enforcement_retries})")
-
-                                    # Send a message that DEMANDS a function call with increasingly forceful language
-                                    if enforcement_retry_count == 1:
-                                        enforcement_msg = "You MUST call press_buttons now. No more text analysis. Just call the tool based on your plan. Use press_buttons(['WAIT']) if unsure."
-                                    elif enforcement_retry_count == 2:
-                                        enforcement_msg = "CRITICAL: Call press_buttons([...]) RIGHT NOW. Do not write any text. Only make the function call."
-                                    else:
-                                        enforcement_msg = "EMERGENCY: You are stuck in a loop. Call press_buttons(['WAIT'], 'observing') immediately. This is your final chance."
-
-                                    try:
-                                        # TODO: Implement enforcement for VLM (currently using early return so this is unreachable)
-                                        logger.warning("Enforcement retry not implemented for VLM - breaking out of loop")
-                                        break
-                                    except Exception as e:
-                                        # Handle malformed function calls or other errors during enforcement
-                                        logger.error(f"❌ Enforcement failed with error: {e}")
-                                        logger.error(f"   Gemini attempted malformed function call")
-
-                                        # Force WAIT action and break out
-                                        tool_calls_made.append({
-                                            "name": "press_buttons",
-                                            "args": {"buttons": ["WAIT"], "reasoning": f"Fallback: Enforcement failed - {str(e)[:50]}"},
-                                            "result": "Forced WAIT due to enforcement error"
-                                        })
-                                        break
-
-                                # Calculate duration
-                                duration = time.time() - start_time
-
-                                # Add to history
-                                self._add_to_history(prompt, text_response, tool_calls_made)
-
-                                # Log to LLM logger with duration and tool calls
-                                # self._log_thinking(prompt, text_response, duration, tool_calls_made)
-
-                                # Send thinking to server for display in stream
-                                self._send_thinking_to_server(text_response, self.step_count + 1)
-
-                                return True, text_response
-
-            # If we get here, no text response was generated
-            logger.warning("⚠️ No text response from Gemini")
-            return False, "No response"
-
+                            s = json.loads(self._execute_function_call_by_name("get_game_state", {}))
+                            coords = (s.get("player_position", {}).get("x"), s.get("player_position", {}).get("y"))
+                        except:
+                            coords = None
+                        self._add_to_history(prompt, "", None, f"Executed {p.function_call.name}", pc=coords)
+                        return True, "Action executed"
+            self._add_to_history(prompt, str(res))
+            return True, str(res)
         except Exception as e:
-            logger.error(f"❌ Error in agent step: {e}")
-            import traceback
-            traceback.print_exc()
             return False, str(e)
 
-    def _wait_for_actions_complete(self, timeout: int = 30) -> None:
-        """Wait for all queued actions to complete before proceeding.
-
-        Optimization: For single actions, just wait a fixed time instead of polling.
-        This avoids timeout errors when the queue_status endpoint is slow.
-        """
-        import requests
-
-        # First, check initial queue length
+    def _build_optimized_prompt(self, gs_res, sc):
         try:
-            response = requests.get(f"{self.server_url}/queue_status", timeout=2)
-            if response.status_code == 200:
-                status = response.json()
-                initial_queue_len = status.get("queue_length", 0)
+            gd = json.loads(gs_res)
+        except:
+            gd = {}
+        st = gd.get("state_text", "")
+        if self._is_title_sequence(gd):
+            st = self._strip_map_info(st)
+        do, ds = gd.get("direct_objective", ""), gd.get("direct_objective_status", "")
+        co = gd.get("categorized_objectives", {})
+        if co:
+            parts = []
+            for c in ["story", "battling", "dynamics"]:
+                o = co.get(c, {})
+                if o:
+                    parts.append(
+                        f"{c.upper()}: {o.get('description')} (@ {o.get('target_location')})\n   Hint: {o.get('navigation_hint')}"
+                    )
+            if parts:
+                do = "\n\n".join(parts)
+            cs = gd.get("categorized_status", {})
+            if cs:
+                ds = "📊 PROGRESS: " + " | ".join(
+                    [
+                        f"{c.capitalize()}: {i.get('current_index') + 1}/{i.get('total')}"
+                        for c, i in cs.items()
+                        if i.get("total") > 0
+                    ]
+                )
+        loc = gd.get("location", "Unknown")
+        is_gym = "Gym" in loc or "GYM" in loc
+        tools = "🎮 **TOOLS**:\n- get_game_state()\n- complete_direct_objective()\n- press_buttons()"
+        if not is_gym:
+            tools += "\n- navigate_to()"
+        return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n### HISTORY:\n{self._format_action_history()}\n{self._get_function_results_context()}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n### TOOLS:\n{tools}\n"
 
-                # If only 1 action or empty queue, just wait a fixed time
-                if initial_queue_len <= 1:
-                    logger.info(f"⏳ Single action queued, waiting 1.5s...")
-                    time.sleep(1.5)  # Fixed wait for single action
-                    logger.info("✅ Action completed (fixed wait)")
-                    return
+    def _build_structured_prompt(self, gs_res, sc):
+        return self._build_optimized_prompt(gs_res, sc)
 
-                logger.info(f"⏳ Waiting for {initial_queue_len} actions to complete...")
-        except Exception as e:
-            # If we can't check queue, fall back to fixed wait
-            logger.debug(f"Could not check queue length: {e}, using fixed wait")
-            time.sleep(1.5)
-            return
-
-        # For multiple actions, poll the queue
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                response = requests.get(f"{self.server_url}/queue_status", timeout=2)
-                if response.status_code == 200:
-                    status = response.json()
-                    if status.get("queue_empty", False):
-                        logger.info("✅ All actions completed")
-                        return
-                    else:
-                        queue_len = status.get("queue_length", 0)
-                        logger.debug(f"   Queue: {queue_len} actions remaining...")
-                        time.sleep(0.5)  # Poll every 500ms
-                else:
-                    logger.warning(f"Failed to get queue status: {response.status_code}")
-                    time.sleep(0.5)
-            except Exception as e:
-                logger.warning(f"Error checking queue status: {e}")
-                time.sleep(0.5)
-
-        logger.warning(f"⚠️ Timeout waiting for actions to complete after {timeout}s")
-
-    def _log_thinking(self, prompt: str, response: str, duration: float = None, tool_calls: list = None) -> None:
-        """Log interaction to LLM logger with full tool call history."""
+    def _is_black_frame(self, img):
         try:
-            self.llm_logger.log_interaction(
-                interaction_type="my_gemini_cli",
-                prompt=prompt,
-                response=response,
-                duration=duration,
-                metadata={"tool_calls": tool_calls or []},
-                model_info={"model": self.model}
-            )
-            logger.debug("✅ Logged to LLM logger")
-        except Exception as e:
-            logger.debug(f"Could not log to LLM logger: {e}")
+            a = np.array(img) if hasattr(img, "save") else img
+            return a.mean() < 10 and a.std() < 5
+        except:
+            return False
 
-    def _store_function_result_for_context(self, function_name: str, result_json: str):
-        """Store function result to include in next step's context."""
-        import time
-        self.recent_function_results.append({
-            "function_name": function_name,
-            "result": result_json,
-            "timestamp": time.time()
-        })
+    def _is_title_sequence(self, gd):
+        if gd.get("location") == "TITLE_SEQUENCE":
+            return True
+        st = gd.get("state_text", "")
+        if "Player Name:" in st:
+            m = re.search(r"Player Name:\s*(\S+)", st)
+            return True if m and (not m.group(1).strip() or m.group(1).strip() == "????????") else not m
+        return False
 
-        # Keep only last 3 function results to avoid context explosion
-        if len(self.recent_function_results) > 3:
-            self.recent_function_results = self.recent_function_results[-3:]
+    def _strip_map_info(self, st):
+        lines, filtered, skip = st.split("\n"), [], False
+        for l in lines:
+            if any(
+                m in l
+                for m in [
+                    "🗺️ MAP:",
+                    "CURRENT MAP:",
+                    "PORYMAP ASCII:",
+                    "PORYMAP GROUND TRUTH MAP:",
+                    "🧭 MOVEMENT PREVIEW:",
+                    "POSITION:",
+                    "LOCATION:",
+                ]
+            ):
+                skip = True
+            if l.strip() == "" or l.startswith(("🎯", "📊", "⚠️")):
+                skip = False
+            if not skip:
+                filtered.append(l)
+        return "\n".join(filtered)
 
-        logger.info(f"📝 Stored {function_name} result for next step's context")
-
-    def _get_function_results_context(self) -> str:
-        """Format recent function results for inclusion in prompt."""
-        if not self.recent_function_results:
-            return ""
-
-        lines = ["\n" + "="*70, "📋 RESULTS FROM PREVIOUS STEP:", "="*70]
-
-        for entry in self.recent_function_results:
-            func_name = entry["function_name"]
-            result = entry["result"]
-
-            lines.append(f"\n🔧 Function: {func_name}")
-            lines.append(f"Result:")
-
-            # Truncate very long results
-            if len(result) > 10000:
-                lines.append(result[:10000] + "\n... (truncated)")
-            else:
-                lines.append(result)
-            lines.append("")
-
-        lines.append("="*70)
-
-        # Clear the results after formatting (they've been used)
-        self.recent_function_results = []
-
+    def _format_action_history(self):
+        if not self.conversation_history:
+            return "None."
+        lines = []
+        for e in self.conversation_history[-10:]:
+            c = f"({e['player_coords'][0]},{e['player_coords'][1]})" if e.get("player_coords") else "(?)"
+            res = e.get("llm_response", "")
+            # Truncate long thinking to keep history clean
+            if len(res) > 200:
+                res = res[:200] + "..."
+            lines.append(f"[{e['step']}] at {c}: {res} -> {e['action_details']}")
         return "\n".join(lines)
 
-    def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
-        """Build optimized prompt by combining base_prompt.md with current game context.
-        
-        Used when prompt optimization is enabled.
-        This function:
-        1. Loads the base_prompt.md (strategic guidance - can be optimized)
-        2. Extracts current game context (state, objectives, history)
-        3. Combines them into a complete prompt for the VLM
-        """
-        
-        # Parse game state to extract relevant information
-        import json as json_module
-        try:
-            game_state_data = json_module.loads(game_state_result)
-        except:
-            game_state_data = {}
-        
-        # Extract key information from game state
-        state_text = game_state_data.get("state_text", "")
-
-        # Detect if in title sequence
-        is_title_sequence = self._is_title_sequence(game_state_data)
-        if is_title_sequence:
-            logger.info("🎬 Title sequence detected - map information will be hidden")
-
-        # Extract player coordinates for stuck detection
-        player_position = game_state_data.get("player_position", {})
-        current_coords = None
-        if player_position and "x" in player_position and "y" in player_position:
-            current_coords = (player_position["x"], player_position["y"])
-
-        # Add stuck warning if detected (but not during title sequence)
-        if not is_title_sequence:
-            stuck_warning = self._get_stuck_warning(current_coords)
-            if stuck_warning:
-                state_text = stuck_warning + state_text
-
-        # Strip map information during title sequence
-        if is_title_sequence:
-            state_text = self._strip_map_info(state_text)
-
-        direct_objective = game_state_data.get("direct_objective", "")
-        direct_objective_status = game_state_data.get("direct_objective_status", "")
-        direct_objective_context = game_state_data.get("direct_objective_context", "")
-        
-        # Format direct objective nicely if it's a dict - show ALL fields
-        if isinstance(direct_objective, dict):
-            obj_id = direct_objective.get("id", "")
-            desc = direct_objective.get("description", "")
-            action_type = direct_objective.get("action_type", "")
-            target_location = direct_objective.get("target_location")
-            target_coords = direct_objective.get("target_coords")
-            hint = direct_objective.get("navigation_hint", "")
-            completion_condition = direct_objective.get("completion_condition", "")
-            
-            formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
-            if action_type:
-                formatted_obj += f"\n  Action Type: {action_type}"
-            if target_location:
-                formatted_obj += f"\n  Target Location: {target_location}"
-            if target_coords:
-                formatted_obj += f"\n  Target Coordinates: {target_coords}"
-            if hint:
-                formatted_obj += f"\n  Navigation Hint: {hint}"
-            if completion_condition:
-                formatted_obj += f"\n  Completion Condition: {completion_condition}"
-            direct_objective = formatted_obj
-        
-        # Format status nicely if it's a dict
-        if isinstance(direct_objective_status, dict):
-            seq = direct_objective_status.get("sequence_name", "")
-            total = direct_objective_status.get("total_objectives", 0)
-            current_idx = direct_objective_status.get("current_index", 0)
-            completed = direct_objective_status.get("completed_count", 0)
-            direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
-        
-        # Build action history summary for better context
-        action_history = self._format_action_history()
-
-        # Get function results from previous step
-        function_results_context = self._get_function_results_context()
-
-        # Load base prompt (strategic guidance - can be optimized)
-        base_prompt = self._load_base_prompt()
-
-        # Log component sizes BEFORE building prompt
-        logger.info(f"📏 Pre-prompt component sizes:")
-        logger.info(f"   base_prompt: {len(base_prompt):,} chars")
-        logger.info(f"   state_text: {len(state_text):,} chars")
-        logger.info(f"   action_history: {len(action_history):,} chars")
-        logger.info(f"   function_results: {len(function_results_context):,} chars")
-        logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
-        logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
-        logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
-
-        # Build complete prompt by combining base prompt with context
-        prompt = f"""# Current Step: {step_count}
-
-{base_prompt}
-
-## CONTEXT FOR THIS STEP
-
-### ACTION HISTORY (Recent Steps):
-{action_history}
-{function_results_context}
-
-### CURRENT DIRECT OBJECTIVE:
-{direct_objective_context}
-
-{direct_objective}
-
-{direct_objective_status}
-
-⚠️ **CRITICAL**: When you complete the objective, IMMEDIATELY call:
-   complete_direct_objective(reasoning="<explain why it's complete>")
-
-### CURRENT GAME STATE:
-{state_text}
-
-Step {step_count}"""
-
-        # Log prompt size breakdown to debug token issues
-        prompt_size = len(prompt)
-        state_size = len(state_text)
-        history_size = len(action_history)
-        function_results_size = len(function_results_context)
-        context_size = len(direct_objective_context)
-        objective_size = len(str(direct_objective))
-        status_size = len(direct_objective_status)
-
-        # Calculate static instruction size (approximate)
-        dynamic_total = state_size + history_size + function_results_size + context_size + objective_size + status_size
-        static_instructions = prompt_size - dynamic_total
-
-        logger.info(f"📏 Final prompt size breakdown:")
-        logger.info(f"   ═══════════════════════════════════════")
-        logger.info(f"   TOTAL PROMPT: {prompt_size:,} chars (~{prompt_size//4:,} tokens)")
-        logger.info(f"   ═══════════════════════════════════════")
-        logger.info(f"   Dynamic content:")
-        logger.info(f"     - State text: {state_size:,} chars")
-        logger.info(f"     - Action history: {history_size:,} chars")
-        logger.info(f"     - Function results: {function_results_size:,} chars")
-        logger.info(f"     - Objective context: {context_size:,} chars")
-        logger.info(f"     - Objective: {objective_size:,} chars")
-        logger.info(f"     - Status: {status_size:,} chars")
-        logger.info(f"     DYNAMIC TOTAL: {dynamic_total:,} chars")
-        logger.info(f"   ───────────────────────────────────────")
-        logger.info(f"   Static instructions: {static_instructions:,} chars")
-        logger.info(f"   ═══════════════════════════════════════")
-
-        return prompt
-    
-    def _build_structured_prompt(self, game_state_result: str, step_count: int) -> str:
-        """Build a function-call focused prompt with all instructions inline (ORIGINAL VERSION).
-        
-        Used when prompt optimization is NOT enabled.
-        This uses the comprehensive POKEAGENT.md system instructions and includes
-        all strategic guidance directly in the per-step prompt.
-        """
-        
-        # Parse game state to extract relevant information
-        import json as json_module
-        try:
-            game_state_data = json_module.loads(game_state_result)
-        except:
-            game_state_data = {}
-        
-        # Extract key information from game state
-        state_text = game_state_data.get("state_text", "")
-
-        # Detect if in title sequence
-        is_title_sequence = self._is_title_sequence(game_state_data)
-        if is_title_sequence:
-            logger.info("🎬 Title sequence detected - map information will be hidden")
-
-        # Extract player coordinates for stuck detection
-        player_position = game_state_data.get("player_position", {})
-        current_coords = None
-        if player_position and "x" in player_position and "y" in player_position:
-            current_coords = (player_position["x"], player_position["y"])
-
-        # Add stuck warning if detected (but not during title sequence)
-        if not is_title_sequence:
-            stuck_warning = self._get_stuck_warning(current_coords)
-            if stuck_warning:
-                state_text = stuck_warning + state_text
-
-        # Strip map information during title sequence
-        if is_title_sequence:
-            state_text = self._strip_map_info(state_text)
-
-        direct_objective = game_state_data.get("direct_objective", "")
-        direct_objective_status = game_state_data.get("direct_objective_status", "")
-        direct_objective_context = game_state_data.get("direct_objective_context", "")
-        
-        # Format direct objective nicely if it's a dict - show ALL fields
-        if isinstance(direct_objective, dict):
-            obj_id = direct_objective.get("id", "")
-            desc = direct_objective.get("description", "")
-            action_type = direct_objective.get("action_type", "")
-            target_location = direct_objective.get("target_location")
-            target_coords = direct_objective.get("target_coords")
-            hint = direct_objective.get("navigation_hint", "")
-            completion_condition = direct_objective.get("completion_condition", "")
-            
-            formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
-            if action_type:
-                formatted_obj += f"\n  Action Type: {action_type}"
-            if target_location:
-                formatted_obj += f"\n  Target Location: {target_location}"
-            if target_coords:
-                formatted_obj += f"\n  Target Coordinates: {target_coords}"
-            if hint:
-                formatted_obj += f"\n  Navigation Hint: {hint}"
-            if completion_condition:
-                formatted_obj += f"\n  Completion Condition: {completion_condition}"
-            direct_objective = formatted_obj
-        
-        # Format status nicely if it's a dict
-        if isinstance(direct_objective_status, dict):
-            seq = direct_objective_status.get("sequence_name", "")
-            total = direct_objective_status.get("total_objectives", 0)
-            current_idx = direct_objective_status.get("current_index", 0)
-            completed = direct_objective_status.get("completed_count", 0)
-            direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
-        
-        # Build action history summary for better context
-        action_history = self._format_action_history()
-
-        # Log component sizes BEFORE building prompt
-        logger.info(f"📏 Pre-prompt component sizes:")
-        logger.info(f"   state_text: {len(state_text):,} chars")
-        logger.info(f"   action_history: {len(action_history):,} chars")
-        logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
-        logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
-        logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
-
-        # Build function-call focused prompt (ORIGINAL VERSION - all inline)
-        prompt = f"""You are an expert navigator and battle strategist playing Pokémon Emerald on a Game Boy Advance emulator.
-If you notice that you are repeating the same action sequences over and over again, you definitely need to try something different since what you are doing is wrong! Try exploring different new areas or interacting with different NPCs if you are stuck.
-
-Some pointers to keep in mind (guard rails) as you problem solve:
-1) You must think step-by-step when solving problems and making decisions. 
-2) Always provide detailed, context-aware responses that bias for ground-truth.
-3) Consider the current situation in the game as well as what you've learned over time.
-4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
-
-
-ACTION HISTORY (last steps with thinking):
-{action_history}
-
-================================================================================
-🎯🎯🎯 CURRENT DIRECT OBJECTIVE - READ THIS CAREFULLY 🎯🎯🎯
-================================================================================
-
-{direct_objective_context}
-
-{direct_objective}
-
-{direct_objective_status}
-
-================================================================================
-⚠️ CRITICAL: When you have completed the objective above, you MUST call (prioritize this before progressing through dialogue):
-   complete_direct_objective(reasoning="<explain why it's complete>")
-   
-🔄 SEQUENCE COMPLETION HANDLING:
-When you see "All objectives completed!" or sequence_complete=True in the response:
-1. Call get_progress_summary() to see what you've accomplished (milestones, objectives, location, knowledge)
-2. Use get_walkthrough(part=X) to find the next relevant walkthrough part based on your current location/progress
-3. Optionally use lookup_pokemon_info() for specific location/NPC information
-4. Create the next 3 logical objectives using create_direct_objectives():
-   - Base them on walkthrough/wiki information
-   - Format them with clear descriptions, action_types, target_locations, navigation_hints
-   - Use completion_condition to specify how to verify completion
-5. Once created, proceed with the first new objective
-
-Example format for create_direct_objectives:
-create_direct_objectives(
-    objectives=[
-        {{
-            "id": "dynamic_01_navigate_route_102",
-            "description": "Travel to Route 102",
-            "action_type": "navigate",
-            "target_location": "Route 102",
-            "navigation_hint": "Move east from Petalburg City to reach Route 102",
-            "completion_condition": "location_contains_route_102"
-        }},
-        {{"id": "dynamic_02_...", "description": "...", ...}},
-        {{"id": "dynamic_03_...", "description": "...", ...}}
-    ],
-    reasoning="Based on walkthrough Part 5, the next step is to travel to Route 102..."
-)
-================================================================================
-
-CURRENT GAME STATE:
-{state_text}
-
-**DIALOGUE CHECK**: Look at the game screen carefully - if you see a dialogue box with text, press_buttons(["A"], reasoning).
-
-AVAILABLE TOOLS - Use these function calls to interact with the game:
-
-🎮 **PRIMARY GAME TOOLS** :
-- get_game_state() - Get current game state, player position, Pokemon, map, and screenshot
-- complete_direct_objective(reasoning) - Mark current direct objective as complete. Provide strict justification before completing the objective. (prioritize this before progressing through dialogue)
-- press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
-- navigate_to(x, y, variance, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data. Make sure the coordinate you are requesting a path to is walkable. If it isnt, pathfinding will fail and you wont move. NOTE: the top-left corner of the map is (0, 0).
-
-🗺️ **NAVIGATION**: Use navigate_to(x, y, variance, reason) to automatically pathfind to a coordinate. It uses A* pathfinding on the porymap ground truth map. You can also use press_buttons() for manual movement if navigate_to isn't working.
-
-📚 **INFORMATION TOOLS** (use when you need info or are stuck in a loop):
-- lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis
-- get_walkthrough(part) - Get official Emerald walkthrough (parts 1-21)
-- search_knowledge(query, category) - Search your stored knowledge
-- add_knowledge(category, title, content, importance) - Store important discoveries
-- get_progress_summary() - Get comprehensive progress summary (milestones, objectives, location, knowledge)
-
-💾 **KNOWLEDGE TOOLS** (use to remember things):
-- get_knowledge_summary(min_importance) - Get summary of important discoveries
-- save_memory(fact) - Save facts to remember across sessions
-
-🎯 **OBJECTIVE MANAGEMENT** (use when sequences complete):
-- create_direct_objectives(objectives, reasoning) - Create next 3 direct objectives dynamically
-  Use this after get_progress_summary() and get_walkthrough() to plan your next steps
-
-** COORDINATE & MOVEMENT EXAMPLES **:
-- Pressing LEFT decreases your X coordinate (moves you west)
-- Pressing RIGHT increases your X coordinate (moves you east)  
-- Pressing UP decreases your Y coordinate (moves you north)
-- Pressing DOWN increases your Y coordinate (moves you south)
-
-Example: If you are at position (5, 5) and press RIGHT, you will move to (6, 5)
-Example: If you are at position (3, 8) and press UP, you will move to (3, 7)
-
-** INTERACTION TIPS **:
-- To interact with an object or NPC, you must be both 1) on an adjacent tile to the NPC or object and 2) facing the NPC or object.
-
-STRATEGY - PRIORITY ORDER:
-1. **CHECK OBJECTIVE COMPLETION FIRST**: Before doing ANYTHING, check if your current direct objective is complete. If you've accomplished what the objective asks for, IMMEDIATELY call complete_direct_objective(reasoning="...") 
-2. **DIALOGUE SECOND**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
-3. **MOVEMENT**: Preferentially use navigate_to(x, y, variance, reason) to automatically pathfind to a coordinate. Use press_buttons(["UP"], reasoning) etc. for manual movement only if navigate_to is not working.
-4. **BATTLES**: Use press_buttons with battle moves. Select moves carefully based on the current situation and the enemy's Pokemon. If below 50% health, prioritize using healing moves that also cause damage like (absorb, gigadrain, etc) if these moves are available.
-5. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
-6. **STUCK DETECTION**: If you've been attempting the same action (A, UP, DOWN, LEFT, RIGHT) for an extended period of time without your player coordinates changing, try a different direction to move around the obstacle that still conforms to the objective.
-
-🔴 **REMEMBER**: You MUST call complete_direct_objective() as soon as you've completed the current objective! The agent will NOT automatically know you're done - you must explicitly call the function.
-
-IMPORTANT: Always check the game screen for dialogue boxes before planning movement!
-**CRITICAL**: After performing any action, proactively check if your current direct objective is complete!
-
-═══════════════════════════════════════════════════════════════════════
-🧠 HOW TO STRUCTURE YOUR REASONING 
-═══════════════════════════════════════════════════════════════════════
-
-You MUST follow this decision-making process for EVERY action:
-
-**STEP 1 - ANALYZE**: Examine the current situation
-   - What do I see on the game screen?
-   - Where am I located? (coordinates and map name)
-   - What is my current objective?
-   - What obstacles or opportunities are present?
-   - Is there dialogue I need to advance?
-
-**STEP 2 - PLAN**: Decide what to do next
-   - What action will help achieve my objective?
-   - Why is this action the best choice right now?
-   - What do I expect to happen after this action?
-   - Are there any risks or alternative approaches?
-
-**STEP 3 - EXECUTE**: Call the function with DETAILED reasoning
-
-🎯 **CRITICAL REQUIREMENT**: 
-Your `reasoning` parameter MUST contain your FULL analysis and plan!
-Format it with clear sections so your thinking is visible and traceable.
-
-**GOOD EXAMPLE** (detailed reasoning):
-press_buttons(
-    buttons=["UP"],
-    reasoning='''ANALYSIS: I'm at position (10, 2) in Littleroot Town. The movement preview shows UP leads to (10, 1) which is walkable terrain. My current objective is to explore the town and find the Pokemon Lab. Looking at the map, there are buildings to the north.
-
-PLAN: I'll move UP one tile to get closer to the northern buildings. This is safe according to the movement preview - no obstacles or NPCs blocking the path AND I don't see any NPCs in my way in the visual frame. After moving, I'll reassess and continue exploring north.
-
-ACTION: Pressing UP to move north toward potential buildings/NPCs.'''
-)
-
-**BAD EXAMPLE** (too brief):
-press_buttons(
-    buttons=["UP"],
-    reasoning="Moving north"
-)
-
-**ANOTHER GOOD EXAMPLE** (dialogue):
-press_buttons(
-    buttons=["A"],
-    reasoning='''ANALYSIS: I can see a dialogue box on screen with text from Professor Birch. He's explaining something about Pokemon. The dialogue box is visible in the bottom portion of the screen.
-
-PLAN: I need to advance this dialogue by pressing A to read what he says and continue the conversation. This is standard Pokemon game interaction.
-
-ACTION: Pressing A to advance the dialogue and hear what Professor Birch has to say.'''
-)
-
-**ANOTHER BAD EXAMPLE** (invalid button action):
-press_buttons(
-    buttons=["QUICK ATTACK"],
-    reasoning="Using QUICK ATTACK to attack the enemy Pokemon. 
-) This is invalid because QUICK ATTACK is not a valid button in the game.
-
-**WHY THIS MATTERS**: 
-- Detailed reasoning helps track your decision-making process
-- It makes debugging easier when things go wrong
-- It provides context for future decisions
-- It demonstrates goal-oriented thinking
-
-Think step-by-step through ANALYZE → PLAN → EXECUTE, then call the appropriate function with your detailed reasoning.
-
-Step {step_count}"""
-
-        # Log prompt size breakdown to debug token issues
-        prompt_size = len(prompt)
-        state_size = len(state_text)
-        history_size = len(action_history)
-        context_size = len(direct_objective_context)
-        objective_size = len(str(direct_objective))
-        status_size = len(direct_objective_status)
-
-        # Calculate static instruction size (approximate)
-        dynamic_total = state_size + history_size + context_size + objective_size + status_size
-        static_instructions = prompt_size - dynamic_total
-
-        logger.info(f"📏 Final prompt size breakdown:")
-        logger.info(f"   ═══════════════════════════════════════")
-        logger.info(f"   TOTAL PROMPT: {prompt_size:,} chars (~{prompt_size//4:,} tokens)")
-        logger.info(f"   ═══════════════════════════════════════")
-        logger.info(f"   Dynamic content:")
-        logger.info(f"     - State text: {state_size:,} chars")
-        logger.info(f"     - Action history: {history_size:,} chars")
-        logger.info(f"     - Objective context: {context_size:,} chars")
-        logger.info(f"     - Objective: {objective_size:,} chars")
-        logger.info(f"     - Status: {status_size:,} chars")
-        logger.info(f"     DYNAMIC TOTAL: {dynamic_total:,} chars")
-        logger.info(f"   ───────────────────────────────────────")
-        logger.info(f"   Static instructions: {static_instructions:,} chars")
-        logger.info(f"   ═══════════════════════════════════════")
-
-        return prompt
-
-
-    def _is_title_sequence(self, game_state_data: Dict[str, Any]) -> bool:
-        """Detect if in title sequence"""
-        # Check player location
-        player_location = game_state_data.get("location", "")
-        if player_location == "TITLE_SEQUENCE":
-            return True
-
-        # Check player name (empty or ???????? indicates title)
-        player_name = game_state_data.get("player_name", "").strip()
-        if not player_name or player_name == "????????":
-            return True
-
-        # Check game state value
-        game_state_value = game_state_data.get("game_state", "").lower()
-        if "title" in game_state_value or "intro" in game_state_value:
-            return True
-
-        return False
-
-    def _strip_map_info(self, state_text: str) -> str:
-        """Strip map/navigation information from state text during title sequence"""
-        lines = state_text.split('\n')
-        filtered_lines = []
-        skip_section = False
-
-        for line in lines:
-            # Skip sections that contain map information
-            if any(marker in line for marker in [
-                "🗺️ MAP:",
-                "CURRENT MAP:",
-                "PORYMAP ASCII:",
-                "PORYMAP GROUND TRUTH MAP:",
-                "🧭 MOVEMENT PREVIEW:",
-                "MOVEMENT MEMORY:",
-                "Player coordinates:",
-                "Map dimensions:",
-                "POSITION:",
-                "LOCATION:"
-            ]):
-                skip_section = True
-                continue
-
-            # Resume after finding a new section or empty line
-            if line.strip() == "" or (line.startswith("🎯") or line.startswith("📊") or line.startswith("⚠️")):
-                skip_section = False
-
-            if not skip_section:
-                filtered_lines.append(line)
-
-        return '\n'.join(filtered_lines)
-
-    def _is_black_frame(self, image) -> bool:
-        """Check if frame is a black screen (transition)
-
-        Uses both mean brightness AND variance to avoid false positives in caves.
-        A true black transition frame has very low brightness AND very low variance.
-        A cave scene has low brightness but higher variance (lit areas vs dark areas).
-        """
-        try:
-            # Convert PIL Image to numpy array if needed
-            if hasattr(image, 'save'):  # PIL Image
-                frame_array = np.array(image)
-            else:
-                frame_array = image
-
-            mean_brightness = frame_array.mean()
-            std_brightness = frame_array.std()
-
-            # True black frame: very low brightness AND very low variance
-            brightness_threshold = 10
-            variance_threshold = 5  # Low variance = uniform darkness
-
-            is_black = (mean_brightness < brightness_threshold and
-                       std_brightness < variance_threshold)
-
-            if is_black:
-                logger.debug(f"Black frame detected: mean={mean_brightness:.2f}, std={std_brightness:.2f}")
-            elif mean_brightness < brightness_threshold:
-                logger.debug(f"Dark frame (cave?) but not black: mean={mean_brightness:.2f}, std={std_brightness:.2f}")
-
-            return is_black
-        except Exception as e:
-            logger.warning(f"Error checking for black frame: {e}")
-            return False  # If we can't check, assume it's not black
-
-    def _detect_stuck_pattern(self, current_coords: Optional[Tuple[int, int]]) -> bool:
-        """Detect if agent is stuck (same position for multiple recent steps)"""
-        if not current_coords or len(self.conversation_history) < 3:
-            return False
-
-        # Get last 3 positions
-        recent_positions = []
-        for entry in self.conversation_history[-3:]:
-            coords = entry.get("player_coords")
-            if coords:
-                recent_positions.append(coords)
-
-        # If we have 3+ recent positions and they're all the same, we're stuck
-        if len(recent_positions) >= 3:
-            if all(pos == recent_positions[0] for pos in recent_positions):
-                return True
-
-        return False
-
-    def _log_trajectory_for_step(self, run_manager, step_num: int, pre_state: dict, 
-                                  prompt: str, reasoning: str, tool_calls: list, response: str):
-        """Log trajectory for a CLI agent step
-        
-        Args:
-            run_manager: RunDataManager instance
-            step_num: Step number
-            pre_state: Pre-state snapshot
-            prompt: Prompt sent to LLM
-            reasoning: Reasoning from LLM
-            tool_calls: List of tool calls made
-            response: Full response from LLM
-        """
-        try:
-            # Get post-state after tool calls
-            try:
-                game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
-                if isinstance(game_state_result, str):
-                    import json
-                    game_state_result = json.loads(game_state_result)
-                if game_state_result.get("success"):
-                    raw_state = game_state_result.get("raw_state", {})
-                    post_state = run_manager.create_state_snapshot(raw_state)
-                else:
-                    post_state = pre_state  # Fallback to pre-state
-            except Exception as e:
-                logger.debug(f"Could not capture post-state: {e}")
-                post_state = pre_state  # Fallback to pre-state
-            
-            # Build action dict from tool calls
-            action = {
-                "type": "tool_calls",
-                "tool_calls": [
-                    {
-                        "name": tc.get("name"),
-                        "args": {k: v for k, v in tc.get("args", {}).items() 
-                                if k not in ["screenshot_base64"]}  # Exclude large base64 data
-                    }
-                    for tc in tool_calls
-                ],
-                "total_tool_calls": len(tool_calls)
-            }
-            
-            # Determine outcome
-            outcome = {
-                "success": True,
-                "objectives_completed": []
-            }
-            
-            # Check if location/coordinates changed
-            if pre_state.get("location") != post_state.get("location"):
-                outcome["observations"] = f"Moved from {pre_state.get('location')} to {post_state.get('location')}"
-            elif pre_state.get("player_coords") != post_state.get("player_coords"):
-                outcome["observations"] = f"Position changed from {pre_state.get('player_coords')} to {post_state.get('player_coords')}"
-            else:
-                outcome["observations"] = "No significant state change"
-            
-            # Log trajectory
-            logger.debug(f"🔍 [DEBUG] Calling run_manager.log_trajectory for step {step_num}")
-            run_manager.log_trajectory(
-                step=step_num,
-                reasoning=reasoning,
-                action=action,
-                pre_state=pre_state,
-                post_state=post_state,
-                outcome=outcome,
-                llm_prompt=prompt
-            )
-            logger.info(f"🔍 [DEBUG] Successfully logged trajectory for step {step_num}")
-        except Exception as e:
-            logger.error(f"🔍 [DEBUG] Failed to log trajectory at step {step_num}: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-
-    def _get_stuck_warning(self, coords: Optional[Tuple[int, int]]) -> str:
-        """Generate warning text if stuck pattern detected"""
-        if self._detect_stuck_pattern(coords):
-            return "\n⚠️ WARNING: You appear to be stuck at this location. Try a different approach!\n" \
-                   "💡 TIP: If you try an action like RIGHT but coordinates don't change from (X,Y) to (X+1,Y), there's likely an obstacle. Check the map around player P for walls (#) or other barriers blocking your path.\n"
-        return ""
-
-    def _format_action_history(self) -> str:
-        """Format action history - shows only LLM thinking and actions taken."""
-        if not self.conversation_history:
-            logger.debug(f"📜 No conversation history to format")
-            return "No previous actions recorded."
-
-        # Get last 10 entries only
-        recent_entries = self.conversation_history[-10:]
-        logger.debug(f"📜 Formatting {len(recent_entries)} history entries")
-
-        history_lines = []
-        for entry in recent_entries:
-            step = entry.get("step", "?")
-            llm_response = entry.get("llm_response", "").strip()
-            action_details = entry.get("action_details", "").strip()
-            coords = entry.get("player_coords", None)
-
-            # Format: [Step X] at (x,y): LLM thinking → action
-            coord_str = f"({coords[0]},{coords[1]})" if coords else "(?)"
-
-            if llm_response or action_details:
-                history_lines.append(f"[{step}] at {coord_str}:")
-                if llm_response:
-                    history_lines.append(f"  {llm_response}")
-                if action_details:
-                    history_lines.append(f"  → {action_details}")
-                history_lines.append("")  # Separator
-
-        return "\n".join(history_lines).strip()
-
     def run(self) -> int:
-        """Run the agent loop."""
-        # CRITICAL: Clear conversation history to prevent recursive prompt embedding from old runs
         self.conversation_history = []
-        logger.info("🧹 Cleared conversation history (fresh start)")
-
-        logger.info("=" * 70)
-        logger.info("🎮 Pokemon Emerald My Custom CLI Agent (Gemini API)")
-        logger.info("=" * 70)
-        logger.info(f"Model: {self.model}")
-        logger.info(f"Server: {self.server_url}")
-        if hasattr(self, 'tools') and self.tools:
-            logger.info(f"Tools: {len(self.tools)} MCP tools (9 Pokemon + 11 Baseline)")
-        else:
-            logger.info(f"Tools: MCP tools available via VLM backend ({self.backend})")
-        logger.info(f"Context: Max {self.max_context_chars:,} chars (compact to {self.target_context_chars:,})")
-        if self.max_steps:
-            logger.info(f"Max Steps: {self.max_steps}")
-        logger.info("=" * 70)
-
-        # Check prerequisites
-        logger.info("\n🔍 Checking prerequisites...")
-        if not self.check_prerequisites():
-            logger.error("❌ Prerequisites check failed")
-            return 1
-
-        logger.info("\n🚀 Starting agent loop...")
-        logger.info("📝 Gemini API with native function calling")
-        logger.info("💾 Conversation history with auto-compaction")
-        logger.info("🔧 20 MCP tools available via HTTP (Pokemon + Baseline)")
-        logger.info("Press Ctrl+C to stop")
-        logger.info("-" * 70)
-
+        logger.info("🚀 Starting MyCLIAgent loop...")
         try:
             while True:
-                # Check max steps
                 if self.max_steps and self.step_count >= self.max_steps:
-                    logger.info(f"\n✅ Reached max steps ({self.max_steps})")
                     break
-
-                logger.info(f"\n{'='*70}")
                 logger.info(f"🤖 Step {self.step_count + 1}")
-                context_size = self._calculate_context_size()
-                logger.info(f"📚 History: {len(self.conversation_history)} turns ({context_size:,} chars)")
-                logger.info(f"{'='*70}")
-
-                # Automatically fetch game state at the beginning of each step
-                game_state_result = self._execute_function_call_by_name("get_game_state", {})
-
-                # Parse game state result to extract screenshot if available
-                import json as json_module
+                gs_res = self._execute_function_call_by_name("get_game_state", {})
                 try:
-                    game_state_data = json_module.loads(game_state_result)
-                    screenshot_b64 = game_state_data.get("screenshot_base64")
+                    b64 = json.loads(gs_res).get("screenshot_base64")
                 except:
-                    screenshot_b64 = None
-
-                # Build prompt for this step (conditional based on optimization mode)
-                if self.optimization_enabled:
-                    prompt = self._build_optimized_prompt(game_state_result, self.step_count)
-                else:
-                    prompt = self._build_structured_prompt(game_state_result, self.step_count)
-
-                # Run step with optional screenshot
-                success, output = self.run_step(prompt, screenshot_b64=screenshot_b64)
-
+                    b64 = None
+                p = (
+                    self._build_optimized_prompt(gs_res, self.step_count)
+                    if self.optimization_enabled
+                    else self._build_structured_prompt(gs_res, self.step_count)
+                )
+                success, out = self.run_step(p, screenshot_b64=b64)
                 if not success:
-                    logger.warning("⚠️ Step failed, waiting 5 seconds before retry...")
                     time.sleep(5)
                     continue
-
-                # Increment step count
                 self.step_count += 1
-                logger.info(f"✅ Step {self.step_count} completed")
-
-                # Update server metrics with LLM usage
                 try:
                     update_server_metrics(self.server_url)
-                except Exception as e:
-                    logger.debug(f"Failed to update server metrics: {e}")
-
-                # Auto-save checkpoint after each step for persistence
-                try:
-                    # Save game state checkpoint
-                    checkpoint_response = requests.post(
-                        f"{self.server_url}/checkpoint",
-                        json={"step_count": self.step_count},
-                        timeout=10
-                    )
-                    
-                    # Save agent history to checkpoint_llm.txt
-                    history_response = requests.post(
-                        f"{self.server_url}/save_agent_history",
-                        timeout=5
-                    )
-                    
-                    if checkpoint_response.status_code == 200 and history_response.status_code == 200:
-                        if self.step_count % 10 == 0:  # Log every 10 steps to avoid spam
-                            logger.info(f"💾 Checkpoint and history saved at step {self.step_count}")
-                    else:
-                        logger.warning(f"⚠️ Save failed - Checkpoint: {checkpoint_response.status_code}, History: {history_response.status_code}")
-                except requests.exceptions.RequestException as e:
-                    logger.debug(f"⚠️ Checkpoint/history save error: {e}")
-
-                # Brief pause between steps
-                logger.info("⏸️  Waiting 1 second before next step...")
+                    requests.post(f"{self.server_url}/checkpoint", json={"step_count": self.step_count}, timeout=10)
+                    requests.post(f"{self.server_url}/save_agent_history", timeout=5)
+                except:
+                    pass
                 time.sleep(1)
-
         except KeyboardInterrupt:
-            logger.info("\n\n🛑 Agent stopped by user")
-            logger.info(self._format_history_for_display())
+            logger.info("🛑 Stopped")
             return 0
         except Exception as e:
-            logger.error(f"\n❌ Fatal error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"❌ Error: {e}")
             return 1
-
-        logger.info(f"\n🎯 Agent completed {self.step_count} steps")
-        logger.info(f"📚 Conversation history: {len(self.conversation_history)} turns")
-        logger.info(self._format_history_for_display())
+        finally:
+            self.stop_sampling.set()
+            if self.sampling_thread:
+                self.sampling_thread.join(timeout=2)
         return 0
-
-    def _handle_vertex_function_calls(self, response, tool_calls_made, tool_call_count, max_tool_calls):
-        """Handle function calls from VertexAI backend
-        
-        Args:
-            response: Response object (GenerationResponse or string)
-            tool_calls_made: List to append executed calls to
-            tool_call_count: Current count of tool calls
-            max_tool_calls: Maximum allowed tool calls
-            
-        Returns:
-            bool: True if function calls were executed, False otherwise
-        """
-        if not hasattr(response, 'candidates') or not response.candidates:
-            return False
-        
-        candidate = response.candidates[0]
-        if not hasattr(candidate, 'content') or not candidate.content:
-            return False
-            
-        content = candidate.content
-        if not hasattr(content, 'parts'):
-            logger.warning("⚠️ Response content has no 'parts' attribute - cannot extract function calls")
-            return False
-
-        logger.debug(f"🔍 Checking {len(content.parts)} response parts for function calls")
-        function_calls_found = False
-        for i, part in enumerate(content.parts):
-            logger.debug(f"   Part {i}: has function_call={hasattr(part, 'function_call')}, has text={hasattr(part, 'text')}")
-            if hasattr(part, 'function_call') and part.function_call:
-                function_call = part.function_call
-                tool_call_count += 1
-                logger.info(f"🔧 VLM wants to call: {function_call.name} ({tool_call_count}/{max_tool_calls})")
-                
-                # Execute the function
-                function_result = self._execute_function_call(function_call)
-                result_str = str(function_result)
-                logger.info(f"📥 Function result: {result_str[:200]}...")
-                
-                # Track tool call with result (convert protobuf args to JSON-serializable types)
-                tool_calls_made.append({
-                    "name": function_call.name,
-                    "args": self._convert_protobuf_args(function_call.args),
-                    "result": function_result
-                })
-                
-                # Store function result for next step's context
-                self._store_function_result_for_context(function_call.name, function_result)
-                
-                # Wait for action queue to complete if this was a button press
-                if function_call.name == "press_buttons":
-                    self._wait_for_actions_complete()
-                
-                function_calls_found = True
-            elif hasattr(part, 'text') and part.text:
-                logger.debug(f"   Part {i} is text: {part.text[:100]}...")
-
-        if not function_calls_found:
-            logger.warning(f"⚠️ No function calls found in response (parts checked: {len(content.parts)})")
-        elif len(tool_calls_made) == 0:
-            logger.error(f"🚫 Function calls found but none were executed (tool_calls_made is empty)")
-
-        result = function_calls_found and len(tool_calls_made) > 0
-        logger.debug(f"   Returning: function_calls_found={function_calls_found}, tool_calls_made={len(tool_calls_made)}, result={result}")
-        return result
-    
-    def _extract_text_from_response(self, response):
-        """Extract text content from response (handles both string and GenerationResponse)
-
-        Args:
-            response: Response object (string or GenerationResponse)
-
-        Returns:
-            str: Extracted text content
-        """
-        if isinstance(response, str):
-            return response.strip()
-
-        # Try to extract text from GenerationResponse
-        try:
-            if hasattr(response, 'text'):
-                return response.text.strip()
-            return ""
-        except:
-            return ""
 
 
 def main():
-    """Main entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Pokemon Emerald My Custom CLI Agent")
-    parser.add_argument(
-        "--server-url",
-        type=str,
-        default="http://localhost:8000",
-        help="Game server URL"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="gemini-2.5-flash",
-        help="Gemini model to use"
-    )
-    parser.add_argument(
-        "--max-steps",
-        type=int,
-        default=None,
-        help="Maximum number of steps to run"
-    )
-    parser.add_argument(
-        "--system-instructions",
-        type=str,
-        default="POKEAGENT.md",
-        help="System instructions file"
-    )
-    parser.add_argument(
-        "--backend",
-        type=str,
-        default="gemini",
-        help="VLM backend (gemini, vertex, openai, etc.)"
-    )
-
-    args = parser.parse_args()
-
+    p = argparse.ArgumentParser()
+    p.add_argument("--server-url", default="http://localhost:8000")
+    p.add_argument("--model", default="gemini-2.5-flash")
+    p.add_argument("--max-steps", type=int, default=None)
+    p.add_argument("--system-instructions", default="POKEAGENT.md")
+    p.add_argument("--backend", default="gemini")
+    args = p.parse_args()
     agent = MyCLIAgent(
         server_url=args.server_url,
         model=args.model,
         backend=args.backend,
         max_steps=args.max_steps,
-        system_instructions_file=args.system_instructions
+        system_instructions_file=args.system_instructions,
     )
-
     return agent.run()
-
-
-# DEPRECATED: Text parsing functions have been removed in favor of native function calling
-# The following functions were used for parsing text responses but are no longer needed:
-# - _parse_tool_call_from_text()
-# - _execute_tool_call_from_text()
-# 
-# All VLM backends now use native function calling through proper tool declarations.
 
 
 if __name__ == "__main__":

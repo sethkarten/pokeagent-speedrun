@@ -3440,9 +3440,23 @@ class DirectObjectiveManager:
         # Get the prerequisite of the current objective
         current_prereq = current_obj.prerequisite_story_objective
 
+        # BUGFIX: Find the START of the current prerequisite group by searching backwards
+        # This ensures we don't skip earlier uncompleted objectives in the same group
+        group_start_index = self.battling_index
+        for i in range(self.battling_index - 1, -1, -1):
+            if i < 0 or i >= len(self.battling_sequence):
+                break
+            obj = self.battling_sequence[i]
+            # Stop when we hit a different prerequisite
+            if obj.prerequisite_story_objective != current_prereq:
+                break
+            # Found an objective in the same group - update start index
+            group_start_index = i
+
         # Collect all objectives with the same prerequisite that are not yet completed
+        # Start from the beginning of the group, not from battling_index
         group = []
-        for i in range(self.battling_index, len(self.battling_sequence)):
+        for i in range(group_start_index, len(self.battling_sequence)):
             obj = self.battling_sequence[i]
 
             # Stop when we hit a different prerequisite
@@ -3453,7 +3467,7 @@ class DirectObjectiveManager:
             if not obj.completed:
                 group.append(obj)
 
-        logger.info(f"⚔️  Battling group: {len(group)} objectives with prerequisite '{current_prereq}'")
+        logger.info(f"⚔️  Battling group: {len(group)} objectives with prerequisite '{current_prereq}' (indices {group_start_index}-{i})")
         return group
 
     def add_objectives_to_category(self, category: str, objectives_data: List[Dict[str, Any]], run_dir: Optional[str] = None):

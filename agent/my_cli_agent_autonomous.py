@@ -535,7 +535,9 @@ class AutonomousCLIAgent:
                 logger.warning(f"Could not load knowledge base for reflection: {e}")
                 knowledge_section = "\n\nKNOWLEDGE BASE: Error loading knowledge base\n"
 
-            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald. Provide direct, actionable guidance.
+            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald in an attempt to speedrun the game. Provide direct, actionable guidance. 
+Look for mistakes in logic, erroneous decision-making, or bad macro strategy (e.g., puzzles, going the wrong direction, not sufficiently traning and catching pokemon based on game progress).
+
 
 AGENT'S CONCERN:
 {situation}
@@ -554,7 +556,7 @@ PROGRESS:
 - Milestones: {progress.get('milestones_completed', 0)}
 - Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence
 
-RECENT ACTIONS (last 10 steps):
+RECENT ACTIONS (last 20 steps):
 {history_str}
 
 GROUND TRUTH SOURCES (trust these in priority order):
@@ -617,11 +619,30 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
             # Use agent's own VLM for reflection
             reflection_response = self.vlm.get_text_query(reflection_prompt, "Self_Reflection")
 
-            logger.info(f"✅ Self-reflection complete ({len(reflection_response)} chars)")
+            # Extract text from response (may be GenerateContentResponse object or string)
+            if isinstance(reflection_response, str):
+                reflection_text = reflection_response
+            else:
+                # Extract text from GenerateContentResponse object
+                try:
+                    reflection_text = reflection_response.text
+                except Exception as e:
+                    # Fallback: try to extract from candidates
+                    try:
+                        if hasattr(reflection_response, 'candidates') and reflection_response.candidates:
+                            parts = reflection_response.candidates[0].content.parts
+                            reflection_text = ''.join(part.text for part in parts if hasattr(part, 'text'))
+                        else:
+                            reflection_text = str(reflection_response)
+                    except Exception as e2:
+                        logger.warning(f"Could not extract text from reflection response: {e}, {e2}")
+                        reflection_text = "Reflection completed but could not extract text."
+
+            logger.info(f"✅ Self-reflection complete ({len(reflection_text)} chars)")
 
             return json.dumps({
                 "success": True,
-                "reflection": reflection_response,
+                "reflection": reflection_text,
                 "context_analyzed": {
                     "steps_reviewed": len(history),
                     "location": current_state.get('location'),
@@ -705,6 +726,7 @@ Provide your analysis in this format:
 - Look at the porymap ground truth map in the game state. Tiles marked '#' are walls, '.' are walkable, 'D' are doors/warps, 'S' are stairs.
 - Review the action history to avoid repeating failed attempts.
 - Learn from previous outputs and function results to refine your strategy.
+- **USE press_buttons() FOR PUZZLE GYMS**: Do NOT use navigate_to() in puzzle gyms - it doesn't work well with rotating doors, switches, or moving platforms. Instead, use press_buttons() with explicit directional inputs (UP, DOWN, LEFT, RIGHT) to solve puzzles step by step.
 Be specific and actionable. Reference actual coordinates from the porymap when possible."""
 
             logger.info(f"🧩 Agent analyzing gym puzzle: {gym_name}")
@@ -714,11 +736,19 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             if not frame_b64:
                 return json.dumps({"success": False, "error": "No frame available in game state"})
 
+            # Convert base64 string to PIL Image for VLM
+            try:
+                frame_bytes = base64.b64decode(frame_b64)
+                frame_image = PILImage.open(io.BytesIO(frame_bytes))
+                logger.info(f"   Screenshot: <{len(frame_bytes)} bytes>")
+            except Exception as e:
+                logger.error(f"Failed to decode screenshot: {e}")
+                return json.dumps({"success": False, "error": f"Failed to decode screenshot: {e}"})
+
             # Use agent's own VLM for puzzle analysis with current frame
             # IMPORTANT: We need to create a separate VLM instance WITHOUT tools to avoid recursive function calling
             # The agent's self.vlm has gym_puzzle_agent in its tools, which causes it to try calling the tool
             # instead of providing text analysis when asked about gym puzzles
-            from utils.vlm import VLM
 
             # Create a temporary VLM instance without tools (tools=None)
             puzzle_vlm = VLM(
@@ -727,7 +757,7 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 tools=None  # No function calling - pure text analysis
             )
 
-            puzzle_response = puzzle_vlm.get_query(frame_b64, puzzle_prompt, "Gym_Puzzle_Analysis")
+            puzzle_response = puzzle_vlm.get_query(frame_image, puzzle_prompt, "Gym_Puzzle_Analysis")
 
             # Extract text from response - same logic as VLM backends use
             puzzle_text = ""
@@ -953,9 +983,9 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
         self.conversation_history.append(entry)
 
-        # Keep only last 10 entries to prevent unbounded growth
-        if len(self.conversation_history) > 10:
-            self.conversation_history = self.conversation_history[-10:]
+        # Keep only last 20 entries to prevent unbounded growth
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
 
         logger.debug(f"✅ History now has {len(self.conversation_history)} entries")
 
@@ -2520,7 +2550,7 @@ Step {step_count}"""
             logger.debug(f"📜 No conversation history to format")
             return "No previous actions recorded."
 
-        recent_entries = self.conversation_history[-10:]
+        recent_entries = self.conversation_history[-20:]
         logger.debug(f"📜 Formatting {len(recent_entries)} history entries")
 
         history_lines = []
@@ -2615,6 +2645,21 @@ Step {step_count}"""
                 # Increment step count
                 self.step_count += 1
                 logger.info(f"✅ Step {self.step_count} completed")
+
+                # Automatic reflection every 20 steps
+                if self.step_count % 20 == 0 and self.step_count > 0:
+                    logger.info(f"\n🔄 Auto-reflection triggered (every 20 steps)")
+                    try:
+                        reflection_result = self._execute_reflect({})
+                        logger.info(f"📝 Reflection completed")
+                        # Log the reflection result to conversation history
+                        self.conversation_history.append({
+                            "role": "function_result",
+                            "name": "reflect",
+                            "content": reflection_result
+                        })
+                    except Exception as e:
+                        logger.warning(f"⚠️ Auto-reflection failed: {e}")
 
                 # Update server metrics
                 try:
