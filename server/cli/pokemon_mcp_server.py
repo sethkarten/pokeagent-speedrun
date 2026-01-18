@@ -114,6 +114,7 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             "screenshot_base64": screenshot_b64,
             "player_position": state.get("player", {}).get("position", {}),
             "location": state.get("player", {}).get("location", "Unknown"),
+            "raw_state": state,
         }
 
     except Exception as e:
@@ -163,7 +164,15 @@ def press_buttons_direct(buttons, action_queue, reasoning="", source=None, metad
         return {"success": False, "error": str(e)}
 
 
-def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = None, consider_npcs: bool = True) -> dict:
+def navigate_to_direct(
+    env,
+    x,
+    y,
+    reason: str = "",
+    variance: Optional[str] = None,
+    consider_npcs: bool = True,
+    blocked_coords: Optional[List[Tuple[int, int]]] = None,
+) -> dict:
     """
     Calculate path to coordinates without HTTP calls - for use by server endpoints.
     Returns buttons to be queued via take_action.
@@ -175,6 +184,7 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
         reason: Reason for navigation
         variance: Path variance level ('low', 'medium', 'high', or None)
         consider_npcs: Whether to avoid NPC positions during pathfinding (default False)
+        blocked_coords: Optional list of additional blocked coordinates
 
     Returns:
         Dictionary with success status, buttons, and path info
@@ -202,6 +212,8 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
 
         # Get current state for pathfinding
         state = env.get_comprehensive_state()
+
+        # (CRITICAL: Load porymap data remains same...)
 
         # CRITICAL: Load porymap data into state for pathfinding
         # The pathfinder needs map['porymap']['grid'] which is normally added by format_state_for_llm
@@ -341,7 +353,9 @@ def navigate_to_direct(env, x, y, reason: str = "", variance: Optional[str] = No
                         goal_was_blocked = True
 
         # Calculate path buttons using Pathfinder
-        buttons = pathfinder.find_path(start, goal, state, variance=variance_level, consider_npcs=consider_npcs)
+        buttons = pathfinder.find_path(
+            start, goal, state, variance=variance_level, consider_npcs=consider_npcs, blocked_coords=blocked_coords
+        )
 
         if not buttons:
             # Provide detailed error message about why path failed
@@ -581,7 +595,14 @@ def press_buttons(
 
 
 @mcp.tool()
-def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consider_npcs: bool = True) -> dict:
+def navigate_to(
+    x: int,
+    y: int,
+    variance: str = "none",
+    reason: str = "",
+    consider_npcs: bool = True,
+    blocked_coords: Optional[List[List[int]]] = None,
+) -> dict:
     """
     Automatically pathfind and move to a specific coordinate on the current map using A* algorithm.
     Handles collision detection and finds the optimal path. The pathfinding will be executed
@@ -593,6 +614,7 @@ def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consid
         variance: Path variance level ('low', 'medium', 'high', or 'none')
         reason: Why you're navigating to this location (optional context)
         consider_npcs: Whether to avoid NPC positions during pathfinding (default True, NPCs avoided)
+        blocked_coords: Optional list of additional coordinates to treat as blocked (e.g. [ [10, 11], [10, 12] ])
 
     Returns:
         Dictionary with success status, path information, and navigation result
@@ -601,6 +623,11 @@ def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consid
     state_response = get_game_state()
     if not state_response.get("success"):
         return {"success": False, "error": "Failed to get current game state"}
+
+    # Convert list of lists to list of tuples for internal use
+    internal_blocked = None
+    if blocked_coords:
+        internal_blocked = [tuple(c) for c in blocked_coords]
 
     # Disable navigate_to for Mauville Gym due to map coordinate issues
     location = state_response.get("state", {}).get("player", {}).get("location", {})
@@ -648,7 +675,9 @@ def navigate_to(x: int, y: int, variance: str = "none", reason: str = "", consid
         goal = (x, y)
 
         # Calculate path using Pathfinder
-        buttons = pathfinder.find_path(start, goal, state, variance=variance_level, consider_npcs=consider_npcs)
+        buttons = pathfinder.find_path(
+            start, goal, state, variance=variance_level, consider_npcs=consider_npcs, blocked_coords=internal_blocked
+        )
 
         if not buttons:
             return {"success": False, "error": "No path found to target location", "target": f"({x}, {y})"}

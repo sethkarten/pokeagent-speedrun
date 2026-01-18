@@ -75,9 +75,24 @@ class MyCLIAgent:
         self.server_url, self.model, self.backend, self.max_steps = server_url, model, backend, max_steps
         self.step_count, self.max_context_chars, self.target_context_chars = 0, max_context_chars, target_context_chars
         self.optimization_enabled, self.optimization_frequency = enable_prompt_optimization, optimization_frequency
-        self.conversation_history, self.frame_buffer, self.max_frame_buffer_size = [], [], 15
+        self.conversation_history, self.frame_buffer, self.max_frame_buffer_size = [], [], 10
         self.frame_buffer_lock, self.sampling_interval, self.stop_sampling = threading.Lock(), 1.0, threading.Event()
         self.recent_function_results = []
+        self.defeated_trainers = set()
+        self.blocked_coords = set()
+        self.turnstile_states = {
+            (15, 21): "H",
+            (13, 5): "H",
+            (5, 6): "H",
+            (9, 11): "H",
+            (9, 13): "V",
+            (7, 17): "H",
+            (4, 18): "V",
+            (4, 3): "H",
+            (12, 13): "H",
+            (12, 11): "V",
+        }
+
         self.system_instructions = self._load_system_instructions(system_instructions_file)
         self.mcp_adapter = MCPToolAdapter(server_url)
         self.tools = self._create_tool_declarations()
@@ -141,6 +156,10 @@ class MyCLIAgent:
                         "y": {"type_": "INTEGER"},
                         "variance": {"type_": "STRING"},
                         "reason": {"type_": "STRING"},
+                        "blocked_coords": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "ARRAY", "items": {"type_": "INTEGER"}},
+                        },
                     },
                     "required": ["x", "y", "variance", "reason"],
                 },
@@ -162,14 +181,28 @@ class MyCLIAgent:
     def _execute_function_call(self, fc):
         return self._execute_function_call_by_name(fc.name, self._convert_protobuf_args(fc.args))
 
-    def _convert_protobuf_args(self, pa):
-        return {k: (list(v) if hasattr(v, "__iter__") and not isinstance(v, (str, dict)) else v) for k, v in pa.items()}
+    def _convert_protobuf_args(self, proto_args):
+        result = {}
+        for k, v in proto_args.items():
+            if hasattr(v, "items"):
+                result[k] = self._convert_protobuf_args(v)
+            elif hasattr(v, "__iter__") and not isinstance(v, (str, dict)):
+                converted_list = []
+                for item in v:
+                    if hasattr(item, "items"):
+                        converted_list.append(self._convert_protobuf_args(item))
+                    else:
+                        converted_list.append(item)
+                result[k] = converted_list
+            else:
+                result[k] = v
+        return result
 
     def _add_to_history(self, p, r, tc=None, ad=None, pc=None):
         self.conversation_history.append(
             {"step": self.step_count, "llm_response": r, "action_details": ad, "player_coords": pc}
         )
-        if len(self.conversation_history) > 10:
+        if len(self.conversation_history) > 30:
             self.conversation_history.pop(0)
 
     def _store_function_result_for_context(self, n, r):
@@ -180,21 +213,83 @@ class MyCLIAgent:
     def _get_function_results_context(self):
         return "\n".join([f"🔧 {r['name']}: {r['result'][:500]}" for r in self.recent_function_results])
 
+    def _patch_gym_grid(self, gs_data):
+        """Patch the grid and state_text to reflect current turnstile states."""
+        try:
+            loc = gs_data.get("location", "")
+            if "GYM" not in loc.upper():
+                return gs_data
+
+            grid = gs_data.get("raw_state", {}).get("map", {}).get("porymap", {}).get("grid")
+            if not grid:
+                st = gs_data.get("state_text", "")
+                if "ASCII Map:" in st:
+                    # Extract the map part accurately
+                    map_part = st.split("ASCII Map:")[1]
+                    # Cut off at Warps or Objects
+                    if "Warps (" in map_part:
+                        map_part = map_part.split("Warps (")[0]
+                    elif "Objects/" in map_part:
+                        map_part = map_part.split("Objects/")[0]
+
+                    # Split lines and strip each
+                    map_lines = [line.strip() for line in map_part.strip().split("\n") if line.strip()]
+                    grid = [list(line) for line in map_lines]
+            if not grid:
+                return gs_data
+
+            # 2. Clear all arms (orthogonal neighbors of pivots)
+            for px, py in self.turnstile_states.keys():
+                for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0)]:
+                    nx, ny = px + dx, py + dy
+                    if 0 <= ny < len(grid) and 0 <= nx < len(grid[ny]):
+                        if grid[ny][nx] == "#":
+                            grid[ny][nx] = "."
+
+            # 3. Add arms based on toggle states
+            for (px, py), state in self.turnstile_states.items():
+                arms = [(px - 1, py), (px + 1, py)] if state == "H" else [(px, py - 1), (px, py + 1)]
+                for ax, ay in arms:
+                    if 0 <= ay < len(grid) and 0 <= ax < len(grid[ay]):
+                        grid[ay][ax] = "#"
+
+            # 4. Re-format ASCII map in state_text
+            st = gs_data.get("state_text", "")
+            if "ASCII Map:" in st:
+                parts = st.split("ASCII Map:")
+                header = parts[0]
+                rest = parts[1].split("Warps (")
+                footer = "Warps (" + rest[1] if len(rest) > 1 else ""
+
+                # Build new ASCII map from patched grid
+                new_ascii_lines = []
+                for y, row in enumerate(grid):
+                    line_chars = list(row)
+                    # Add player if at this Y
+                    pp = gs_data.get("player_position", {})
+                    if pp and pp.get("y") == y:
+                        px = pp.get("x")
+                        if 0 <= px < len(line_chars):
+                            line_chars[px] = "P"
+                    new_ascii_lines.append("".join(line_chars))
+
+                new_ascii = "\n".join(new_ascii_lines)
+                gs_data["state_text"] = f"{header}ASCII Map (PATCHED):\n{new_ascii}\n\n{footer}"
+                logger.info("🗺️ Successfully patched gym ASCII map")
+
+            return gs_data
+        except Exception as e:
+            logger.warning(f"Failed to patch gym grid: {e}")
+            return gs_data
+
     def run_step(self, prompt, max_tool_calls=5, screenshot_b64=None):
         try:
             gs = self.mcp_adapter.call_tool("get_game_state", {})
             loc = gs.get("location", "Unknown")
-            is_gym = "Gym" in loc or "GYM" in loc
-            logger.info(f"📍 Current location: {loc} (is_gym={is_gym})")
-
-            at = [t for t in self.tools if t["name"] != "navigate_to"] if is_gym else self.tools
-            if is_gym:
-                logger.info(f"🚫 Disabled navigate_to tool for {loc}")
-
-            self.vlm.backend.tools = at
-
+            self.vlm.backend.tools = self.tools
             if hasattr(self.vlm.backend, "_setup_function_calling"):
                 self.vlm.backend._setup_function_calling()
+            last_coords = self.conversation_history[-1].get("player_coords") if self.conversation_history else None
             with self.frame_buffer_lock:
                 frames = list(self.frame_buffer)
                 if screenshot_b64:
@@ -204,19 +299,70 @@ class MyCLIAgent:
             if self._is_black_frame(frames[-1]):
                 return True, "WAIT"
             res = self.vlm.get_query(frames, prompt, "CLI_Agent")
+            thinking_text, parts = "", []
             if self.backend == "gemini":
                 parts = res.candidates[0].content.parts if hasattr(res, "candidates") else []
                 for p in parts:
+                    if hasattr(p, "text") and p.text:
+                        thinking_text += p.text + " "
+                thinking_text = thinking_text.strip()
+                for p in parts:
                     if hasattr(p, "function_call"):
-                        fr = self._execute_function_call(p.function_call)
-                        self._store_function_result_for_context(p.function_call.name, fr)
+                        fc = p.function_call
+                        args = self._convert_protobuf_args(fc.args)
+                        if fc.name == "navigate_to" and self.blocked_coords:
+                            if not args.get("blocked_coords"):
+                                args["blocked_coords"] = [list(c) for c in self.blocked_coords]
+                                fr = self._execute_function_call_by_name(fc.name, args)
+                            else:
+                                fr = self._execute_function_call(fc)
+                        else:
+                            fr = self._execute_function_call(fc)
+                        self._store_function_result_for_context(fc.name, fr)
+                        if fc.name in ["press_buttons", "navigate_to"]:
+                            self._wait_for_actions_complete()
+                        tr = args.get("reasoning") or args.get("reason") or ""
+                        cr = f"{thinking_text}\nTool Reasoning: {tr}" if thinking_text and tr else (thinking_text or tr)
                         try:
                             s = json.loads(self._execute_function_call_by_name("get_game_state", {}))
                             coords = (s.get("player_position", {}).get("x"), s.get("player_position", {}).get("y"))
                         except:
                             coords = None
-                        self._add_to_history(prompt, "", None, f"Executed {p.function_call.name}", pc=coords)
-                        return True, "Action executed"
+                        self._add_to_history(prompt, cr, None, f"Executed {fc.name}", pc=coords)
+                        if coords and last_coords and coords == last_coords and fc.name == "press_buttons":
+                            try:
+                                btn = args.get("buttons", [])[-1]
+                                tx, ty = coords
+                                if btn == "UP":
+                                    ty -= 1
+                                elif btn == "DOWN":
+                                    ty += 1
+                                elif btn == "LEFT":
+                                    tx -= 1
+                                elif btn == "RIGHT":
+                                    tx += 1
+                                for px, py in self.turnstile_states.keys():
+                                    if abs(tx - px) + abs(ty - py) == 1:
+                                        self.turnstile_states[(px, py)] = (
+                                            "H" if self.turnstile_states[(px, py)] == "V" else "V"
+                                        )
+                                self.blocked_coords.add((tx, ty))
+                            except:
+                                pass
+                        if isinstance(cr, str) and any(
+                            p in cr.lower() for p in ["already fought", "already battled", "repeating", "defeated"]
+                        ):
+                            try:
+                                gs_data = json.loads(self._execute_function_call_by_name("get_game_state", {}))
+                                if coords:
+                                    for obj in gs_data.get("raw_state", {}).get("objects", []):
+                                        if obj.get("trainer_type") != "TRAINER_TYPE_NONE" and (
+                                            abs(obj["x"] - coords[0]) + abs(obj["y"] - coords[1]) <= 1
+                                        ):
+                                            self.defeated_trainers.add(f"{obj['graphics_id']}@{obj['x']},{obj['y']}")
+                            except:
+                                pass
+                        return True, cr or "Action executed"
             self._add_to_history(prompt, str(res))
             return True, str(res)
         except Exception as e:
@@ -227,9 +373,11 @@ class MyCLIAgent:
             gd = json.loads(gs_res)
         except:
             gd = {}
-        st = gd.get("state_text", "")
+        st, loc = gd.get("state_text", ""), gd.get("location", "Unknown")
         if self._is_title_sequence(gd):
             st = self._strip_map_info(st)
+        elif "Gym" in loc:
+            st = self._gym_strip(st)
         do, ds = gd.get("direct_objective", ""), gd.get("direct_objective_status", "")
         co = gd.get("categorized_objectives", {})
         if co:
@@ -237,9 +385,7 @@ class MyCLIAgent:
             for c in ["story", "battling", "dynamics"]:
                 o = co.get(c, {})
                 if o:
-                    parts.append(
-                        f"{c.upper()}: {o.get('description')} (@ {o.get('target_location')})\n   Hint: {o.get('navigation_hint')}"
-                    )
+                    parts.append(f"{c.upper()}: {o.get('description')} (@ {o.get('target_location')})")
             if parts:
                 do = "\n\n".join(parts)
             cs = gd.get("categorized_status", {})
@@ -251,12 +397,52 @@ class MyCLIAgent:
                         if i.get("total") > 0
                     ]
                 )
-        loc = gd.get("location", "Unknown")
-        is_gym = "Gym" in loc or "GYM" in loc
-        tools = "🎮 **TOOLS**:\n- get_game_state()\n- complete_direct_objective()\n- press_buttons()"
-        if not is_gym:
-            tools += "\n- navigate_to()"
-        return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n### HISTORY:\n{self._format_action_history()}\n{self._get_function_results_context()}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n### TOOLS:\n{tools}\n"
+        # Enhanced history for LLM
+        lines, last, trail = [], None, []
+        for e in self.conversation_history[-20:]:
+            c = e.get("player_coords")
+            c_str = f"({c[0]},{c[1]})" if c else "(?)"
+            if c:
+                trail.append(c_str)
+            s = (
+                " [STAYED AT SAME POS]"
+                if last and c == last
+                else (
+                    " [LOOP]"
+                    if c and last and any(p.get("player_coords") == c for p in self.conversation_history[:-1])
+                    else ""
+                )
+            )
+            res = str(e.get("llm_response", ""))
+            res_preview = res.split("\n")[0][:100]
+            if s and "Executed press_buttons" in e.get("action_details", ""):
+                s = " [STAYED AT SAME POS - LIKELY TOGGLED GATE]"
+            lines.append(f"[{e['step']}] {c_str}{s}: {res_preview}... -> {e['action_details']}")
+            last = c
+        hist = "\n".join(lines) + "\n### TRAIL: " + " -> ".join(trail[-10:])
+
+        func = self._get_function_results_context()
+        defeated = "\n### DEFEATED TRAINERS:\n" + "\n".join(self.defeated_trainers) if self.defeated_trainers else ""
+        blocked = (
+            "\n### BLOCKED TILES:\n" + ", ".join([f"({x},{y})" for x, y in self.blocked_coords])
+            if self.blocked_coords
+            else ""
+        )
+        prog = ""
+        try:
+            pp = gd.get("player_position", {})
+            if pp:
+                dist = abs(pp["x"] - 15) + abs(pp["y"] - 2)
+                radar = self._get_local_radar(gd)
+                prog = f"\n### PROGRESS METRICS:\n- Distance to Winona (15,2): {dist} tiles\n- DONT BACKTRACK!\n{radar}"
+        except:
+            pass
+        warning = ""
+        if "Gym" in loc and self.conversation_history:
+            if "STAYED AT SAME POS" in self.conversation_history[-1].get("llm_response", ""):
+                warning = "\n⚠️ ALERT: Last move toggled a gate. DO NOT repeat it! Look for a NEW path."
+        tools = "🎮 **TOOLS**:\n- get_game_state()\n- complete_direct_objective()\n- press_buttons()\n- navigate_to(x, y, variance, reason, blocked_coords=[])"
+        return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n{warning}\n### HISTORY:\n{hist}\n{func}{defeated}{blocked}{prog}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n### TOOLS:\n{tools}\n"
 
     def _build_structured_prompt(self, gs_res, sc):
         return self._build_optimized_prompt(gs_res, sc)
@@ -299,18 +485,42 @@ class MyCLIAgent:
                 filtered.append(l)
         return "\n".join(filtered)
 
-    def _format_action_history(self):
-        if not self.conversation_history:
-            return "None."
-        lines = []
-        for e in self.conversation_history[-10:]:
-            c = f"({e['player_coords'][0]},{e['player_coords'][1]})" if e.get("player_coords") else "(?)"
-            res = e.get("llm_response", "")
-            # Truncate long thinking to keep history clean
-            if len(res) > 200:
-                res = res[:200] + "..."
-            lines.append(f"[{e['step']}] at {c}: {res} -> {e['action_details']}")
-        return "\n".join(lines)
+    def _gym_strip(self, st):
+        lines, filtered, skip = st.split("\n"), [], False
+        for l in lines:
+            if "MOVEMENT PREVIEW:" in l:
+                skip = True
+            if l.strip() == "" or "### TOOLS:" in l:
+                skip = False
+            if not skip:
+                filtered.append(l)
+        return "\n".join(filtered)
+
+    def _get_local_radar(self, gd):
+        try:
+            player_pos = gd.get("player_position", {})
+            if not (player_pos and "x" in player_pos and "y" in player_pos):
+                return ""
+            px, py = player_pos["x"], player_pos["y"]
+            grid = gd.get("raw_state", {}).get("map", {}).get("porymap", {}).get("grid")
+            if not grid:
+                return ""
+            radar_text = "\n### LOCAL COLLISION RADAR (5x5, P=You, #=Gate/Wall, .=Walkable):\n"
+            for y in range(py - 2, py + 3):
+                row = []
+                for x in range(px - 2, px + 3):
+                    if 0 <= y < len(grid) and 0 <= x < len(grid[y]):
+                        char = "P" if x == px and y == py else grid[y][x]
+                        row.append(f"{char}")
+                    else:
+                        row.append("X")
+                radar_text += " ".join(row) + "\n"
+            return radar_text
+        except:
+            return ""
+
+    def _wait_for_actions_complete(self):
+        time.sleep(1.8)
 
     def run(self) -> int:
         self.conversation_history = []
@@ -321,6 +531,12 @@ class MyCLIAgent:
                     break
                 logger.info(f"🤖 Step {self.step_count + 1}")
                 gs_res = self._execute_function_call_by_name("get_game_state", {})
+                try:
+                    gs_json = json.loads(gs_res)
+                    gs_patched = self._patch_gym_grid(gs_json)
+                    gs_res = json.dumps(gs_patched)
+                except:
+                    pass
                 try:
                     b64 = json.loads(gs_res).get("screenshot_base64")
                 except:
@@ -343,10 +559,8 @@ class MyCLIAgent:
                     pass
                 time.sleep(1)
         except KeyboardInterrupt:
-            logger.info("🛑 Stopped")
             return 0
         except Exception as e:
-            logger.error(f"❌ Error: {e}")
             return 1
         finally:
             self.stop_sampling.set()
