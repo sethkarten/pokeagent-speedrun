@@ -19,8 +19,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Mapping from variance level to the number of initial moves that must differ
-VARIANCE_LEVEL_TO_STEPS = {
+# Mapping from variance to the number of initial moves that must differ
+VARIANCE_TO_STEPS = {
     "low": 1,
     "medium": 3,
     "high": 5,
@@ -297,8 +297,8 @@ class Pathfinder:
 
         base_buttons = self._path_to_buttons(path)
 
-        if variance_level:
-            variance_steps = VARIANCE_LEVEL_TO_STEPS.get(variance_level)
+        if variance:
+            variance_steps = VARIANCE_TO_STEPS.get(variance)
             if variance_steps:
                 variant_buttons = self._generate_variance_candidates(
                     start=start,
@@ -312,11 +312,11 @@ class Pathfinder:
                 if variant_buttons:
                     chosen_buttons = random.choice(variant_buttons)
                     logger.info(
-                        f"Variance '{variance_level}' selected alternative path (prefix {chosen_buttons[:variance_steps]})"
+                        f"Variance '{variance}' selected alternative path (prefix {chosen_buttons[:variance_steps]})"
                     )
                     return chosen_buttons
                 else:
-                    logger.debug(f"No alternative paths found for variance level '{variance_level}', using base path")
+                    logger.debug(f"No alternative paths found for variance '{variance}', using base path")
 
         return base_buttons
 
