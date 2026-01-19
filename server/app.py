@@ -2606,8 +2606,10 @@ async def mcp_get_game_state():
                     objective_context = direct_objectives_manager.get_objective_context(game_state)
                     if objective_context:
                         result["direct_objective_context"] = objective_context
-        
-        return result
+
+        # Ensure all data is JSON-serializable (objectives data may contain enums/numpy types)
+        from server.cli.pokemon_mcp_server import serialize_for_json
+        return serialize_for_json(result)
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
         return {"success": False, "error": str(e)}
@@ -2834,15 +2836,16 @@ async def mcp_complete_direct_objective(request: dict):
         next_obj = direct_objectives_manager.get_current_objective()
         if next_obj:
             next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
-            return {
+            from server.cli.pokemon_mcp_server import serialize_for_json
+            return serialize_for_json({
                 "success": True,
                 "completed_objective": {
                     "id": current_obj.id,
                     "description": current_obj.description
                 },
                 "next_objective": next_guidance,
-                "sequence_status": direct_objectives_manager.get_sequence_status()
-            }
+                "sequence_status": direct_objectives_manager.get_sequence_status(),
+            })
         else:
             # Sequence complete - save to history in timestamped run directory
             if current_run_dir:
@@ -2879,8 +2882,9 @@ async def mcp_complete_direct_objective(request: dict):
                 
                 # Get guidance for the new objective
                 next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
-                
-                return {
+
+                from server.cli.pokemon_mcp_server import serialize_for_json
+                return serialize_for_json({
                     "success": True,
                     "completed_objective": {
                         "id": current_obj.id,
@@ -2890,12 +2894,13 @@ async def mcp_complete_direct_objective(request: dict):
                     "sequence_status": direct_objectives_manager.get_sequence_status(),
                     "message": "All objectives completed! A new objective has been automatically created to guide you through creating the next 3 objectives. Follow the steps: get_progress_summary() → get_walkthrough() → create_direct_objectives()",
                     "sequence_complete": False,  # Not complete anymore - we added a new objective
-                    "auto_objective_created": True
-                }
+                    "auto_objective_created": True,
+                })
             except Exception as e:
                 logger.error(f"Failed to create auto objective: {e}")
                 # Fallback to original behavior if auto-objective creation fails
-                return {
+                from server.cli.pokemon_mcp_server import serialize_for_json
+                return serialize_for_json({
                     "success": True,
                     "completed_objective": {
                         "id": current_obj.id,
@@ -2904,9 +2909,9 @@ async def mcp_complete_direct_objective(request: dict):
                     "next_objective": None,
                     "sequence_status": direct_objectives_manager.get_sequence_status(),
                     "message": "All objectives completed! Use get_progress_summary() to see what you've accomplished, then get_walkthrough() to plan next steps, and create_direct_objectives() to create the next 3 objectives.",
-                    "sequence_complete": True
-                }
-            
+                    "sequence_complete": True,
+                })
+
     except Exception as e:
         logger.error(f"Error completing direct objective: {e}")
         return {"success": False, "error": str(e)}
@@ -3483,8 +3488,9 @@ async def mcp_create_direct_objectives(request: dict):
         
         # Get next objective guidance (should now be the first of the newly created objectives)
         next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
-        
-        return {
+
+        from server.cli.pokemon_mcp_server import serialize_for_json
+        return serialize_for_json({
             "success": True,
             "message": f"Created {len(objectives_data)} objectives",
             "reasoning": reasoning,
@@ -3497,8 +3503,8 @@ async def mcp_create_direct_objectives(request: dict):
                     if d.get("completed", False)
                 ]
             },
-            "auto_objective_completed": should_complete_auto_obj
-        }
+            "auto_objective_completed": should_complete_auto_obj,
+        })
     except Exception as e:
         logger.error(f"Error creating direct objectives: {e}")
         import traceback
@@ -3553,8 +3559,9 @@ async def mcp_get_progress_summary():
         # Get location and coordinates
         location = game_state.get("player", {}).get("location", "Unknown")
         player_pos = game_state_result.get("player_position", {}) if game_state_result.get("success") else {}
-        
-        return {
+
+        from server.cli.pokemon_mcp_server import serialize_for_json
+        return serialize_for_json({
             "success": True,
             "progress": {
                 "milestones_completed": completed_milestones,
@@ -3570,9 +3577,9 @@ async def mcp_get_progress_summary():
                 },
                 "completed_sequences_history": completed_history,
                 "knowledge_summary": kb_summary,
-                "run_directory": current_run_dir
-            }
-        }
+                "run_directory": current_run_dir,
+            },
+        })
     except Exception as e:
         logger.error(f"Error getting progress summary: {e}")
         import traceback
@@ -3653,7 +3660,8 @@ async def mcp_reflect(request: dict):
             })
 
         # Return all context for agent to analyze
-        return {
+        from server.cli.pokemon_mcp_server import serialize_for_json
+        return serialize_for_json({
             "success": True,
             "context": {
                 "situation": situation,
@@ -3674,9 +3682,9 @@ async def mcp_reflect(request: dict):
                     "objectives_completed": progress_info.get('direct_objectives', {}).get('objectives_completed_in_current_sequence', 0),
                     "total_objectives": progress_info.get('direct_objectives', {}).get('total_in_current_sequence', 0)
                 },
-                "recent_history": history_summary
-            }
-        }
+                "recent_history": history_summary,
+            },
+        })
 
     except Exception as e:
         logger.error(f"Error in reflect tool: {e}")

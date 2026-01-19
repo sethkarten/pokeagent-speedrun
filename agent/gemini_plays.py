@@ -1173,7 +1173,7 @@ Created at step {self.step_count}"""
                                     x = args.get('x')
                                     y = args.get('y')
                                     variance = args.get('variance', 'none')
-                                    action_str = f"navigate_to(x={x}, y={y}, variance={variance})"
+                                    action_str = f"navigate_to(x={x}, y={y}, variance_level={variance})"
                                 else:
                                     action_str = f"{function_name}(...)"
 
