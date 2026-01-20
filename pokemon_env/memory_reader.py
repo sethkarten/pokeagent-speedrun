@@ -3039,7 +3039,8 @@ class PokemonEmeraldReader:
         import os
         import shutil
         
-        cache_dir = ".pokeagent_cache"
+        from utils.run_data_manager import get_cache_directory
+        cache_dir = str(get_cache_directory())
         os.makedirs(cache_dir, exist_ok=True)
         cache_map_file = os.path.join(cache_dir, "map_stitcher_data.json")
         

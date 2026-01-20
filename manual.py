@@ -189,15 +189,17 @@ def handle_debug_command(key, emulator, agent_mode=False):
         print(f"💾 Screenshot saved to {filename}")
     elif key == '1':
         # Save state
-        import os
-        os.makedirs(".pokeagent_cache", exist_ok=True)
-        emulator.save_state(".pokeagent_cache/manual_save.state")
-        print("💾 State saved to .pokeagent_cache/manual_save.state")
+        from utils.run_data_manager import get_cache_path
+        save_path = str(get_cache_path("manual_save.state"))
+        emulator.save_state(save_path)
+        print(f"💾 State saved to {save_path}")
     elif key == '2':
         # Load state
         try:
-            emulator.load_state(".pokeagent_cache/manual_save.state")
-            print("📂 State loaded from .pokeagent_cache/manual_save.state")
+            from utils.run_data_manager import get_cache_path
+            load_path = str(get_cache_path("manual_save.state"))
+            emulator.load_state(load_path)
+            print(f"📂 State loaded from {load_path}")
         except:
             print("⚠️ No save state found")
     elif key == 'tab':

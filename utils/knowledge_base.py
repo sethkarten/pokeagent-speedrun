@@ -51,13 +51,17 @@ class KnowledgeBase:
     - General gameplay notes
     """
 
-    def __init__(self, cache_dir: str = ".pokeagent_cache"):
+    def __init__(self, cache_dir: str = None):
         """
         Initialize the knowledge base.
 
         Args:
-            cache_dir: Directory for storing knowledge base file
+            cache_dir: Directory for storing knowledge base file. If None, uses run-specific cache.
         """
+        if cache_dir is None:
+            from utils.run_data_manager import get_cache_directory
+            cache_dir = str(get_cache_directory())
+        
         self.cache_dir = cache_dir
         self.knowledge_file = os.path.join(cache_dir, "knowledge_base.json")
 
