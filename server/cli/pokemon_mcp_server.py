@@ -18,7 +18,7 @@ This server provides:
 import sys
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -49,6 +49,76 @@ knowledge_base = get_knowledge_base()
 
 # Screenshot cache to avoid re-encoding the same frame
 _screenshot_cache = {"frame_count": -1, "base64": None}
+
+
+def serialize_for_json(obj):
+    """Recursively convert non-JSON-serializable objects to JSON-compatible types.
+    
+    Handles:
+    - IntEnum/Enum -> int (via .value)
+    - numpy types -> native Python int/float
+    - dicts -> recursively serialize values
+    - lists/tuples -> recursively serialize items
+    - Objects with __dict__ -> convert to dict
+    - None/bool/str/int/float -> pass through
+    """
+    from enum import IntEnum, Enum
+    import numpy as np
+    
+    # Handle None and basic JSON types
+    if obj is None or isinstance(obj, (bool, str, int, float)):
+        return obj
+    
+    # Handle bytes
+    if isinstance(obj, bytes):
+        try:
+            return obj.decode('utf-8')
+        except:
+            import base64
+            return base64.b64encode(obj).decode('utf-8')
+    
+    # Handle numpy types before checking other types (numpy subclasses int/float)
+    try:
+        if isinstance(obj, (np.integer, np.int64, np.int32, np.int16, np.int8, np.uint8, np.uint16, np.uint32, np.uint64)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32, np.float16)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+    except:
+        pass
+    
+    # Handle enums
+    if isinstance(obj, (IntEnum, Enum)):
+        return obj.value
+    
+    # Handle dicts
+    if isinstance(obj, dict):
+        return {str(k): serialize_for_json(v) for k, v in obj.items()}
+    
+    # Handle sets
+    if isinstance(obj, set):
+        return [serialize_for_json(item) for item in obj]
+    
+    # Handle lists and tuples
+    if isinstance(obj, (list, tuple)):
+        return [serialize_for_json(item) for item in obj]
+    
+    # Handle objects with __dict__ (convert to dict representation)
+    if hasattr(obj, '__dict__') and not isinstance(obj, type):
+        try:
+            return serialize_for_json(obj.__dict__)
+        except Exception:
+            pass
+    
+    # Try to convert to string as last resort
+    try:
+        return str(obj)
+    except Exception:
+        logger.warning(f"Could not serialize object of type {type(obj)}: {obj}")
+        return None
 
 
 # ============================================================================
@@ -108,7 +178,8 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             screenshot_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
             logger.debug("Encoded fresh screenshot (caching disabled)")
 
-        return {
+        # Serialize state to ensure JSON compatibility (converts enums, numpy types)
+        result = {
             "success": True,
             "state_text": state_text,
             "screenshot_base64": screenshot_b64,
@@ -116,6 +187,8 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             "location": state.get("player", {}).get("location", "Unknown"),
             "raw_state": state,
         }
+        
+        return serialize_for_json(result)
 
     except Exception as e:
         logger.error(f"Failed to get game state: {e}")
