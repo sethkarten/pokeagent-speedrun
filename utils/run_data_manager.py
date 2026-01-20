@@ -22,26 +22,37 @@ logger = logging.getLogger(__name__)
 class RunDataManager:
     """Manages structured data collection for a single run"""
     
-    def __init__(self, run_id: Optional[str] = None, base_dir: str = "run_data", run_name: Optional[str] = None):
+    def __init__(self, run_id: Optional[str] = None, base_dir: str = "run_data", run_name: Optional[str] = None,
+                 first_objective_id: Optional[str] = None, first_objective_desc: Optional[str] = None):
         """Initialize run data manager
         
         Args:
             run_id: Optional run identifier. If None, creates timestamped ID.
             base_dir: Base directory for all runs (default: run_data)
-            run_name: Optional name to append to run_id (e.g., "test_run" -> "run_20251129_191503_test_run")
+            run_name: Optional name to append to run_id (deprecated - use objectives)
+            first_objective_id: ID of the first objective (for consistent naming)
+            first_objective_desc: Description of the first objective (for consistent naming)
         """
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(exist_ok=True)
         
         if run_id is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_id = f"run_{timestamp}"
-            # Append run_name if provided
-            if run_name:
-                # Sanitize run_name (remove invalid characters for filesystem)
+            
+            # Use objective info for run_id if provided
+            if first_objective_id and first_objective_desc:
+                # Sanitize objective description (remove special chars, limit length)
+                safe_desc = "".join(c if c.isalnum() or c in ('_', '-', ' ') else '_' for c in first_objective_desc)
+                safe_desc = safe_desc.replace(' ', '_')[:50]  # Limit length
+                run_id = f"{timestamp}_{first_objective_id}_{safe_desc}"
+            # Fallback to run_name if provided (deprecated)
+            elif run_name:
                 import re
                 sanitized_name = re.sub(r'[^\w\-_]', '_', run_name)
-                run_id = f"{run_id}_{sanitized_name}"
+                run_id = f"run_{timestamp}_{sanitized_name}"
+            else:
+                # Default format (no objectives specified)
+                run_id = f"run_{timestamp}"
         
         self.run_id = run_id
         self.run_dir = self.base_dir / run_id
@@ -321,13 +332,25 @@ class RunDataManager:
             maps: Path to maps file
             knowledge_base: Path to knowledge_base.json
         """
+        from utils.run_data_manager import get_cache_path
+        
         game_state_dir = self.run_dir / "end_state" / "game_state"
         
+        # Use run-specific cache paths if not explicitly provided
+        if checkpoint_state is None:
+            checkpoint_state = str(get_cache_path("checkpoint.state"))
+        if milestones is None:
+            milestones = str(get_cache_path("milestones_progress.json"))
+        if maps is None:
+            maps = str(get_cache_path("checkpoint_maps.json"))
+        if knowledge_base is None:
+            knowledge_base = str(get_cache_path("knowledge_base.json"))
+        
         files_to_copy = {
-            "checkpoint.state": checkpoint_state or ".pokeagent_cache/checkpoint.state",
-            "milestones.json": milestones or ".pokeagent_cache/milestones_progress.json",
-            "maps.json": maps or ".pokeagent_cache/checkpoint_maps.json",
-            "knowledge_base.json": knowledge_base or ".pokeagent_cache/knowledge_base.json"
+            "checkpoint.state": checkpoint_state,
+            "milestones.json": milestones,
+            "maps.json": maps,
+            "knowledge_base.json": knowledge_base
         }
         
         for dest_name, src_path in files_to_copy.items():
@@ -344,8 +367,9 @@ class RunDataManager:
         Args:
             map_stitcher_file: Path to map_stitcher_data.json
         """
+        from utils.run_data_manager import get_cache_path
         if map_stitcher_file is None:
-            map_stitcher_file = ".pokeagent_cache/map_stitcher_data.json"
+            map_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
         
         if os.path.exists(map_stitcher_file):
             dest_file = self.run_dir / "end_state" / "map_data" / "map_stitcher_data.json"
@@ -356,12 +380,13 @@ class RunDataManager:
         """Copy submission.log to run_data end_state
         
         Args:
-            submission_log: Path to submission.log. If None, looks in .pokeagent_cache
+            submission_log: Path to submission.log. If None, looks in run-specific cache
         """
+        from utils.run_data_manager import get_cache_path
         if submission_log is None:
             # Check common locations
             possible_paths = [
-                ".pokeagent_cache/submission.log",
+                str(get_cache_path("submission.log")),
                 "submission.log",
             ]
             for path in possible_paths:
@@ -378,10 +403,11 @@ class RunDataManager:
         """Copy knowledge_base.json to agent_scratch_space
         
         Args:
-            knowledge_base_file: Path to knowledge_base.json. If None, looks in .pokeagent_cache
+            knowledge_base_file: Path to knowledge_base.json. If None, looks in run-specific cache
         """
+        from utils.run_data_manager import get_cache_path
         if knowledge_base_file is None:
-            knowledge_base_file = ".pokeagent_cache/knowledge_base.json"
+            knowledge_base_file = str(get_cache_path("knowledge_base.json"))
         
         if os.path.exists(knowledge_base_file):
             dest_file = self.run_dir / "agent_scratch_space" / "knowledge_base.json"
@@ -395,10 +421,11 @@ class RunDataManager:
         """Copy frame_cache.json to end_state/frame_cache
         
         Args:
-            frame_cache_file: Path to frame_cache.json. If None, looks in .pokeagent_cache
+            frame_cache_file: Path to frame_cache.json. If None, looks in run-specific cache
         """
+        from utils.run_data_manager import get_cache_path
         if frame_cache_file is None:
-            frame_cache_file = ".pokeagent_cache/frame_cache.json"
+            frame_cache_file = str(get_cache_path("frame_cache.json"))
         
         if os.path.exists(frame_cache_file):
             dest_file = self.run_dir / "end_state" / "frame_cache" / "frame_cache.json"
@@ -427,9 +454,11 @@ class RunDataManager:
         logger.info(f"🔍 [VIDEO] Run ID: {self.run_id}")
         
         # Find all .mp4 files matching the pattern in current directory
-        # Try multiple search patterns
+        # Try multiple search patterns (new format with run_id and old format)
         search_patterns = [
-            "pokegent_recording_*.mp4",
+            f"{self.run_id}.mp4",  # New format
+            f"./{self.run_id}.mp4",
+            "pokegent_recording_*.mp4",  # Old format (fallback)
             "./pokegent_recording_*.mp4",
             os.path.join(os.getcwd(), "pokegent_recording_*.mp4"),
         ]
@@ -554,19 +583,65 @@ def get_run_data_manager() -> Optional[RunDataManager]:
     return _run_data_manager
 
 
-def initialize_run_data_manager(run_id: Optional[str] = None, run_name: Optional[str] = None) -> RunDataManager:
+def initialize_run_data_manager(run_id: Optional[str] = None, run_name: Optional[str] = None,
+                               first_objective_id: Optional[str] = None, 
+                               first_objective_desc: Optional[str] = None) -> RunDataManager:
     """Initialize the global run data manager
     
     Args:
         run_id: Optional run identifier
-        run_name: Optional name to append to run_id
+        run_name: Optional name to append to run_id (deprecated - use objectives)
+        first_objective_id: ID of the first objective (for consistent naming)
+        first_objective_desc: Description of the first objective (for consistent naming)
     
     Returns:
         RunDataManager instance
     """
     global _run_data_manager
-    _run_data_manager = RunDataManager(run_id=run_id, run_name=run_name)
+    _run_data_manager = RunDataManager(
+        run_id=run_id, 
+        run_name=run_name,
+        first_objective_id=first_objective_id,
+        first_objective_desc=first_objective_desc
+    )
     return _run_data_manager
+
+
+def get_cache_directory() -> Path:
+    """Get the cache directory for the current run
+    
+    Returns:
+        Path to .pokeagent_cache/{run_id}/ or .pokeagent_cache/ if no run_id
+    """
+    run_manager = get_run_data_manager()
+    if run_manager and run_manager.run_id:
+        cache_dir = Path(".pokeagent_cache") / run_manager.run_id
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+    else:
+        # Fallback: try to get run_id from environment
+        run_id = os.environ.get("RUN_DATA_ID")
+        if run_id:
+            cache_dir = Path(".pokeagent_cache") / run_id
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            return cache_dir
+        # Final fallback: use base cache directory (for backward compatibility)
+        cache_dir = Path(".pokeagent_cache")
+        cache_dir.mkdir(exist_ok=True)
+        return cache_dir
+
+
+def get_cache_path(relative_path: str) -> Path:
+    """Get a path within the run-specific cache directory
+    
+    Args:
+        relative_path: Relative path within cache (e.g., "checkpoint.state")
+    
+    Returns:
+        Full path to the file in the run-specific cache
+    """
+    cache_dir = get_cache_directory()
+    return cache_dir / relative_path
 
 
 def cleanup_old_cache_runs():

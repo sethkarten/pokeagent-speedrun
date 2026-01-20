@@ -19,6 +19,51 @@ from agent.objective_types import DirectObjective
 logger = logging.getLogger(__name__)
 
 
+def get_first_objective_info(sequence_name: str, start_index: int = 0) -> tuple:
+    """Get first objective ID and description from a sequence without loading it
+    
+    Args:
+        sequence_name: Name of the direct objectives sequence
+        start_index: Starting index in the sequence
+    
+    Returns:
+        tuple: (objective_id, objective_description) or (None, None) if not found
+    """
+    try:
+        if sequence_name == "autonomous_objective_creation":
+            # For autonomous mode, use a generic name
+            return ("autonomous", "autonomous_objective_creation")
+        elif sequence_name == "categorized_full_game":
+            # Load the first story objective
+            from agent.all_obj_categorized import STORY_OBJECTIVES
+            if start_index < len(STORY_OBJECTIVES):
+                obj = STORY_OBJECTIVES[start_index]
+                return (obj.id, obj.description)
+        elif sequence_name in ["tutorial_to_rival", "tutorial_to_rustboro_city", "part_1_walkthrough_claude_4_5", "full_game"]:
+            # For legacy sequences with inline objectives, create a temp manager
+            temp_manager = DirectObjectiveManager()
+            
+            if sequence_name == "tutorial_to_rustboro_city":
+                temp_manager.load_tutorial_to_rustboro_city_sequence(start_index=0)
+            elif sequence_name == "tutorial_to_rival":
+                temp_manager.load_birch_to_rival_sequence()
+            elif sequence_name == "part_1_walkthrough_claude_4_5":
+                temp_manager.load_part_1_walkthrough_claude_4_5_sequence(start_index=0)
+            elif sequence_name == "full_game":
+                temp_manager.load_full_game_sequence(start_index=0)
+            
+            if start_index < len(temp_manager.current_sequence):
+                obj = temp_manager.current_sequence[start_index]
+                return (obj.id, obj.description)
+        
+        return (None, None)
+    except Exception as e:
+        logger.warning(f"Could not get first objective info for {sequence_name}: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return (None, None)
+
+
 class DirectObjectiveManager:
     """Manages objective sequences across 3 categories: story, battling, and dynamics"""
 
@@ -2826,16 +2871,37 @@ class DirectObjectiveManager:
             # ),
 
 
-            # gemini 2.5 - flash, autonomous objective creation... fix bug in pathfinding
-            DirectObjective(
-                id="set_clock_in_rival_player_bedroom",
-                description="Set the clock in the player's bedroom to 12:00 PM",
-                action_type="interact",
-                target_location="Player's Bedroom",
-                navigation_hint="Go to the player's bedroom and set the clock. navigate to the clock via navigate_to(5, 1) and directly face it by pressing up. Interact with it by pressing A.",
-                completion_condition="clock_set",
-                priority=1
-            ),
+
+
+            # ------------------------------
+            # gemini 2.5 - flash
+            # DirectObjective(
+            #     id="battle_rival_in_route_103",
+            #     description="Battle your rival May in Route 103",
+            #     action_type="battle",
+            #     target_location="Route 103",
+            #     navigation_hint="Navigate to Route 103 and battle your rival May/Brendan. Use your starter's basic attack move to defeat them. This should be an easy first battle.",
+            #     completion_condition="battle_ends_and_rival_says_theyre_returning_to_lab",
+            #     priority=1
+            # ),
+            # DirectObjective(
+            #     id="visit_birch_lab_to_collect_pokedex",
+            #     description="Visit Professor Birch's Lab to collect the Pokedex",
+            #     action_type="navigate",
+            #     target_location="Professor Birch's Lab",
+            #     navigation_hint="Navigate to Professor Birch's Lab and collect the Pokedex. The Pokedex is located in the Lab.",
+            #     completion_condition="pokedex_collected",
+            #     priority=1
+            # ),
+            # DirectObjective(
+            #     id="visit_petalbug_city_gym",
+            #     description="Enter the Petalburg City Gym",
+            #     action_type="interact",
+            #     target_location="Petalburg City Gym",
+            #     navigation_hint="Navigate to Petalburg City Gym and enter through the front door. Talk to Norman who is currently standing in the lobby at (4, 107). Align youself to face him by looking at the visual frame and interact with him by pressing A.",
+            #     completion_condition="location_contains_petalburg_city_gym_and_talked_to_norman",
+            #     priority=1
+            # ),
             DirectObjective(
                 id="autonomous_01_create_next_objectives",
                 description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",

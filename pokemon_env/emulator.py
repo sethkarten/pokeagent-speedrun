@@ -29,7 +29,8 @@ class MilestoneTracker:
     
     def __init__(self, filename: str = None):
         # Setup cache directory
-        self.cache_dir = ".pokeagent_cache"
+        from utils.run_data_manager import get_cache_directory
+        self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Use cache folder for runtime milestone file
@@ -346,7 +347,8 @@ class EmeraldEmulator:
         self._mem_cache = {}
         
         # Setup cache directory
-        self.cache_dir = ".pokeagent_cache"
+        from utils.run_data_manager import get_cache_directory
+        self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Milestone tracker for progress tracking (using cache file)
@@ -687,8 +689,8 @@ class EmeraldEmulator:
                 # For manual saves, copy the current map_stitcher.json
                 if base_name.startswith("manual_save"):
                     # Copy the current map_stitcher_data.json from cache to manual_save_map_stitcher.json
-                    cache_dir = ".pokeagent_cache"
-                    current_stitcher_file = os.path.join(cache_dir, "map_stitcher_data.json")
+                    from utils.run_data_manager import get_cache_path
+                    current_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
                     
                     # Also check for the old location in case it exists
                     if not os.path.exists(current_stitcher_file) and os.path.exists("map_stitcher_data.json"):
@@ -748,15 +750,14 @@ class EmeraldEmulator:
         import os
         import shutil
         
-        # Ensure cache directory exists
-        cache_dir = ".pokeagent_cache"
-        os.makedirs(cache_dir, exist_ok=True)
+        # Ensure cache directory exists (use run-specific cache)
+        from utils.run_data_manager import get_cache_path
+        cache_map_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
         
         # Copy map stitcher file to cache
         state_dir = os.path.dirname(state_filename)
         base_name = os.path.splitext(os.path.basename(state_filename))[0]
         state_map_stitcher_file = os.path.join(state_dir, f"{base_name}_map_stitcher.json")
-        cache_map_stitcher_file = os.path.join(cache_dir, "map_stitcher_data.json")
         
         if os.path.exists(state_map_stitcher_file):
             # Check if the file has content
