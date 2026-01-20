@@ -427,7 +427,7 @@ def navigate_to_direct(
 
         # Calculate path buttons using Pathfinder
         buttons = pathfinder.find_path(
-            start, goal, state, variane=variance_level, consider_npcs=consider_npcs, blocked_coords=blocked_coords
+            start, goal, state, variance=variance_level, consider_npcs=consider_npcs, blocked_coords=blocked_coords
         )
 
         if not buttons:
