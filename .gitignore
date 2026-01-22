@@ -186,6 +186,8 @@ cython_debug/
 .vscode
 
 
+notes/*
+
 *.mp4
 .pokeagent_cache/*
 *scripts/*
@@ -196,3 +198,4 @@ out_2.txt
 *.sh
 # Agent cache backups
 backups/
+
