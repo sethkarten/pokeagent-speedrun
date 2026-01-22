@@ -26,7 +26,7 @@ def update_server_metrics(server_url: str = "http://localhost:8000") -> None:
         llm_logger = get_llm_logger()
         metrics = llm_logger.get_cumulative_metrics()
 
-        # Send metrics to server
+        # Send metrics to server (update in-memory display)
         try:
             response = requests.post(
                 f"{server_url}/agent_step",
@@ -37,6 +37,19 @@ def update_server_metrics(server_url: str = "http://localhost:8000") -> None:
                 logger.debug(f"Failed to update server metrics: {response.status_code}")
         except requests.exceptions.RequestException:
             # Silent fail - server might not be running or in different mode
+            pass
+
+        # Sync cumulative metrics to server LLM logger (single writer mode)
+        try:
+            response = requests.post(
+                f"{server_url}/sync_llm_metrics",
+                json={"cumulative_metrics": metrics},
+                timeout=1
+            )
+            if response.status_code != 200:
+                logger.debug(f"Failed to sync LLM metrics: {response.status_code}")
+        except requests.exceptions.RequestException:
+            # Silent fail - server might not be running or endpoint unavailable
             pass
 
     except Exception as e:

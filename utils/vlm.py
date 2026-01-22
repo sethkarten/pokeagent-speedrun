@@ -1100,9 +1100,10 @@ class VertexBackend(VLMBackend):
             if hasattr(response, 'usage_metadata'):
                 usage = response.usage_metadata
                 token_usage = {
-                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
-                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
-                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
+                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
+                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
             
             # DUAL MODE: Function calling vs Regular text response
@@ -1207,9 +1208,10 @@ class VertexBackend(VLMBackend):
             if hasattr(response, 'usage_metadata'):
                 usage = response.usage_metadata
                 token_usage = {
-                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
-                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
-                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
+                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
+                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
             
             # Log the interaction
@@ -1456,9 +1458,10 @@ class GeminiBackend(VLMBackend):
             if hasattr(response, 'usage_metadata'):
                 usage = response.usage_metadata
                 token_usage = {
-                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
-                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
-                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
+                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
+                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
 
             # DUAL MODE: Function calling vs Regular text response
@@ -1557,9 +1560,10 @@ class GeminiBackend(VLMBackend):
             if hasattr(response, 'usage_metadata'):
                 usage = response.usage_metadata
                 token_usage = {
-                    "prompt_tokens": getattr(usage, 'prompt_token_count', 0),
-                    "completion_tokens": getattr(usage, 'candidates_token_count', 0),
-                    "total_tokens": getattr(usage, 'total_token_count', 0)
+                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
+                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
+                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
 
             # DUAL MODE: Function calling vs Regular text response

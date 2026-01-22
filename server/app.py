@@ -385,7 +385,7 @@ def periodic_milestone_updater():
                                 "location": env.get_location()
                             }
                         }
-                        env.check_and_update_milestones(basic_state)
+                        env.check_and_update_milestones(basic_state, agent_step_count=agent_step_count)
                         last_milestone_update = current_time
                         logger.debug("Lightweight milestone update completed")
                     except Exception as e:
@@ -1116,7 +1116,7 @@ async def take_action(request: ActionRequest):
                     if env and hasattr(env, 'milestone_tracker'):
                         try:
                             # Force an immediate milestone check before logging
-                            env.check_and_update_milestones(game_state)
+                            env.check_and_update_milestones(game_state, agent_step_count=agent_step_count)
                         except Exception as e:
                             logger.debug(f"Error during immediate milestone check: {e}")
 
@@ -2685,6 +2685,13 @@ async def mcp_press_buttons(request: dict):
             metadata=metadata_dict
         )
         await take_action(action_request)
+        
+        # Track actual button presses in metrics (not text parsing!)
+        try:
+            from utils.llm_logger import increment_action_count
+            increment_action_count(len(actual_buttons))
+        except Exception as e:
+            logger.debug(f"Could not increment action count: {e}")
 
         logger.info(f"🎮 Queued buttons via MCP: {actual_buttons} - {reasoning}")
         response_dict = {
