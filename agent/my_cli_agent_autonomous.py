@@ -1541,7 +1541,8 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 response=response,
                 duration=duration,
                 metadata={"tool_calls": tool_calls or []},
-                model_info={"model": self.model}
+                model_info={"model": self.model},
+                step_number=self.step_count
             )
             logger.debug("✅ Logged to LLM logger")
         except Exception as e:

@@ -36,6 +36,9 @@ def start_server(args, run_id=None):
     llm_session_id = os.environ.get("LLM_SESSION_ID")
     if llm_session_id:
         server_env["LLM_SESSION_ID"] = llm_session_id
+
+    # Single-writer metrics: server is the only writer
+    server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
     
     # Pass through server-relevant arguments
     if args.record:
@@ -326,6 +329,9 @@ def main():
             if not server_process:
                 print("❌ Failed to start server, exiting...")
                 return 1
+
+            # Single-writer metrics: client should not write to cache
+            os.environ["LLM_METRICS_WRITE_ENABLED"] = "false"
             
             # Also start frame server for web visualization
             frame_server_process = start_frame_server(args.port)
