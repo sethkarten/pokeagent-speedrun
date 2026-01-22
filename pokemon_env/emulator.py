@@ -89,8 +89,14 @@ class MilestoneTracker:
         except Exception as e:
             logger.warning(f"Error saving milestones to file: {e}")
     
-    def mark_completed(self, milestone_id: str, timestamp: float = None):
-        """Mark a milestone as completed and log split time"""
+    def mark_completed(self, milestone_id: str, timestamp: float = None, agent_step_count: int = None):
+        """Mark a milestone as completed and log split time
+        
+        Args:
+            milestone_id: ID of the milestone being completed
+            timestamp: Optional timestamp (defaults to current time)
+            agent_step_count: Optional current agent step count for metrics tracking
+        """
         if timestamp is None:
             timestamp = time.time()
         
@@ -114,6 +120,15 @@ class MilestoneTracker:
             
             logger.info(f"Milestone completed: {milestone_id} (Split: {self._format_time(split_time)})")
             self.save_to_file()
+            
+            # Log milestone completion to LLM logger for unified metrics
+            if agent_step_count is not None:
+                try:
+                    from utils.llm_logger import log_milestone_completion
+                    log_milestone_completion(milestone_id, agent_step_count, timestamp)
+                except Exception as e:
+                    logger.debug(f"Could not log milestone to LLM logger: {e}")
+            
             return True
         return False
     
@@ -1096,8 +1111,13 @@ class EmeraldEmulator:
         except Exception as e:
             return {"error": f"Failed to run memory tests: {e}"}
     
-    def check_and_update_milestones(self, game_state: Dict[str, Any]):
-        """Check current game state and update milestones"""
+    def check_and_update_milestones(self, game_state: Dict[str, Any], agent_step_count: int = None):
+        """Check current game state and update milestones
+        
+        Args:
+            game_state: Current game state dictionary
+            agent_step_count: Optional current agent step count for metrics tracking
+        """
         try:
             # Debug: Show current state
             location = game_state.get("player", {}).get("location", "Unknown")
@@ -1132,7 +1152,7 @@ class EmeraldEmulator:
                 if not self.milestone_tracker.is_completed(milestone_id):
                     if self._check_milestone_condition(milestone_id, game_state):
                         print(f"🎯 Milestone detected: {milestone_id}")
-                        self.milestone_tracker.mark_completed(milestone_id)
+                        self.milestone_tracker.mark_completed(milestone_id, agent_step_count=agent_step_count)
         except Exception as e:
             logger.warning(f"Error checking milestones: {e}")
     
