@@ -1506,8 +1506,12 @@ class EmeraldEmulator:
             logger.warning(f"Error checking milestone condition {milestone_id}: {e}")
             return False
     
-    def get_milestones(self) -> Dict[str, Any]:
-        """Get current milestone data and progress"""
+    def get_milestones(self, agent_step_count: int = None) -> Dict[str, Any]:
+        """Get current milestone data and progress
+
+        Args:
+            agent_step_count: Optional current agent step count for metrics tracking
+        """
         try:
             # Get current game state and update milestones
             # Use cached state if available to avoid redundant calls
@@ -1516,7 +1520,7 @@ class EmeraldEmulator:
             import time
             current_time = time.time()
             if not hasattr(self, '_last_milestone_update') or current_time - self._last_milestone_update > 1.0:  # Update at most once per second
-                self.check_and_update_milestones(game_state)
+                self.check_and_update_milestones(game_state, agent_step_count=agent_step_count)
                 self._last_milestone_update = current_time
             
             # Use loaded milestones from the milestone tracker

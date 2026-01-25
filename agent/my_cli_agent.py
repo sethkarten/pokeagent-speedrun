@@ -591,8 +591,94 @@ class MyCLIAgent:
             logger.error(f"Failed to parse function arguments: {e}")
             return json.dumps({"success": False, "error": f"Invalid arguments: {e}"})
 
-        # Call the tool via MCP adapter
-        result = self.mcp_adapter.call_tool(function_name, arguments)
+    def run_step(self, prompt, max_tool_calls=5, screenshot_b64=None):
+        try:
+            # Make current step available for per-step metrics logging
+            os.environ["LLM_STEP_NUMBER"] = str(self.step_count)
+
+            gs = self.mcp_adapter.call_tool("get_game_state", {})
+            loc = gs.get("location", "Unknown")
+            self.vlm.backend.tools = self.tools
+            if hasattr(self.vlm.backend, "_setup_function_calling"):
+                self.vlm.backend._setup_function_calling()
+            last_coords = self.conversation_history[-1].get("player_coords") if self.conversation_history else None
+            with self.frame_buffer_lock:
+                frames = list(self.frame_buffer)
+                if screenshot_b64:
+                    frames.append(Image.open(io.BytesIO(base64.b64decode(screenshot_b64))))
+            if not frames:
+                return False, "No frames"
+            if self._is_black_frame(frames[-1]):
+                return True, "WAIT"
+            res = self.vlm.get_query(frames, prompt, "CLI_Agent")
+            thinking_text, parts = "", []
+            if self.backend == "gemini":
+                parts = res.candidates[0].content.parts if hasattr(res, "candidates") else []
+                for p in parts:
+                    if hasattr(p, "text") and p.text:
+                        thinking_text += p.text + " "
+                thinking_text = thinking_text.strip()
+                for p in parts:
+                    if hasattr(p, "function_call"):
+                        fc = p.function_call
+                        args = self._convert_protobuf_args(fc.args)
+                        if fc.name == "navigate_to" and self.blocked_coords:
+                            if not args.get("blocked_coords"):
+                                args["blocked_coords"] = [list(c) for c in self.blocked_coords]
+                                fr = self._execute_function_call_by_name(fc.name, args)
+                            else:
+                                fr = self._execute_function_call(fc)
+                        else:
+                            fr = self._execute_function_call(fc)
+                        self._store_function_result_for_context(fc.name, fr)
+                        if fc.name in ["press_buttons", "navigate_to"]:
+                            self._wait_for_actions_complete()
+                        tr = args.get("reasoning") or args.get("reason") or ""
+                        cr = f"{thinking_text}\nTool Reasoning: {tr}" if thinking_text and tr else (thinking_text or tr)
+                        try:
+                            s = json.loads(self._execute_function_call_by_name("get_game_state", {}))
+                            coords = (s.get("player_position", {}).get("x"), s.get("player_position", {}).get("y"))
+                        except:
+                            coords = None
+                        self._add_to_history(prompt, cr, None, f"Executed {fc.name}", pc=coords)
+                        if coords and last_coords and coords == last_coords and fc.name == "press_buttons":
+                            try:
+                                btn = args.get("buttons", [])[-1]
+                                tx, ty = coords
+                                if btn == "UP":
+                                    ty -= 1
+                                elif btn == "DOWN":
+                                    ty += 1
+                                elif btn == "LEFT":
+                                    tx -= 1
+                                elif btn == "RIGHT":
+                                    tx += 1
+                                for px, py in self.turnstile_states.keys():
+                                    if abs(tx - px) + abs(ty - py) == 1:
+                                        self.turnstile_states[(px, py)] = (
+                                            "H" if self.turnstile_states[(px, py)] == "V" else "V"
+                                        )
+                                self.blocked_coords.add((tx, ty))
+                            except:
+                                pass
+                        if isinstance(cr, str) and any(
+                            p in cr.lower() for p in ["already fought", "already battled", "repeating", "defeated"]
+                        ):
+                            try:
+                                gs_data = json.loads(self._execute_function_call_by_name("get_game_state", {}))
+                                if coords:
+                                    for obj in gs_data.get("raw_state", {}).get("objects", []):
+                                        if obj.get("trainer_type") != "TRAINER_TYPE_NONE" and (
+                                            abs(obj["x"] - coords[0]) + abs(obj["y"] - coords[1]) <= 1
+                                        ):
+                                            self.defeated_trainers.add(f"{obj['graphics_id']}@{obj['x']},{obj['y']}")
+                            except:
+                                pass
+                        return True, cr or "Action executed"
+            self._add_to_history(prompt, str(res))
+            return True, str(res)
+        except Exception as e:
+            return False, str(e)
 
         # Return as JSON string
         return json.dumps(result, indent=2)
