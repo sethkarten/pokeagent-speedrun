@@ -197,6 +197,11 @@ class LLMLogger:
                 self.cumulative_metrics["total_cost"] += prompt_cost + completion_cost
         
         # NEW: Track per-step metrics
+        if step_number is None:
+            env_step = os.environ.get("LLM_STEP_NUMBER")
+            if env_step and env_step.isdigit():
+                step_number = int(env_step)
+
         if step_number is not None and duration is not None:
             step_entry = {
                 "step": step_number,
