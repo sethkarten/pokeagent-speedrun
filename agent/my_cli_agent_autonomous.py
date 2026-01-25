@@ -453,6 +453,47 @@ class AutonomousCLIAgent:
                     "required": ["objectives", "reasoning"]
                 }
             },
+            {
+                "name": "get_progress_summary",
+                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {},
+                    "required": []
+                }
+            },
+            {
+                "name": "get_walkthrough",
+                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "part": {
+                            "type_": "INTEGER",
+                            "description": "Walkthrough part 1-21"
+                        }
+                    },
+                    "required": ["part"]
+                }
+            },
+            {
+                "name": "lookup_pokemon_info",
+                "description": "Look up Pokemon information from Bulbapedia (stats, moves, evolution, locations).",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "topic": {
+                            "type_": "STRING",
+                            "description": "Pokemon name or topic to look up"
+                        },
+                        "source": {
+                            "type_": "STRING",
+                            "description": "Wiki source (default: bulbapedia)"
+                        }
+                    },
+                    "required": ["topic"]
+                }
+            },
         ]
 
         logger.info(f"✅ Created {len(tools)} tool declarations (ALL TOOLS ENABLED)")
@@ -1051,6 +1092,9 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             Tuple of (success: bool, response: str)
         """
         try:
+            # Make current step available for per-step metrics logging
+            os.environ["LLM_STEP_NUMBER"] = str(self.step_count)
+
             # Capture pre-state for trajectory logging
             run_manager = get_run_data_manager()
             
@@ -1512,7 +1556,7 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 duration=duration,
                 metadata={"tool_calls": tool_calls or []},
                 model_info={"model": self.model},
-                step_number=self.step_count
+                step_number=self.step_count  # Pass step number for per-step tracking
             )
             logger.debug("✅ Logged to LLM logger")
         except Exception as e:
