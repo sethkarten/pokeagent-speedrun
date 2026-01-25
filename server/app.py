@@ -2377,7 +2377,7 @@ async def get_milestones():
 
     try:
         # Get milestones directly from emulator
-        result = env.get_milestones()
+        result = env.get_milestones(agent_step_count=agent_step_count)
 
         # Read objectives from cached file (fast, no manager access needed)
         objectives_data = {
@@ -4004,6 +4004,10 @@ async def sync_llm_metrics(request: Request):
             # Update cumulative metrics (but preserve server-managed metrics like start_time and total_actions)
             server_start_time = llm_logger.cumulative_metrics.get("start_time")
             server_total_actions = llm_logger.cumulative_metrics.get("total_actions")
+            server_milestones = llm_logger.cumulative_metrics.get("milestones")
+            server_last_milestone_step = llm_logger.cumulative_metrics.get("_last_milestone_step")
+            server_last_milestone_tokens = llm_logger.cumulative_metrics.get("_last_milestone_tokens")
+            server_last_milestone_time = llm_logger.cumulative_metrics.get("_last_milestone_time")
 
             llm_logger.cumulative_metrics.update(cumulative_metrics)
 
@@ -4012,6 +4016,15 @@ async def sync_llm_metrics(request: Request):
                 llm_logger.cumulative_metrics["start_time"] = server_start_time
             if server_total_actions is not None:
                 llm_logger.cumulative_metrics["total_actions"] = server_total_actions
+            # Preserve milestone tracking from server (authoritative source)
+            if server_milestones is not None:
+                llm_logger.cumulative_metrics["milestones"] = server_milestones
+            if server_last_milestone_step is not None:
+                llm_logger.cumulative_metrics["_last_milestone_step"] = server_last_milestone_step
+            if server_last_milestone_tokens is not None:
+                llm_logger.cumulative_metrics["_last_milestone_tokens"] = server_last_milestone_tokens
+            if server_last_milestone_time is not None:
+                llm_logger.cumulative_metrics["_last_milestone_time"] = server_last_milestone_time
 
             # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
             global latest_metrics
@@ -4019,6 +4032,9 @@ async def sync_llm_metrics(request: Request):
                 for key, value in cumulative_metrics.items():
                     if key in latest_metrics and key not in ["total_actions", "start_time"]:
                         latest_metrics[key] = value
+
+            # Persist to cache so steps/milestones are saved promptly
+            llm_logger.save_cumulative_metrics()
 
             logger.info(
                 f"🔄 Synced LLM metrics: {cumulative_metrics.get('total_llm_calls', 0)} calls, {cumulative_metrics.get('total_tokens', 0)} tokens, ${cumulative_metrics.get('total_cost', 0):.6f}"
