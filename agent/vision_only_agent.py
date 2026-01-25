@@ -755,6 +755,9 @@ Be direct and actionable. Focus on what the agent can see and do."""
             Tuple of (success: bool, response: str)
         """
         try:
+            # Make current step available for per-step metrics logging
+            os.environ["LLM_STEP_NUMBER"] = str(self.step_count)
+
             logger.info(f"📤 Sending prompt to {self.backend}...")
             logger.info(f"   Model: {self.model}")
             logger.info(f"   Prompt length: {len(prompt)} chars")

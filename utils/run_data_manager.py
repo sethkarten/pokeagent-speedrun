@@ -45,6 +45,10 @@ class RunDataManager:
                 safe_desc = "".join(c if c.isalnum() or c in ('_', '-', ' ') else '_' for c in first_objective_desc)
                 safe_desc = safe_desc.replace(' ', '_')[:50]  # Limit length
                 run_id = f"{timestamp}_{first_objective_id}_{safe_desc}"
+
+                # append run_name to run_id if provided
+                if run_name:
+                    run_id = f"{run_id}_{run_name}"
             # Fallback to run_name if provided (deprecated)
             elif run_name:
                 import re

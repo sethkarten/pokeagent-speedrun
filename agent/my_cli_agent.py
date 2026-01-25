@@ -284,6 +284,9 @@ class MyCLIAgent:
 
     def run_step(self, prompt, max_tool_calls=5, screenshot_b64=None):
         try:
+            # Make current step available for per-step metrics logging
+            os.environ["LLM_STEP_NUMBER"] = str(self.step_count)
+
             gs = self.mcp_adapter.call_tool("get_game_state", {})
             loc = gs.get("location", "Unknown")
             self.vlm.backend.tools = self.tools
