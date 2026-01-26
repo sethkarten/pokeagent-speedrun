@@ -124,40 +124,39 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                 line = "".join(tile_to_symbol(tile, map_name) for tile in row)
                 ascii_lines.append(line)
 
-                # Overlay special object markers (TV, Clock, etc.)
-                # This must be done BEFORE joining ascii_lines into ascii_map
-                # Convert lines to list of lists for easier modification
-                ascii_grid = [list(line) for line in ascii_lines]
+            # Overlay special object markers (TV, Clock, etc.)
+            # This must be done BEFORE joining ascii_lines into ascii_map
+            ascii_grid = [list(line) for line in ascii_lines]
 
-                # Define special object graphics IDs and their symbols
-                special_object_markers = {
-                    # TVs - common graphics_id for TV objects
-                    "OBJ_EVENT_GFX_ITEM_BALL": "I",  # Item balls
-                    "OBJ_EVENT_GFX_CUTTABLE_TREE": "T",  # Tree
-                    # Add more as needed
-                }
+            # Define special object graphics IDs and their symbols
+            special_object_markers = {
+                # TVs - common graphics_id for TV objects
+                "OBJ_EVENT_GFX_ITEM_BALL": "I",  # Item balls
+                "OBJ_EVENT_GFX_CUTTABLE_TREE": "T",  # Tree
+                # Add more as needed
+            }
 
-                # Mark background events (clocks, PCs, etc.) on the ASCII map
-                for bg_event in map_data.get("bg_events", []):
-                    bg_x = bg_event.get("x", 0)
-                    bg_y = bg_event.get("y", 0)
-                    script = bg_event.get("script", "")
+            # Mark background events (clocks, PCs, etc.) on the ASCII map
+            for bg_event in map_data.get("bg_events", []):
+                bg_x = bg_event.get("x", 0)
+                bg_y = bg_event.get("y", 0)
+                script = bg_event.get("script", "")
 
-                    # Check if position is valid
-                    if 0 <= bg_y < height and 0 <= bg_x < width:
-                        # Clock events
-                        if "WallClock" in script or "Clock" in script:
-                            ascii_grid[bg_y][bg_x] = 'K'  # Clock marker
-                        # PC events
-                        elif "PC" in script and "TurnOnPC" in script:
-                            ascii_grid[bg_y][bg_x] = 'P'  # PC marker
-                        # TV/GameCube events (optional - might already be visible)
-                        elif "TV" in script or "GameCube" in script:
-                            ascii_grid[bg_y][bg_x] = 'V'  # TV marker
+                # Check if position is valid
+                if 0 <= bg_y < len(ascii_grid) and 0 <= bg_x < len(ascii_grid[bg_y]):
+                    # Clock events
+                    if "WallClock" in script or "Clock" in script:
+                        ascii_grid[bg_y][bg_x] = 'K'  # Clock marker
+                    # PC events
+                    elif "PC" in script and "TurnOnPC" in script:
+                        ascii_grid[bg_y][bg_x] = 'P'  # PC marker
+                    # TV/GameCube events (optional - might already be visible)
+                    elif "TV" in script or "GameCube" in script:
+                        ascii_grid[bg_y][bg_x] = 'V'  # TV marker
 
-                # Convert back to strings
-                ascii_lines = [''.join(row) for row in ascii_grid]
-                ascii_map = "\n".join(ascii_lines)
+            # Convert back to strings
+            ascii_lines = [''.join(row) for row in ascii_grid]
+            ascii_map = "\n".join(ascii_lines)
     
     # Extract warps
     warps = []
