@@ -248,11 +248,7 @@ class MyCLIAgent:
             {
                 "name": "get_game_state",
                 "description": "Get the current game state including player position, party Pokemon, map, items, and a screenshot. Use this to understand where you are and what you can do.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {},
-                    "required": []
-                }
+                "parameters": {"type_": "OBJECT", "properties": {}, "required": []},
             },
             {
                 "name": "press_buttons",
@@ -263,46 +259,92 @@ class MyCLIAgent:
                         "buttons": {
                             "type_": "ARRAY",
                             "items": {"type_": "STRING"},
-                            "description": "List of buttons to press (e.g., ['A'], ['UP'])"
+                            "description": "List of buttons to press (e.g., ['A'], ['UP'])",
                         },
                         "reasoning": {
                             "type_": "STRING",
-                            "description": "Explain why you are pressing these buttons"
-                        }
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [game screen, location, objective, situation]' and 'PLAN: [action, reason, expected result]'.",
+                        },
                     },
                     "required": ["buttons", "reasoning"]
                 }
             },
             {
                 "name": "navigate_to",
-                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium', 'high', or 'extreme' to explore alternative paths.",
+                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
                         "x": {"type_": "INTEGER", "description": "Target X coordinate"},
                         "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
                         "variance": {
-                            "type_": "STRING", 
-                            "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if very stuck), 'extreme' (8-step variation, use as last resort). Default: 'none'",
-                            "enum": ["none", "low", "medium", "high", "extreme"]
+                            "type_": "STRING",
+                            "description": "Path variance level: 'none', 'low', 'medium', 'high', 'extreme'.",
+                            "enum": ["none", "low", "medium", "high", "extreme"],
                         },
-                        "reason": {"type_": "STRING", "description": "Why you are navigating here"}
+                        "reason": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE:' and 'PLAN:' sections.",
+                        },
+                        "blocked_coords": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "ARRAY", "items": {"type_": "INTEGER"}},
+                        },
+                        "consider_npcs": {
+                            "type_": "BOOLEAN",
+                            "description": "Whether to treat NPCs as obstacles during pathfinding.",
+                        },
                     },
                     "required": ["x", "y", "variance", "reason"]
                 }
             },
             {
                 "name": "complete_direct_objective",
-                "description": "Complete the current direct objective and advance to the next one. Use this when you have successfully completed the current objective's task.",
+                "description": "Complete the current direct objective and advance to the next one. In CATEGORIZED mode, you must specify which category objective to complete (story, battling, or dynamics). In LEGACY mode, category is ignored.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "reasoning": {"type_": "STRING", "description": "Brief explanation of why the current direct objective is complete"}
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current state, objective requirements, completion evidence]' and 'PLAN: [confirm completion, next objective]'.",
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["story", "battling", "dynamics"],
+                            "description": "Which category objective to complete (required in CATEGORIZED mode).",
+                        },
                     },
-                    "required": ["reasoning"]
-                }
+                    "required": ["reasoning"],
+                },
             },
-            # Knowledge Base Tools
+            {
+                "name": "reflect",
+                "description": "Use this when you feel stuck, uncertain, or suspect your current approach/objectives are wrong. This tool helps you step back, analyze what's happening, and realign your strategy.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "situation": {
+                            "type_": "STRING",
+                            "description": "Describe what you've been trying to do and why you think something might be wrong.",
+                        }
+                    },
+                    "required": ["situation"],
+                },
+            },
+            {
+                "name": "gym_puzzle_agent",
+                "description": "Get expert guidance on solving gym puzzles. Use this when you're in a gym and need help understanding the puzzle mechanics or finding the solution.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "gym_name": {
+                            "type_": "STRING",
+                            "description": "Name of the gym you're currently in (e.g., 'MOSSDEEP_CITY_GYM').",
+                        }
+                    },
+                    "required": ["gym_name"],
+                },
+            },
             {
                 "name": "add_knowledge",
                 "description": "Store important discoveries in your knowledge base.",
@@ -312,19 +354,16 @@ class MyCLIAgent:
                         "category": {
                             "type_": "STRING",
                             "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
-                            "description": "Category of knowledge"
+                            "description": "Category of knowledge",
                         },
                         "title": {"type_": "STRING", "description": "Short title"},
                         "content": {"type_": "STRING", "description": "Detailed content"},
                         "location": {"type_": "STRING", "description": "Map name (optional)"},
                         "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
-                        "importance": {
-                            "type_": "INTEGER",
-                            "description": "Importance 1-5",
-                        }
+                        "importance": {"type_": "INTEGER", "description": "Importance 1-5"},
                     },
-                    "required": ["category", "title", "content", "importance"]
-                }
+                    "required": ["category", "title", "content", "importance"],
+                },
             },
             {
                 "name": "search_knowledge",
@@ -335,10 +374,10 @@ class MyCLIAgent:
                         "category": {"type_": "STRING", "description": "Category (optional)"},
                         "query": {"type_": "STRING", "description": "Text to search (optional)"},
                         "location": {"type_": "STRING", "description": "Map name filter (optional)"},
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"}
+                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"},
                     },
-                    "required": []
-                }
+                    "required": [],
+                },
             },
             {
                 "name": "get_knowledge_summary",
@@ -404,141 +443,84 @@ class MyCLIAgent:
                                     "action_type": {
                                         "type_": "STRING",
                                         "enum": ["navigate", "interact", "battle", "wait"],
-                                        "description": "Type of action"
+                                        "description": "Type of action",
                                     },
                                     "target_location": {"type_": "STRING", "description": "Target location/map name"},
                                     "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
-                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
+                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"},
                                 },
-                                "required": ["id", "description", "action_type"]
+                                "required": ["id", "description", "action_type"],
                             },
-                            "description": "Array of exactly 3 objectives to create next"
+                            "description": "Array of exactly 3 objectives to create next",
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["dynamics", "story", "battling"],
+                            "description": "Category for objectives: 'dynamics' (default, agent-created), 'story' (narrative), or 'battling' (team building/training). Usually you should use 'dynamics'.",
                         },
                         "reasoning": {
                             "type_": "STRING",
-                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
-                        }
+                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)",
+                        },
                     },
-                    "required": ["objectives", "reasoning"]
-                }
+                    "required": ["objectives", "reasoning"],
+                },
             },
             {
                 "name": "get_progress_summary",
-                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary. Use this when a sequence completes to understand what you've accomplished before creating next objectives.",
+                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {},
-                    "required": []
-                }
+                    "required": [],
+                },
             },
-            # ============================================================
-            # BASELINE MCP TOOLS (File/Shell/Web)
-            # ============================================================
-
-            # {
-            #     "name": "read_file",
-            #     "description": "Read file contents. Supports text, images, PDFs. Returns content or base64 for binary files.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "file_path": {"type_": "STRING", "description": "Absolute path to file"}
-            #         },
-            #         "required": ["file_path"]
-            #     }
-            # },
-            # {
-            #     "name": "write_file",
-            #     "description": "Write file to .pokeagent_cache/cli/ directory or current run directory. If using relative path, writes to run directory (timestamped). Creates directories if needed.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "file_path": {"type_": "STRING", "description": "Path within .pokeagent_cache/cli/ (absolute) or relative path for run directory"},
-            #             "content": {"type_": "STRING", "description": "File content"}
-            #         },
-            #         "required": ["file_path", "content"]
-            #     }
-            # },
-            # {
-            #     "name": "list_directory",
-            #     "description": "List files and directories at path.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "path": {"type_": "STRING", "description": "Directory path"}
-            #         },
-            #         "required": ["path"]
-            #     }
-            # },
-            # {
-            #     "name": "glob",
-            #     "description": "Find files matching glob pattern (e.g., '**/*.py', 'src/*.md').",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "pattern": {"type_": "STRING", "description": "Glob pattern"},
-            #             "path": {"type_": "STRING", "description": "Starting directory (optional)"}
-            #         },
-            #         "required": ["pattern"]
-            #     }
-            # },
-            # {
-            #     "name": "search_file_content",
-            #     "description": "Search files for regex pattern. Returns matching lines.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "pattern": {"type_": "STRING", "description": "Regex pattern"},
-            #             "path": {"type_": "STRING", "description": "Directory to search"},
-            #             "file_pattern": {"type_": "STRING", "description": "File glob (e.g., '*.py')"}
-            #         },
-            #         "required": ["pattern", "path"]
-            #     }
-            # },
-            # {
-            #     "name": "run_shell_command",
-            #     "description": "Run shell command (42 safe commands allowed: ls, cat, grep, python, npm, etc. NO git, rm, sudo).",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "command": {"type_": "STRING", "description": "Shell command"},
-            #             "description": {"type_": "STRING", "description": "What this command does"}
-            #         },
-            #         "required": ["command", "description"]
-            #     }
-            # },
-            # {
-            #     "name": "web_fetch",
-            #     "description": "Fetch and parse web pages (up to 20 URLs). Extracts text content.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "prompt": {"type_": "STRING", "description": "Prompt with URLs and instructions"}
-            #         },
-            #         "required": ["prompt"]
-            #     }
-            # },
-            # {
-            #     "name": "google_web_search",
-            #     "description": "Search web using DuckDuckGo (privacy-friendly, no API key). Returns 10 results.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "query": {"type_": "STRING", "description": "Search query"}
-            #         },
-            #         "required": ["query"]
-            #     }
-            # },
-            # {
-            #     "name": "save_memory",
-            #     "description": "Save facts to remember across sessions (stored in .pokeagent_cache/cli/AGENT.md).",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "fact": {"type_": "STRING", "description": "Clear, self-contained fact"}
-            #         },
-            #         "required": ["fact"]
-            #     }
-            # },
+            {
+                "name": "get_walkthrough",
+                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "part": {
+                            "type_": "INTEGER",
+                            "description": "Walkthrough part 1-21",
+                        }
+                    },
+                    "required": ["part"],
+                },
+            },
+            {
+                "name": "lookup_pokemon_info",
+                "description": "Look up Pokemon information from Bulbapedia (stats, moves, evolution, locations).",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "topic": {
+                            "type_": "STRING",
+                            "description": "Pokemon name or topic to look up",
+                        },
+                        "source": {
+                            "type_": "STRING",
+                            "description": "Wiki source (default: bulbapedia)",
+                        },
+                    },
+                    "required": ["topic"],
+                },
+            },
+            {
+                "name": "list_wiki_sources",
+                "description": "List all available wiki article sources.",
+                "parameters": {"type_": "OBJECT", "properties": {}, "required": []},
+            },
+            {
+                "name": "save_memory",
+                "description": "Save important facts to remember across sessions.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {"fact": {"type_": "STRING", "description": "Fact to remember"}},
+                    "required": ["fact"],
+                },
+            },
         ]
 
         logger.info(f"✅ Created {len(tools)} tool declarations (9 Pokemon + 11 Baseline)")
@@ -680,94 +662,69 @@ class MyCLIAgent:
         except Exception as e:
             return False, str(e)
 
-        # Return as JSON string
-        return json.dumps(result, indent=2)
+    def _build_structured_prompt(self, gs_res, sc):
+        try:
+            gd = json.loads(gs_res)
+        except:
+            gd = {}
+        st, loc = gd.get("state_text", ""), gd.get("location", "Unknown")
+        if self._is_title_sequence(gd):
+            st = self._strip_map_info(st)
+        elif "Gym" in loc:
+            st = self._gym_strip(st)
+        do, ds = gd.get("direct_objective", ""), gd.get("direct_objective_status", "")
+        co = gd.get("categorized_objectives", {})
+        if co:
+            parts = []
+            for c in ["story", "battling", "dynamics"]:
+                o = co.get(c, {})
+                if o:
+                    parts.append(f"{c.upper()}: {o.get('description')} (@ {o.get('target_location')})")
+            if parts:
+                do = "\n\n".join(parts)
+            cs = gd.get("categorized_status", {})
+            if cs:
+                ds = "📊 PROGRESS: " + " | ".join(
+                    [
+                        f"{c.capitalize()}: {i.get('current_index') + 1}/{i.get('total')}"
+                        for c, i in cs.items()
+                        if i.get("total") > 0
+                    ]
+                )
+        # Enhanced history for LLM
+        lines, last, trail = [], None, []
+        for e in self.conversation_history[-20:]:
+            c = e.get("player_coords")
+            c_str = f"({c[0]},{c[1]})" if c else "(?)"
+            if c:
+                trail.append(c_str)
+            s = (
+                " [STAYED AT SAME POS]"
+                if last and c == last
+                else (
+                    " [LOOP]"
+                    if c and last and any(p.get("player_coords") == c for p in self.conversation_history[:-1])
+                    else ""
+                )
+            )
+            res = str(e.get("llm_response", ""))
+            res_preview = res.split("\n")[0][:100]
+            if s and "Executed press_buttons" in e.get("action_details", ""):
+                s = " [STAYED AT SAME POS - LIKELY TOGGLED GATE]"
+            lines.append(f"[{e['step']}] {c_str}{s}: {res_preview}... -> {e['action_details']}")
+            last = c
+        hist = "\n".join(lines) + "\n### TRAIL: " + " -> ".join(trail[-10:])
 
     def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None, player_coords: tuple = None):
         """Add interaction to conversation history - ONLY stores LLM responses and actions."""
         # CRITICAL: Do NOT store full prompts! They contain game state + screenshot + previous history
         # Only store: LLM thinking (truncated), action taken, and player coordinates
 
-        # Strip whitespace from response to save tokens
-        response_stripped = response.strip() if response else ""
-
-        # CRITICAL SAFEGUARD: If response contains our prompt header, skip it entirely
-        # This means the LLM echoed back the prompt or we have corrupted data
-        if "You are an expert navigator and battle strategist" in response_stripped:
-            logger.warning(f"⚠️ Skipping corrupted history entry at step {self.step_count} (contains prompt echo)")
-            return  # Don't store corrupted data
-
-        entry = {
-            "step": self.step_count,
-            "llm_response": response_stripped,  # LLM thinking only, max 500 chars
-            "timestamp": time.time()
-        }
-
-        logger.debug(f"📝 Storing history entry for step {self.step_count}: {response_stripped[:100]}...")
-
-        # Extract action and action_details from tool_calls
-        if tool_calls:
-            last_call = tool_calls[-1]
-            entry["action"] = last_call.get("name", "unknown")
-            if action_details:
-                entry["action_details"] = action_details
-            elif last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get("args", {}):
-                variance = last_call['args'].get('variance', 'none')
-                entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
-            elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
-                entry["action_details"] = f"press_buttons({last_call['args']['buttons']})"
-            else:
-                entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
-
-        # Store player coordinates if available
-        if player_coords:
-            entry["player_coords"] = player_coords
-
-        self.conversation_history.append(entry)
-
-        # Keep only last 10 entries to prevent unbounded growth
-        if len(self.conversation_history) > 10:
-            self.conversation_history = self.conversation_history[-10:]
-
-        logger.debug(f"✅ History now has {len(self.conversation_history)} entries")
-
-    def _calculate_context_size(self) -> int:
-        """Calculate total character count of conversation history."""
-        total_chars = 0
-        for entry in self.conversation_history:
-            total_chars += len(entry.get("prompt", ""))
-            total_chars += len(entry.get("response", ""))
-            # Also count tool call strings
-            for tool_call in entry.get("tool_calls", []):
-                total_chars += len(str(tool_call))
-        return total_chars
-
-    def _format_history_for_display(self) -> str:
-        """Format conversation history for display."""
-        if not self.conversation_history:
-            return "No conversation history yet."
-
-        lines = [f"\n{'='*70}", "CONVERSATION HISTORY", '='*70]
-
-        for entry in self.conversation_history[-10:]:  # Show last 10
-            try:
-                lines.append(f"\nStep {entry['step']}:")
-                lines.append(f"  Prompt: {entry['prompt'][:100]}...")
-                if entry.get('tool_calls'):
-                    lines.append(f"  Tools called: {', '.join(t['name'] for t in entry['tool_calls'])}")
-                lines.append(f"  Response: {entry['response'][:100]}...")
-            except:
-                print("Error my_cli_agent.py L642")
-                continue
-
-        lines.append('='*70)
-        return '\n'.join(lines)
-
-    def check_prerequisites(self) -> bool:
-        """Check if prerequisites are met."""
-        # Check if API key is set (only required for Gemini backend)
-        if self.backend == "gemini" and not os.environ.get("GEMINI_API_KEY"):
-            logger.error("GEMINI_API_KEY environment variable not set")
+    def _is_black_frame(self, img):
+        try:
+            a = np.array(img) if hasattr(img, "save") else img
+            return a.mean() < 10 and a.std() < 5
+        except:
             return False
 
         # Check if server is running
@@ -2411,6 +2368,55 @@ Step {step_count}"""
             return ""
         except:
             return ""
+
+    def _wait_for_actions_complete(self):
+        time.sleep(1.8)
+
+    def run(self) -> int:
+        self.conversation_history = []
+        logger.info("🚀 Starting MyCLIAgent loop...")
+        try:
+            while True:
+                if self.max_steps and self.step_count >= self.max_steps:
+                    break
+                logger.info(f"🤖 Step {self.step_count + 1}")
+                gs_res = self._execute_function_call_by_name("get_game_state", {})
+                try:
+                    gs_json = json.loads(gs_res)
+                    gs_patched = self._patch_gym_grid(gs_json)
+                    gs_res = json.dumps(gs_patched)
+                except:
+                    pass
+                try:
+                    b64 = json.loads(gs_res).get("screenshot_base64")
+                except:
+                    b64 = None
+                p = (
+                    self._build_structured_prompt(gs_res, self.step_count)
+                    if self.optimization_enabled
+                    else self._build_structured_prompt(gs_res, self.step_count)
+                )
+                success, out = self.run_step(p, screenshot_b64=b64)
+                if not success:
+                    time.sleep(5)
+                    continue
+                self.step_count += 1
+                try:
+                    update_server_metrics(self.server_url)
+                    requests.post(f"{self.server_url}/checkpoint", json={"step_count": self.step_count}, timeout=10)
+                    requests.post(f"{self.server_url}/save_agent_history", timeout=5)
+                except:
+                    pass
+                time.sleep(1)
+        except KeyboardInterrupt:
+            return 0
+        except Exception as e:
+            return 1
+        finally:
+            self.stop_sampling.set()
+            if self.sampling_thread:
+                self.sampling_thread.join(timeout=2)
+        return 0
 
 
 def main():
