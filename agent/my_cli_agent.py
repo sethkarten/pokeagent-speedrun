@@ -131,34 +131,52 @@ class MyCLIAgent:
         return [
             {
                 "name": "get_game_state",
-                "description": "Get state",
+                "description": "Get the current game state including player position, party Pokemon, map, items, and a screenshot. Use this to understand where you are and what you can do.",
                 "parameters": {"type_": "OBJECT", "properties": {}, "required": []},
             },
             {
                 "name": "press_buttons",
-                "description": "Press buttons",
+                "description": "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT. Use WAIT to observe without pressing any button.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "buttons": {"type_": "ARRAY", "items": {"type_": "STRING"}},
-                        "reasoning": {"type_": "STRING"},
+                        "buttons": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "STRING"},
+                            "description": "List of buttons to press (e.g., ['A'], ['UP'])",
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [game screen, location, objective, situation]' and 'PLAN: [action, reason, expected result]'.",
+                        },
                     },
                     "required": ["buttons", "reasoning"],
                 },
             },
             {
                 "name": "navigate_to",
-                "description": "Navigate",
+                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "x": {"type_": "INTEGER"},
-                        "y": {"type_": "INTEGER"},
-                        "variance": {"type_": "STRING"},
-                        "reason": {"type_": "STRING"},
+                        "x": {"type_": "INTEGER", "description": "Target X coordinate"},
+                        "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
+                        "variance": {
+                            "type_": "STRING",
+                            "description": "Path variance level: 'none', 'low', 'medium', 'high', 'extreme'.",
+                            "enum": ["none", "low", "medium", "high", "extreme"],
+                        },
+                        "reason": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE:' and 'PLAN:' sections.",
+                        },
                         "blocked_coords": {
                             "type_": "ARRAY",
                             "items": {"type_": "ARRAY", "items": {"type_": "INTEGER"}},
+                        },
+                        "consider_npcs": {
+                            "type_": "BOOLEAN",
+                            "description": "Whether to treat NPCs as obstacles during pathfinding.",
                         },
                     },
                     "required": ["x", "y", "variance", "reason"],
@@ -166,11 +184,188 @@ class MyCLIAgent:
             },
             {
                 "name": "complete_direct_objective",
-                "description": "Complete objective",
+                "description": "Complete the current direct objective and advance to the next one. In CATEGORIZED mode, you must specify which category objective to complete (story, battling, or dynamics). In LEGACY mode, category is ignored.",
                 "parameters": {
                     "type_": "OBJECT",
-                    "properties": {"reasoning": {"type_": "STRING"}},
+                    "properties": {
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current state, objective requirements, completion evidence]' and 'PLAN: [confirm completion, next objective]'.",
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["story", "battling", "dynamics"],
+                            "description": "Which category objective to complete (required in CATEGORIZED mode).",
+                        },
+                    },
                     "required": ["reasoning"],
+                },
+            },
+            {
+                "name": "reflect",
+                "description": "Use this when you feel stuck, uncertain, or suspect your current approach/objectives are wrong. This tool helps you step back, analyze what's happening, and realign your strategy.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "situation": {
+                            "type_": "STRING",
+                            "description": "Describe what you've been trying to do and why you think something might be wrong.",
+                        }
+                    },
+                    "required": ["situation"],
+                },
+            },
+            {
+                "name": "gym_puzzle_agent",
+                "description": "Get expert guidance on solving gym puzzles. Use this when you're in a gym and need help understanding the puzzle mechanics or finding the solution.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "gym_name": {
+                            "type_": "STRING",
+                            "description": "Name of the gym you're currently in (e.g., 'MOSSDEEP_CITY_GYM').",
+                        }
+                    },
+                    "required": ["gym_name"],
+                },
+            },
+            {
+                "name": "add_knowledge",
+                "description": "Store important discoveries in your knowledge base.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
+                            "description": "Category of knowledge",
+                        },
+                        "title": {"type_": "STRING", "description": "Short title"},
+                        "content": {"type_": "STRING", "description": "Detailed content"},
+                        "location": {"type_": "STRING", "description": "Map name (optional)"},
+                        "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
+                        "importance": {"type_": "INTEGER", "description": "Importance 1-5"},
+                    },
+                    "required": ["category", "title", "content", "importance"],
+                },
+            },
+            {
+                "name": "search_knowledge",
+                "description": "Search your knowledge base for stored information.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "category": {"type_": "STRING", "description": "Category (optional)"},
+                        "query": {"type_": "STRING", "description": "Text to search (optional)"},
+                        "location": {"type_": "STRING", "description": "Map name filter (optional)"},
+                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"},
+                    },
+                    "required": [],
+                },
+            },
+            {
+                "name": "get_knowledge_summary",
+                "description": "Get a summary of the most important things you've learned.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "min_importance": {"type_": "INTEGER", "description": "Min importance (default 3)"}
+                    },
+                    "required": [],
+                },
+            },
+            {
+                "name": "create_direct_objectives",
+                "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, creates objectives for the 'dynamics' category (agent-created objectives).",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "objectives": {
+                            "type_": "ARRAY",
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
+                                    "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
+                                    "action_type": {
+                                        "type_": "STRING",
+                                        "enum": ["navigate", "interact", "battle", "wait"],
+                                        "description": "Type of action",
+                                    },
+                                    "target_location": {"type_": "STRING", "description": "Target location/map name"},
+                                    "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
+                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"},
+                                },
+                                "required": ["id", "description", "action_type"],
+                            },
+                            "description": "Array of exactly 3 objectives to create next",
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["dynamics", "story", "battling"],
+                            "description": "Category for objectives: 'dynamics' (default, agent-created), 'story' (narrative), or 'battling' (team building/training). Usually you should use 'dynamics'.",
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)",
+                        },
+                    },
+                    "required": ["objectives", "reasoning"],
+                },
+            },
+            {
+                "name": "get_progress_summary",
+                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+            {
+                "name": "get_walkthrough",
+                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "part": {
+                            "type_": "INTEGER",
+                            "description": "Walkthrough part 1-21",
+                        }
+                    },
+                    "required": ["part"],
+                },
+            },
+            {
+                "name": "lookup_pokemon_info",
+                "description": "Look up Pokemon information from Bulbapedia (stats, moves, evolution, locations).",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "topic": {
+                            "type_": "STRING",
+                            "description": "Pokemon name or topic to look up",
+                        },
+                        "source": {
+                            "type_": "STRING",
+                            "description": "Wiki source (default: bulbapedia)",
+                        },
+                    },
+                    "required": ["topic"],
+                },
+            },
+            {
+                "name": "list_wiki_sources",
+                "description": "List all available wiki article sources.",
+                "parameters": {"type_": "OBJECT", "properties": {}, "required": []},
+            },
+            {
+                "name": "save_memory",
+                "description": "Save important facts to remember across sessions.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {"fact": {"type_": "STRING", "description": "Fact to remember"}},
+                    "required": ["fact"],
                 },
             },
         ]
@@ -371,7 +566,7 @@ class MyCLIAgent:
         except Exception as e:
             return False, str(e)
 
-    def _build_optimized_prompt(self, gs_res, sc):
+    def _build_structured_prompt(self, gs_res, sc):
         try:
             gd = json.loads(gs_res)
         except:
@@ -446,9 +641,6 @@ class MyCLIAgent:
                 warning = "\n⚠️ ALERT: Last move toggled a gate. DO NOT repeat it! Look for a NEW path."
         tools = "🎮 **TOOLS**:\n- get_game_state()\n- complete_direct_objective()\n- press_buttons()\n- navigate_to(x, y, variance, reason, blocked_coords=[])"
         return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n{warning}\n### HISTORY:\n{hist}\n{func}{defeated}{blocked}{prog}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n### TOOLS:\n{tools}\n"
-
-    def _build_structured_prompt(self, gs_res, sc):
-        return self._build_optimized_prompt(gs_res, sc)
 
     def _is_black_frame(self, img):
         try:
@@ -545,7 +737,7 @@ class MyCLIAgent:
                 except:
                     b64 = None
                 p = (
-                    self._build_optimized_prompt(gs_res, self.step_count)
+                    self._build_structured_prompt(gs_res, self.step_count)
                     if self.optimization_enabled
                     else self._build_structured_prompt(gs_res, self.step_count)
                 )
