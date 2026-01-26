@@ -429,7 +429,7 @@ class MyCLIAgent:
             },
             {
                 "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when you need new goals. Use this after consulting get_walkthrough() and get_progress_summary() to plan your next steps. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition at a medium level of granularity (not too specific like \"walk_left_to_oldale_town\" but not too vague either like \"complete_route_102\"). This function will also increment the objective index to the first new objective created.",
+                "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for main walkthrough progression, 'battling' for training prep, and 'dynamics' for ad-hoc navigation or cleanup.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -456,7 +456,7 @@ class MyCLIAgent:
                         "category": {
                             "type_": "STRING",
                             "enum": ["dynamics", "story", "battling"],
-                            "description": "Category for objectives: 'dynamics' (default, agent-created), 'story' (narrative), or 'battling' (team building/training). Usually you should use 'dynamics'.",
+                            "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal.",
                         },
                         "reasoning": {
                             "type_": "STRING",
@@ -709,16 +709,48 @@ class MyCLIAgent:
             st = self._strip_map_info(st)
         elif "Gym" in loc:
             st = self._gym_strip(st)
+        def _fmt_obj(obj, label):
+            if not obj:
+                return [f"{label}: None"]
+            return [
+                f"{label}:",
+                f"  id: {obj.get('id')}",
+                f"  description: {obj.get('description')}",
+                f"  action_type: {obj.get('action_type')}",
+                f"  target_location: {obj.get('target_location')}",
+                f"  navigation_hint: {obj.get('navigation_hint')}",
+                f"  completion_condition: {obj.get('completion_condition')}",
+            ]
+
         do, ds = gd.get("direct_objective", ""), gd.get("direct_objective_status", "")
         co = gd.get("categorized_objectives", {})
         if co:
+            story_obj = co.get("story")
+            battling_group = co.get("battling_group", [])
+            dynamics_obj = co.get("dynamics")
+
             parts = []
-            for c in ["story", "battling", "dynamics"]:
-                o = co.get(c, {})
-                if o:
-                    parts.append(f"{c.upper()}: {o.get('description')} (@ {o.get('target_location')})")
-            if parts:
-                do = "\n\n".join(parts)
+            parts.extend(_fmt_obj(story_obj, "STORY"))
+
+            if battling_group:
+                parts.append("BATTLING:")
+                for i, obj in enumerate(battling_group, 1):
+                    parts.extend(
+                        [
+                            f"  [{i}] id: {obj.get('id')}",
+                            f"  [{i}] description: {obj.get('description')}",
+                            f"  [{i}] action_type: {obj.get('action_type')}",
+                            f"  [{i}] target_location: {obj.get('target_location')}",
+                            f"  [{i}] navigation_hint: {obj.get('navigation_hint')}",
+                            f"  [{i}] completion_condition: {obj.get('completion_condition')}",
+                        ]
+                    )
+            else:
+                parts.append("BATTLING: None")
+
+            parts.extend(_fmt_obj(dynamics_obj, "DYNAMICS"))
+            do = "\n".join(parts)
+
             cs = gd.get("categorized_status", {})
             if cs:
                 ds = "📊 PROGRESS: " + " | ".join(
@@ -728,6 +760,9 @@ class MyCLIAgent:
                         if i.get("total") > 0
                     ]
                 )
+        if do and isinstance(do, dict):
+            do = "\n".join(_fmt_obj(do, "OBJECTIVE"))
+
         # Enhanced history for LLM
         lines, last, trail = [], None, []
         for e in self.conversation_history[-20:]:
