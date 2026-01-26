@@ -394,11 +394,37 @@ class MyCLIAgent:
         return result
 
     def _add_to_history(self, p, r, tc=None, ad=None, pc=None):
-        self.conversation_history.append(
-            {"step": self.step_count, "llm_response": r, "action_details": ad, "player_coords": pc}
-        )
-        if len(self.conversation_history) > 30:
-            self.conversation_history.pop(0)
+        response_stripped = r.strip() if isinstance(r, str) else str(r)
+        entry = {
+            "step": self.step_count,
+            "llm_response": response_stripped,
+            "timestamp": time.time(),
+        }
+
+        if tc:
+            entry["tool_calls"] = tc
+            last_call = tc[-1]
+            entry["action"] = last_call.get("name", "unknown")
+            if ad:
+                entry["action_details"] = ad
+            elif last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get(
+                "args", {}
+            ):
+                variance = last_call.get("args", {}).get("variance", "none")
+                entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
+            elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
+                entry["action_details"] = f"press_buttons({last_call['args']['buttons']})"
+            else:
+                entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
+        elif ad:
+            entry["action_details"] = ad
+
+        if pc:
+            entry["player_coords"] = pc
+
+        self.conversation_history.append(entry)
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
 
     def _store_function_result_for_context(self, n, r):
         self.recent_function_results.append({"name": n, "result": r})
@@ -526,7 +552,15 @@ class MyCLIAgent:
                             coords = (s.get("player_position", {}).get("x"), s.get("player_position", {}).get("y"))
                         except:
                             coords = None
-                        self._add_to_history(prompt, cr, None, f"Executed {fc.name}", pc=coords)
+                        tool_call = {"name": fc.name, "args": args, "result": fr}
+                        if fc.name == "navigate_to" and "x" in args and "y" in args:
+                            variance = args.get("variance", "none")
+                            action_details = f"navigate_to({args['x']}, {args['y']}, variance={variance})"
+                        elif fc.name == "press_buttons" and "buttons" in args:
+                            action_details = f"press_buttons({args['buttons']})"
+                        else:
+                            action_details = f"{fc.name}(...)"
+                        self._add_to_history(prompt, cr, [tool_call], action_details, pc=coords)
                         if coords and last_coords and coords == last_coords and fc.name == "press_buttons":
                             try:
                                 btn = args.get("buttons", [])[-1]
@@ -561,7 +595,7 @@ class MyCLIAgent:
                             except:
                                 pass
                         return True, cr or "Action executed"
-            self._add_to_history(prompt, str(res))
+            self._add_to_history(prompt, str(res), [])
             return True, str(res)
         except Exception as e:
             return False, str(e)
@@ -615,7 +649,11 @@ class MyCLIAgent:
             res_preview = res.split("\n")[0][:100]
             if s and "Executed press_buttons" in e.get("action_details", ""):
                 s = " [STAYED AT SAME POS - LIKELY TOGGLED GATE]"
-            lines.append(f"[{e['step']}] {c_str}{s}: {res_preview}... -> {e['action_details']}")
+            tools_called = ""
+            if e.get("tool_calls"):
+                tools_called = f" [Tools: {', '.join(t.get('name', 'unknown') for t in e['tool_calls'])}]"
+            action_details = e.get("action_details", "No action")
+            lines.append(f"[{e['step']}] {c_str}{s}: {res_preview}... -> {action_details}{tools_called}")
             last = c
         hist = "\n".join(lines) + "\n### TRAIL: " + " -> ".join(trail[-10:])
 
@@ -639,8 +677,7 @@ class MyCLIAgent:
         if "Gym" in loc and self.conversation_history:
             if "STAYED AT SAME POS" in self.conversation_history[-1].get("llm_response", ""):
                 warning = "\n⚠️ ALERT: Last move toggled a gate. DO NOT repeat it! Look for a NEW path."
-        tools = "🎮 **TOOLS**:\n- get_game_state()\n- complete_direct_objective()\n- press_buttons()\n- navigate_to(x, y, variance, reason, blocked_coords=[])"
-        return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n{warning}\n### HISTORY:\n{hist}\n{func}{defeated}{blocked}{prog}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n### TOOLS:\n{tools}\n"
+        return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n{warning}\n### HISTORY:\n{hist}\n{func}{defeated}{blocked}{prog}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n"
 
     def _is_black_frame(self, img):
         try:
