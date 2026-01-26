@@ -2827,6 +2827,20 @@ async def mcp_complete_direct_objective(request: dict):
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
 
+        # Persist completed objectives after each completion (for real time execution... get_progress_summary() relies on this run_data)
+        try:
+            from utils.run_data_manager import get_run_data_manager
+
+            run_manager = get_run_data_manager()
+            if not run_manager:
+                logger.warning("Cannot save completed_objectives: run_data_manager not initialized")
+            else:
+                scratch_space_dir = str(run_manager.get_scratch_space_dir())
+                saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
+                logger.info(f"💾 Saved completed objectives to {saved_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save completed objectives: {e}")
+
         # Create backup of .pokeagent_cache after completing objective
         try:
             from utils.backup_manager import create_cache_backup
@@ -2986,7 +3000,7 @@ async def mcp_add_knowledge(request: dict):
     try:
         from server.cli import pokemon_mcp_server
 
-        return pokemon_mcp_server.add_knowledge_direct(
+        result = pokemon_mcp_server.add_knowledge_direct(
             category=request.get("category"),
             title=request.get("title"),
             content=request.get("content"),
@@ -2994,6 +3008,19 @@ async def mcp_add_knowledge(request: dict):
             coordinates=request.get("coordinates"),
             importance=request.get("importance", 3)
         )
+        # Keep agent_scratch_space in sync for real-time access of knowledge base
+        try:
+            from utils.run_data_manager import get_run_data_manager
+
+            run_manager = get_run_data_manager()
+            if run_manager:
+                run_manager.copy_knowledge_base()
+            else:
+                logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
+        except Exception as e:
+            logger.warning(f"Failed to copy knowledge_base: {e}")
+
+        return result
     except Exception as e:
         logger.error(f"Error adding knowledge: {e}")
         return {"success": False, "error": str(e)}
