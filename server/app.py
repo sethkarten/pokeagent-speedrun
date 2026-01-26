@@ -3612,14 +3612,40 @@ async def mcp_create_direct_objectives(request: dict):
             if category not in ["story", "battling", "dynamics"]:
                 return {"success": False, "error": f"Invalid category: {category}. Must be story, battling, or dynamics"}
 
+            current_obj = direct_objectives_manager._get_current_objective_for_category(category)
+            if not current_obj:
+                return {
+                    "success": False,
+                    "error": f"No current {category} objective to create new objectives from"
+                }
+            if current_obj.action_type != "create_new_objectives":
+                return {
+                    "success": False,
+                    "error": (
+                        f"Cannot create new {category} objectives because the current {category} objective "
+                        f"is not a guidance objective (action_type='create_new_objectives')."
+                    ),
+                }
+
             # Use run_data agent_scratch_space for dynamics backup
             from utils.run_data_manager import get_run_data_manager
 
             run_manager = get_run_data_manager()
             objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
 
+            start_index = len(direct_objectives_manager._get_sequence_for_category(category))
             direct_objectives_manager.add_objectives_to_category(
                 category, objectives_data, run_dir=objectives_run_dir
+            )
+            direct_objectives_manager._mark_objective_completed(current_obj)
+            if category == "story":
+                direct_objectives_manager.story_index = start_index
+            elif category == "battling":
+                direct_objectives_manager.battling_index = start_index
+            elif category == "dynamics":
+                direct_objectives_manager.dynamics_index = start_index
+            logger.info(
+                f"✅ Created {len(objectives_data)} {category} objectives and advanced index to {start_index}"
             )
             should_complete_auto_obj = False
         else:
