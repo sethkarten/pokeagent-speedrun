@@ -580,4 +580,3 @@ if __name__ == "__main__":
         output_dir.mkdir(exist_ok=True)
         output_path = output_dir / f"{args.map}.json"
         save_json_map(args.map, pokeemerald_root, output_path)
-
