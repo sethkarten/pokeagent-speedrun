@@ -1426,6 +1426,8 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                     last_call = tool_calls_made[-1]
                     self._store_function_result_for_context(last_call['name'], last_call['result'])
 
+                if tool_calls_made:
+                    self.llm_logger.add_step_tool_calls(self.step_count, tool_calls_made)
                 self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details)
                 
                 # Log trajectory for this step

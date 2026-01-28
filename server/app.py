@@ -4463,22 +4463,6 @@ def main():
             sys_argv=sys.argv,
             additional_info={"server_mode": True, "checkpoint_loading_enabled": checkpoint_loading_enabled},
         )
-    else:
-        # Update metadata with server-specific info without overwriting
-        metadata_file = run_manager.run_dir / "metadata.json"
-        if metadata_file.exists():
-            import json
-
-            with open(metadata_file, "r") as f:
-                metadata = json.load(f)
-            metadata["server_info"] = {
-                "server_mode": True,
-                "checkpoint_loading_enabled": checkpoint_loading_enabled,
-                "server_start_time": datetime.now().isoformat(),
-            }
-            with open(metadata_file, "w") as f:
-                json.dump(metadata, f, indent=2)
-            logger.info(f"Updated metadata with server info")
 
     # Initialize run directory for this execution (deprecated, will be moved)
     global current_run_dir
