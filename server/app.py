@@ -2914,12 +2914,46 @@ async def mcp_complete_direct_objective(request: dict):
             # Mark objective as completed
             direct_objectives_manager._mark_objective_completed(current_obj)
 
-            # Advance the appropriate index
+            # Advance the appropriate index, and inject guidance when a category ends
             if category == "story":
-                direct_objectives_manager.story_index += 1
-                logger.info(
-                    f"✅ Completed story objective: {current_obj.id} (advanced to story index {direct_objectives_manager.story_index})"
-                )
+                if direct_objectives_manager.story_index >= len(direct_objectives_manager.story_sequence) - 1:
+                    from agent.objective_types import DirectObjective
+
+                    next_obj = DirectObjective(
+                        id="autonomous_01_create_next_story_objectives",
+                        description=(
+                            "Follow the autonomous objective creation procedure to create the next 3 objectives. "
+                            "Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). "
+                            "Step 2: Call get_walkthrough(part=X) with the appropriate part number. "
+                            "Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information."
+                        ),
+                        action_type="create_new_objectives",
+                        category="story",
+                        target_location=None,
+                        navigation_hint=(
+                            "IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. "
+                            "Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). "
+                            "Step 3: Create new objectives with create_direct_objectives(category=...). "
+                            "In categorized mode, you MUST include a category (story, battling, or dynamics). "
+                            "Use 'story' for walkthrough progression, 'battling' only for training prep, and 'dynamics' for short-term navigation/cleanup. "
+                            "Multiple create_direct_objectives calls are allowed. Each function call result will appear in the "
+                            "'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), "
+                            "the new objectives will be added to the sequence and the current_index for that category will be incremented "
+                            "to the first new objective."
+                        ),
+                        completion_condition="story_objectives_created",
+                        priority=1,
+                    )
+                    direct_objectives_manager.story_sequence.append(next_obj)
+                    direct_objectives_manager.story_index = len(direct_objectives_manager.story_sequence) - 1
+                    logger.info(
+                        f"✅ Completed story objective: {current_obj.id} (appended create_new_objectives guidance at story index {direct_objectives_manager.story_index})"
+                    )
+                else:
+                    direct_objectives_manager.story_index += 1
+                    logger.info(
+                        f"✅ Completed story objective: {current_obj.id} (advanced to story index {direct_objectives_manager.story_index})"
+                    )
             elif category == "battling":
                 direct_objectives_manager.battling_index += 1
                 logger.info(
@@ -2938,13 +2972,72 @@ async def mcp_complete_direct_objective(request: dict):
 
             # Mark objective as completed
             direct_objectives_manager._mark_objective_completed(current_obj)
-            direct_objectives_manager.current_index += 1
-            logger.info(
-                f"✅ Completed objective: {current_obj.id} (advanced to index {direct_objectives_manager.current_index})"
+
+            hold_index = (
+                current_obj.action_type == "create_new_objectives"
+                and direct_objectives_manager.current_index >= len(direct_objectives_manager.current_sequence) - 1
             )
+            if hold_index:
+                logger.info(
+                    f"✅ Completed objective: {current_obj.id} (holding index {direct_objectives_manager.current_index} for create_new_objectives guidance)"
+                )
+            else:
+                direct_objectives_manager.current_index += 1
+                logger.info(
+                    f"✅ Completed objective: {current_obj.id} (advanced to index {direct_objectives_manager.current_index})"
+                )
 
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
+
+        # Persist completed objectives after each completion (for real time execution... get_progress_summary() relies on this run_data)
+        try:
+            from utils.run_data_manager import get_run_data_manager
+
+            run_manager = get_run_data_manager()
+            if not run_manager:
+                logger.warning("Cannot save completed_objectives: run_data_manager not initialized")
+            else:
+                scratch_space_dir = str(run_manager.get_scratch_space_dir())
+                if direct_objectives_manager.mode == "categorized":
+                    completed_path = os.path.join(scratch_space_dir, "completed_objectives.json")
+                    if os.path.exists(completed_path):
+                        with open(completed_path, "r") as f:
+                            history = json.load(f)
+                    else:
+                        history = {
+                            "mode": "categorized",
+                            "sequence_name": direct_objectives_manager.sequence_name,
+                            "categories": {"story": [], "battling": [], "dynamics": []},
+                        }
+
+                    category_key = category or "dynamics"
+                    history.setdefault("categories", {})
+                    history["categories"].setdefault("story", [])
+                    history["categories"].setdefault("battling", [])
+                    history["categories"].setdefault("dynamics", [])
+                    history["categories"][category_key].append(
+                        {
+                            "id": current_obj.id,
+                            "description": current_obj.description,
+                            "target_location": current_obj.target_location,
+                            "action_type": current_obj.action_type,
+                            "completed_at": current_obj.completed_at.isoformat()
+                            if hasattr(current_obj, "completed_at") and current_obj.completed_at
+                            else None,
+                            "category": category_key,
+                        }
+                    )
+                    history["last_updated"] = datetime.datetime.now().isoformat()
+
+                    with open(completed_path, "w") as f:
+                        json.dump(history, f, indent=2)
+                    logger.info(f"💾 Saved completed objectives to {completed_path}")
+                else:
+                    saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
+                    logger.info(f"💾 Saved completed objectives to {saved_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save completed objectives: {e}")
 
         # Create backup of .pokeagent_cache after completing objective
         try:
@@ -2959,7 +3052,34 @@ async def mcp_complete_direct_objective(request: dict):
             logger.warning(f"Failed to create cache backup: {e}")
 
         # Get next objective if available
-        next_obj = direct_objectives_manager.get_current_objective()
+        if direct_objectives_manager.mode == "categorized":
+            next_guidance = direct_objectives_manager.get_categorized_objective_guidance(game_state)
+            categorized_status = {
+                "story": {
+                    "current_index": direct_objectives_manager.story_index,
+                    "total": len(direct_objectives_manager.story_sequence),
+                    "completed": sum(1 for obj in direct_objectives_manager.story_sequence if obj.completed),
+                },
+                "battling": {
+                    "current_index": direct_objectives_manager.battling_index,
+                    "total": len(direct_objectives_manager.battling_sequence),
+                    "completed": sum(1 for obj in direct_objectives_manager.battling_sequence if obj.completed),
+                },
+                "dynamics": {
+                    "current_index": direct_objectives_manager.dynamics_index,
+                    "total": len(direct_objectives_manager.dynamics_sequence),
+                    "completed": sum(1 for obj in direct_objectives_manager.dynamics_sequence if obj.completed),
+                },
+            }
+            from server.cli.pokemon_mcp_server import serialize_for_json
+            return serialize_for_json({
+                "success": True,
+                "completed_objective": {"id": current_obj.id, "description": current_obj.description},
+                "next_objective": next_guidance,
+                "sequence_status": categorized_status,
+            })
+        else:
+            next_obj = direct_objectives_manager.get_current_objective()
         if next_obj:
             next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
             from server.cli.pokemon_mcp_server import serialize_for_json
@@ -3093,7 +3213,7 @@ async def mcp_add_knowledge(request: dict):
     try:
         from server.cli import pokemon_mcp_server
 
-        return pokemon_mcp_server.add_knowledge_direct(
+        result = pokemon_mcp_server.add_knowledge_direct(
             category=request.get("category"),
             title=request.get("title"),
             content=request.get("content"),
@@ -3101,6 +3221,19 @@ async def mcp_add_knowledge(request: dict):
             coordinates=request.get("coordinates"),
             importance=request.get("importance", 3),
         )
+        # Keep agent_scratch_space in sync for real-time access of knowledge base
+        try:
+            from utils.run_data_manager import get_run_data_manager
+
+            run_manager = get_run_data_manager()
+            if run_manager:
+                run_manager.copy_knowledge_base()
+            else:
+                logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
+        except Exception as e:
+            logger.warning(f"Failed to copy knowledge_base: {e}")
+
+        return result
     except Exception as e:
         logger.error(f"Error adding knowledge: {e}")
         return {"success": False, "error": str(e)}
@@ -3556,26 +3689,71 @@ async def mcp_create_direct_objectives(request: dict):
         if direct_objectives_manager is None:
             direct_objectives_manager = DirectObjectiveManager()
 
-        # Check if we need to complete the "sequence_complete_create_next_objectives" objective first
-        current_obj = direct_objectives_manager.get_current_objective()
-        should_complete_auto_obj = False
-        if current_obj and current_obj.id == "sequence_complete_create_next_objectives":
-            should_complete_auto_obj = True
+        category = request.get("category")
 
-        # Add dynamic objectives (this will automatically set current_index to the first new objective)
-        direct_objectives_manager.add_dynamic_objectives(objectives_data, set_as_current=True)
+        if direct_objectives_manager.mode == "categorized":
+            if not category:
+                return {"success": False, "error": "Category parameter required in categorized mode (story, battling, or dynamics)"}
+            if category not in ["story", "battling", "dynamics"]:
+                return {"success": False, "error": f"Invalid category: {category}. Must be story, battling, or dynamics"}
 
-        # If we just created the auto-objective to create new objectives, mark it as completed
-        # Note: add_dynamic_objectives already set current_index to the first new objective,
-        # so we don't need to increment it again here
-        if should_complete_auto_obj:
+            current_obj = direct_objectives_manager._get_current_objective_for_category(category)
+            if not current_obj:
+                return {
+                    "success": False,
+                    "error": f"No current {category} objective to create new objectives from"
+                }
+            if current_obj.action_type != "create_new_objectives":
+                return {
+                    "success": False,
+                    "error": (
+                        f"Cannot create new {category} objectives because the current {category} objective "
+                        f"is not a guidance objective (action_type='create_new_objectives')."
+                    ),
+                }
+
+            # Use run_data agent_scratch_space for dynamics backup
+            from utils.run_data_manager import get_run_data_manager
+
+            run_manager = get_run_data_manager()
+            objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
+
+            start_index = len(direct_objectives_manager._get_sequence_for_category(category))
+            direct_objectives_manager.add_objectives_to_category(
+                category, objectives_data, run_dir=objectives_run_dir
+            )
             direct_objectives_manager._mark_objective_completed(current_obj)
+            if category == "story":
+                direct_objectives_manager.story_index = start_index
+            elif category == "battling":
+                direct_objectives_manager.battling_index = start_index
+            elif category == "dynamics":
+                direct_objectives_manager.dynamics_index = start_index
             logger.info(
-                f"✅ Marked sequence_complete_create_next_objectives as completed after creating {len(objectives_data)} new objectives"
+                f"✅ Created {len(objectives_data)} {category} objectives and advanced index to {start_index}"
             )
-            logger.info(
-                f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)"
-            )
+            should_complete_auto_obj = False
+        else:
+            # Check if we need to complete the "sequence_complete_create_next_objectives" objective first
+            current_obj = direct_objectives_manager.get_current_objective()
+            should_complete_auto_obj = False
+            if current_obj and current_obj.id == "sequence_complete_create_next_objectives":
+                should_complete_auto_obj = True
+
+            # Add dynamic objectives (this will automatically set current_index to the first new objective)
+            direct_objectives_manager.add_dynamic_objectives(objectives_data, set_as_current=True)
+
+            # If we just created the auto-objective to create new objectives, mark it as completed
+            # Note: add_dynamic_objectives already set current_index to the first new objective,
+            # so we don't need to increment it again here
+            if should_complete_auto_obj:
+                direct_objectives_manager._mark_objective_completed(current_obj)
+                logger.info(
+                    f"✅ Marked sequence_complete_create_next_objectives as completed after creating {len(objectives_data)} new objectives"
+                )
+                logger.info(
+                    f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)"
+                )
 
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
@@ -3588,7 +3766,28 @@ async def mcp_create_direct_objectives(request: dict):
         game_state = game_state_result.get("raw_state", {})
 
         # Get next objective guidance (should now be the first of the newly created objectives)
-        next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+        if direct_objectives_manager.mode == "categorized":
+            next_guidance = direct_objectives_manager.get_categorized_objective_guidance(game_state)
+            sequence_status = {
+                "story": {
+                    "current_index": direct_objectives_manager.story_index,
+                    "total": len(direct_objectives_manager.story_sequence),
+                    "completed": sum(1 for obj in direct_objectives_manager.story_sequence if obj.completed),
+                },
+                "battling": {
+                    "current_index": direct_objectives_manager.battling_index,
+                    "total": len(direct_objectives_manager.battling_sequence),
+                    "completed": sum(1 for obj in direct_objectives_manager.battling_sequence if obj.completed),
+                },
+                "dynamics": {
+                    "current_index": direct_objectives_manager.dynamics_index,
+                    "total": len(direct_objectives_manager.dynamics_sequence),
+                    "completed": sum(1 for obj in direct_objectives_manager.dynamics_sequence if obj.completed),
+                },
+            }
+        else:
+            next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
+            sequence_status = direct_objectives_manager.get_sequence_status()
 
         from server.cli.pokemon_mcp_server import serialize_for_json
         return serialize_for_json({
@@ -3596,7 +3795,7 @@ async def mcp_create_direct_objectives(request: dict):
             "message": f"Created {len(objectives_data)} objectives",
             "reasoning": reasoning,
             "next_objective": next_guidance,
-            "sequence_status": direct_objectives_manager.get_sequence_status(),
+            "sequence_status": sequence_status,
             "context": {
                 "current_location": game_state.get("player", {}).get("location"),
                 "milestones_completed": [
@@ -3657,7 +3856,10 @@ async def mcp_get_progress_summary():
 
                     with open(completed_obj_file, "r") as f:
                         history_data = json.load(f)
-                        completed_history = history_data.get("sequences", [])
+                        if "categories" in history_data:
+                            completed_history = history_data.get("categories", {})
+                        else:
+                            completed_history = history_data.get("sequences", [])
 
         # Get knowledge summary (persistent)
         kb_result = pokemon_mcp_server.get_knowledge_summary_direct(min_importance=3)

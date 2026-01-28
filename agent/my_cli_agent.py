@@ -131,34 +131,52 @@ class MyCLIAgent:
         return [
             {
                 "name": "get_game_state",
-                "description": "Get state",
+                "description": "Get the current game state including player position, party Pokemon, map, items, and a screenshot. Use this to understand where you are and what you can do.",
                 "parameters": {"type_": "OBJECT", "properties": {}, "required": []},
             },
             {
                 "name": "press_buttons",
-                "description": "Press buttons",
+                "description": "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT. Use WAIT to observe without pressing any button.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "buttons": {"type_": "ARRAY", "items": {"type_": "STRING"}},
-                        "reasoning": {"type_": "STRING"},
+                        "buttons": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "STRING"},
+                            "description": "List of buttons to press (e.g., ['A'], ['UP'])",
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [game screen, location, objective, situation]' and 'PLAN: [action, reason, expected result]'.",
+                        },
                     },
                     "required": ["buttons", "reasoning"],
                 },
             },
             {
                 "name": "navigate_to",
-                "description": "Navigate",
+                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "x": {"type_": "INTEGER"},
-                        "y": {"type_": "INTEGER"},
-                        "variance": {"type_": "STRING"},
-                        "reason": {"type_": "STRING"},
+                        "x": {"type_": "INTEGER", "description": "Target X coordinate"},
+                        "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
+                        "variance": {
+                            "type_": "STRING",
+                            "description": "Path variance level: 'none', 'low', 'medium', 'high', 'extreme'.",
+                            "enum": ["none", "low", "medium", "high", "extreme"],
+                        },
+                        "reason": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE:' and 'PLAN:' sections.",
+                        },
                         "blocked_coords": {
                             "type_": "ARRAY",
                             "items": {"type_": "ARRAY", "items": {"type_": "INTEGER"}},
+                        },
+                        "consider_npcs": {
+                            "type_": "BOOLEAN",
+                            "description": "Whether to treat NPCs as obstacles during pathfinding.",
                         },
                     },
                     "required": ["x", "y", "variance", "reason"],
@@ -166,11 +184,188 @@ class MyCLIAgent:
             },
             {
                 "name": "complete_direct_objective",
-                "description": "Complete objective",
+                "description": "Complete the current direct objective and advance to the next one. In CATEGORIZED mode, you must specify which category objective to complete (story, battling, or dynamics). In LEGACY mode, category is ignored.",
                 "parameters": {
                     "type_": "OBJECT",
-                    "properties": {"reasoning": {"type_": "STRING"}},
+                    "properties": {
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current state, objective requirements, completion evidence]' and 'PLAN: [confirm completion, next objective]'.",
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["story", "battling", "dynamics"],
+                            "description": "Which category objective to complete (required in CATEGORIZED mode).",
+                        },
+                    },
                     "required": ["reasoning"],
+                },
+            },
+            {
+                "name": "reflect",
+                "description": "Use this when you feel stuck, uncertain, or suspect your current approach/objectives are wrong. This tool helps you step back, analyze what's happening, and realign your strategy.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "situation": {
+                            "type_": "STRING",
+                            "description": "Describe what you've been trying to do and why you think something might be wrong.",
+                        }
+                    },
+                    "required": ["situation"],
+                },
+            },
+            {
+                "name": "gym_puzzle_agent",
+                "description": "Get expert guidance on solving gym puzzles. Use this when you're in a gym and need help understanding the puzzle mechanics or finding the solution.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "gym_name": {
+                            "type_": "STRING",
+                            "description": "Name of the gym you're currently in (e.g., 'MOSSDEEP_CITY_GYM').",
+                        }
+                    },
+                    "required": ["gym_name"],
+                },
+            },
+            {
+                "name": "add_knowledge",
+                "description": "Store important discoveries in your knowledge base.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
+                            "description": "Category of knowledge",
+                        },
+                        "title": {"type_": "STRING", "description": "Short title"},
+                        "content": {"type_": "STRING", "description": "Detailed content"},
+                        "location": {"type_": "STRING", "description": "Map name (optional)"},
+                        "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
+                        "importance": {"type_": "INTEGER", "description": "Importance 1-5"},
+                    },
+                    "required": ["category", "title", "content", "importance"],
+                },
+            },
+            {
+                "name": "search_knowledge",
+                "description": "Search your knowledge base for stored information.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "category": {"type_": "STRING", "description": "Category (optional)"},
+                        "query": {"type_": "STRING", "description": "Text to search (optional)"},
+                        "location": {"type_": "STRING", "description": "Map name filter (optional)"},
+                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"},
+                    },
+                    "required": [],
+                },
+            },
+            {
+                "name": "get_knowledge_summary",
+                "description": "Get a summary of the most important things you've learned.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "min_importance": {"type_": "INTEGER", "description": "Min importance (default 3)"}
+                    },
+                    "required": [],
+                },
+            },
+            {
+                "name": "create_direct_objectives",
+                "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for main walkthrough progression, 'battling' for training prep, and 'dynamics' for ad-hoc navigation or cleanup.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "objectives": {
+                            "type_": "ARRAY",
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
+                                    "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
+                                    "action_type": {
+                                        "type_": "STRING",
+                                        "enum": ["navigate", "interact", "battle", "wait"],
+                                        "description": "Type of action",
+                                    },
+                                    "target_location": {"type_": "STRING", "description": "Target location/map name"},
+                                    "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
+                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"},
+                                },
+                                "required": ["id", "description", "action_type"],
+                            },
+                            "description": "Array of exactly 3 objectives to create next",
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["dynamics", "story", "battling"],
+                            "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal.",
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)",
+                        },
+                    },
+                    "required": ["objectives", "reasoning"],
+                },
+            },
+            {
+                "name": "get_progress_summary",
+                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {},
+                    "required": [],
+                },
+            },
+            {
+                "name": "get_walkthrough",
+                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "part": {
+                            "type_": "INTEGER",
+                            "description": "Walkthrough part 1-21",
+                        }
+                    },
+                    "required": ["part"],
+                },
+            },
+            {
+                "name": "lookup_pokemon_info",
+                "description": "Look up Pokemon information from Bulbapedia (stats, moves, evolution, locations).",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "topic": {
+                            "type_": "STRING",
+                            "description": "Pokemon name or topic to look up",
+                        },
+                        "source": {
+                            "type_": "STRING",
+                            "description": "Wiki source (default: bulbapedia)",
+                        },
+                    },
+                    "required": ["topic"],
+                },
+            },
+            {
+                "name": "list_wiki_sources",
+                "description": "List all available wiki article sources.",
+                "parameters": {"type_": "OBJECT", "properties": {}, "required": []},
+            },
+            {
+                "name": "save_memory",
+                "description": "Save important facts to remember across sessions.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {"fact": {"type_": "STRING", "description": "Fact to remember"}},
+                    "required": ["fact"],
                 },
             },
         ]
@@ -199,11 +394,37 @@ class MyCLIAgent:
         return result
 
     def _add_to_history(self, p, r, tc=None, ad=None, pc=None):
-        self.conversation_history.append(
-            {"step": self.step_count, "llm_response": r, "action_details": ad, "player_coords": pc}
-        )
-        if len(self.conversation_history) > 30:
-            self.conversation_history.pop(0)
+        response_stripped = r.strip() if isinstance(r, str) else str(r)
+        entry = {
+            "step": self.step_count,
+            "llm_response": response_stripped,
+            "timestamp": time.time(),
+        }
+
+        if tc:
+            entry["tool_calls"] = tc
+            last_call = tc[-1]
+            entry["action"] = last_call.get("name", "unknown")
+            if ad:
+                entry["action_details"] = ad
+            elif last_call.get("name") == "navigate_to" and "x" in last_call.get("args", {}) and "y" in last_call.get(
+                "args", {}
+            ):
+                variance = last_call.get("args", {}).get("variance", "none")
+                entry["action_details"] = f"navigate_to({last_call['args']['x']}, {last_call['args']['y']}, variance={variance})"
+            elif last_call.get("name") == "press_buttons" and "buttons" in last_call.get("args", {}):
+                entry["action_details"] = f"press_buttons({last_call['args']['buttons']})"
+            else:
+                entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
+        elif ad:
+            entry["action_details"] = ad
+
+        if pc:
+            entry["player_coords"] = pc
+
+        self.conversation_history.append(entry)
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
 
     def _store_function_result_for_context(self, n, r):
         self.recent_function_results.append({"name": n, "result": r})
@@ -331,7 +552,15 @@ class MyCLIAgent:
                             coords = (s.get("player_position", {}).get("x"), s.get("player_position", {}).get("y"))
                         except:
                             coords = None
-                        self._add_to_history(prompt, cr, None, f"Executed {fc.name}", pc=coords)
+                        tool_call = {"name": fc.name, "args": args, "result": fr}
+                        if fc.name == "navigate_to" and "x" in args and "y" in args:
+                            variance = args.get("variance", "none")
+                            action_details = f"navigate_to({args['x']}, {args['y']}, variance={variance})"
+                        elif fc.name == "press_buttons" and "buttons" in args:
+                            action_details = f"press_buttons({args['buttons']})"
+                        else:
+                            action_details = f"{fc.name}(...)"
+                        self._add_to_history(prompt, cr, [tool_call], action_details, pc=coords)
                         if coords and last_coords and coords == last_coords and fc.name == "press_buttons":
                             try:
                                 btn = args.get("buttons", [])[-1]
@@ -366,12 +595,12 @@ class MyCLIAgent:
                             except:
                                 pass
                         return True, cr or "Action executed"
-            self._add_to_history(prompt, str(res))
+            self._add_to_history(prompt, str(res), [])
             return True, str(res)
         except Exception as e:
             return False, str(e)
 
-    def _build_optimized_prompt(self, gs_res, sc):
+    def _build_structured_prompt(self, gs_res, sc):
         try:
             gd = json.loads(gs_res)
         except:
@@ -381,16 +610,48 @@ class MyCLIAgent:
             st = self._strip_map_info(st)
         elif "Gym" in loc:
             st = self._gym_strip(st)
+        def _fmt_obj(obj, label):
+            if not obj:
+                return [f"{label}: None"]
+            return [
+                f"{label}:",
+                f"  id: {obj.get('id')}",
+                f"  description: {obj.get('description')}",
+                f"  action_type: {obj.get('action_type')}",
+                f"  target_location: {obj.get('target_location')}",
+                f"  navigation_hint: {obj.get('navigation_hint')}",
+                f"  completion_condition: {obj.get('completion_condition')}",
+            ]
+
         do, ds = gd.get("direct_objective", ""), gd.get("direct_objective_status", "")
         co = gd.get("categorized_objectives", {})
         if co:
+            story_obj = co.get("story")
+            battling_group = co.get("battling_group", [])
+            dynamics_obj = co.get("dynamics")
+
             parts = []
-            for c in ["story", "battling", "dynamics"]:
-                o = co.get(c, {})
-                if o:
-                    parts.append(f"{c.upper()}: {o.get('description')} (@ {o.get('target_location')})")
-            if parts:
-                do = "\n\n".join(parts)
+            parts.extend(_fmt_obj(story_obj, "STORY"))
+
+            if battling_group:
+                parts.append("BATTLING:")
+                for i, obj in enumerate(battling_group, 1):
+                    parts.extend(
+                        [
+                            f"  [{i}] id: {obj.get('id')}",
+                            f"  [{i}] description: {obj.get('description')}",
+                            f"  [{i}] action_type: {obj.get('action_type')}",
+                            f"  [{i}] target_location: {obj.get('target_location')}",
+                            f"  [{i}] navigation_hint: {obj.get('navigation_hint')}",
+                            f"  [{i}] completion_condition: {obj.get('completion_condition')}",
+                        ]
+                    )
+            else:
+                parts.append("BATTLING: None")
+
+            parts.extend(_fmt_obj(dynamics_obj, "DYNAMICS"))
+            do = "\n".join(parts)
+
             cs = gd.get("categorized_status", {})
             if cs:
                 ds = "📊 PROGRESS: " + " | ".join(
@@ -400,6 +661,9 @@ class MyCLIAgent:
                         if i.get("total") > 0
                     ]
                 )
+        if do and isinstance(do, dict):
+            do = "\n".join(_fmt_obj(do, "OBJECTIVE"))
+
         # Enhanced history for LLM
         lines, last, trail = [], None, []
         for e in self.conversation_history[-20:]:
@@ -420,7 +684,11 @@ class MyCLIAgent:
             res_preview = res.split("\n")[0][:100]
             if s and "Executed press_buttons" in e.get("action_details", ""):
                 s = " [STAYED AT SAME POS - LIKELY TOGGLED GATE]"
-            lines.append(f"[{e['step']}] {c_str}{s}: {res_preview}... -> {e['action_details']}")
+            tools_called = ""
+            if e.get("tool_calls"):
+                tools_called = f" [Tools: {', '.join(t.get('name', 'unknown') for t in e['tool_calls'])}]"
+            action_details = e.get("action_details", "No action")
+            lines.append(f"[{e['step']}] {c_str}{s}: {res_preview}... -> {action_details}{tools_called}")
             last = c
         hist = "\n".join(lines) + "\n### TRAIL: " + " -> ".join(trail[-10:])
 
@@ -444,11 +712,7 @@ class MyCLIAgent:
         if "Gym" in loc and self.conversation_history:
             if "STAYED AT SAME POS" in self.conversation_history[-1].get("llm_response", ""):
                 warning = "\n⚠️ ALERT: Last move toggled a gate. DO NOT repeat it! Look for a NEW path."
-        tools = "🎮 **TOOLS**:\n- get_game_state()\n- complete_direct_objective()\n- press_buttons()\n- navigate_to(x, y, variance, reason, blocked_coords=[])"
-        return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n{warning}\n### HISTORY:\n{hist}\n{func}{defeated}{blocked}{prog}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n### TOOLS:\n{tools}\n"
-
-    def _build_structured_prompt(self, gs_res, sc):
-        return self._build_optimized_prompt(gs_res, sc)
+        return f"# Step: {sc}\n{self._load_base_prompt()}\n## CONTEXT\n{warning}\n### HISTORY:\n{hist}\n{func}{defeated}{blocked}{prog}\n### OBJECTIVE:\n{do}\n{ds}\n### STATE:\n{st}\n"
 
     def _is_black_frame(self, img):
         try:
@@ -545,7 +809,7 @@ class MyCLIAgent:
                 except:
                     b64 = None
                 p = (
-                    self._build_optimized_prompt(gs_res, self.step_count)
+                    self._build_structured_prompt(gs_res, self.step_count)
                     if self.optimization_enabled
                     else self._build_structured_prompt(gs_res, self.step_count)
                 )
