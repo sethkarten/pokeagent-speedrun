@@ -160,7 +160,7 @@ class DirectObjectiveManager:
             DirectObjective(
                 id="birch_08_enter_lab",
                 description="Enter Professor Birch's lab to receive Pokédex",
-                action_type="interact",
+                action_type="create_new_objectives",
                 target_location="Professor Birch's Lab",
                 navigation_hint="Move to lab entrance and interact to receive Pokédex",
                 completion_condition="pokedex_received",
@@ -2832,7 +2832,17 @@ class DirectObjectiveManager:
             run_dir: Optional run directory for saving completed objectives
         """
         self.sequence_name = "autonomous_objective_creation"
-        self.current_sequence = [
+        self.enable_categorized_mode()
+        self.sequence_name = "autonomous_objective_creation"
+
+        # Clear legacy sequence state
+        self.current_sequence = []
+        self.current_index = 0
+
+        # Categorized mode: use dynamics for autonomous objective creation
+        self.dynamics_sequence = []
+        self.battling_sequence = []
+        self.story_sequence = [
             # DirectObjective(
             #     id="dynamic_01_reach_route_102",
             #     description="Head south from route 103 to enter Route 102",
@@ -2903,23 +2913,26 @@ class DirectObjectiveManager:
             #     priority=1
             # ),
             DirectObjective(
-                id="autonomous_01_create_next_objectives",
+                id="autonomous_01_create_next_story_objectives",
                 description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
-                action_type="interact",
+                action_type="create_new_objectives",
+                category="story",
                 target_location=None,
-                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Verify and create objectives with create_direct_objectives(). Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), the new objectives will be added to the sequence and the current_index will be incremented to the first new objective.",
-                completion_condition="dynamic_objectives_created",
+                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Create new objectives with create_direct_objectives(category=...). In categorized mode, you MUST include a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' only for training prep, and 'dynamics' for short-term navigation/cleanup. Multiple create_direct_objectives calls are allowed. Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), the new objectives will be added to the sequence and the current_index for that category will be incremented to the first new objective.",
+                completion_condition="story_objectives_created",
                 priority=1
             ),
 
         ]
-        self.current_index = min(start_index, len(self.current_sequence))
+        self.dynamics_index = 0
+        self.battling_index = 0
+        self.story_index = min(start_index, len(self.story_sequence))
         
         # Mark objectives before start_index as completed if needed
         initial_completed = []
         for i in range(start_index):
-            if i < len(self.current_sequence):
-                obj = self.current_sequence[i]
+            if i < len(self.story_sequence):
+                obj = self.story_sequence[i]
                 obj.completed = True
                 obj.completed_at = datetime.now()
                 initial_completed.append({
@@ -2927,6 +2940,7 @@ class DirectObjectiveManager:
                     "description": obj.description,
                     "target_location": obj.target_location,
                     "action_type": obj.action_type,
+                    "category": obj.category,
                     "completed_at": obj.completed_at.isoformat(),
                     "completed_at_load": True
                 })
@@ -2935,23 +2949,28 @@ class DirectObjectiveManager:
         if run_dir and start_index > 0 and initial_completed:
             try:
                 filename = os.path.join(run_dir, "completed_objectives.json")
-                initial_data = {
+                history = {
+                    "mode": "categorized",
                     "sequence_name": self.sequence_name,
-                    "completed_at": datetime.now().isoformat(),
-                    "completed_objectives": initial_completed,
-                    "total_objectives_completed": len(initial_completed),
-                    "total_objectives": len(self.current_sequence),
-                    "start_index": start_index,
-                    "note": f"Initial completed objectives (loaded at index {start_index})"
+                    "categories": {
+                        "dynamics": [],
+                        "battling": [],
+                        "story": initial_completed,
+                    },
+                    "last_updated": datetime.now().isoformat(),
                 }
-                history = {"sequences": [initial_data], "last_updated": datetime.now().isoformat()}
                 with open(filename, 'w') as f:
                     json.dump(history, f, indent=2)
                 logger.info(f"💾 Saved {len(initial_completed)} initial completed objectives to {filename}")
             except Exception as e:
                 logger.warning(f"Failed to save initial completed objectives: {e}")
         
-        logger.info(f"Loaded autonomous_objective_creation sequence with {len(self.current_sequence)} objective, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
+        logger.info(
+            "Loaded autonomous_objective_creation sequence with %s objective, starting at index %s (%s pre-completed)",
+            len(self.story_sequence),
+            self.story_index,
+            len(initial_completed),
+        )
 
     def load_full_game_sequence(self, start_index: int = 0, run_dir: Optional[str] = None):
         """Load the complete Pokemon Emerald full game sequence (244 objectives).
@@ -3713,5 +3732,3 @@ class DirectObjectiveManager:
             logger.info(f"💾 Saved {len(dynamics_data)} dynamics objectives to {filename}")
         except Exception as e:
             logger.warning(f"Failed to save dynamics objectives backup: {e}")
-
-
