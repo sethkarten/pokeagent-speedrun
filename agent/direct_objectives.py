@@ -3732,5 +3732,3 @@ class DirectObjectiveManager:
             logger.info(f"💾 Saved {len(dynamics_data)} dynamics objectives to {filename}")
         except Exception as e:
             logger.warning(f"Failed to save dynamics objectives backup: {e}")
-
-

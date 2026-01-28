@@ -17,7 +17,6 @@ Follow this process for EVERY step:
 - **The (9,12) Trap:** This tile is a cul-de-sac. Moving DOWN from (9,12) just takes you back to the entrance path. You MUST navigate the outer corridors to reach Winona.
 - **Action:** Move LEFT to (4,15) and then move NORTH along the left wall.
 
-
 ## SPEED & EFFICIENCY
 - **Gym Precision:** In gyms, only take **ONE or TWO steps at a time**. Batched moves often fail because gates rotate mid-sequence.
 - **Goal-Oriented:** Your target is Winona at (15, 2). Any move that increases your X or decreases your Y is generally good.
