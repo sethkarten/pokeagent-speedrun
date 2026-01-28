@@ -57,6 +57,7 @@ class LLMLogger:
             "total_llm_calls": 0,
             "total_run_time": 0,  # Actual gameplay time in seconds
             "last_update_time": time.time(),  # Track when we last updated
+            "metadata": {},
             
             # NEW: Per-step granular tracking
             "steps": [],  # List of {step, prompt_tokens, completion_tokens, cached_tokens, time_taken, timestamp}
@@ -551,6 +552,8 @@ class LLMLogger:
                 self.cumulative_metrics["steps"] = []
             if "milestones" not in self.cumulative_metrics:
                 self.cumulative_metrics["milestones"] = []
+            if "metadata" not in self.cumulative_metrics:
+                self.cumulative_metrics["metadata"] = {}
             
             # Restore internal tracking from last milestone if available
             if self.cumulative_metrics["milestones"]:
@@ -573,6 +576,53 @@ class LLMLogger:
         except Exception as e:
             logger.error(f"Failed to load cumulative metrics: {e}")
             return False
+
+    def set_run_metadata(self, metadata: Dict[str, Any], overwrite: bool = False):
+        """Set run metadata in cumulative metrics.
+
+        Args:
+            metadata: Run metadata to store under cumulative_metrics["metadata"]
+            overwrite: If True, replace existing metadata. Otherwise only fill missing keys.
+        """
+        if not metadata:
+            return
+        current = self.cumulative_metrics.get("metadata", {})
+        if overwrite or not current:
+            self.cumulative_metrics["metadata"] = metadata
+        else:
+            for key, value in metadata.items():
+                if key not in current:
+                    current[key] = value
+            self.cumulative_metrics["metadata"] = current
+        self.save_cumulative_metrics()
+
+    def add_step_tool_calls(self, step_number: int, tool_calls: list[Dict[str, Any]]):
+        """Attach tool call parameters to a step entry in cumulative metrics."""
+        if step_number is None:
+            return
+        if "steps" not in self.cumulative_metrics:
+            self.cumulative_metrics["steps"] = []
+
+        # Keep only name + args to avoid oversized entries
+        cleaned_calls = []
+        for call in tool_calls or []:
+            name = call.get("name")
+            args = call.get("args", {})
+            if name:
+                cleaned_calls.append({"name": name, "args": args})
+
+        # Update existing step entry if present
+        for entry in reversed(self.cumulative_metrics["steps"]):
+            if entry.get("step") == step_number:
+                entry["tool_calls"] = cleaned_calls
+                self.save_cumulative_metrics()
+                return
+
+        # If no step entry exists, append a minimal one
+        self.cumulative_metrics["steps"].append(
+            {"step": step_number, "tool_calls": cleaned_calls, "timestamp": time.time()}
+        )
+        self.save_cumulative_metrics()
 
     def save_checkpoint(self, checkpoint_file: str = None, agent_step_count: int = None):
         """Save current LLM interaction history to checkpoint file

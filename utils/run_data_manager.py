@@ -109,7 +109,7 @@ class RunDataManager:
                      command_args: Dict[str, Any],
                      sys_argv: List[str],
                      additional_info: Optional[Dict[str, Any]] = None):
-        """Save run metadata including command line information
+        """Save run metadata to cumulative metrics (metadata.json deprecated)
         
         Args:
             command_args: Parsed command line arguments dictionary
@@ -121,34 +121,74 @@ class RunDataManager:
             "start_time": datetime.now().isoformat(),
             "command": " ".join(sys_argv),
             "command_args": command_args,
-            "sys_argv": sys_argv,
-            "python_version": sys.version,
-            "working_directory": os.getcwd(),
+            "sys": {
+                "platform": sys.platform,
+                "python_version": sys.version,
+            },
         }
         
-        # Try to get git commit hash
+        # Try to get git remote, branch, and commit to build a GitHub URL
         try:
+            commit = None
+            branch = None
+            remote_url = None
             result = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
                 capture_output=True,
                 text=True,
-                timeout=2
+                timeout=2,
             )
             if result.returncode == 0:
-                metadata["git_commit"] = result.stdout.strip()
+                commit = result.stdout.strip()
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0:
+                branch = result.stdout.strip()
+            result = subprocess.run(
+                ["git", "config", "--get", "remote.origin.url"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0:
+                remote_url = result.stdout.strip()
+
+            if remote_url:
+                if remote_url.startswith("git@github.com:"):
+                    remote_url = remote_url.replace("git@github.com:", "https://github.com/")
+                if remote_url.startswith("http://"):
+                    remote_url = "https://" + remote_url[len("http://") :]
+                if remote_url.endswith(".git"):
+                    remote_url = remote_url[: -len(".git")]
+            if remote_url and branch and commit:
+                metadata["github_url"] = f"{remote_url}/tree/{branch}/{commit}"
         except Exception as e:
-            logger.debug(f"Could not get git commit: {e}")
+            logger.debug(f"Could not build github_url: {e}")
         
         # Add any additional info
         if additional_info:
             metadata.update(additional_info)
-        
-        # Save metadata in end_state directory
-        metadata_file = self.run_dir / "end_state" / "metadata.json"
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        logger.info(f"Saved metadata: {metadata_file}")
+
+        # Map mode from additional_info if provided
+        if "mode" not in metadata:
+            if additional_info and additional_info.get("server_mode"):
+                metadata["mode"] = "server"
+            elif additional_info and additional_info.get("mode"):
+                metadata["mode"] = additional_info.get("mode")
+
+        # Save metadata into cumulative_metrics.json
+        try:
+            from utils.llm_logger import get_llm_logger
+
+            llm_logger = get_llm_logger()
+            if llm_logger:
+                llm_logger.set_run_metadata(metadata)
+        except Exception as e:
+            logger.warning(f"Failed to write run metadata to cumulative metrics: {e}")
     
     def log_trajectory(self,
                       step: int,
@@ -536,39 +576,18 @@ class RunDataManager:
     def finalize_run(self, 
                     end_time: Optional[datetime] = None,
                     final_metrics: Optional[Dict[str, Any]] = None):
-        """Finalize the run by updating metadata with end time and metrics
-        
-        Args:
-            end_time: End time of the run
-            final_metrics: Final metrics (tokens, cost, steps, etc.)
-        """
-        metadata_file = self.run_dir / "end_state" / "metadata.json"
-        
-        if not metadata_file.exists():
-            logger.warning("No metadata.json found to finalize")
-            return
-        
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
-        
+        """Finalize the run (metadata.json deprecated)."""
         if end_time is None:
             end_time = datetime.now()
-        
-        metadata["end_time"] = end_time.isoformat()
-        
-        # Calculate duration
-        if "start_time" in metadata:
-            start = datetime.fromisoformat(metadata["start_time"])
-            duration = (end_time - start).total_seconds()
-            metadata["duration_seconds"] = duration
-        
-        if final_metrics:
-            metadata["final_metrics"] = final_metrics
-        
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        logger.info(f"Finalized run: {self.run_id}")
+        try:
+            from utils.llm_logger import get_llm_logger
+
+            llm_logger = get_llm_logger()
+            if llm_logger:
+                llm_logger.set_run_metadata({"end_time": end_time.isoformat()})
+        except Exception as e:
+            logger.warning(f"Failed to write end_time to cumulative metrics metadata: {e}")
+        logger.info("Run finalization complete (metadata.json deprecated)")
     
     def get_run_directory(self) -> Path:
         """Get the run directory path"""

@@ -560,6 +560,7 @@ class MyCLIAgent:
                             action_details = f"press_buttons({args['buttons']})"
                         else:
                             action_details = f"{fc.name}(...)"
+                        self.llm_logger.add_step_tool_calls(self.step_count, [tool_call])
                         self._add_to_history(prompt, cr, [tool_call], action_details, pc=coords)
                         if coords and last_coords and coords == last_coords and fc.name == "press_buttons":
                             try:
