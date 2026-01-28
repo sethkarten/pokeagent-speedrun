@@ -1024,9 +1024,9 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
         self.conversation_history.append(entry)
 
-        # Keep only last 20 entries to prevent unbounded growth
-        if len(self.conversation_history) > 20:
-            self.conversation_history = self.conversation_history[-20:]
+        # Keep only last 10 entries to prevent unbounded growth
+        if len(self.conversation_history) > 10:
+            self.conversation_history = self.conversation_history[-10:]
 
         logger.debug(f"✅ History now has {len(self.conversation_history)} entries")
 
@@ -1743,8 +1743,6 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
         # Detect if in title sequence
         is_title_sequence = self._is_title_sequence(game_state_data)
-        if is_title_sequence:
-            logger.info("🎬 Title sequence detected - map information will be hidden")
 
         # Extract player coordinates for stuck detection
         player_position = game_state_data.get("player_position", {})
@@ -1764,7 +1762,6 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
         # Check if we're in categorized mode
         objectives_mode = game_state_data.get("objectives_mode", "legacy")
-        logger.info(f"🎯 Objectives mode: {objectives_mode}")
 
         if objectives_mode == "categorized":
             # NEW: Handle 3-category objectives
@@ -1774,13 +1771,6 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             dynamics_obj = categorized_objs.get("dynamics")
             recommended_battling = categorized_objs.get("recommended_battling_objectives", [])
             categorized_status = game_state_data.get("categorized_status", {})
-
-            # DEBUG: Log what we received
-            logger.info(f"📊 Categorized objectives received:")
-            logger.info(f"   - story_obj: {'Yes' if story_obj else 'None'}")
-            logger.info(f"   - battling_group: {len(battling_group)} objectives")
-            logger.info(f"   - dynamics_obj: {'Yes' if dynamics_obj else 'None'}")
-            logger.info(f"   - recommended: {len(recommended_battling)} IDs")
 
             # Format single objective
             def format_objective(obj_dict, category_emoji, category_name):
@@ -2150,259 +2140,20 @@ Step {step_count}"""
         # Get knowledge base summary for context
         knowledge_context = self._get_knowledge_base_context(max_entries=15, min_importance=3)
 
-        # Log component sizes
-        logger.info(f"📏 Pre-prompt component sizes:")
-        logger.info(f"   state_text: {len(state_text):,} chars")
-        logger.info(f"   action_history: {len(action_history):,} chars")
-        logger.info(f"   function_results: {len(function_results_context):,} chars")
-        logger.info(f"   knowledge_base: {len(knowledge_context):,} chars")
-        logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
-        logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
-        logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
-
         # Build autonomous prompt
-        prompt = f"""You are an autonomous AI agent playing Pokémon Emerald on a Game Boy Advance emulator.
-
-🧠 AUTONOMOUS MODE: You must create your own objectives and plan your progression through the game!
-
-If you notice that you are repeating the same action sequences over and over again, you definitely need to try something different since what you are doing is wrong! Try exploring different new areas or interacting with different NPCs if you are stuck.
-
-Some pointers to keep in mind (guard rails) as you problem solve:
-1) You must think step-by-step when solving problems and making decisions.
-2) Always provide detailed, context-aware responses that bias for ground-truth.
-3) Consider the current situation in the game as well as what you've learned over time.
-4) Do not fixate on the correctness of a particular solution, be flexible and adapt your strategy as needed.
-
-
-ACTION HISTORY (last steps with thinking):
+        prompt = f"""# Step: {step_count}
+### SHORT-TERM MEMORY (last 10 steps)
 {action_history}
 {function_results_context}
-
-================================================================================
-🎯🎯🎯 CURRENT DIRECT OBJECTIVE - READ THIS CAREFULLY 🎯🎯🎯
-================================================================================
-
+### OBJECTIVES
 {direct_objective_context}
-
 {direct_objective}
-
 {direct_objective_status}
-
-================================================================================
-⚠️ CRITICAL: When you have completed the objective above:
-1. FIRST: Call add_knowledge() to store what you learned (NPCs, items, locations, strategies)
-   - Use importance=4 or 5 for critical information
-   - Example: add_knowledge(category="npc", title="Gym Leader Norman", content="...", importance=5)
-2. THEN: Call complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>")
-
-This ensures your discoveries are remembered for future gameplay!
-
-🔄 AUTONOMOUS OBJECTIVE CREATION:
-When you see "All objectives completed!" or sequence_complete=True OR when you start fresh:
-
-**STEP 1: DETERMINE YOUR PROGRESS**
-1. Call get_progress_summary() to see milestones, completed objectives, current location, AND knowledge base summary
-   → This gives you a complete picture of what you've accomplished
-   → Result appears in "RESULTS FROM PREVIOUS STEP" in next step
-   → NOTE: get_progress_summary() includes knowledge base info, so you don't need to call get_knowledge_summary() separately
-
-**STEP 2: GET THE RIGHT WALKTHROUGH PART**
-2. Call get_walkthrough(part=X) where X is determined from Step 2
-   → Result appears in next step's context
-
-**STEP 3 CREATE OBJECTIVES**
-3. Create the next 3 logical objectives using create_direct_objectives()
-   → Base objectives on the walkthrough steps you haven't completed
-   → Confirm success in next step
-
-
-⭐ IMPORTANT: Function call results appear in the NEXT step!
-   - Call ONE function per step (e.g., get_walkthrough)
-   - The result will appear in "📋 RESULTS FROM PREVIOUS STEP" section above
-   - Use that result to make your next decision
-   - This applies to ALL functions - information gathering AND actions
-
-Example format for create_direct_objectives:
-create_direct_objectives(
-    objectives=[
-        {{
-            "id": "dynamic_01_navigate_route_102",
-            "description": "Travel to Route 102",
-            "action_type": "navigate",
-            "target_location": "Route 102",
-            "navigation_hint": "Move east from Petalburg City to reach Route 102",
-            "completion_condition": "location_contains_route_102"
-        }},
-        {{"id": "dynamic_02_...", "description": "...", ...}},
-        {{"id": "dynamic_03_...", "description": "...", ...}}
-    ],
-    reasoning="Based on walkthrough Part 5, the next step is to travel to Route 102..."
-)
-
-🎯 YOUR MISSION: Progress through Pokemon Emerald by:
-- Creating appropriate objectives based on the game walkthrough
-- Exploring new areas and talking to NPCs
-- Building a strong Pokemon team
-- Defeating gym leaders and trainers
-- Advancing the story
-================================================================================
-
-CURRENT GAME STATE:
+### STATE
 {state_text}
-
-================================================================================
-📚 KNOWLEDGE BASE - What You've Learned
-================================================================================
+### KNOWLEDGE BASE
 {knowledge_context}
-================================================================================
-
-**DIALOGUE CHECK**: Look at the game screen carefully - if you see a dialogue box with text, press_buttons(["A"], reasoning).
-
-AVAILABLE TOOLS - Use these function calls to interact with the game:
-
-🎮 **PRIMARY GAME TOOLS** :
-- complete_direct_objective(category, reasoning) - Mark current direct objective as complete. MUST specify category ("story", "battling", or "dynamics"). Provide strict justification before completing the objective.
-- press_buttons(buttons, reasoning) - Press GBA buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT
-- navigate_to(x, y, variance, reason) - Automatically pathfind to coordinates using A* algorithm with porymap ground truth data.
-- reflect(situation) - 🔄 SELF-CORRECTION TOOL: Use when stuck, repeating actions, or objectives seem wrong. Helps realign strategy and objectives.
-
-🗺️ **NAVIGATION**: Use navigate_to(x, y, variance, reason) to automatically pathfind to a coordinate.
-
-⚠️ **CRITICAL - UNREACHABLE WARPS**:
-When you see warps marked "⚠️ UNREACHABLE" in the game state:
-- These warps are on different elevation levels or blocked by walls
-- DO NOT try to navigate to them - pathfinding will FAIL
-- Look for reachable warps (marked with ✓) instead
-- If no reachable warps exist, you may need to find another path or complete other objectives first
-- Multi-level dungeons often have unreachable exits until you find the correct path through the dungeon
-
-📚 **INFORMATION TOOLS** (use when you need info or planning objectives):
-- lookup_pokemon_info(topic, source) - Look up Pokemon, moves, locations from wikis
-- get_walkthrough(part) - Get official Emerald walkthrough (parts 1-21)
-- search_knowledge(query, category) - Search your stored knowledge
-- add_knowledge(category, title, content, importance) - Store important discoveries
-- get_progress_summary() - Get comprehensive progress summary
-- get_knowledge_summary(min_importance) - Get summary of important discoveries
-
-💾 **KNOWLEDGE TOOLS**:
-- save_memory(fact) - Save facts to remember across sessions
-
-🎯 **OBJECTIVE MANAGEMENT** (use to create your own goals):
-- create_direct_objectives(objectives, reasoning) - Create next 3 direct objectives dynamically
-  Use this to plan your progression through the game autonomously!
-
-** COORDINATE & MOVEMENT EXAMPLES **:
-- Pressing LEFT decreases your X coordinate (moves you west)
-- Pressing RIGHT increases your X coordinate (moves you east)
-- Pressing UP decreases your Y coordinate (moves you north)
-- Pressing DOWN increases your Y coordinate (moves you south)
-
-** INTERACTION TIPS **:
-- To interact with an object or NPC, you must be both 1) on an adjacent tile to the NPC or object and 2) facing the NPC or object.
-
-STRATEGY - PRIORITY ORDER:
-1. **CHECK OBJECTIVE COMPLETION FIRST**: Before doing ANYTHING, check if your current direct objective is complete. If yes:
-   a. Call add_knowledge() to store what you learned
-   b. THEN call complete_direct_objective(category="<story/battling/dynamics>", reasoning="...")
-2. **CREATE OBJECTIVES IF NEEDED**: If you have no objectives or sequence is complete, use the tools above to research and create new objectives
-3. **SELF-REFLECT WHEN STUCK/LOOPING**: If you notice you're repeating the same actions, not making progress, or objectives don't match reality:
-   a. CALL reflect(situation="...") to analyze the situation
-   b. If reflect suggests objectives are wrong, CALL get_walkthrough(part=X) to verify correct steps
-   c. Create new objectives if current ones are misaligned
-4. **DIALOGUE SECOND**: If you see a dialogue box on screen, ALWAYS use press_buttons(["A"], reasoning) to advance it
-5. **MOVEMENT**: Preferentially use navigate_to(x, y, variance, reason) for pathfinding
-6. **BATTLES**: Use press_buttons with battle moves carefully
-7. **INFORMATION**: Use lookup_pokemon_info or get_walkthrough when you need to know something
-
-🔄 **WHEN TO USE reflect()**:
-- You've tried the same action 3+ times without progress
-- Your coordinates haven't changed in multiple steps
-- Current objective doesn't match what's actually happening in the game
-- You're confused about what to do next
-- Objectives seem misaligned with game state
-- You feel like you're going in circles
-
-⚠️ **CRITICAL - When stuck/looping:**
-After calling reflect(), if it suggests objectives are wrong:
-1. **First, call get_knowledge_summary()** to see what you've already accomplished
-   → This helps determine which walkthrough part is appropriate
-2. **Then call get_walkthrough(part=X)** to verify the correct next steps
-   → Choose the part based on what you learned from knowledge base
-3. Compare walkthrough instructions to your current objectives
-4. If objectives are wrong, create new ones using create_direct_objectives()
-5. The walkthrough is ground truth - trust it over your current plan
-
-After calling reflect(), you'll receive guidance on whether to:
-- Continue current approach
-- **Recheck walkthrough to verify objectives** (do this when stuck!)
-  → Remember to check knowledge base FIRST to pick the right walkthrough part
-- Create new objectives with create_direct_objectives()
-- Try a completely different strategy
-- Gather more information with get_walkthrough() or get_progress_summary()
-
-🔴 **REMEMBER**:
-- You MUST create objectives yourself when needed!
-- You MUST call complete_direct_objective(category="<story/battling/dynamics>") when objectives are done!
-- You MUST work on ALL THREE categories: story, battling, AND dynamics!
-- You are autonomous - think, plan, and execute!
-
-IMPORTANT: Always check the game screen for dialogue boxes before planning movement!
-
-═══════════════════════════════════════════════════════════════════════
-🧠 HOW TO STRUCTURE YOUR REASONING (MANDATORY FORMAT)
-═══════════════════════════════════════════════════════════════════════
-
-You MUST structure your reasoning parameter using this EXACT format:
-
-**ANALYZE:**
-- Game screen: [what you see]
-- Location: [map name, coordinates X,Y]
-- Current objective: [what you're trying to accomplish]
-- Situation: [obstacles, NPCs, dialogue, items, etc.]
-- IMPORTANT: IF THERE IS DIALOG, note down the dialog in your analysis text so you can refer to it later!!
-
-**PLAN:**
-- Action: [what you will do]
-- Reason: [why this is the best choice]
-- Expected result: [what will happen]
-
-**EXAMPLE - Correct Format:**
-press_buttons(["A"], reasoning="ANALYZE: Game screen shows dialogue box with Mom talking. Location: Player's House 2F at (7,6). Current objective: Talk to Mom and go downstairs. Situation: In dialogue with Mom about visiting Prof. Birch's lab. PLAN: Action: Press A to advance dialogue. Reason: Must complete dialogue before moving. Expected result: Dialogue advances or ends, allowing movement.")
-
-**EXAMPLE - WRONG (too short):**
-press_buttons(["A"], reasoning="Need to advance dialogue with Mom")  ❌ INCORRECT - Missing analysis!
-
-🎯 **CRITICAL**: Every reasoning parameter must include BOTH "ANALYZE:" and "PLAN:" sections!
-
-Step {step_count}"""
-
-        # Log prompt size breakdown
-        prompt_size = len(prompt)
-        state_size = len(state_text)
-        history_size = len(action_history)
-        function_results_size = len(function_results_context)
-        context_size = len(direct_objective_context)
-        objective_size = len(str(direct_objective))
-        status_size = len(direct_objective_status)
-
-        dynamic_total = state_size + history_size + function_results_size + context_size + objective_size + status_size
-        static_instructions = prompt_size - dynamic_total
-
-        logger.info(f"📏 Final prompt size breakdown:")
-        logger.info(f"   ═══════════════════════════════════════")
-        logger.info(f"   TOTAL PROMPT: {prompt_size:,} chars (~{prompt_size//4:,} tokens)")
-        logger.info(f"   ═══════════════════════════════════════")
-        logger.info(f"   Dynamic content:")
-        logger.info(f"     - State text: {state_size:,} chars")
-        logger.info(f"     - Action history: {history_size:,} chars")
-        logger.info(f"     - Function results: {function_results_size:,} chars")
-        logger.info(f"     - Objective context: {context_size:,} chars")
-        logger.info(f"     - Objective: {objective_size:,} chars")
-        logger.info(f"     - Status: {status_size:,} chars")
-        logger.info(f"     DYNAMIC TOTAL: {dynamic_total:,} chars")
-        logger.info(f"   ───────────────────────────────────────")
-        logger.info(f"   Static instructions: {static_instructions:,} chars")
-        logger.info(f"   ═══════════════════════════════════════")
+"""
 
         return prompt
 
@@ -2590,30 +2341,43 @@ Step {step_count}"""
             logger.error(traceback.format_exc())
 
     def _format_action_history(self) -> str:
-        """Format action history - shows only LLM thinking and actions taken."""
+        """Format short-term memory (last 10 steps) with full tool details."""
         if not self.conversation_history:
-            logger.debug(f"📜 No conversation history to format")
             return "No previous actions recorded."
 
-        recent_entries = self.conversation_history[-20:]
-        logger.debug(f"📜 Formatting {len(recent_entries)} history entries")
+        recent_entries = self.conversation_history[-10:]
 
         history_lines = []
+        prev_coords = None
         for entry in recent_entries:
             step = entry.get("step", "?")
             llm_response = entry.get("llm_response", "").strip()
-            action_details = entry.get("action_details", "").strip()
             coords = entry.get("player_coords", None)
 
-            coord_str = f"({coords[0]},{coords[1]})" if coords else "(?)"
+            start_str = f"({prev_coords[0]},{prev_coords[1]})" if prev_coords else "(?)"
+            end_str = f"({coords[0]},{coords[1]})" if coords else "(?)"
 
-            if llm_response or action_details:
-                history_lines.append(f"[{step}] at {coord_str}:")
-                if llm_response:
-                    history_lines.append(f"  {llm_response}")
-                if action_details:
-                    history_lines.append(f"  → {action_details}")
-                history_lines.append("")
+            history_lines.append(f"[{step}] start={start_str} end={end_str}")
+            if llm_response:
+                history_lines.append(f"  THINKING: {llm_response}")
+
+            tool_calls = entry.get("tool_calls", [])
+            if tool_calls:
+                history_lines.append("  TOOLS:")
+                for tool_call in tool_calls:
+                    name = tool_call.get("name", "unknown")
+                    args = tool_call.get("args", {})
+                    result = tool_call.get("result", "")
+                    history_lines.append(f"    - {name}")
+                    history_lines.append(f"      args: {json.dumps(args, ensure_ascii=False)}")
+                    if result != "":
+                        try:
+                            history_lines.append(f"      result: {json.dumps(result, ensure_ascii=False)}")
+                        except TypeError:
+                            history_lines.append(f"      result: {str(result)}")
+            history_lines.append("")
+            if coords:
+                prev_coords = coords
 
         return "\n".join(history_lines).strip()
 
@@ -2690,21 +2454,6 @@ Step {step_count}"""
                 # Increment step count
                 self.step_count += 1
                 logger.info(f"✅ Step {self.step_count} completed")
-
-                # Automatic reflection every 20 steps
-                if self.step_count % 20 == 0 and self.step_count > 0:
-                    logger.info(f"\n🔄 Auto-reflection triggered (every 20 steps)")
-                    try:
-                        reflection_result = self._execute_reflect({})
-                        logger.info(f"📝 Reflection completed")
-                        # Log the reflection result to conversation history
-                        self.conversation_history.append({
-                            "role": "function_result",
-                            "name": "reflect",
-                            "content": reflection_result
-                        })
-                    except Exception as e:
-                        logger.warning(f"⚠️ Auto-reflection failed: {e}")
 
                 # Update server metrics
                 try:
