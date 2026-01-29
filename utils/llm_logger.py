@@ -65,10 +65,17 @@ class LLMLogger:
             # NEW: Per-milestone tracking
             "milestones": [],  # List of milestone completion data with cumulative and split metrics
             
+            # Per-objective tracking (direct objective completions)
+            "objectives": [],  # List of {objective_id, category, objective_index, + same metrics as milestones}
+            
             # Internal tracking for milestone deltas
             "_last_milestone_step": 0,
             "_last_milestone_tokens": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
             "_last_milestone_time": None,
+            # Internal tracking for objective deltas (split = since last objective)
+            "_last_objective_step": 0,
+            "_last_objective_tokens": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
+            "_last_objective_time": None,
         }
         
         # Model pricing (per 1K tokens) - Updated January 2025
@@ -440,7 +447,91 @@ class LLMLogger:
         
         # Save updated metrics
         self.save_cumulative_metrics()
-    
+
+    def log_objective_completion(
+        self,
+        objective_id: str,
+        category: str,
+        objective_index: int,
+        step_number: int,
+        timestamp: Optional[float] = None,
+    ):
+        """Log direct objective completion with cumulative and split metrics.
+
+        Appends to cumulative_metrics["objectives"] with the same metric shape as
+        milestones plus objective_id, category, and objective_index. Split metrics
+        are deltas since the last objective completion.
+
+        Args:
+            objective_id: ID of the completed objective.
+            category: Category (e.g. story, battling, dynamics, legacy).
+            objective_index: Index of the objective within its sequence.
+            step_number: Current agent step number.
+            timestamp: Optional timestamp (defaults to current time).
+        """
+        if timestamp is None:
+            timestamp = time.time()
+
+        cumulative_step = step_number
+        cumulative_prompt_tokens = self.cumulative_metrics.get("prompt_tokens", 0)
+        cumulative_completion_tokens = self.cumulative_metrics.get("completion_tokens", 0)
+        cumulative_cached_tokens = self.cumulative_metrics.get("cached_tokens", 0)
+        cumulative_total_tokens = self.cumulative_metrics.get("total_tokens", 0)
+
+        last_step = self.cumulative_metrics.get("_last_objective_step", 0)
+        last_tokens = self.cumulative_metrics.get(
+            "_last_objective_tokens", {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
+        )
+        last_time = self.cumulative_metrics.get("_last_objective_time")
+
+        split_steps = cumulative_step - last_step
+        split_prompt_tokens = cumulative_prompt_tokens - last_tokens.get("prompt", 0)
+        split_completion_tokens = cumulative_completion_tokens - last_tokens.get("completion", 0)
+        split_cached_tokens = cumulative_cached_tokens - last_tokens.get("cached", 0)
+        split_total_tokens = cumulative_total_tokens - last_tokens.get("total", 0)
+
+        if last_time is not None:
+            time_elapsed = timestamp - last_time
+        else:
+            time_elapsed = timestamp - self.cumulative_metrics.get("start_time", timestamp)
+
+        objective_entry = {
+            "objective_id": objective_id,
+            "category": category,
+            "objective_index": objective_index,
+            "timestamp": timestamp,
+            "cumulative_steps": cumulative_step,
+            "cumulative_prompt_tokens": cumulative_prompt_tokens,
+            "cumulative_completion_tokens": cumulative_completion_tokens,
+            "cumulative_cached_tokens": cumulative_cached_tokens,
+            "cumulative_total_tokens": cumulative_total_tokens,
+            "split_steps": split_steps,
+            "split_prompt_tokens": split_prompt_tokens,
+            "split_completion_tokens": split_completion_tokens,
+            "split_cached_tokens": split_cached_tokens,
+            "split_total_tokens": split_total_tokens,
+            "split_time_seconds": round(time_elapsed, 2),
+        }
+
+        if "objectives" not in self.cumulative_metrics:
+            self.cumulative_metrics["objectives"] = []
+        self.cumulative_metrics["objectives"].append(objective_entry)
+
+        self.cumulative_metrics["_last_objective_step"] = cumulative_step
+        self.cumulative_metrics["_last_objective_tokens"] = {
+            "prompt": cumulative_prompt_tokens,
+            "completion": cumulative_completion_tokens,
+            "cached": cumulative_cached_tokens,
+            "total": cumulative_total_tokens,
+        }
+        self.cumulative_metrics["_last_objective_time"] = timestamp
+
+        logger.info(
+            f"📊 Objective '{objective_id}' (category={category}, index={objective_index}): "
+            f"{split_steps} steps, {split_total_tokens} tokens, {time_elapsed:.1f}s"
+        )
+        self.save_cumulative_metrics()
+
     def get_cumulative_metrics(self) -> Dict[str, Any]:
         """Get cumulative metrics for the session
 
@@ -554,7 +645,9 @@ class LLMLogger:
                 self.cumulative_metrics["milestones"] = []
             if "metadata" not in self.cumulative_metrics:
                 self.cumulative_metrics["metadata"] = {}
-            
+            if "objectives" not in self.cumulative_metrics:
+                self.cumulative_metrics["objectives"] = []
+
             # Restore internal tracking from last milestone if available
             if self.cumulative_metrics["milestones"]:
                 last_milestone = self.cumulative_metrics["milestones"][-1]
@@ -566,6 +659,18 @@ class LLMLogger:
                     "total": last_milestone.get("cumulative_total_tokens", 0)
                 }
                 self.cumulative_metrics["_last_milestone_time"] = last_milestone.get("timestamp")
+
+            # Restore internal tracking from last objective if available
+            if self.cumulative_metrics.get("objectives"):
+                last_obj = self.cumulative_metrics["objectives"][-1]
+                self.cumulative_metrics["_last_objective_step"] = last_obj.get("cumulative_steps", 0)
+                self.cumulative_metrics["_last_objective_tokens"] = {
+                    "prompt": last_obj.get("cumulative_prompt_tokens", 0),
+                    "completion": last_obj.get("cumulative_completion_tokens", 0),
+                    "cached": last_obj.get("cumulative_cached_tokens", 0),
+                    "total": last_obj.get("cumulative_total_tokens", 0),
+                }
+                self.cumulative_metrics["_last_objective_time"] = last_obj.get("timestamp")
 
             logger.info(f"✅ Loaded cumulative metrics: {saved_metrics.get('total_llm_calls', 0)} calls, {saved_metrics.get('total_actions', 0)} actions, ${saved_metrics.get('total_cost', 0):.4f}, {saved_metrics.get('total_run_time', 0):.0f}s runtime")
             logger.info(f"   - Total tokens: {saved_metrics.get('total_tokens', 0):,}")
@@ -821,4 +926,25 @@ def log_milestone_completion(milestone_id: str, step_number: int, timestamp: flo
         timestamp: Optional timestamp
     """
     logger = get_llm_logger()
-    logger.log_milestone_completion(milestone_id, step_number, timestamp) 
+    logger.log_milestone_completion(milestone_id, step_number, timestamp)
+
+
+def log_objective_completion(
+    objective_id: str,
+    category: str,
+    objective_index: int,
+    step_number: int,
+    timestamp: Optional[float] = None,
+):
+    """Convenience function to log direct objective completion.
+
+    Args:
+        objective_id: ID of the completed objective.
+        category: Category (e.g. story, battling, dynamics, legacy).
+        objective_index: Index of the objective within its sequence.
+        step_number: Current agent step number.
+        timestamp: Optional timestamp.
+    """
+    get_llm_logger().log_objective_completion(
+        objective_id, category, objective_index, step_number, timestamp
+    ) 
