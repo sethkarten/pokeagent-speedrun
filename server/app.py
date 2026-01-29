@@ -2911,6 +2911,10 @@ async def mcp_complete_direct_objective(request: dict):
             if not current_obj:
                 return {"success": False, "error": f"No current {category} objective to complete"}
 
+            completed_objective_index = getattr(
+                direct_objectives_manager, f"{category}_index"
+            )
+
             # Mark objective as completed
             direct_objectives_manager._mark_objective_completed(current_obj)
 
@@ -2970,6 +2974,8 @@ async def mcp_complete_direct_objective(request: dict):
             if not current_obj:
                 return {"success": False, "error": "No current objective to complete"}
 
+            completed_objective_index = direct_objectives_manager.current_index
+
             # Mark objective as completed
             direct_objectives_manager._mark_objective_completed(current_obj)
 
@@ -2989,6 +2995,19 @@ async def mcp_complete_direct_objective(request: dict):
 
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
+
+        # Log objective completion to cumulative_metrics.json (objectives column)
+        try:
+            from utils.llm_logger import log_objective_completion
+
+            log_objective_completion(
+                objective_id=current_obj.id,
+                category=category if direct_objectives_manager.mode == "categorized" else "legacy",
+                objective_index=completed_objective_index,
+                step_number=agent_step_count,
+            )
+        except Exception as e:
+            logger.warning("Failed to log objective completion to metrics: %s", e)
 
         # Persist completed objectives after each completion (for real time execution... get_progress_summary() relies on this run_data)
         try:
@@ -4210,6 +4229,11 @@ async def sync_llm_metrics(request: Request):
             server_last_milestone_step = llm_logger.cumulative_metrics.get("_last_milestone_step")
             server_last_milestone_tokens = llm_logger.cumulative_metrics.get("_last_milestone_tokens")
             server_last_milestone_time = llm_logger.cumulative_metrics.get("_last_milestone_time")
+            # Objectives are appended only on server (complete_direct_objective); client has no copy
+            server_objectives = llm_logger.cumulative_metrics.get("objectives")
+            server_last_objective_step = llm_logger.cumulative_metrics.get("_last_objective_step")
+            server_last_objective_tokens = llm_logger.cumulative_metrics.get("_last_objective_tokens")
+            server_last_objective_time = llm_logger.cumulative_metrics.get("_last_objective_time")
 
             llm_logger.cumulative_metrics.update(cumulative_metrics)
 
@@ -4227,6 +4251,15 @@ async def sync_llm_metrics(request: Request):
                 llm_logger.cumulative_metrics["_last_milestone_tokens"] = server_last_milestone_tokens
             if server_last_milestone_time is not None:
                 llm_logger.cumulative_metrics["_last_milestone_time"] = server_last_milestone_time
+            # Preserve objectives (only server appends on complete_direct_objective)
+            if server_objectives is not None:
+                llm_logger.cumulative_metrics["objectives"] = server_objectives
+            if server_last_objective_step is not None:
+                llm_logger.cumulative_metrics["_last_objective_step"] = server_last_objective_step
+            if server_last_objective_tokens is not None:
+                llm_logger.cumulative_metrics["_last_objective_tokens"] = server_last_objective_tokens
+            if server_last_objective_time is not None:
+                llm_logger.cumulative_metrics["_last_objective_time"] = server_last_objective_time
 
             # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
             global latest_metrics
