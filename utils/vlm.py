@@ -1,5 +1,6 @@
 from io import BytesIO
 from PIL import Image
+import json
 import os
 import base64
 import random
@@ -66,10 +67,94 @@ class VLMBackend(ABC):
         pass
 
 
-class OpenAIBackend(VLMBackend):
-    """OpenAI API backend"""
+def _openai_tool_call_part(name: str, args: Dict[str, Any]):
+    """Create a Gemini-compatible part object for agent consumption."""
 
-    def __init__(self, model_name: str, **kwargs):
+    class FunctionCallPart:
+        def __init__(self, fn_name: str, fn_args: Dict[str, Any]):
+            self.name = fn_name
+            self.args = fn_args
+
+    part = type("Part", (), {})()
+    part.function_call = FunctionCallPart(name, args)
+    part.text = ""  # No text; agents join part.text and expect str
+    return part
+
+
+def _openai_text_part(text: str):
+    """Create a Gemini-compatible text part for agent consumption."""
+    part = type("Part", (), {})()
+    part.function_call = None
+    part.text = text
+    return part
+
+
+def _openai_responses_adapter(response) -> Any:
+    """Adapt OpenAI Responses API output to Gemini-like structure for agents.
+
+    Responses API returns response.output: list of items (function_call, message, etc.).
+    Agents expect candidates[0].content.parts with .function_call / .text.
+    """
+    parts = []
+    output = getattr(response, "output", None) or []
+
+    for item in output:
+        item_type = getattr(item, "type", None) if hasattr(item, "type") else (item.get("type") if isinstance(item, dict) else None)
+        if item_type == "function_call":
+            name = getattr(item, "name", None) or (item.get("name") if isinstance(item, dict) else "")
+            raw_args = getattr(item, "arguments", None) or (item.get("arguments", "{}") if isinstance(item, dict) else "{}")
+            try:
+                args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+            except json.JSONDecodeError:
+                args = {}
+            parts.append(_openai_tool_call_part(name, args))
+        elif item_type == "message":
+            content_list = getattr(item, "content", None) or (item.get("content", []) if isinstance(item, dict) else [])
+            for c in content_list:
+                c_type = getattr(c, "type", None) if hasattr(c, "type") else (c.get("type") if isinstance(c, dict) else None)
+                if c_type == "output_text":
+                    text = getattr(c, "text", None) or (c.get("text", "") if isinstance(c, dict) else "")
+                    if text:
+                        parts.append(_openai_text_part(text))
+
+    if not parts:
+        # Fallback: output_text convenience property on response (SDK)
+        text = getattr(response, "output_text", None) or ""
+        parts.append(_openai_text_part(text if text else ""))
+
+    content = type("Content", (), {"parts": parts})()
+    candidate = type("Candidate", (), {"content": content})()
+    adapter = type("ResponseAdapter", (), {"candidates": [candidate]})()
+    adapter.usage_metadata = None
+    if hasattr(response, "usage") and response.usage:
+        usage = response.usage
+        inp = getattr(usage, "input_tokens", 0) or getattr(usage, "prompt_tokens", 0)
+        out = getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0)
+        total = getattr(usage, "total_tokens", 0) or (inp + out)
+        cached = 0
+        if hasattr(usage, "input_tokens_details") and usage.input_tokens_details:
+            cached = getattr(usage.input_tokens_details, "cached_tokens", 0)
+        adapter.usage_metadata = type(
+            "UsageMetadata",
+            (),
+            {
+                "prompt_token_count": inp,
+                "candidates_token_count": out,
+                "total_token_count": total,
+                "cached_content_token_count": cached,
+            },
+        )()
+    return adapter
+
+
+class OpenAIBackend(VLMBackend):
+    """OpenAI API backend with tool calling and system instructions.
+
+    Modeled after GeminiBackend: supports tools, system_instruction, dual mode
+    (function calling returns adapter object; text-only returns string).
+    """
+
+    def __init__(self, model_name: str, tools: list = None, system_instruction: str = None, **kwargs):
         try:
             import openai
             from openai import OpenAI
@@ -77,6 +162,8 @@ class OpenAIBackend(VLMBackend):
             raise ImportError("OpenAI package not found. Install with: pip install openai")
 
         self.model_name = model_name
+        self.tools = tools or []
+        self.system_instruction = system_instruction
         self.api_key = os.getenv("OPENAI_API_KEY")
 
         if not self.api_key:
@@ -85,10 +172,80 @@ class OpenAIBackend(VLMBackend):
         self.client = OpenAI(api_key=self.api_key)
         self.errors = (openai.RateLimitError,)
 
+        if self.tools:
+            self._tools_openai = self._convert_tools_to_openai_format()
+            log_parts = [f"OpenAI backend initialized with model: {model_name}", f"{len(self.tools)} tools"]
+        else:
+            self._tools_openai = []
+            log_parts = [f"OpenAI backend initialized with model: {model_name}"]
+        if self.system_instruction:
+            log_parts.append(f"system instructions ({len(self.system_instruction)} chars)")
+        logger.info(", ".join(log_parts))
+
+    def _setup_function_calling(self):
+        """Update tools (called when agent dynamically updates tool list)."""
+        self._tools_openai = self._convert_tools_to_openai_format() if self.tools else []
+        logger.info(f"OpenAI model updated with {len(self.tools) if self.tools else 0} tools")
+
+    def _convert_tools_to_openai_format(self) -> list:
+        """Convert Gemini-style tool declarations to OpenAI format.
+
+        Responses API expects flat format: {"type":"function","name":...,"description":...,"parameters":...}
+        (not nested under "function" like Chat Completions).
+        """
+        result = []
+        for tool in self.tools:
+            params = tool.get("parameters", {})
+            properties, required = self._build_json_schema_properties(params)
+            # Responses API: flat format with name/description/parameters at top level
+            result.append({
+                "type": "function",
+                "name": tool["name"],
+                "description": tool.get("description", ""),
+                "parameters": {"type": "object", "properties": properties, "required": required},
+            })
+        return result
+
+    def _build_json_schema_properties(self, params: dict) -> tuple:
+        """Build JSON Schema properties from Gemini-style params. Returns (properties, required)."""
+        properties = {}
+        required = params.get("required", [])
+        for prop_name, prop_def in params.get("properties", {}).items():
+            t = prop_def.get("type_", "STRING")
+            if t == "ARRAY":
+                t = "array"
+            elif t == "INTEGER":
+                t = "integer"
+            elif t == "BOOLEAN":
+                t = "boolean"
+            else:
+                t = "string"
+            prop = {"type": t, "description": prop_def.get("description", "")}
+            if t == "array" and "items" in prop_def:
+                items_t = prop_def["items"].get("type_", "STRING") if isinstance(prop_def["items"], dict) else "STRING"
+                prop["items"] = {"type": "string" if items_t == "STRING" else "string"}
+            if "enum" in prop_def:
+                prop["enum"] = prop_def["enum"]
+            properties[prop_name] = prop
+        return properties, required
+
     @retry_with_exponential_backoff
-    def _call_completion(self, messages):
-        """Calls the completions.create method with exponential backoff."""
-        return self.client.chat.completions.create(model=self.model_name, messages=messages)
+    def _call_responses(self, instructions: str | None, input_data, tools: list = None):
+        """Calls the Responses API (v1/responses) with optional tools.
+
+        Supports Codex and other models that require the Responses API.
+        """
+        kwargs = {"model": self.model_name}
+        if instructions:
+            kwargs["instructions"] = instructions
+        if isinstance(input_data, str):
+            kwargs["input"] = input_data
+        else:
+            kwargs["input"] = input_data if isinstance(input_data, list) else [input_data]
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+        return self.client.responses.create(**kwargs)
 
     def _prepare_image_base64(self, img: Union[Image.Image, np.ndarray]) -> str:
         """Prepare image as base64 string"""
@@ -103,118 +260,219 @@ class OpenAIBackend(VLMBackend):
         image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+    def _extract_thinking_from_response(self, response) -> str:
+        """Extract reasoning for logging from response/adapter (candidates[0].content.parts structure)."""
+        if not response or not getattr(response, "candidates", None):
+            return "[Executing function call]"
+        candidate = response.candidates[0]
+        content = getattr(candidate, "content", None)
+        if not content or not getattr(content, "parts", None):
+            return "[Executing function call]"
+        for part in content.parts:
+            fc = getattr(part, "function_call", None)
+            if fc:
+                args = getattr(fc, "args", {}) or {}
+                reasoning = args.get("reasoning") or args.get("reason", "")
+                if reasoning:
+                    return f"[{fc.name}] {reasoning}"
+                return f"Calling {fc.name}({list(args.keys())[:3]})"
+            if getattr(part, "text", None):
+                return part.text[:200]
+        return "[Executing function call]"
+
     def get_query(
         self,
         img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]],
         text: str,
         module_name: str = "Unknown",
-    ) -> str:
-        """Process an image (or list of images) and text prompt using OpenAI API"""
+    ) -> Union[str, Any]:
+        """Process an image (or list of images) and text prompt using OpenAI API.
+
+        Returns:
+            - If tools configured: Adapter object (Gemini-like) for agent function calling
+            - If no tools: String text response
+        """
         start_time = time.time()
 
-        # Handle list of images (video-like input)
+        # Build Responses API input (input_text + input_image)
+        content_parts = [{"type": "input_text", "text": text}]
         if isinstance(img, list):
-            content_parts = [{"type": "text", "text": text}]
             for i in img:
                 image_base64 = self._prepare_image_base64(i)
-                content_parts.append(
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}}
-                )
+                content_parts.append({"type": "input_image", "image_url": f"data:image/png;base64,{image_base64}"})
         else:
             image_base64 = self._prepare_image_base64(img)
-            content_parts = [
-                {"type": "text", "text": text},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
-            ]
+            content_parts.append({"type": "input_image", "image_url": f"data:image/png;base64,{image_base64}"})
 
-        messages = [
-            {
-                "role": "user",
-                "content": content_parts,
-            }
-        ]
+        input_data = {"role": "user", "content": content_parts}
 
         try:
-            response = self._call_completion(messages)
-            result = response.choices[0].message.content
+            response = self._call_responses(
+                self.system_instruction,
+                input_data,
+                tools=self._tools_openai if self._tools_openai else None,
+            )
             duration = time.time() - start_time
 
-            # Extract token usage if available
             token_usage = {}
-            if hasattr(response, "usage"):
+            if hasattr(response, "usage") and response.usage:
+                u = response.usage
+                inp = getattr(u, "input_tokens", 0) or getattr(u, "prompt_tokens", 0)
+                out = getattr(u, "output_tokens", 0) or getattr(u, "completion_tokens", 0)
+                cached = 0
+                if hasattr(u, "input_tokens_details") and u.input_tokens_details:
+                    cached = getattr(u.input_tokens_details, "cached_tokens", 0)
                 token_usage = {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
+                    "prompt_tokens": inp,
+                    "completion_tokens": out,
+                    "total_tokens": getattr(u, "total_tokens", 0) or (inp + out),
+                    "cached_tokens": cached,
                 }
 
-            # Log the interaction
-            log_llm_interaction(
-                interaction_type=f"openai_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={"model": self.model_name, "backend": "openai", "has_image": True, "token_usage": token_usage},
-                model_info={"model": self.model_name, "backend": "openai"},
-            )
-
-            return result
+            if self.tools:
+                adapter = _openai_responses_adapter(response)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"openai_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "openai",
+                        "has_image": True,
+                        "token_usage": token_usage,
+                        "has_function_call": True,
+                    },
+                    model_info={"model": self.model_name, "backend": "openai"},
+                )
+                return adapter
+            else:
+                result = getattr(response, "output_text", None) or ""
+                log_llm_interaction(
+                    interaction_type=f"openai_{module_name}",
+                    prompt=text,
+                    response=result,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "openai",
+                        "has_image": True,
+                        "token_usage": token_usage,
+                    },
+                    model_info={"model": self.model_name, "backend": "openai"},
+                )
+                return result
         except Exception as e:
             duration = time.time() - start_time
+            err_msg = str(e)
+            if hasattr(e, "body") and e.body:
+                err_msg = f"{err_msg} | body: {e.body}"
+            elif hasattr(e, "response") and e.response is not None:
+                try:
+                    body = getattr(e.response, "json", lambda: None)()
+                    if body is None and hasattr(e.response, "text"):
+                        body = e.response.text
+                    if body:
+                        err_msg = f"{err_msg} | body: {body}"
+                except Exception:
+                    pass
             log_llm_error(
                 interaction_type=f"openai_{module_name}",
                 prompt=text,
-                error=str(e),
+                error=err_msg,
                 metadata={"model": self.model_name, "backend": "openai", "duration": duration, "has_image": True},
             )
-            logger.error(f"OpenAI API error: {e}")
+            logger.error(f"OpenAI API error: {err_msg}")
             raise
 
-    def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
-        """Process a text-only prompt using OpenAI API"""
+    def get_text_query(self, text: str, module_name: str = "Unknown") -> Union[str, Any]:
+        """Process a text-only prompt using OpenAI API.
+
+        Returns:
+            - If tools configured: Adapter object for agent function calling
+            - If no tools: String text response
+        """
         start_time = time.time()
 
-        messages = [{"role": "user", "content": [{"type": "text", "text": text}]}]
-
         try:
-            response = self._call_completion(messages)
-            result = response.choices[0].message.content
+            response = self._call_responses(
+                self.system_instruction,
+                text,
+                tools=self._tools_openai if self._tools_openai else None,
+            )
             duration = time.time() - start_time
 
-            # Extract token usage if available
             token_usage = {}
-            if hasattr(response, "usage"):
+            if hasattr(response, "usage") and response.usage:
+                u = response.usage
+                inp = getattr(u, "input_tokens", 0) or getattr(u, "prompt_tokens", 0)
+                out = getattr(u, "output_tokens", 0) or getattr(u, "completion_tokens", 0)
+                cached = 0
+                if hasattr(u, "input_tokens_details") and u.input_tokens_details:
+                    cached = getattr(u.input_tokens_details, "cached_tokens", 0)
                 token_usage = {
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
-                    "total_tokens": response.usage.total_tokens,
+                    "prompt_tokens": inp,
+                    "completion_tokens": out,
+                    "total_tokens": getattr(u, "total_tokens", 0) or (inp + out),
+                    "cached_tokens": cached,
                 }
 
-            # Log the interaction
-            log_llm_interaction(
-                interaction_type=f"openai_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={
-                    "model": self.model_name,
-                    "backend": "openai",
-                    "has_image": False,
-                    "token_usage": token_usage,
-                },
-                model_info={"model": self.model_name, "backend": "openai"},
-            )
-
-            return result
+            if self.tools:
+                adapter = _openai_responses_adapter(response)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"openai_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "openai",
+                        "has_image": False,
+                        "token_usage": token_usage,
+                        "has_function_call": True,
+                    },
+                    model_info={"model": self.model_name, "backend": "openai"},
+                )
+                return adapter
+            else:
+                result = getattr(response, "output_text", None) or ""
+                log_llm_interaction(
+                    interaction_type=f"openai_{module_name}",
+                    prompt=text,
+                    response=result,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "openai",
+                        "has_image": False,
+                        "token_usage": token_usage,
+                    },
+                    model_info={"model": self.model_name, "backend": "openai"},
+                )
+                return result
         except Exception as e:
             duration = time.time() - start_time
+            err_msg = str(e)
+            if hasattr(e, "body") and e.body:
+                err_msg = f"{err_msg} | body: {e.body}"
+            elif hasattr(e, "response") and e.response is not None:
+                try:
+                    body = getattr(e.response, "json", lambda: None)()
+                    if body is None and hasattr(e.response, "text"):
+                        body = e.response.text
+                    if body:
+                        err_msg = f"{err_msg} | body: {body}"
+                except Exception:
+                    pass
             log_llm_error(
                 interaction_type=f"openai_{module_name}",
                 prompt=text,
-                error=str(e),
+                error=err_msg,
                 metadata={"model": self.model_name, "backend": "openai", "duration": duration, "has_image": False},
             )
-            logger.error(f"OpenAI API error: {e}")
+            logger.error(f"OpenAI API error: {err_msg}")
             raise
 
 
@@ -824,13 +1082,13 @@ class VertexBackend(VLMBackend):
                 function_declarations.append(function_declaration)
 
             # Create Tool object with function declarations
-            self.tools_for_vertex = [Tool(function_declarations=function_declarations)]
+            self._tools_vertex = [Tool(function_declarations=function_declarations)]
 
             logger.info(f"🔧 Configured function calling with {len(function_declarations)} functions")
 
         except Exception as e:
             logger.error(f"Failed to setup function calling: {e}")
-            self.tools_for_vertex = []
+            self._tools_vertex = []
 
     def _convert_parameters_format(self, gemini_params):
         """Convert Gemini tool parameters to VertexAI format"""
@@ -997,7 +1255,7 @@ class VertexBackend(VLMBackend):
 
         # Add timeout logging and monitoring
         call_start_time = time.time()
-        has_tools = hasattr(self, "tools_for_vertex") and self.tools_for_vertex
+        has_tools = hasattr(self, "_tools_vertex") and self._tools_vertex
 
         # logger.info(f"   🔧 has_tools={has_tools}, about to call generate_content...")
 
@@ -1015,14 +1273,14 @@ class VertexBackend(VLMBackend):
                 # Pass tools at call time (not at model creation to avoid gRPC race condition)
                 # logger.info(f"   📞 Calling generate_content with function calling (tools passed at call time)")
                 # logger.info(f"   ⏱️  Call started at {time.strftime('%H:%M:%S.%f')}")
-                # logger.debug(f"   Tools type: {type(self.tools_for_vertex).__name__}")
+                # logger.debug(f"   Tools type: {type(self._tools_vertex).__name__}")
                 # logger.debug(f"   Generation config: temperature=0")
 
                 try:
                     response = self.model.generate_content(
                         user_prompt_content,
                         generation_config=GenerationConfig(temperature=0),
-                        tools=self.tools_for_vertex,  # Pass tools at call time
+                        tools=self._tools_vertex,  # Pass tools at call time
                     )
                 except Exception as inner_e:
                     inner_duration = time.time() - call_start_time
@@ -1796,7 +2054,7 @@ class VLM:
             self.backend = backend_class(model_name, port=port, **kwargs)
         else:
             # Pass tools and system_instruction to backends that support function calling
-            if self.backend_type in ["vertex", "gemini"]:
+            if self.backend_type in ["vertex", "gemini", "openai"]:
                 self.backend = backend_class(
                     model_name, tools=self.tools, system_instruction=self.system_instruction, **kwargs
                 )
