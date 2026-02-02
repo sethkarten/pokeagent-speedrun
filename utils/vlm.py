@@ -278,7 +278,7 @@ class OpenAIBackend(VLMBackend):
                     return f"[{fc.name}] {reasoning}"
                 return f"Calling {fc.name}({list(args.keys())[:3]})"
             if getattr(part, "text", None):
-                return part.text[:200]
+                return part.text
         return "[Executing function call]"
 
     def get_query(
@@ -646,7 +646,7 @@ class AnthropicBackend(VLMBackend):
                     return f"[{fc.name}] {reasoning}"
                 return f"Calling {fc.name}({list(args.keys())[:3]})"
             if getattr(part, "text", None):
-                return part.text[:200]
+                return part.text
         return "[Executing function call]"
 
     def get_query(
@@ -1788,9 +1788,8 @@ class VertexBackend(VLMBackend):
                     model_info={"model": self.model_name, "backend": "vertex"},
                 )
 
-                # Log the response preview
-                thinking_preview = thinking_text[:200] + "..." if len(thinking_text) > 200 else thinking_text
-                logger.info(f"[{module_name}] AGENT THINKING: {thinking_preview}")
+                # Log the full agent thinking (no truncation)
+                logger.info(f"[{module_name}] AGENT THINKING: {thinking_text}")
                 logger.info(f"[{module_name}] ---")
 
                 # Return response object for function calling
@@ -2190,9 +2189,8 @@ class GeminiBackend(VLMBackend):
                     model_info={"model": self.model_name, "backend": "gemini"},
                 )
 
-                # Log the response preview
-                thinking_preview = thinking_text[:200] + "..." if len(thinking_text) > 200 else thinking_text
-                logger.info(f"[{module_name}] AGENT THINKING: {thinking_preview}")
+                # Log the full agent thinking (no truncation)
+                logger.info(f"[{module_name}] AGENT THINKING: {thinking_text}")
                 logger.info(f"[{module_name}] ---")
 
                 # Debug logging for response structure
