@@ -830,16 +830,103 @@ def _anthropic_error_message(exc: Exception) -> str:
     return msg
 
 
-class OpenRouterBackend(VLMBackend):
-    """OpenRouter API backend"""
+def _openrouter_error_message(exc: Exception) -> str:
+    """Build a detailed error message from OpenRouter/OpenAI API exception (including 400 body)."""
+    msg = str(exc)
+    try:
+        err_body = getattr(exc, "body", None)
+        if err_body is not None:
+            if isinstance(err_body, dict):
+                msg = f"{msg} | API body: {json.dumps(err_body)}"
+            else:
+                msg = f"{msg} | API body: {err_body}"
+    except Exception:
+        pass
+    if "API body:" not in msg:
+        try:
+            resp = getattr(exc, "response", None)
+            if resp is not None:
+                raw = getattr(resp, "text", None) or getattr(resp, "content", None)
+                if raw is not None:
+                    if isinstance(raw, bytes):
+                        raw = raw.decode("utf-8", errors="replace")
+                    if raw and raw.strip():
+                        msg = f"{msg} | API body: {raw}"
+        except Exception:
+            pass
+    return msg
 
-    def __init__(self, model_name: str, **kwargs):
+
+def _openrouter_response_adapter(response) -> Any:
+    """Adapt OpenRouter/OpenAI Chat Completions response to Gemini-like structure for agents.
+
+    Chat Completions returns choices[0].message with content (string) and optional tool_calls.
+    Agents expect candidates[0].content.parts with .function_call / .text.
+    """
+    parts = []
+    if not response or not getattr(response, "choices", None) or not response.choices:
+        parts.append(_openai_text_part(""))
+    else:
+        msg = response.choices[0].message
+        content = getattr(msg, "content", None)
+        if content and isinstance(content, str) and content.strip():
+            parts.append(_openai_text_part(content))
+        tool_calls = getattr(msg, "tool_calls", None) or []
+        for tc in tool_calls:
+            fn = getattr(tc, "function", None)
+            if not fn:
+                continue
+            name = getattr(fn, "name", None) or ""
+            raw_args = getattr(fn, "arguments", None) or "{}"
+            try:
+                args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args or {})
+            except json.JSONDecodeError:
+                args = {}
+            parts.append(_openai_tool_call_part(name, args))
+        if not parts:
+            parts.append(_openai_text_part(content or ""))
+
+    content = type("Content", (), {"parts": parts})()
+    candidate = type("Candidate", (), {"content": content})()
+    adapter = type("ResponseAdapter", (), {"candidates": [candidate]})()
+    adapter.usage_metadata = None
+    if hasattr(response, "usage") and response.usage:
+        usage = response.usage
+        inp = getattr(usage, "prompt_tokens", 0)
+        out = getattr(usage, "completion_tokens", 0)
+        total = getattr(usage, "total_tokens", 0) or (inp + out)
+        cached = 0
+        if hasattr(usage, "prompt_tokens_details") and usage.prompt_tokens_details:
+            cached = getattr(usage.prompt_tokens_details, "cached_tokens", 0)
+        adapter.usage_metadata = type(
+            "UsageMetadata",
+            (),
+            {
+                "prompt_token_count": inp,
+                "candidates_token_count": out,
+                "total_token_count": total,
+                "cached_content_token_count": cached,
+            },
+        )()
+    return adapter
+
+
+class OpenRouterBackend(VLMBackend):
+    """OpenRouter API backend with tool calling and system instructions.
+
+    Uses OpenAI Chat Completions–compatible API (base_url OpenRouter). Supports tools,
+    system message, and vision. Returns adapter when tools configured, else string.
+    """
+
+    def __init__(self, model_name: str, tools: list = None, system_instruction: str = None, **kwargs):
         try:
             from openai import OpenAI
         except ImportError:
             raise ImportError("OpenAI package not found. Install with: pip install openai")
 
         self.model_name = model_name
+        self.tools = tools or []
+        self.system_instruction = system_instruction
         self.api_key = os.getenv("OPENROUTER_API_KEY")
 
         if not self.api_key:
@@ -850,34 +937,110 @@ class OpenRouterBackend(VLMBackend):
             api_key=self.api_key,
         )
 
+        if self.tools:
+            self._tools_openrouter = self._convert_tools_to_openrouter_format()
+            log_parts = [f"OpenRouter backend initialized with model: {model_name}", f"{len(self.tools)} tools"]
+        else:
+            self._tools_openrouter = []
+            log_parts = [f"OpenRouter backend initialized with model: {model_name}"]
+        if self.system_instruction:
+            log_parts.append(f"system instructions ({len(self.system_instruction)} chars)")
+        logger.info(", ".join(log_parts))
+
+    def _setup_function_calling(self):
+        """Update tools when agent dynamically updates tool list."""
+        self._tools_openrouter = self._convert_tools_to_openrouter_format() if self.tools else []
+        logger.info(f"OpenRouter model updated with {len(self.tools) if self.tools else 0} tools")
+
+    def _build_json_schema_properties(self, params: dict) -> tuple:
+        """Build JSON Schema properties from Gemini-style params. Returns (properties, required)."""
+        properties = {}
+        required = params.get("required", [])
+        for prop_name, prop_def in params.get("properties", {}).items():
+            t = prop_def.get("type_", "STRING")
+            if t == "ARRAY":
+                t = "array"
+            elif t == "INTEGER":
+                t = "integer"
+            elif t == "BOOLEAN":
+                t = "boolean"
+            else:
+                t = "string"
+            prop = {"type": t, "description": prop_def.get("description", "")}
+            if t == "array" and "items" in prop_def:
+                items_t = prop_def["items"].get("type_", "STRING") if isinstance(prop_def["items"], dict) else "STRING"
+                prop["items"] = {"type": "string" if items_t == "STRING" else "string"}
+            if "enum" in prop_def:
+                prop["enum"] = prop_def["enum"]
+            properties[prop_name] = prop
+        return properties, required
+
+    def _convert_tools_to_openrouter_format(self) -> list:
+        """Convert Gemini-style tool declarations to OpenAI Chat Completions format (nested function)."""
+        result = []
+        for tool in self.tools:
+            params = tool.get("parameters", {})
+            properties, required = self._build_json_schema_properties(params)
+            result.append({
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "parameters": {"type": "object", "properties": properties, "required": required},
+                },
+            })
+        return result
+
     def _prepare_image_base64(self, img: Union[Image.Image, np.ndarray]) -> str:
-        """Prepare image as base64 string"""
-        if hasattr(img, "convert"):  # It's a PIL Image
+        """Prepare image as base64 string."""
+        if hasattr(img, "convert"):
             image = img
-        elif hasattr(img, "shape"):  # It's a numpy array
+        elif hasattr(img, "shape"):
             image = Image.fromarray(img)
         else:
             raise ValueError(f"Unsupported image type: {type(img)}")
-
         buffered = BytesIO()
         image.save(buffered, format="PNG")
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
+    def _extract_thinking_from_response(self, response) -> str:
+        """Extract reasoning for logging from adapter (candidates[0].content.parts)."""
+        if not response or not getattr(response, "candidates", None):
+            return "[Executing function call]"
+        candidate = response.candidates[0]
+        content = getattr(candidate, "content", None)
+        if not content or not getattr(content, "parts", None):
+            return "[Executing function call]"
+        for part in content.parts:
+            fc = getattr(part, "function_call", None)
+            if fc:
+                args = getattr(fc, "args", {}) or {}
+                reasoning = args.get("reasoning") or args.get("reason", "")
+                if reasoning:
+                    return f"[{fc.name}] {reasoning}"
+                return f"Calling {fc.name}({list(args.keys())[:3]})"
+            if getattr(part, "text", None):
+                return part.text
+        return "[Executing function call]"
+
     @retry_with_exponential_backoff
-    def _call_completion(self, messages):
-        """Calls the completions.create method with exponential backoff."""
-        return self.client.chat.completions.create(model=self.model_name, messages=messages)
+    def _call_completion(self, messages, tools=None):
+        """Calls chat.completions with optional tools and system message."""
+        kwargs = {"model": self.model_name, "messages": messages, "max_tokens": 8192}
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = "auto"
+        return self.client.chat.completions.create(**kwargs)
 
     def get_query(
         self,
         img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]],
         text: str,
         module_name: str = "Unknown",
-    ) -> str:
-        """Process an image (or list of images) and text prompt using OpenRouter API"""
+    ) -> Union[str, Any]:
+        """Process image(s) and text. Returns adapter if tools, else string."""
         start_time = time.time()
 
-        # Handle list of images (video-like input)
         if isinstance(img, list):
             content_parts = [{"type": "text", "text": text}]
             for i in img:
@@ -892,41 +1055,171 @@ class OpenRouterBackend(VLMBackend):
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_base64}"}},
             ]
 
-        messages = [{"role": "user", "content": content_parts}]
+        messages = []
+        if self.system_instruction:
+            messages.append({"role": "system", "content": self.system_instruction})
+        messages.append({"role": "user", "content": content_parts})
 
-        # Log the prompt
         prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
         logger.info(f"[{module_name}] OPENROUTER VLM IMAGE QUERY:")
         logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
 
-        response = self._call_completion(messages)
-        result = response.choices[0].message.content
+        try:
+            response = self._call_completion(
+                messages,
+                tools=self._tools_openrouter if self._tools_openrouter else None,
+            )
+            duration = time.time() - start_time
 
-        # Log the response
-        result_preview = result[:1000] + "..." if len(result) > 1000 else result
-        logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-        logger.info(f"[{module_name}] ---")
+            token_usage = {}
+            if hasattr(response, "usage") and response.usage:
+                u = response.usage
+                token_usage = {
+                    "prompt_tokens": getattr(u, "prompt_tokens", 0),
+                    "completion_tokens": getattr(u, "completion_tokens", 0),
+                    "total_tokens": getattr(u, "total_tokens", 0) or (
+                        getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
+                    ),
+                    "cached_tokens": 0,
+                }
+                if hasattr(u, "prompt_tokens_details") and u.prompt_tokens_details:
+                    token_usage["cached_tokens"] = getattr(u.prompt_tokens_details, "cached_tokens", 0)
 
-        return result
+            if self.tools:
+                adapter = _openrouter_response_adapter(response)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"openrouter_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "openrouter",
+                        "has_image": True,
+                        "token_usage": token_usage,
+                        "has_function_call": True,
+                    },
+                    model_info={"model": self.model_name, "backend": "openrouter"},
+                )
+                logger.info(f"[{module_name}] AGENT THINKING: {thinking_text}")
+                logger.info(f"[{module_name}] ---")
+                return adapter
 
-    def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
-        """Process a text-only prompt using OpenRouter API"""
-        messages = [{"role": "user", "content": [{"type": "text", "text": text}]}]
+            result = (getattr(response.choices[0].message, "content", None) or "") or ""
+            log_llm_interaction(
+                interaction_type=f"openrouter_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={
+                    "model": self.model_name,
+                    "backend": "openrouter",
+                    "has_image": True,
+                    "token_usage": token_usage,
+                },
+                model_info={"model": self.model_name, "backend": "openrouter"},
+            )
+            result_preview = result[:1000] + "..." if len(result) > 1000 else result
+            logger.info(f"[{module_name}] RESPONSE: {result_preview}")
+            logger.info(f"[{module_name}] ---")
+            return result
+        except Exception as e:
+            duration = time.time() - start_time
+            err_msg = _openrouter_error_message(e)
+            log_llm_error(
+                interaction_type=f"openrouter_{module_name}",
+                prompt=text,
+                error=err_msg,
+                metadata={"model": self.model_name, "backend": "openrouter", "duration": duration, "has_image": True},
+            )
+            logger.error("OpenRouter API error: %s", err_msg)
+            raise
 
-        # Log the prompt
+    def get_text_query(self, text: str, module_name: str = "Unknown") -> Union[str, Any]:
+        """Process text-only prompt. Returns adapter if tools, else string."""
+        start_time = time.time()
+
+        messages = []
+        if self.system_instruction:
+            messages.append({"role": "system", "content": self.system_instruction})
+        messages.append({"role": "user", "content": text})
+
         prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
         logger.info(f"[{module_name}] OPENROUTER VLM TEXT QUERY:")
         logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
 
-        response = self._call_completion(messages)
-        result = response.choices[0].message.content
+        try:
+            response = self._call_completion(
+                messages,
+                tools=self._tools_openrouter if self._tools_openrouter else None,
+            )
+            duration = time.time() - start_time
 
-        # Log the response
-        result_preview = result[:1000] + "..." if len(result) > 1000 else result
-        logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-        logger.info(f"[{module_name}] ---")
+            token_usage = {}
+            if hasattr(response, "usage") and response.usage:
+                u = response.usage
+                token_usage = {
+                    "prompt_tokens": getattr(u, "prompt_tokens", 0),
+                    "completion_tokens": getattr(u, "completion_tokens", 0),
+                    "total_tokens": getattr(u, "total_tokens", 0) or (
+                        getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
+                    ),
+                    "cached_tokens": 0,
+                }
+                if hasattr(u, "prompt_tokens_details") and u.prompt_tokens_details:
+                    token_usage["cached_tokens"] = getattr(u.prompt_tokens_details, "cached_tokens", 0)
 
-        return result
+            if self.tools:
+                adapter = _openrouter_response_adapter(response)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"openrouter_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "openrouter",
+                        "has_image": False,
+                        "token_usage": token_usage,
+                        "has_function_call": True,
+                    },
+                    model_info={"model": self.model_name, "backend": "openrouter"},
+                )
+                logger.info(f"[{module_name}] AGENT THINKING: {thinking_text}")
+                logger.info(f"[{module_name}] ---")
+                return adapter
+
+            result = (getattr(response.choices[0].message, "content", None) or "") or ""
+            log_llm_interaction(
+                interaction_type=f"openrouter_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={
+                    "model": self.model_name,
+                    "backend": "openrouter",
+                    "has_image": False,
+                    "token_usage": token_usage,
+                },
+                model_info={"model": self.model_name, "backend": "openrouter"},
+            )
+            result_preview = result[:1000] + "..." if len(result) > 1000 else result
+            logger.info(f"[{module_name}] RESPONSE: {result_preview}")
+            logger.info(f"[{module_name}] ---")
+            return result
+        except Exception as e:
+            duration = time.time() - start_time
+            err_msg = _openrouter_error_message(e)
+            log_llm_error(
+                interaction_type=f"openrouter_{module_name}",
+                prompt=text,
+                error=err_msg,
+                metadata={"model": self.model_name, "backend": "openrouter", "duration": duration, "has_image": False},
+            )
+            logger.error("OpenRouter API error: %s", err_msg)
+            raise
 
 
 class LocalHuggingFaceBackend(VLMBackend):
@@ -2407,7 +2700,7 @@ class VLM:
             self.backend = backend_class(model_name, port=port, **kwargs)
         else:
             # Pass tools and system_instruction to backends that support function calling
-            if self.backend_type in ["vertex", "gemini", "openai", "anthropic"]:
+            if self.backend_type in ["vertex", "gemini", "openai", "anthropic", "openrouter"]:
                 self.backend = backend_class(
                     model_name, tools=self.tools, system_instruction=self.system_instruction, **kwargs
                 )
