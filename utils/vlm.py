@@ -2,6 +2,7 @@ from io import BytesIO
 from PIL import Image
 import json
 import os
+import sys
 import base64
 import random
 import time
@@ -474,6 +475,359 @@ class OpenAIBackend(VLMBackend):
             )
             logger.error(f"OpenAI API error: {err_msg}")
             raise
+
+
+def _anthropic_response_adapter(response) -> Any:
+    """Adapt Anthropic Messages API output to Gemini-like structure for agents.
+
+    Response has .content: list of blocks (type 'text' | 'tool_use').
+    Agents expect candidates[0].content.parts with .function_call / .text.
+    Reuses _openai_tool_call_part and _openai_text_part (same part shape).
+    """
+    parts = []
+    content = getattr(response, "content", None) or []
+
+    for block in content:
+        block_type = getattr(block, "type", None) if hasattr(block, "type") else (block.get("type") if isinstance(block, dict) else None)
+        if block_type == "tool_use":
+            name = getattr(block, "name", None) or (block.get("name") if isinstance(block, dict) else "")
+            inp = getattr(block, "input", None) or (block.get("input", {}) if isinstance(block, dict) else {})
+            args = inp if isinstance(inp, dict) else {}
+            if name:
+                parts.append(_openai_tool_call_part(name, args))
+        elif block_type == "text":
+            text = getattr(block, "text", None) or (block.get("text", "") if isinstance(block, dict) else "")
+            if text:
+                parts.append(_openai_text_part(text))
+
+    if not parts:
+        parts.append(_openai_text_part(""))
+
+    content_obj = type("Content", (), {"parts": parts})()
+    candidate = type("Candidate", (), {"content": content_obj})()
+    adapter = type("ResponseAdapter", (), {"candidates": [candidate]})()
+    adapter.usage_metadata = None
+    if hasattr(response, "usage") and response.usage:
+        u = response.usage
+        inp = getattr(u, "input_tokens", 0)
+        out = getattr(u, "output_tokens", 0)
+        total = inp + out
+        cached = getattr(u, "cache_creation_input_tokens", 0) or 0
+        cached += getattr(u, "cache_read_input_tokens", 0) or 0
+        adapter.usage_metadata = type(
+            "UsageMetadata",
+            (),
+            {
+                "prompt_token_count": inp,
+                "candidates_token_count": out,
+                "total_token_count": total,
+                "cached_content_token_count": cached,
+            },
+        )()
+    return adapter
+
+
+class AnthropicBackend(VLMBackend):
+    """Anthropic Messages API backend with tool calling and system prompt.
+
+    Uses POST /v1/messages (client.messages.create). Supports tools, system,
+    and vision (image blocks). Returns adapter when tools configured, else string.
+    """
+
+    def __init__(self, model_name: str, tools: list = None, system_instruction: str = None, **kwargs):
+        try:
+            import anthropic
+        except ImportError:
+            raise ImportError("Anthropic package not found. Install with: pip install anthropic")
+
+        self.model_name = model_name
+        self.tools = tools or []
+        self.system_instruction = system_instruction
+        self.api_key = os.getenv("ANTHROPIC_API_KEY")
+
+        if not self.api_key:
+            raise ValueError("ANTHROPIC_API_KEY is required. Set the environment variable.")
+
+        self.client = anthropic.Anthropic(api_key=self.api_key)
+        self.errors = (anthropic.RateLimitError,)
+
+        if self.tools:
+            self._tools_anthropic = self._convert_tools_to_anthropic_format()
+            log_parts = [f"Anthropic backend initialized with model: {model_name}", f"{len(self.tools)} tools"]
+        else:
+            self._tools_anthropic = []
+            log_parts = [f"Anthropic backend initialized with model: {model_name}"]
+        if self.system_instruction:
+            log_parts.append(f"system instructions ({len(self.system_instruction)} chars)")
+        logger.info(", ".join(log_parts))
+
+    def _setup_function_calling(self):
+        """Update tools when agent dynamically updates tool list."""
+        self._tools_anthropic = self._convert_tools_to_anthropic_format() if self.tools else []
+        logger.info(f"Anthropic model updated with {len(self.tools) if self.tools else 0} tools")
+
+    def _build_input_schema(self, params: dict) -> tuple:
+        """Build JSON Schema properties from Gemini-style params. Returns (properties, required)."""
+        properties = {}
+        required = params.get("required", [])
+        for prop_name, prop_def in params.get("properties", {}).items():
+            t = prop_def.get("type_", "STRING")
+            if t == "ARRAY":
+                t = "array"
+            elif t == "INTEGER":
+                t = "integer"
+            elif t == "BOOLEAN":
+                t = "boolean"
+            else:
+                t = "string"
+            prop = {"type": t, "description": prop_def.get("description", "")}
+            if t == "array" and "items" in prop_def:
+                items_t = prop_def["items"].get("type_", "STRING") if isinstance(prop_def["items"], dict) else "STRING"
+                prop["items"] = {"type": "string" if items_t == "STRING" else "string"}
+            if "enum" in prop_def:
+                prop["enum"] = prop_def["enum"]
+            properties[prop_name] = prop
+        return properties, required
+
+    def _convert_tools_to_anthropic_format(self) -> list:
+        """Convert Gemini-style tool declarations to Anthropic input_schema format."""
+        result = []
+        for tool in self.tools:
+            params = tool.get("parameters", {})
+            properties, required = self._build_input_schema(params)
+            result.append({
+                "name": tool["name"],
+                "description": tool.get("description", ""),
+                "input_schema": {"type": "object", "properties": properties, "required": required},
+            })
+        return result
+
+    @retry_with_exponential_backoff
+    def _call_messages(self, system: Optional[str], messages: list, tools: Optional[list] = None):
+        """Call Anthropic Messages API."""
+        kwargs = {
+            "model": self.model_name,
+            "max_tokens": 8192,
+            "messages": messages,
+        }
+        if system:
+            kwargs["system"] = system
+        if tools:
+            kwargs["tools"] = tools
+            kwargs["tool_choice"] = {"type": "auto"}
+        return self.client.messages.create(**kwargs)
+
+    def _prepare_image_base64(self, img: Union[Image.Image, np.ndarray]) -> str:
+        """Prepare image as base64 string."""
+        if hasattr(img, "convert"):
+            image = img
+        elif hasattr(img, "shape"):
+            image = Image.fromarray(img)
+        else:
+            raise ValueError(f"Unsupported image type: {type(img)}")
+        buffered = BytesIO()
+        image.save(buffered, format="PNG")
+        return base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+    def _extract_thinking_from_response(self, response) -> str:
+        """Extract reasoning for logging from adapter (candidates[0].content.parts)."""
+        if not response or not getattr(response, "candidates", None):
+            return "[Executing function call]"
+        candidate = response.candidates[0]
+        content = getattr(candidate, "content", None)
+        if not content or not getattr(content, "parts", None):
+            return "[Executing function call]"
+        for part in content.parts:
+            fc = getattr(part, "function_call", None)
+            if fc:
+                args = getattr(fc, "args", {}) or {}
+                reasoning = args.get("reasoning") or args.get("reason", "")
+                if reasoning:
+                    return f"[{fc.name}] {reasoning}"
+                return f"Calling {fc.name}({list(args.keys())[:3]})"
+            if getattr(part, "text", None):
+                return part.text[:200]
+        return "[Executing function call]"
+
+    def get_query(
+        self,
+        img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]],
+        text: str,
+        module_name: str = "Unknown",
+    ) -> Union[str, Any]:
+        """Process image(s) and text. Returns adapter if tools, else string."""
+        start_time = time.time()
+        content = [{"type": "text", "text": text}]
+        if isinstance(img, list):
+            for i in img:
+                content.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": self._prepare_image_base64(i)},
+                })
+        else:
+            content.append({
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png", "data": self._prepare_image_base64(img)},
+            })
+        messages = [{"role": "user", "content": content}]
+
+        try:
+            response = self._call_messages(
+                self.system_instruction,
+                messages,
+                tools=self._tools_anthropic if self._tools_anthropic else None,
+            )
+            duration = time.time() - start_time
+            token_usage = {}
+            if hasattr(response, "usage") and response.usage:
+                u = response.usage
+                token_usage = {
+                    "prompt_tokens": getattr(u, "input_tokens", 0),
+                    "completion_tokens": getattr(u, "output_tokens", 0),
+                    "total_tokens": getattr(u, "input_tokens", 0) + getattr(u, "output_tokens", 0),
+                    "cached_tokens": (getattr(u, "cache_creation_input_tokens", 0) or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0),
+                }
+
+            if self.tools:
+                adapter = _anthropic_response_adapter(response)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"anthropic_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "anthropic",
+                        "has_image": True,
+                        "token_usage": token_usage,
+                        "has_function_call": True,
+                    },
+                    model_info={"model": self.model_name, "backend": "anthropic"},
+                )
+                return adapter
+            result = ""
+            for block in (response.content or []):
+                if isinstance(block, dict) and block.get("type") == "text":
+                    result += block.get("text", "")
+                elif getattr(block, "type", None) == "text":
+                    result += getattr(block, "text", "") or ""
+            log_llm_interaction(
+                interaction_type=f"anthropic_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "anthropic", "has_image": True, "token_usage": token_usage},
+                model_info={"model": self.model_name, "backend": "anthropic"},
+            )
+            return result
+        except Exception as e:
+            duration = time.time() - start_time
+            err_msg = _anthropic_error_message(e)
+            log_llm_error(
+                interaction_type=f"anthropic_{module_name}",
+                prompt=text,
+                error=err_msg,
+                metadata={"model": self.model_name, "backend": "anthropic", "duration": duration, "has_image": True},
+            )
+            logger.error("Anthropic API error: %s", err_msg)
+            raise
+
+    def get_text_query(self, text: str, module_name: str = "Unknown") -> Union[str, Any]:
+        """Process text-only prompt. Returns adapter if tools, else string."""
+        start_time = time.time()
+        messages = [{"role": "user", "content": text}]
+
+        try:
+            response = self._call_messages(
+                self.system_instruction,
+                messages,
+                tools=self._tools_anthropic if self._tools_anthropic else None,
+            )
+            duration = time.time() - start_time
+            token_usage = {}
+            if hasattr(response, "usage") and response.usage:
+                u = response.usage
+                token_usage = {
+                    "prompt_tokens": getattr(u, "input_tokens", 0),
+                    "completion_tokens": getattr(u, "output_tokens", 0),
+                    "total_tokens": getattr(u, "input_tokens", 0) + getattr(u, "output_tokens", 0),
+                    "cached_tokens": (getattr(u, "cache_creation_input_tokens", 0) or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0),
+                }
+
+            if self.tools:
+                adapter = _anthropic_response_adapter(response)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"anthropic_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "anthropic",
+                        "has_image": False,
+                        "token_usage": token_usage,
+                        "has_function_call": True,
+                    },
+                    model_info={"model": self.model_name, "backend": "anthropic"},
+                )
+                return adapter
+            result = ""
+            for block in (response.content or []):
+                if isinstance(block, dict) and block.get("type") == "text":
+                    result += block.get("text", "")
+                elif getattr(block, "type", None) == "text":
+                    result += getattr(block, "text", "") or ""
+            log_llm_interaction(
+                interaction_type=f"anthropic_{module_name}",
+                prompt=text,
+                response=result,
+                duration=duration,
+                metadata={"model": self.model_name, "backend": "anthropic", "has_image": False, "token_usage": token_usage},
+                model_info={"model": self.model_name, "backend": "anthropic"},
+            )
+            return result
+        except Exception as e:
+            duration = time.time() - start_time
+            err_msg = _anthropic_error_message(e)
+            log_llm_error(
+                interaction_type=f"anthropic_{module_name}",
+                prompt=text,
+                error=err_msg,
+                metadata={"model": self.model_name, "backend": "anthropic", "duration": duration, "has_image": False},
+            )
+            logger.error("Anthropic API error: %s", err_msg)
+            raise
+
+
+def _anthropic_error_message(exc: Exception) -> str:
+    """Build a detailed error message from an Anthropic API exception (including 400 body)."""
+    msg = str(exc)
+    # Prefer exc.body first (Anthropic SDK sets this to parsed JSON from the API)
+    try:
+        err_body = getattr(exc, "body", None)
+        if err_body is not None:
+            if isinstance(err_body, dict):
+                msg = f"{msg} | API body: {json.dumps(err_body)}"
+            else:
+                msg = f"{msg} | API body: {err_body}"
+    except Exception:
+        pass
+    # Fallback: raw response text
+    if "API body:" not in msg:
+        try:
+            resp = getattr(exc, "response", None)
+            if resp is not None:
+                raw = getattr(resp, "text", None) or getattr(resp, "content", None)
+                if raw is not None:
+                    if isinstance(raw, bytes):
+                        raw = raw.decode("utf-8", errors="replace")
+                    if raw and raw.strip():
+                        msg = f"{msg} | API body: {raw}"
+        except Exception:
+            pass
+    return msg
 
 
 class OpenRouterBackend(VLMBackend):
@@ -2007,6 +2361,7 @@ class VLM:
 
     BACKENDS = {
         "openai": OpenAIBackend,
+        "anthropic": AnthropicBackend,
         "openrouter": OpenRouterBackend,
         "local": LocalHuggingFaceBackend,
         "gemini": GeminiBackend,
@@ -2028,7 +2383,7 @@ class VLM:
 
         Args:
             model_name: Name of the model to use
-            backend: Backend type ('openai', 'openrouter', 'local', 'gemini', 'ollama', 'vertex')
+            backend: Backend type ('openai', 'anthropic', 'openrouter', 'local', 'gemini', 'ollama', 'vertex')
             port: Port for Ollama backend (legacy)
             tools: List of tool declarations for function calling
             system_instruction: System instructions for the model (supported by vertex, gemini)
@@ -2054,7 +2409,7 @@ class VLM:
             self.backend = backend_class(model_name, port=port, **kwargs)
         else:
             # Pass tools and system_instruction to backends that support function calling
-            if self.backend_type in ["vertex", "gemini", "openai"]:
+            if self.backend_type in ["vertex", "gemini", "openai", "anthropic"]:
                 self.backend = backend_class(
                     model_name, tools=self.tools, system_instruction=self.system_instruction, **kwargs
                 )
@@ -2066,7 +2421,9 @@ class VLM:
     def _auto_detect_backend(self, model_name: str) -> str:
         """Auto-detect backend based on model name"""
         model_lower = model_name.lower()
-
+        # Native Anthropic model ids (e.g. claude-sonnet-4-5) have no slash; OpenRouter uses "anthropic/claude-..."
+        if model_lower.startswith("claude-") and "/" not in model_name:
+            return "anthropic"
         if any(x in model_lower for x in ["gpt", "o4-mini", "o3", "claude"]):
             return "openai"
         elif any(x in model_lower for x in ["gemini", "palm"]):
@@ -2074,7 +2431,6 @@ class VLM:
         elif any(x in model_lower for x in ["llama", "mistral", "qwen", "phi"]):
             return "local"
         else:
-            # Default to OpenAI for unknown models
             return "openai"
 
     def get_query(
