@@ -115,7 +115,7 @@ class LLMLogger:
             "o1-pro": {"prompt": 0.15, "completion": 0.60},         # $150/$600 per 1M
 
             # Anthropic Claude
-            "claude-sonnet-4": {"prompt": 0.003, "completion": 0.015},   # $3/$15 per 1M
+            "claude-sonnet-4.5": {"prompt": 0.003, "completion": 0.015},   # $3/$15 per 1M
             "claude-sonnet-3.7": {"prompt": 0.003, "completion": 0.015},
             "claude-sonnet-3.5": {"prompt": 0.003, "completion": 0.015},
             "claude-opus-4.1": {"prompt": 0.015, "completion": 0.075},   # $15/$75 per 1M

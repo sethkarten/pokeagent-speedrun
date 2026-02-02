@@ -1774,6 +1774,10 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             recommended_battling = categorized_objs.get("recommended_battling_objectives", [])
             categorized_status = game_state_data.get("categorized_status", {})
 
+            # Log whether 3-category status was received (so user can confirm in out.txt)
+            if not categorized_status:
+                logger.info("   - categorized_status: No (missing from get_game_state - 3-category progress will be empty)")
+
             # Format single objective
             def format_objective(obj_dict, category_emoji, category_name):
                 if not obj_dict:
@@ -2020,6 +2024,7 @@ Step {step_count}"""
             logger.info(f"   - battling_group: {len(battling_group)} objectives")
             logger.info(f"   - dynamics_obj: {'Yes' if dynamics_obj else 'None'}")
             logger.info(f"   - recommended: {len(recommended_battling)} IDs")
+            logger.info(f"   - categorized_status: {'Yes' if categorized_status else 'No (missing from get_game_state)'}")
 
             # Format single objective
             def format_objective(obj_dict, category_emoji, category_name):
@@ -2091,6 +2096,7 @@ Step {step_count}"""
   📖 Story: {story_status.get('current_index', 0) + 1}/{story_status.get('total', 0)} ({story_status.get('completed', 0)} completed)
   ⚔️  Battling: {battling_status.get('current_index', 0) + 1}/{battling_status.get('total', 0)} ({battling_status.get('completed', 0)} completed)
   🎯 Dynamics: {dynamics_status.get('current_index', 0) + 1}/{dynamics_status.get('total', 0)} ({dynamics_status.get('completed', 0)} completed)"""
+                logger.info(f"📊 PROGRESS (3 Categories) in prompt: Story {story_status.get('current_index', 0) + 1}/{story_status.get('total', 0)}, Battling {battling_status.get('current_index', 0) + 1}/{battling_status.get('total', 0)}, Dynamics {dynamics_status.get('current_index', 0) + 1}/{dynamics_status.get('total', 0)}")
             else:
                 direct_objective_status = ""
 
