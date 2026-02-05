@@ -262,13 +262,19 @@ class OpenAIBackend(VLMBackend):
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _extract_thinking_from_response(self, response) -> str:
-        """Extract reasoning for logging from response/adapter (candidates[0].content.parts structure)."""
+        """Extract reasoning for logging from response/adapter (candidates[0].content.parts structure).
+        
+        Prioritizes function calls over text parts to ensure the command name is included,
+        since some backends (like Anthropic) return text explanations before tool calls.
+        """
         if not response or not getattr(response, "candidates", None):
             return "[Executing function call]"
         candidate = response.candidates[0]
         content = getattr(candidate, "content", None)
         if not content or not getattr(content, "parts", None):
             return "[Executing function call]"
+        
+        # First pass: prioritize function calls to include command name in output
         for part in content.parts:
             fc = getattr(part, "function_call", None)
             if fc:
@@ -277,8 +283,12 @@ class OpenAIBackend(VLMBackend):
                 if reasoning:
                     return f"[{fc.name}] {reasoning}"
                 return f"Calling {fc.name}({list(args.keys())[:3]})"
+        
+        # Second pass: fall back to text parts if no function call found
+        for part in content.parts:
             if getattr(part, "text", None):
                 return part.text
+        
         return "[Executing function call]"
 
     def get_query(
@@ -630,13 +640,19 @@ class AnthropicBackend(VLMBackend):
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _extract_thinking_from_response(self, response) -> str:
-        """Extract reasoning for logging from adapter (candidates[0].content.parts)."""
+        """Extract reasoning for logging from adapter (candidates[0].content.parts).
+        
+        Prioritizes function calls over text parts to ensure the command name is included,
+        since Anthropic often returns text explanations before tool calls.
+        """
         if not response or not getattr(response, "candidates", None):
             return "[Executing function call]"
         candidate = response.candidates[0]
         content = getattr(candidate, "content", None)
         if not content or not getattr(content, "parts", None):
             return "[Executing function call]"
+        
+        # First pass: prioritize function calls to include command name in output
         for part in content.parts:
             fc = getattr(part, "function_call", None)
             if fc:
@@ -645,8 +661,12 @@ class AnthropicBackend(VLMBackend):
                 if reasoning:
                     return f"[{fc.name}] {reasoning}"
                 return f"Calling {fc.name}({list(args.keys())[:3]})"
+        
+        # Second pass: fall back to text parts if no function call found
+        for part in content.parts:
             if getattr(part, "text", None):
                 return part.text
+        
         return "[Executing function call]"
 
     def get_query(
@@ -1004,13 +1024,19 @@ class OpenRouterBackend(VLMBackend):
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _extract_thinking_from_response(self, response) -> str:
-        """Extract reasoning for logging from adapter (candidates[0].content.parts)."""
+        """Extract reasoning for logging from adapter (candidates[0].content.parts).
+        
+        Prioritizes function calls over text parts to ensure the command name is included,
+        since some models return text explanations before tool calls.
+        """
         if not response or not getattr(response, "candidates", None):
             return "[Executing function call]"
         candidate = response.candidates[0]
         content = getattr(candidate, "content", None)
         if not content or not getattr(content, "parts", None):
             return "[Executing function call]"
+        
+        # First pass: prioritize function calls to include command name in output
         for part in content.parts:
             fc = getattr(part, "function_call", None)
             if fc:
@@ -1019,8 +1045,12 @@ class OpenRouterBackend(VLMBackend):
                 if reasoning:
                     return f"[{fc.name}] {reasoning}"
                 return f"Calling {fc.name}({list(args.keys())[:3]})"
+        
+        # Second pass: fall back to text parts if no function call found
+        for part in content.parts:
             if getattr(part, "text", None):
                 return part.text
+        
         return "[Executing function call]"
 
     @retry_with_exponential_backoff
