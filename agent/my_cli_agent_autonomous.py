@@ -544,16 +544,50 @@ class AutonomousCLIAgent:
 
             history_str = "\n".join(history_text)
 
-            # Format objective
+            # Format objective - handle both categorized and legacy modes
             obj_text = "None"
-            if current_obj.get("objective"):
-                obj = current_obj["objective"]
-                if isinstance(obj, dict):
-                    obj_text = obj.get("description", "Unknown")
-                    if obj.get("navigation_hint"):
-                        obj_text += f"\nHint: {obj['navigation_hint']}"
+            obj_mode = current_obj.get("mode", "legacy")
+            
+            if obj_mode == "categorized":
+                # Categorized mode - show all 3 category objectives
+                categories = current_obj.get("categories", {})
+                obj_parts = []
+                
+                # Story objective
+                story_cat = categories.get("story", {})
+                story_obj = story_cat.get("current_objective")
+                if story_obj:
+                    obj_parts.append(f"📖 STORY ({story_cat.get('index', 0) + 1}/{story_cat.get('total', 0)}): {story_obj}")
                 else:
-                    obj_text = str(obj)
+                    obj_parts.append(f"📖 STORY: None (all {story_cat.get('completed', 0)} completed)")
+                
+                # Battling objective
+                battling_cat = categories.get("battling", {})
+                battling_obj = battling_cat.get("current_objective")
+                if battling_obj:
+                    obj_parts.append(f"⚔️  BATTLING ({battling_cat.get('index', 0) + 1}/{battling_cat.get('total', 0)}): {battling_obj}")
+                else:
+                    obj_parts.append(f"⚔️  BATTLING: None (all {battling_cat.get('completed', 0)} completed)")
+                
+                # Dynamics objective
+                dynamics_cat = categories.get("dynamics", {})
+                dynamics_obj = dynamics_cat.get("current_objective")
+                if dynamics_obj:
+                    obj_parts.append(f"🎯 DYNAMICS ({dynamics_cat.get('index', 0) + 1}/{dynamics_cat.get('total', 0)}): {dynamics_obj}")
+                else:
+                    obj_parts.append(f"🎯 DYNAMICS: None (all {dynamics_cat.get('completed', 0)} completed)")
+                
+                obj_text = "\n".join(obj_parts)
+            else:
+                # Legacy mode - single objective
+                if current_obj.get("objective"):
+                    obj = current_obj["objective"]
+                    if isinstance(obj, dict):
+                        obj_text = obj.get("description", "Unknown")
+                        if obj.get("navigation_hint"):
+                            obj_text += f"\nHint: {obj['navigation_hint']}"
+                    else:
+                        obj_text = str(obj)
 
             # Include porymap if available
             porymap_section = ""
@@ -576,6 +610,16 @@ class AutonomousCLIAgent:
                 logger.warning(f"Could not load knowledge base for reflection: {e}")
                 knowledge_section = "\n\nKNOWLEDGE BASE: Error loading knowledge base\n"
 
+            # Format progress based on mode
+            if obj_mode == "categorized":
+                progress_text = f"""- Milestones: {progress.get('milestones_completed', 0)}
+- Story: {progress.get('story', {}).get('completed', 0)}/{progress.get('story', {}).get('total', 0)} completed
+- Battling: {progress.get('battling', {}).get('completed', 0)}/{progress.get('battling', {}).get('total', 0)} completed
+- Dynamics: {progress.get('dynamics', {}).get('completed', 0)}/{progress.get('dynamics', {}).get('total', 0)} completed"""
+            else:
+                progress_text = f"""- Milestones: {progress.get('milestones_completed', 0)}
+- Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence"""
+
             reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald in an attempt to speedrun the game. Provide direct, actionable guidance. 
 Look for mistakes in logic, erroneous decision-making, or bad macro strategy (e.g., puzzles, going the wrong direction, not sufficiently traning and catching pokemon based on game progress).
 
@@ -588,14 +632,13 @@ Location: {current_state.get('location')}
 Coordinates: ({current_state.get('coordinates', {}).get('x')}, {current_state.get('coordinates', {}).get('y')})
 {current_state.get('state_text', '')}{porymap_section}{knowledge_section}
 
-CURRENT OBJECTIVE:
-Sequence: {current_obj.get('sequence')}
-Objective: {obj_text}
-Status: {'COMPLETE - needs new objectives' if current_obj.get('is_complete') else 'Active'}
+CURRENT OBJECTIVE{'S' if obj_mode == 'categorized' else ''}:
+{f"Mode: Categorized (3 parallel tracks)" if obj_mode == "categorized" else f"Sequence: {current_obj.get('sequence')}"}
+{obj_text}
+Status: {'ALL CATEGORIES COMPLETE - needs new objectives' if current_obj.get('is_complete') else 'Active'}
 
 PROGRESS:
-- Milestones: {progress.get('milestones_completed', 0)}
-- Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence
+{progress_text}
 
 RECENT ACTIONS (last 20 steps):
 {history_str}

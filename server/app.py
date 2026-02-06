@@ -3944,11 +3944,55 @@ async def mcp_reflect(request: dict):
         current_objective = None
         objectives_complete = False
         sequence_name = None
+        categorized_objectives = None
+        
         if direct_objectives_manager:
-            obj_status = direct_objectives_manager.get_sequence_status()
-            current_objective = obj_status.get("current_objective")
-            objectives_complete = obj_status.get("is_complete", False)
-            sequence_name = obj_status.get("sequence_name")
+            # Check if we're in categorized mode (3 categories: story, battling, dynamics)
+            if direct_objectives_manager.mode == "categorized":
+                categorized_status = direct_objectives_manager.get_categorized_status()
+                
+                # Build a summary of all 3 category objectives
+                story_status = categorized_status.get("story", {})
+                battling_status = categorized_status.get("battling", {})
+                dynamics_status = categorized_status.get("dynamics", {})
+                
+                categorized_objectives = {
+                    "story": {
+                        "current_objective": story_status.get("current_objective"),
+                        "index": story_status.get("current_index", 0),
+                        "total": story_status.get("total", 0),
+                        "completed": story_status.get("completed", 0),
+                    },
+                    "battling": {
+                        "current_objective": battling_status.get("current_objective"),
+                        "index": battling_status.get("current_index", 0),
+                        "total": battling_status.get("total", 0),
+                        "completed": battling_status.get("completed", 0),
+                    },
+                    "dynamics": {
+                        "current_objective": dynamics_status.get("current_objective"),
+                        "index": dynamics_status.get("current_index", 0),
+                        "total": dynamics_status.get("total", 0),
+                        "completed": dynamics_status.get("completed", 0),
+                    }
+                }
+                
+                # Primary focus is usually story objective
+                current_objective = story_status.get("current_objective")
+                
+                # Sequence is complete only if all categories are exhausted
+                objectives_complete = (
+                    story_status.get("current_index", 0) >= story_status.get("total", 0) and
+                    battling_status.get("current_index", 0) >= battling_status.get("total", 0) and
+                    dynamics_status.get("current_index", 0) >= dynamics_status.get("total", 0)
+                )
+                sequence_name = "categorized_objectives"
+            else:
+                # Legacy mode - use existing behavior
+                obj_status = direct_objectives_manager.get_sequence_status()
+                current_objective = obj_status.get("current_objective")
+                objectives_complete = obj_status.get("is_complete", False)
+                sequence_name = obj_status.get("sequence_name")
 
         # Get current game state
         from utils.state_formatter import format_state_for_llm, _format_porymap_info
@@ -3994,6 +4038,49 @@ async def mcp_reflect(request: dict):
 
         # Return all context for agent to analyze
         from server.cli.pokemon_mcp_server import serialize_for_json
+        
+        # Build objective info based on mode
+        if categorized_objectives:
+            # Categorized mode - include all 3 categories
+            objective_info = {
+                "mode": "categorized",
+                "sequence": sequence_name,
+                "categories": categorized_objectives,
+                "status": "all_complete" if objectives_complete else "active",
+                "is_complete": objectives_complete,
+            }
+            progress_info_formatted = {
+                "milestones_completed": progress_info.get("total_milestones_completed", 0),
+                "story": {
+                    "completed": categorized_objectives["story"]["completed"],
+                    "total": categorized_objectives["story"]["total"],
+                },
+                "battling": {
+                    "completed": categorized_objectives["battling"]["completed"],
+                    "total": categorized_objectives["battling"]["total"],
+                },
+                "dynamics": {
+                    "completed": categorized_objectives["dynamics"]["completed"],
+                    "total": categorized_objectives["dynamics"]["total"],
+                },
+            }
+        else:
+            # Legacy mode - existing structure
+            objective_info = {
+                "mode": "legacy",
+                "sequence": sequence_name,
+                "objective": current_objective,
+                "status": "complete" if objectives_complete else "active",
+                "is_complete": objectives_complete,
+            }
+            progress_info_formatted = {
+                "milestones_completed": progress_info.get("total_milestones_completed", 0),
+                "objectives_completed": progress_info.get("direct_objectives", {}).get(
+                    "objectives_completed_in_current_sequence", 0
+                ),
+                "total_objectives": progress_info.get("direct_objectives", {}).get("total_in_current_sequence", 0),
+            }
+        
         return serialize_for_json({
             "success": True,
             "context": {
@@ -4004,19 +4091,8 @@ async def mcp_reflect(request: dict):
                     "state_text": state_text[:1000],  # Truncate for token efficiency
                     "porymap_ground_truth": porymap_text,  # Ground truth map with obstacles
                 },
-                "current_objective": {
-                    "sequence": sequence_name,
-                    "objective": current_objective,
-                    "status": "complete" if objectives_complete else "active",
-                    "is_complete": objectives_complete,
-                },
-                "progress": {
-                    "milestones_completed": progress_info.get("total_milestones_completed", 0),
-                    "objectives_completed": progress_info.get("direct_objectives", {}).get(
-                        "objectives_completed_in_current_sequence", 0
-                    ),
-                    "total_objectives": progress_info.get("direct_objectives", {}).get("total_in_current_sequence", 0),
-                },
+                "current_objective": objective_info,
+                "progress": progress_info_formatted,
                 "recent_history": history_summary,
             },
         })
