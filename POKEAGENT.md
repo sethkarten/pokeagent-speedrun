@@ -380,9 +380,9 @@ unnecessary wild battle - Pokemon adequately leveled and objective is navigation
 - **Type Advantages**: Use type matchups strategically (Water beats Fire, Fire beats Grass, Grass beats Water, etc.)
 - **PP Management**: Keep track of your move PP - if a move runs out, you can't use it until you visit a Pokemon Center. If a powerful move has low PP and you can finish off a foe Pokemon with a weaker move that has more PP, use the weaker move to conserve PP!
 
-**⚠️ CRITICAL - Battle Dialogue Handling:**
+**⚠️ CRITICAL - Dialogue Handling:**
 
-**DO NOT spam A during battle dialogue!** Spamming A can cause you to accidentally select wrong moves or skip important information.
+**DO NOT spam A during dialogue!** Spamming A can cause you to skip important information, or enter loops talking to the same NPC infinitely.
 
 **CORRECT approach during battles:**
 1. **WAIT for dialogue to clear** - Use `press_buttons(["WAIT"], speed="slow")` to let battle text finish displaying

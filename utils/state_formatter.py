@@ -28,12 +28,6 @@ LAST_TRANSITION = None  # Stores transition coordinates
 MAP_STITCHER_SAVE_CALLBACK = None  # Callback to save map stitcher when location connections change
 MAP_STITCHER_INSTANCE = None  # Reference to the MapStitcher instance
 
-# Cache for warp reachability checks to avoid redundant pathfinding
-# Format: {(cache_version, location_name, player_x, player_y, warp_x, warp_y): is_reachable}
-# Increment CACHE_VERSION when elevation/pathfinding logic changes to invalidate old entries
-_WARP_CACHE_VERSION = 3  # v3: Fixed pathfinding to respect filtered grid (trust elevation connectivity)
-_warp_reachability_cache = {}
-
 def _get_location_connections_from_cache():
     """Read location connections from MapStitcher's cache file"""
     try:
@@ -751,11 +745,10 @@ def load_persistent_world_map(file_path=None):
 
 def clear_persistent_world_map():
     """Clear the MapStitcher's data for testing"""
-    global CURRENT_LOCATION, LAST_LOCATION, LAST_TRANSITION, _warp_reachability_cache
+    global CURRENT_LOCATION, LAST_LOCATION, LAST_TRANSITION
     CURRENT_LOCATION = None
     LAST_LOCATION = None
     LAST_TRANSITION = None
-    _warp_reachability_cache.clear()
     # Clear MapStitcher data if instance exists
     if MAP_STITCHER_INSTANCE:
         MAP_STITCHER_INSTANCE.map_areas.clear()
@@ -1882,135 +1875,9 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             context_parts.append(ascii_map)
             context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
         
-        # Add warps with reachability checks (cached)
-        warps = json_map.get('warps', [])
-        if warps:
-            context_parts.append(f"\nWarps ({len(warps)}):")
-
-            # Check reachability if player coords available
-            reachable_warps = []
-            unreachable_warps = []
-
-            # Clear old cache entries with wrong version
-            global _warp_reachability_cache
-            keys_to_remove = [k for k in _warp_reachability_cache.keys() if k[0] != _WARP_CACHE_VERSION]
-            if keys_to_remove:
-                for key in keys_to_remove:
-                    del _warp_reachability_cache[key]
-                logger.info(f"Cleared {len(keys_to_remove)} old warp cache entries (wrong version)")
-
-            if player_coords and json_map.get('grid'):
-                from utils.pathfinding import Pathfinder
-                from utils.ascii_map_loader import has_corrected_map
-
-                # Clear cache for corrected maps to ensure fresh pathfinding results
-                map_name = json_map.get('name', '')
-                if map_name and has_corrected_map(map_name):
-                    # Clear all cache entries for this location
-                    keys_to_remove = [k for k in _warp_reachability_cache.keys() if k[0] == location_name]
-                    for key in keys_to_remove:
-                        del _warp_reachability_cache[key]
-                    if keys_to_remove:
-                        logger.info(f"Cleared {len(keys_to_remove)} cached warp reachability entries for corrected map {map_name}")
-
-                # Round player coords to nearest tile for cache efficiency
-                # (slight sub-tile movements shouldn't invalidate cache)
-                player_tile = (round(player_coords[0]), round(player_coords[1]))
-
-                pathfinder = Pathfinder()
-
-                # Create minimal game state for pathfinding
-                temp_state = {
-                    'map': {'porymap': json_map},
-                    'player': {'position': {'x': player_coords[0], 'y': player_coords[1]}}
-                }
-
-                for warp in warps:
-                    warp_pos = (warp.get('x', 0), warp.get('y', 0))
-
-                    # Create cache key (includes version to invalidate old entries)
-                    cache_key = (_WARP_CACHE_VERSION, location_name, player_tile[0], player_tile[1], warp_pos[0], warp_pos[1])
-
-                    # Check cache first
-                    if cache_key in _warp_reachability_cache:
-                        is_reachable = _warp_reachability_cache[cache_key]
-                        if is_reachable:
-                            reachable_warps.append(warp)
-                        else:
-                            unreachable_warps.append(warp)
-                        continue
-
-                    # Not in cache - perform reachability test with pathfinding
-                    try:
-                        path = pathfinder.find_path(
-                            player_coords,
-                            warp_pos,
-                            temp_state,
-                            max_distance=150,
-                            consider_npcs=False,
-                            allow_partial=False  # Only exact paths for reachability checks
-                        )
-                        is_reachable = bool(path)
-
-                        # Cache the result
-                        _warp_reachability_cache[cache_key] = is_reachable
-
-                        if is_reachable:
-                            reachable_warps.append(warp)
-                        else:
-                            unreachable_warps.append(warp)
-                    except Exception as e:
-                        # If pathfinding fails, mark as unreachable and don't cache
-                        logger.warning(f"Warp reachability check failed for {warp_pos}: {e}")
-                        import traceback
-                        logger.warning(f"  Traceback: {traceback.format_exc()}")
-                        unreachable_warps.append(warp)
-
-                # Clean up old cache entries if cache gets too large (keep last 100 entries)
-                if len(_warp_reachability_cache) > 100:
-                    # Remove oldest entries (first 50)
-                    keys_to_remove = list(_warp_reachability_cache.keys())[:50]
-                    for key in keys_to_remove:
-                        del _warp_reachability_cache[key]
-                    logger.debug(f"Cleaned warp reachability cache, removed {len(keys_to_remove)} old entries")
-
-                # Display reachable warps first
-                for warp in reachable_warps:
-                    dest = warp.get('dest_map', '?')
-                    context_parts.append(f"  ✓ At ({warp.get('x', 0)}, {warp.get('y', 0)}) → {dest}")
-
-                # Display unreachable warps with warning
-                for warp in unreachable_warps:
-                    dest = warp.get('dest_map', '?')
-                    context_parts.append(f"  ⚠️ UNREACHABLE: ({warp.get('x', 0)}, {warp.get('y', 0)}) → {dest} (blocked by elevation/walls)")
-            else:
-                # No player coords, just list warps normally
-                for warp in warps[:10]:
-                    dest = warp.get('dest_map', '?')
-                    context_parts.append(f"  At ({warp.get('x', 0)}, {warp.get('y', 0)}) → {dest}")
-                if len(warps) > 10:
-                    context_parts.append(f"  ... and {len(warps) - 10} more warps")
-        
-        # Add objects (NPCs, items, etc.)
-        objects = json_map.get('objects', [])
-        if objects:
-            context_parts.append(f"\nObjects/NPCs ({len(objects)}):")
-            for obj in objects[:10]:  # Limit to first 10
-                gfx_id = obj.get('graphics_id', '?')
-                context_parts.append(f"  {gfx_id} at ({obj.get('x', 0)}, {obj.get('y', 0)})")
-            if len(objects) > 10:
-                context_parts.append(f"  ... and {len(objects) - 10} more objects")
-        
-        # Add connections
-        connections = json_map.get('connections', [])
-        if connections:
-            context_parts.append(f"\nMap Connections ({len(connections)}):")
-            for conn in connections[:5]:  # Limit to first 5
-                direction = conn.get('direction', '?')
-                target = conn.get('map', '?')
-                context_parts.append(f"  {direction} → {target}")
-            if len(connections) > 5:
-                context_parts.append(f"  ... and {len(connections) - 5} more connections")
+        # NOTE: Warps, Objects/NPCs, and Connections lists are DEPRECATED
+        # This data is already included in the Map Data (JSON) section below.
+        # Removed to reduce redundancy and potential agent confusion.
         
         # Add compact JSON map data (simplified format to save tokens)
         context_parts.append("\nMap Data (JSON):")
