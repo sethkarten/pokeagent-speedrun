@@ -7,6 +7,7 @@ including input prompts, responses, and metadata. Logs are saved to dated
 files in the llm_logs directory.
 """
 
+from operator import ge
 import os
 import json
 import time
@@ -80,18 +81,58 @@ class LLMLogger:
         
         # Model pricing (per 1K tokens) - Updated January 2025
         self.pricing = {
-            # OpenAI models
-            "gpt-4o": {"prompt": 0.01, "completion": 0.03},
-            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
-            "o3-mini": {"prompt": 0.0012, "completion": 0.0048},
+            # OpenAI GPT-5
+            "gpt-5": {"prompt": 0.00125, "completion": 0.01},       # $1.25/$10 per 1M
+            "gpt-5-mini": {"prompt": 0.00025, "completion": 0.002},  # $0.25/$2 per 1M
+            "gpt-5-nano": {"prompt": 0.00005, "completion": 0.0004},  # $0.05/$0.40 per 1M
+            "gpt-5.1": {"prompt": 0.00125, "completion": 0.01},       # $1.25/$10 per 1M
+            "gpt-5.2": {"prompt": 0.00175, "completion": 0.014},       # $1.75/$14 per 1M
+            "gpt-5.2-pro": {"prompt": 0.021, "completion": 0.168},     # $21/$168 per 1M (no cached)
+            "gpt-5-pro": {"prompt": 0.015, "completion": 0.12},        # $15/$120 per 1M (no cached)
+            # GPT-5 chat-latest variants
+            "gpt-5.2-chat-latest": {"prompt": 0.00175, "completion": 0.014},
+            "gpt-5.1-chat-latest": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5-chat-latest": {"prompt": 0.00125, "completion": 0.01},
+            # GPT-5 codex variants
+            "gpt-5.2-codex": {"prompt": 0.00175, "completion": 0.014},
+            "gpt-5.1-codex-max": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5.1-codex": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5-codex": {"prompt": 0.00125, "completion": 0.01},
 
-            # Gemini 2.5 models (standard pricing, not thinking mode)
+            # OpenAI GPT-4
+            "gpt-4o": {"prompt": 0.0025, "completion": 0.01},       # $2.50/$10 per 1M
+            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},  # $0.15/$0.60 per 1M
+            "gpt-4.1": {"prompt": 0.002, "completion": 0.008},      # $2/$8 per 1M
+            "gpt-4.1-mini": {"prompt": 0.0004, "completion": 0.0016},  # $0.40/$1.60 per 1M
+            "gpt-4.1-nano": {"prompt": 0.0001, "completion": 0.0004},  # $0.10/$0.40 per 1M
+
+            # OpenAI o-series (reasoning)
+            "o4-mini": {"prompt": 0.0011, "completion": 0.0044},    # $1.10/$4.40 per 1M
+            "o3-mini": {"prompt": 0.0011, "completion": 0.0044},    # $1.10/$4.40 per 1M
+            "o3": {"prompt": 0.002, "completion": 0.008},           # $2/$8 per 1M
+            "o3-pro": {"prompt": 0.02, "completion": 0.08},         # $20/$80 per 1M
+            "o1": {"prompt": 0.015, "completion": 0.06},            # $15/$60 per 1M
+            "o1-pro": {"prompt": 0.15, "completion": 0.60},         # $150/$600 per 1M
+
+            # Anthropic Claude
+            "claude-sonnet-4.5": {"prompt": 0.003, "completion": 0.015},   # $3/$15 per 1M
+            "claude-sonnet-3.7": {"prompt": 0.003, "completion": 0.015},
+            "claude-sonnet-3.5": {"prompt": 0.003, "completion": 0.015},
+            "claude-opus-4.1": {"prompt": 0.015, "completion": 0.075},   # $15/$75 per 1M
+            "claude-opus-4": {"prompt": 0.015, "completion": 0.075},
+            "claude-opus-3": {"prompt": 0.015, "completion": 0.075},
+            "claude-haiku-3.5": {"prompt": 0.0008, "completion": 0.004},  # $0.80/$4 per 1M
+            "claude-haiku-3": {"prompt": 0.00025, "completion": 0.00125},  # $0.25/$1.25 per 1M
+
+            # Gemini 2.x
             "gemini-2.5-flash": {"prompt": 0.0003, "completion": 0.0006},  # $0.30/$0.60 per 1M
-            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01},      # $1.25/$10 per 1M
+            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01},     # $1.25/$10 per 1M
+            "gemini-2.0-flash": {"prompt": 0.00015, "completion": 0.0006},  # $0.15/$0.60 per 1M
 
-            # Gemini 3 models (≤200K context)
+            # Gemini 3.x
             "gemini-3-pro-preview": {"prompt": 0.002, "completion": 0.012},  # $2/$12 per 1M
-            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012},          # $2/$12 per 1M
+            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012},
+            "gemini-3-flash": {"prompt": 0.0005, "completion": 0.003},       # $0.50/$3 per 1M
 
             "default": {"prompt": 0.001, "completion": 0.002}  # Default pricing
         }
@@ -192,13 +233,24 @@ class LLMLogger:
                 self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
                 self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
                 
-                # Calculate cost based on model
-                model_name = model_info.get("model", "") if model_info else ""
+                # Calculate cost based on model (exact match first, then longest-key match)
+                model_name = (model_info.get("model", "") or "").lower()
                 pricing = self.pricing.get("default")
-                for key in self.pricing:
-                    if key in model_name.lower():
-                        pricing = self.pricing[key]
-                        break
+                if model_name:
+                    # Prefer exact match
+                    if model_name in self.pricing:
+                        pricing = self.pricing[model_name]
+                    else:
+                        # Fall back to longest matching key (gpt-5-nano before gpt-5)
+                        candidates = [
+                            (k, self.pricing[k])
+                            for k in self.pricing
+                            if k != "default" and k in model_name
+                        ]
+                        if candidates:
+                            # Sort by key length descending; use most specific match
+                            candidates.sort(key=lambda x: len(x[0]), reverse=True)
+                            pricing = candidates[0][1]
                 
                 prompt_cost = (step_tokens["prompt"] / 1000) * pricing["prompt"]
                 completion_cost = (step_tokens["completion"] / 1000) * pricing["completion"]
