@@ -51,6 +51,96 @@ knowledge_base = get_knowledge_base()
 _screenshot_cache = {"frame_count": -1, "base64": None}
 
 
+def load_porymap_for_pathfinding(state: dict) -> tuple:
+    """
+    Load porymap data into state for pathfinding, with game-state-aware override support.
+    
+    Returns:
+        (coord_offset, state) - coord_offset is (offset_x, offset_y) if using override map, else None
+    """
+    coord_offset = None
+    location_name = state.get("player", {}).get("location", "Unknown")
+    
+    if not location_name or location_name in ("Unknown", "TITLE_SEQUENCE"):
+        return coord_offset, state
+    
+    try:
+        from utils.porymap_json_builder import build_json_map_for_llm
+        from utils.state_formatter import ROM_TO_PORYMAP_MAP
+        from utils.ascii_map_loader import get_effective_map_name, get_override
+        from pathlib import Path
+        import os
+        
+        # Get badge count for game-state-aware map selection
+        badge_count = 0
+        badges = state.get("game", {}).get("badges", [])
+        if isinstance(badges, list):
+            badge_count = len(badges)
+        elif isinstance(badges, int):
+            badge_count = badges
+        
+        # Get pokeemerald root
+        pokeemerald_root = None
+        root = os.environ.get("POKEEMERALD_ROOT")
+        if root:
+            root_path = Path(root).resolve()
+            if (root_path / "data" / "maps").exists():
+                pokeemerald_root = root_path
+        
+        if not pokeemerald_root:
+            current_dir = Path(__file__).parent.parent.parent
+            porymap_path = current_dir / "porymap_data"
+            if (porymap_path / "data" / "maps").exists():
+                pokeemerald_root = porymap_path.resolve()
+        
+        if not pokeemerald_root:
+            return coord_offset, state
+        
+        porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
+        if not porymap_map_name:
+            return coord_offset, state
+        
+        # Check for game-state-aware map selection and coordinate offset
+        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
+        override = get_override(effective_map_name)
+        if override and ('offset_x' in override or 'offset_y' in override):
+            offset_x = override.get('offset_x', 0)
+            offset_y = override.get('offset_y', 0)
+            coord_offset = (offset_x, offset_y)
+            logger.info(f"Porymap pathfinding: Using override map '{effective_map_name}' with coord offset ({offset_x}, {offset_y})")
+        
+        # Build JSON map with grid for pathfinding (with badge_count for override selection)
+        try:
+            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root, badge_count=badge_count)
+        except ValueError as e:
+            logger.error(f"Failed to build porymap for '{porymap_map_name}': {e}")
+            return coord_offset, state
+        
+        if json_map and "grid" in json_map:
+            raw_tiles = json_map.get("raw_tiles")
+            
+            # Ensure map dict exists
+            if "map" not in state:
+                state["map"] = {}
+            if "porymap" not in state["map"]:
+                state["map"]["porymap"] = {}
+            
+            # Add porymap data for pathfinding
+            state["map"]["porymap"]["grid"] = json_map["grid"]
+            state["map"]["porymap"]["objects"] = json_map.get("objects", [])
+            state["map"]["porymap"]["dimensions"] = json_map.get("dimensions", {})
+            state["map"]["porymap"]["warps"] = json_map.get("warps", [])
+            state["map"]["porymap"]["raw_tiles"] = raw_tiles
+            
+            grid_dims = f"{len(json_map['grid'][0])}x{len(json_map['grid'])}" if json_map.get("grid") else "None"
+            logger.info(f"Loaded porymap for pathfinding: '{effective_map_name}' (ROM: '{location_name}'), grid: {grid_dims}, badges: {badge_count}")
+    
+    except Exception as e:
+        logger.warning(f"Failed to load porymap data for pathfinding: {e}")
+    
+    return coord_offset, state
+
+
 def serialize_for_json(obj):
     """Recursively convert non-JSON-serializable objects to JSON-compatible types.
     
@@ -291,12 +381,22 @@ def navigate_to_direct(
         # CRITICAL: Load porymap data into state for pathfinding
         # The pathfinder needs map['porymap']['grid'] which is normally added by format_state_for_llm
         location_name = state.get("player", {}).get("location", "Unknown")
+        coord_offset = None  # Will be set if using an override map with coordinate translation
         if location_name and location_name != "Unknown" and location_name != "TITLE_SEQUENCE":
             try:
                 from utils.porymap_json_builder import build_json_map_for_llm
                 from utils.pokeemerald_parser import PokeemeraldMapLoader
+                from utils.ascii_map_loader import get_effective_map_name, get_override
                 from pathlib import Path
                 import os
+
+                # Get badge count for game-state-aware map selection
+                badge_count = 0
+                badges = state.get("game", {}).get("badges", [])
+                if isinstance(badges, list):
+                    badge_count = len(badges)
+                elif isinstance(badges, int):
+                    badge_count = badges
 
                 # Get pokeemerald root (use same logic as state_formatter)
                 pokeemerald_root = None
@@ -336,9 +436,18 @@ def navigate_to_direct(
                     porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
 
                     if porymap_map_name:
-                        # Build JSON map with grid for pathfinding
+                        # Check for game-state-aware map selection and coordinate offset
+                        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
+                        override = get_override(effective_map_name)
+                        if override and ('offset_x' in override or 'offset_y' in override):
+                            offset_x = override.get('offset_x', 0)
+                            offset_y = override.get('offset_y', 0)
+                            coord_offset = (offset_x, offset_y)
+                            logger.info(f"Using override map '{effective_map_name}' with coord offset ({offset_x}, {offset_y})")
+
+                        # Build JSON map with grid for pathfinding (with badge_count for override selection)
                         try:
-                            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+                            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root, badge_count=badge_count)
                         except ValueError as e:
                             logger.error(
                                 f"Failed to build porymap for '{porymap_map_name}' due to corrupted tileset: {e}"
@@ -406,22 +515,37 @@ def navigate_to_direct(
             except Exception as porymap_err:
                 logger.warning(f"Failed to load porymap data for pathfinding: {porymap_err}")
 
-        # Get player position
+        # Get player position (ROM coordinates)
         player_pos = state.get("player", {}).get("position", {})
-        start_x = player_pos.get("x", 0)
-        start_y = player_pos.get("y", 0)
+        rom_start_x = player_pos.get("x", 0)
+        rom_start_y = player_pos.get("y", 0)
+        
+        # Apply coordinate offset if using an override map
+        # This translates ROM coordinates to the local override map coordinate space
+        start_x = rom_start_x
+        start_y = rom_start_y
+        goal_x = x
+        goal_y = y
+        if coord_offset:
+            offset_x, offset_y = coord_offset
+            start_x = rom_start_x - offset_x
+            start_y = rom_start_y - offset_y
+            # Goal coordinates from agent are already in local map space (agent sees translated coords)
+            # So we don't translate the goal - it's already in the override map's coordinate system
+            logger.info(f"Coordinate translation: ROM ({rom_start_x}, {rom_start_y}) -> local ({start_x}, {start_y}), goal ({goal_x}, {goal_y})")
+        
         start = (start_x, start_y)
-        goal = (x, y)
+        goal = (goal_x, goal_y)
 
         # Check if requested goal is blocked (for agent notification)
         goal_was_blocked = False
         map_data = state.get("map", {}).get("porymap", {})
         if map_data.get("grid"):
             grid = map_data["grid"]
-            if 0 <= y < len(grid):
-                row = grid[y]
-                if isinstance(row, (list, str)) and 0 <= x < len(row):
-                    cell = row[x] if isinstance(row, str) else row[x]
+            if 0 <= goal_y < len(grid):
+                row = grid[goal_y]
+                if isinstance(row, (list, str)) and 0 <= goal_x < len(row):
+                    cell = row[goal_x] if isinstance(row, str) else row[goal_x]
                     if cell == "#":
                         goal_was_blocked = True
 
@@ -740,12 +864,28 @@ def navigate_to(
             variance_level = nav_reason.lower()
             nav_reason = ""
 
-        # Get player position from state
+        # Load porymap data with game-state-aware override support
+        coord_offset, state = load_porymap_for_pathfinding(state)
+
+        # Get player position from state (ROM coordinates)
         player_pos = state.get("player", {}).get("position", {})
-        start_x = player_pos.get("x", 0)
-        start_y = player_pos.get("y", 0)
+        rom_start_x = player_pos.get("x", 0)
+        rom_start_y = player_pos.get("y", 0)
+        
+        # Apply coordinate offset if using an override map
+        start_x = rom_start_x
+        start_y = rom_start_y
+        goal_x = x
+        goal_y = y
+        if coord_offset:
+            offset_x, offset_y = coord_offset
+            start_x = rom_start_x - offset_x
+            start_y = rom_start_y - offset_y
+            # Goal coordinates from agent are already in local map space
+            logger.info(f"MCP navigate_to: Coord translation ROM ({rom_start_x}, {rom_start_y}) -> local ({start_x}, {start_y})")
+        
         start = (start_x, start_y)
-        goal = (x, y)
+        goal = (goal_x, goal_y)
 
         # Calculate path using Pathfinder
         buttons = pathfinder.find_path(
