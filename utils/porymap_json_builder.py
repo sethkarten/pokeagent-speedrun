@@ -35,7 +35,8 @@ def tile_to_symbol(tile_tuple: Tuple[int, Any, int, int], location_name: str = "
 
 def build_json_map(map_name: str, pokeemerald_root: Path, 
                    include_grid: bool = True,
-                   include_ascii: bool = True) -> Optional[Dict[str, Any]]:
+                   include_ascii: bool = True,
+                   badge_count: int = 0) -> Optional[Dict[str, Any]]:
     """
     Build a complete JSON map structure from porymap data.
     
@@ -44,6 +45,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
         pokeemerald_root: Root directory of pokeemerald project
         include_grid: Include full grid data as JSON (True) or just metadata (False)
         include_ascii: Include ASCII representation for visualization
+        badge_count: Number of badges player has (for game-state-aware map selection)
         
     Returns:
         Dictionary with complete map data in JSON-serializable format
@@ -79,17 +81,21 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     ascii_map = None
     dimensions = {"width": 0, "height": 0}
 
-    # Check for corrected ASCII ground truth first
-    from utils.ascii_map_loader import load_corrected_map, has_corrected_map
-
+    # Check for map overrides (game-state-aware selection + partial/full overrides)
+    from utils.ascii_map_loader import get_effective_map_name, get_override, ascii_to_metatiles
+    
+    effective_map_name = get_effective_map_name(map_name, badge_count=badge_count)
+    override = get_override(effective_map_name)
+    
+    # Load base metatiles from porymap (or override ASCII if provided)
     metatiles = None
-    if has_corrected_map(map_name):
-        corrected_data = load_corrected_map(map_name)
-        if corrected_data:
-            metatiles = corrected_data['raw_tiles']
-            dimensions = corrected_data['dimensions']
-
-    # Fall back to binary map.bin files if no corrected map
+    if override and 'ascii' in override:
+        # Use override ASCII - convert to metatiles
+        metatiles = ascii_to_metatiles(override['ascii'], effective_map_name)
+        if metatiles:
+            dimensions = {"width": len(metatiles[0]), "height": len(metatiles)}
+    
+    # Fall back to binary map.bin files if no ASCII override
     if metatiles is None and layout_name:
         # Get metatiles with behavior
         metatiles = layout_parser.get_metatiles_with_behavior(layout_name)
@@ -178,8 +184,8 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
 
         # Adjust warps that are AT map edges (detected by blocked tiles beyond them)
         # Map edge warps need offset since players transition from adjacent maps
-        # BUT: Skip adjustment for corrected maps since coordinates are already exact
-        if layout_name and metatiles and include_grid and grid and not has_corrected_map(map_name):
+        # BUT: Skip adjustment for override maps since coordinates are already exact
+        if layout_name and metatiles and include_grid and grid and not override:
             height = len(grid)
             width = len(grid[0]) if height > 0 else 0
 
@@ -442,48 +448,52 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
             # Rebuild ASCII map from grid
             ascii_map = '\n'.join(''.join(row) for row in ascii_grid)
     
-    # Extract objects
-    objects = []
-    for obj in map_data.get("object_events", []):
-        objects.append({
-            "x": obj.get("x", 0),
-            "y": obj.get("y", 0),
-            "elevation": obj.get("elevation", 0),
-            "graphics_id": obj.get("graphics_id", "?"),
-            "movement_type": obj.get("movement_type", "?"),
-            "movement_range_x": obj.get("movement_range_x", 0),
-            "movement_range_y": obj.get("movement_range_y", 0),
-            "trainer_type": obj.get("trainer_type", "?"),
-            "trainer_sight_or_berry_tree_id": obj.get("trainer_sight_or_berry_tree_id", "?")
-        })
-    
-    # Extract connections (handle null case)
-    connections = []
-    connections_data = map_data.get("connections")
-    if connections_data is not None:  # Check for None explicitly (not just falsy)
-        for conn in connections_data:
-            connections.append({
-                "direction": conn.get("direction", "?"),
-                "offset": conn.get("offset", 0),
-                "map": conn.get("map", "?")
+    # Extract objects - use override if provided, else porymap data
+    if override and 'objects' in override:
+        objects = override['objects']
+    else:
+        objects = []
+        for obj in map_data.get("object_events", []):
+            objects.append({
+                "x": obj.get("x", 0),
+                "y": obj.get("y", 0),
+                "elevation": obj.get("elevation", 0),
+                "graphics_id": obj.get("graphics_id", "?"),
+                "movement_type": obj.get("movement_type", "?"),
+                "movement_range_x": obj.get("movement_range_x", 0),
+                "movement_range_y": obj.get("movement_range_y", 0),
+                "trainer_type": obj.get("trainer_type", "?"),
+                "trainer_sight_or_berry_tree_id": obj.get("trainer_sight_or_berry_tree_id", "?")
             })
+    
+    # Extract connections - use override if provided, else porymap data
+    if override and 'connections' in override:
+        connections = override['connections']
+    else:
+        connections = []
+        connections_data = map_data.get("connections")
+        if connections_data is not None:
+            for conn in connections_data:
+                connections.append({
+                    "direction": conn.get("direction", "?"),
+                    "offset": conn.get("offset", 0),
+                    "map": conn.get("map", "?")
+                })
+    
+    # Use override warps if provided (already extracted above, but override takes precedence)
+    if override and 'warps' in override:
+        warps = override['warps']
+        # Rebuild warp_positions for grid overlay
+        warp_positions = {(w['x'], w['y']) for w in warps}
     
     # Build complete JSON structure
     json_map = {
-        "name": map_data.get("name", map_name),
+        "name": effective_map_name if override else map_data.get("name", map_name),
         "id": map_data.get("id", f"MAP_{map_name.upper()}"),
         "dimensions": dimensions,
         "warps": warps,
         "objects": objects,
         "connections": connections,
-        "metadata": {
-            "music": map_data.get("music", "?"),
-            "map_type": map_data.get("map_type", "?"),
-            "weather": map_data.get("weather", "?"),
-            "show_map_name": map_data.get("show_map_name", False),
-            "floor_number": map_data.get("floor_number", 0),
-            "battle_scene": map_data.get("battle_scene", "?")
-        }
     }
     
     # Add grid and ASCII if requested
@@ -500,7 +510,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     return json_map
 
 
-def build_json_map_for_llm(map_name: str, pokeemerald_root: Path) -> Optional[Dict[str, Any]]:
+def build_json_map_for_llm(map_name: str, pokeemerald_root: Path, badge_count: int = 0) -> Optional[Dict[str, Any]]:
     """
     Build a JSON map optimized for LLM consumption.
     
@@ -508,10 +518,12 @@ def build_json_map_for_llm(map_name: str, pokeemerald_root: Path) -> Optional[Di
     - Full grid as nested arrays (for coordinate-based queries)
     - ASCII visualization (for human readability)
     - All important navigation features (warps, objects, connections)
+    - Game-state-aware map selection (e.g., Petalburg Gym lobby vs full gym)
     
     Args:
         map_name: Map name (e.g., "OldaleTown")
         pokeemerald_root: Root directory of pokeemerald project
+        badge_count: Number of badges player has (for game-state-aware map selection)
         
     Returns:
         JSON-serializable dictionary optimized for LLM
@@ -520,7 +532,8 @@ def build_json_map_for_llm(map_name: str, pokeemerald_root: Path) -> Optional[Di
         map_name=map_name,
         pokeemerald_root=pokeemerald_root,
         include_grid=True,
-        include_ascii=True
+        include_ascii=True,
+        badge_count=badge_count
     )
 
 
