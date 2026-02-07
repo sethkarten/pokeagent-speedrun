@@ -661,16 +661,45 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     # Get player coordinates from ROM (read via memory_reader.read_coordinates())
     # This is the actual player position from the game, not from MapStitcher
     player_coords = None
+    rom_player_coords = None
     if player_data and 'position' in player_data:
         pos = player_data['position']
         if pos:
-            player_coords = (pos.get('x', 0), pos.get('y', 0))
-            context_parts.append(f"Player Position (ROM): ({player_coords[0]}, {player_coords[1]})")
+            rom_player_coords = (pos.get('x', 0), pos.get('y', 0))
+            player_coords = rom_player_coords  # May be adjusted below if using override map
     
-    # MapStitcher map display removed - using porymap ground truth instead
+    # Get badge count for game-state-aware map selection (e.g., Petalburg Gym lobby)
+    badge_count = 0
+    if full_state_data:
+        game_data = full_state_data.get('game', {})
+        badges = game_data.get('badges', [])
+        if isinstance(badges, list):
+            badge_count = len(badges)
+        elif isinstance(badges, int):
+            badge_count = badges
+    
+    # Check for coordinate offset if using an override map
+    # This translates ROM coordinates to the local override map coordinate space
+    from utils.ascii_map_loader import get_effective_map_name, get_override
+    porymap_map_name = _get_porymap_map_name(location_name)
+    coord_offset = None
+    if porymap_map_name:
+        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
+        override = get_override(effective_map_name)
+        if override and ('offset_x' in override or 'offset_y' in override):
+            offset_x = override.get('offset_x', 0)
+            offset_y = override.get('offset_y', 0)
+            coord_offset = (offset_x, offset_y)
+            if rom_player_coords:
+                # Translate ROM coordinates to local map coordinates
+                player_coords = (rom_player_coords[0] - offset_x, rom_player_coords[1] - offset_y)
+    
+    # Display player position (translated if using override map)
+    if player_coords:
+        context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
     
     # Add porymap ground truth data (JSON and ASCII map)
-    porymap_result = _format_porymap_info(location_name, player_coords)
+    porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count)
     if isinstance(porymap_result, tuple):
         porymap_info, porymap_data = porymap_result
         if porymap_info:
@@ -1514,9 +1543,21 @@ ROM_TO_PORYMAP_MAP = {
     "VICTORY ROAD B2F": "VictoryRoad_B2F",  # 100.0% match, verified
 }
 
-def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None) -> List[str]:
+def _get_porymap_map_name(location_name: Optional[str]) -> Optional[str]:
+    """Convert ROM location name to porymap map name."""
+    if not location_name:
+        return None
+    return ROM_TO_PORYMAP_MAP.get(location_name)
+
+
+def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None, badge_count: int = 0) -> List[str]:
     """
     Format porymap ground truth data (JSON and ASCII map) for the agent.
+    
+    Args:
+        location_name: Current location name from ROM
+        player_coords: Player's (x, y) coordinates
+        badge_count: Number of badges player has (for game-state-aware map selection)
     
     Returns list of formatted strings to add to context.
     """
@@ -1597,11 +1638,12 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             logger.warning(f"Porymap: Could not map ROM location '{location_name}' to porymap map name")
             return context_parts
         
-        logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}')")
+        logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}', badges: {badge_count})")
         
         # Build JSON map (with grid included for pathfinding, even though we don't show it in prompt)
+        # Pass badge_count for game-state-aware map selection (e.g., Petalburg Gym lobby)
         try:
-            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root)
+            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root, badge_count=badge_count)
         except ValueError as e:
             logger.error(f"Porymap: Failed to build map for '{porymap_map_name}' due to corrupted tileset data: {e}")
             logger.error("This likely indicates missing or corrupted tileset files in the porymap_data directory.")
