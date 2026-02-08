@@ -877,6 +877,19 @@ def _openrouter_error_message(exc: Exception) -> str:
     return msg
 
 
+def _extract_openrouter_cached_tokens(usage) -> int:
+    """Extract cached_tokens from OpenRouter usage.prompt_tokens_details.
+    Handles both dict and object access (API may return either)."""
+    if not usage or not hasattr(usage, "prompt_tokens_details"):
+        return 0
+    ptd = usage.prompt_tokens_details
+    if not ptd:
+        return 0
+    if isinstance(ptd, dict):
+        return ptd.get("cached_tokens", 0) or 0
+    return getattr(ptd, "cached_tokens", 0) or 0
+
+
 def _openrouter_response_adapter(response) -> Any:
     """Adapt OpenRouter/OpenAI Chat Completions response to Gemini-like structure for agents.
 
@@ -915,9 +928,7 @@ def _openrouter_response_adapter(response) -> Any:
         inp = getattr(usage, "prompt_tokens", 0)
         out = getattr(usage, "completion_tokens", 0)
         total = getattr(usage, "total_tokens", 0) or (inp + out)
-        cached = 0
-        if hasattr(usage, "prompt_tokens_details") and usage.prompt_tokens_details:
-            cached = getattr(usage.prompt_tokens_details, "cached_tokens", 0)
+        cached = _extract_openrouter_cached_tokens(usage)
         adapter.usage_metadata = type(
             "UsageMetadata",
             (),
@@ -1110,10 +1121,8 @@ class OpenRouterBackend(VLMBackend):
                     "total_tokens": getattr(u, "total_tokens", 0) or (
                         getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
                     ),
-                    "cached_tokens": 0,
+                    "cached_tokens": _extract_openrouter_cached_tokens(u),
                 }
-                if hasattr(u, "prompt_tokens_details") and u.prompt_tokens_details:
-                    token_usage["cached_tokens"] = getattr(u.prompt_tokens_details, "cached_tokens", 0)
 
             if self.tools:
                 adapter = _openrouter_response_adapter(response)
@@ -1195,10 +1204,8 @@ class OpenRouterBackend(VLMBackend):
                     "total_tokens": getattr(u, "total_tokens", 0) or (
                         getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
                     ),
-                    "cached_tokens": 0,
+                    "cached_tokens": _extract_openrouter_cached_tokens(u),
                 }
-                if hasattr(u, "prompt_tokens_details") and u.prompt_tokens_details:
-                    token_usage["cached_tokens"] = getattr(u.prompt_tokens_details, "cached_tokens", 0)
 
             if self.tools:
                 adapter = _openrouter_response_adapter(response)
