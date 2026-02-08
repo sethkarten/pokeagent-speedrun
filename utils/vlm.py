@@ -612,16 +612,35 @@ class AnthropicBackend(VLMBackend):
             })
         return result
 
+    def _format_system_for_caching(self, system: Optional[str]) -> Optional[list]:
+        """Format system prompt with cache_control for Anthropic API.
+        
+        Anthropic's API supports caching via cache_control blocks.
+        The first request incurs cache_creation_input_tokens, subsequent requests
+        within TTL return cache_read_input_tokens.
+        """
+        if not system:
+            return None
+        return [
+            {
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"}
+            }
+        ]
+
     @retry_with_exponential_backoff
     def _call_messages(self, system: Optional[str], messages: list, tools: Optional[list] = None):
-        """Call Anthropic Messages API."""
+        """Call Anthropic Messages API with caching enabled for system prompt."""
         kwargs = {
             "model": self.model_name,
             "max_tokens": 8192,
             "messages": messages,
         }
-        if system:
-            kwargs["system"] = system
+        # Format system with cache_control for prompt caching
+        system_with_cache = self._format_system_for_caching(system)
+        if system_with_cache:
+            kwargs["system"] = system_with_cache
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = {"type": "auto"}
@@ -879,7 +898,11 @@ def _openrouter_error_message(exc: Exception) -> str:
 
 def _extract_openrouter_cached_tokens(usage) -> int:
     """Extract cached_tokens from OpenRouter usage.prompt_tokens_details.
-    Handles both dict and object access (API may return either)."""
+    Handles both dict and object access (API may return either).
+    
+    Note: This returns cache_read tokens. For full caching metrics, also
+    check cache_write_tokens (returned on first request with cache_control).
+    """
     if not usage or not hasattr(usage, "prompt_tokens_details"):
         return 0
     ptd = usage.prompt_tokens_details
@@ -888,6 +911,19 @@ def _extract_openrouter_cached_tokens(usage) -> int:
     if isinstance(ptd, dict):
         return ptd.get("cached_tokens", 0) or 0
     return getattr(ptd, "cached_tokens", 0) or 0
+
+
+def _extract_openrouter_cache_write_tokens(usage) -> int:
+    """Extract cache_write_tokens from OpenRouter usage.prompt_tokens_details.
+    This value is populated on first request when cache_control is set."""
+    if not usage or not hasattr(usage, "prompt_tokens_details"):
+        return 0
+    ptd = usage.prompt_tokens_details
+    if not ptd:
+        return 0
+    if isinstance(ptd, dict):
+        return ptd.get("cache_write_tokens", 0) or 0
+    return getattr(ptd, "cache_write_tokens", 0) or 0
 
 
 def _openrouter_response_adapter(response) -> Any:
@@ -982,6 +1018,36 @@ class OpenRouterBackend(VLMBackend):
         """Update tools when agent dynamically updates tool list."""
         self._tools_openrouter = self._convert_tools_to_openrouter_format() if self.tools else []
         logger.info(f"OpenRouter model updated with {len(self.tools) if self.tools else 0} tools")
+
+    def _is_claude_model(self) -> bool:
+        """Check if the model is an Anthropic Claude model (requires explicit cache_control)."""
+        model_lower = self.model_name.lower()
+        return "claude" in model_lower or "anthropic" in model_lower
+
+    def _format_system_message_for_caching(self) -> dict:
+        """Format system message with cache_control for Claude models.
+        
+        Claude models on OpenRouter require explicit cache_control to enable prompt caching.
+        Other models (OpenAI, Gemini, etc.) use automatic caching and can use a plain string.
+        """
+        if not self.system_instruction:
+            return None
+        
+        if self._is_claude_model():
+            # Claude requires content array with cache_control for caching
+            return {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": self.system_instruction,
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ]
+            }
+        else:
+            # Other models use automatic caching with plain string
+            return {"role": "system", "content": self.system_instruction}
 
     def _build_json_schema_properties(self, params: dict) -> tuple:
         """Build JSON Schema properties from Gemini-style params. Returns (properties, required)."""
@@ -1097,8 +1163,9 @@ class OpenRouterBackend(VLMBackend):
             ]
 
         messages = []
-        if self.system_instruction:
-            messages.append({"role": "system", "content": self.system_instruction})
+        system_msg = self._format_system_message_for_caching()
+        if system_msg:
+            messages.append(system_msg)
         messages.append({"role": "user", "content": content_parts})
 
         prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
@@ -1180,8 +1247,9 @@ class OpenRouterBackend(VLMBackend):
         start_time = time.time()
 
         messages = []
-        if self.system_instruction:
-            messages.append({"role": "system", "content": self.system_instruction})
+        system_msg = self._format_system_message_for_caching()
+        if system_msg:
+            messages.append(system_msg)
         messages.append({"role": "user", "content": text})
 
         prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
