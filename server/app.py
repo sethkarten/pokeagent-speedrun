@@ -1857,6 +1857,7 @@ async def test_stream():
 async def stream_agent_thinking():
     """Stream agent thinking in real-time using Server-Sent Events"""
     from fastapi.responses import StreamingResponse
+    from utils.llm_logger import get_llm_logger
     import asyncio
 
     async def event_stream():
@@ -1865,6 +1866,7 @@ async def stream_agent_thinking():
         last_timestamp = ""  # Track last seen timestamp instead of count
         sent_timestamps = set()  # Track all sent timestamps to avoid duplicates
         heartbeat_counter = 0
+        llm_logger = get_llm_logger()
 
         try:
             # Send initial connection message
@@ -1872,20 +1874,20 @@ async def stream_agent_thinking():
 
             # On startup, mark all existing interactions as "sent" to avoid flooding with old messages
             # We only want to stream NEW interactions from this point forward
+            # Use current session's log file only (not glob of all files - avoids cross-execution bleed)
             try:
-                log_files = sorted(glob.glob("llm_logs/llm_log_*.jsonl"))
-                for log_file in log_files:
-                    if os.path.exists(log_file):
-                        with open(log_file, "r", encoding="utf-8") as f:
-                            for line in f:
-                                try:
-                                    entry = json.loads(line.strip())
-                                    if entry.get("type") == "interaction":
-                                        timestamp = entry.get("timestamp", "")
-                                        if timestamp:
-                                            sent_timestamps.add(timestamp)
-                                except:
-                                    continue
+                log_file = llm_logger.log_file
+                if log_file and os.path.exists(log_file):
+                    with open(log_file, "r", encoding="utf-8") as f:
+                        for line in f:
+                            try:
+                                entry = json.loads(line.strip())
+                                if entry.get("type") == "interaction":
+                                    timestamp = entry.get("timestamp", "")
+                                    if timestamp:
+                                        sent_timestamps.add(timestamp)
+                            except Exception:
+                                continue
                 logger.info(f"SSE: Marked {len(sent_timestamps)} existing interactions as already sent")
             except Exception as init_e:
                 logger.warning(f"SSE: Error initializing sent timestamps: {init_e}")
@@ -1902,34 +1904,29 @@ async def stream_agent_thinking():
 
                     new_interactions = []
                     try:
-                        # PERFORMANCE: Only glob once to find latest file, then read only new lines
-                        # Reduced from reading all lines from 2 files every 500ms
-                        log_files = sorted(glob.glob("llm_logs/llm_log_*.jsonl"))
-
-                        # Only check the most recent log file (optimization)
-                        if log_files:
-                            log_file = log_files[-1]
-                            if os.path.exists(log_file):
-                                with open(log_file, "r", encoding="utf-8") as f:
-                                    lines = f.readlines()
-                                    # Only check last 10 lines for new entries (performance optimization)
-                                    for line in lines[-10:]:
-                                        try:
-                                            entry = json.loads(line.strip())
-                                            if entry.get("type") == "interaction":
-                                                timestamp = entry.get("timestamp", "")
-                                                # Only add if we haven't sent this timestamp before
-                                                if timestamp and timestamp not in sent_timestamps:
-                                                    new_interactions.append(
-                                                        {
-                                                            "type": entry.get("interaction_type", "unknown"),
-                                                            "response": entry.get("response", ""),
-                                                            "duration": entry.get("duration", 0),
-                                                            "timestamp": timestamp,
-                                                        }
-                                                    )
-                                        except:
-                                            continue
+                        # Use current session's log file only (not glob - avoids cross-execution bleed)
+                        log_file = llm_logger.log_file
+                        if log_file and os.path.exists(log_file):
+                            with open(log_file, "r", encoding="utf-8") as f:
+                                lines = f.readlines()
+                                # Only check last 10 lines for new entries (performance optimization)
+                                for line in lines[-10:]:
+                                    try:
+                                        entry = json.loads(line.strip())
+                                        if entry.get("type") == "interaction":
+                                            timestamp = entry.get("timestamp", "")
+                                            # Only add if we haven't sent this timestamp before
+                                            if timestamp and timestamp not in sent_timestamps:
+                                                new_interactions.append(
+                                                    {
+                                                        "type": entry.get("interaction_type", "unknown"),
+                                                        "response": entry.get("response", ""),
+                                                        "duration": entry.get("duration", 0),
+                                                        "timestamp": timestamp,
+                                                    }
+                                                )
+                                    except Exception:
+                                        continue
                     except Exception as file_e:
                         logger.warning(f"SSE: File reading error: {file_e}")
 
@@ -1988,37 +1985,30 @@ async def get_agent_thinking():
         llm_logger = get_llm_logger()
         session_summary = llm_logger.get_session_summary()
 
-        # Find all LLM log files and get interactions from all of them
-        import glob
-
-        log_files = glob.glob("llm_logs/llm_log_*.jsonl")
-        logger.info(f"Found {len(log_files)} log files: {log_files}")
-
-        # Get recent interactions from all log files
+        # Use current session's log file only (not glob - avoids cross-execution bleed)
         recent_interactions = []
-        for log_file in log_files:
-            if os.path.exists(log_file):
-                try:
-                    with open(log_file, "r", encoding="utf-8") as f:
-                        lines = f.readlines()
-                        # Get interactions from this file
-                        for line in lines:
-                            try:
-                                entry = json.loads(line.strip())
-                                if entry.get("type") == "interaction":
-                                    recent_interactions.append(
-                                        {
-                                            "type": entry.get("interaction_type", "unknown"),
-                                            "prompt": entry.get("prompt", ""),
-                                            "response": entry.get("response", ""),
-                                            "duration": entry.get("duration", 0),
-                                            "timestamp": entry.get("timestamp", ""),
-                                        }
-                                    )
-                            except json.JSONDecodeError:
-                                continue
-                except Exception as e:
-                    logger.error(f"Error reading LLM log {log_file}: {e}")
+        log_file = llm_logger.log_file
+        if log_file and os.path.exists(log_file):
+            try:
+                with open(log_file, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        try:
+                            entry = json.loads(line.strip())
+                            if entry.get("type") == "interaction":
+                                recent_interactions.append(
+                                    {
+                                        "type": entry.get("interaction_type", "unknown"),
+                                        "prompt": entry.get("prompt", ""),
+                                        "response": entry.get("response", ""),
+                                        "duration": entry.get("duration", 0),
+                                        "timestamp": entry.get("timestamp", ""),
+                                    }
+                                )
+                        except json.JSONDecodeError:
+                            continue
+            except Exception as e:
+                logger.error(f"Error reading LLM log {log_file}: {e}")
 
         # Sort by timestamp and keep only the most recent interaction (current step)
         recent_interactions.sort(key=lambda x: x.get("timestamp", ""))
