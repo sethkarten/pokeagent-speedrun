@@ -29,7 +29,8 @@ class MilestoneTracker:
     
     def __init__(self, filename: str = None):
         # Setup cache directory
-        self.cache_dir = ".pokeagent_cache"
+        from utils.run_data_manager import get_cache_directory
+        self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Use cache folder for runtime milestone file
@@ -88,8 +89,14 @@ class MilestoneTracker:
         except Exception as e:
             logger.warning(f"Error saving milestones to file: {e}")
     
-    def mark_completed(self, milestone_id: str, timestamp: float = None):
-        """Mark a milestone as completed and log split time"""
+    def mark_completed(self, milestone_id: str, timestamp: float = None, agent_step_count: int = None):
+        """Mark a milestone as completed and log split time
+        
+        Args:
+            milestone_id: ID of the milestone being completed
+            timestamp: Optional timestamp (defaults to current time)
+            agent_step_count: Optional current agent step count for metrics tracking
+        """
         if timestamp is None:
             timestamp = time.time()
         
@@ -113,6 +120,15 @@ class MilestoneTracker:
             
             logger.info(f"Milestone completed: {milestone_id} (Split: {self._format_time(split_time)})")
             self.save_to_file()
+            
+            # Log milestone completion to LLM logger for unified metrics
+            if agent_step_count is not None:
+                try:
+                    from utils.llm_logger import log_milestone_completion
+                    log_milestone_completion(milestone_id, agent_step_count, timestamp)
+                except Exception as e:
+                    logger.debug(f"Could not log milestone to LLM logger: {e}")
+            
             return True
         return False
     
@@ -346,7 +362,8 @@ class EmeraldEmulator:
         self._mem_cache = {}
         
         # Setup cache directory
-        self.cache_dir = ".pokeagent_cache"
+        from utils.run_data_manager import get_cache_directory
+        self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
         
         # Milestone tracker for progress tracking (using cache file)
@@ -687,8 +704,8 @@ class EmeraldEmulator:
                 # For manual saves, copy the current map_stitcher.json
                 if base_name.startswith("manual_save"):
                     # Copy the current map_stitcher_data.json from cache to manual_save_map_stitcher.json
-                    cache_dir = ".pokeagent_cache"
-                    current_stitcher_file = os.path.join(cache_dir, "map_stitcher_data.json")
+                    from utils.run_data_manager import get_cache_path
+                    current_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
                     
                     # Also check for the old location in case it exists
                     if not os.path.exists(current_stitcher_file) and os.path.exists("map_stitcher_data.json"):
@@ -748,15 +765,14 @@ class EmeraldEmulator:
         import os
         import shutil
         
-        # Ensure cache directory exists
-        cache_dir = ".pokeagent_cache"
-        os.makedirs(cache_dir, exist_ok=True)
+        # Ensure cache directory exists (use run-specific cache)
+        from utils.run_data_manager import get_cache_path
+        cache_map_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
         
         # Copy map stitcher file to cache
         state_dir = os.path.dirname(state_filename)
         base_name = os.path.splitext(os.path.basename(state_filename))[0]
         state_map_stitcher_file = os.path.join(state_dir, f"{base_name}_map_stitcher.json")
-        cache_map_stitcher_file = os.path.join(cache_dir, "map_stitcher_data.json")
         
         if os.path.exists(state_map_stitcher_file):
             # Check if the file has content
@@ -1095,8 +1111,13 @@ class EmeraldEmulator:
         except Exception as e:
             return {"error": f"Failed to run memory tests: {e}"}
     
-    def check_and_update_milestones(self, game_state: Dict[str, Any]):
-        """Check current game state and update milestones"""
+    def check_and_update_milestones(self, game_state: Dict[str, Any], agent_step_count: int = None):
+        """Check current game state and update milestones
+        
+        Args:
+            game_state: Current game state dictionary
+            agent_step_count: Optional current agent step count for metrics tracking
+        """
         try:
             # Debug: Show current state
             location = game_state.get("player", {}).get("location", "Unknown")
@@ -1131,7 +1152,7 @@ class EmeraldEmulator:
                 if not self.milestone_tracker.is_completed(milestone_id):
                     if self._check_milestone_condition(milestone_id, game_state):
                         print(f"🎯 Milestone detected: {milestone_id}")
-                        self.milestone_tracker.mark_completed(milestone_id)
+                        self.milestone_tracker.mark_completed(milestone_id, agent_step_count=agent_step_count)
         except Exception as e:
             logger.warning(f"Error checking milestones: {e}")
     
@@ -1485,8 +1506,12 @@ class EmeraldEmulator:
             logger.warning(f"Error checking milestone condition {milestone_id}: {e}")
             return False
     
-    def get_milestones(self) -> Dict[str, Any]:
-        """Get current milestone data and progress"""
+    def get_milestones(self, agent_step_count: int = None) -> Dict[str, Any]:
+        """Get current milestone data and progress
+
+        Args:
+            agent_step_count: Optional current agent step count for metrics tracking
+        """
         try:
             # Get current game state and update milestones
             # Use cached state if available to avoid redundant calls
@@ -1495,7 +1520,7 @@ class EmeraldEmulator:
             import time
             current_time = time.time()
             if not hasattr(self, '_last_milestone_update') or current_time - self._last_milestone_update > 1.0:  # Update at most once per second
-                self.check_and_update_milestones(game_state)
+                self.check_and_update_milestones(game_state, agent_step_count=agent_step_count)
                 self._last_milestone_update = current_time
             
             # Use loaded milestones from the milestone tracker
