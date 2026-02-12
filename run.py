@@ -36,6 +36,9 @@ def start_server(args, run_id=None):
     llm_session_id = os.environ.get("LLM_SESSION_ID")
     if llm_session_id:
         server_env["LLM_SESSION_ID"] = llm_session_id
+
+    # Single-writer metrics: server is the only writer
+    server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
     
     # Pass through server-relevant arguments
     if args.record:
@@ -43,13 +46,15 @@ def start_server(args, run_id=None):
     
     if args.load_checkpoint:
         # Auto-load checkpoint.state when --load-checkpoint is used
-        checkpoint_state = ".pokeagent_cache/checkpoint.state"
-        if os.path.exists(checkpoint_state):
-            server_cmd.extend(["--load-state", checkpoint_state])
+        from utils.run_data_manager import get_cache_path
+        checkpoint_state = get_cache_path("checkpoint.state")
+        if checkpoint_state.exists():
+            server_cmd.extend(["--load-state", str(checkpoint_state)])
             # Set environment variable to enable LLM checkpoint loading
             server_env["LOAD_CHECKPOINT_MODE"] = "true"
             print(f"🔄 Server will load checkpoint: {checkpoint_state}")
-            print(f"🔄 LLM metrics will be restored from .pokeagent_cache/checkpoint_llm.txt")
+            checkpoint_llm = get_cache_path("checkpoint_llm.txt")
+            print(f"🔄 LLM metrics will be restored from {checkpoint_llm}")
         else:
             print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
     elif args.load_state:
@@ -176,6 +181,8 @@ def main():
                        help="Load a saved state file on startup")
     parser.add_argument("--load-checkpoint", action="store_true", 
                        help="Load from checkpoint files")
+    parser.add_argument("--backup-state", type=str,
+                       help="Load from a backup zip file (extracts to cache and loads checkpoint). This is the preferred convention for loading a run that doesnt start from the beginning.")
     
     # Agent configuration
     parser.add_argument("--backend", type=str, default="gemini", 
@@ -226,10 +233,29 @@ def main():
     print("🎮 Pokemon Emerald AI Agent")
     print("=" * 60)
     
+    # Get first objective info for consistent run naming
+    first_objective_id = None
+    first_objective_desc = None
+    if args.direct_objectives:
+        from agent.direct_objectives import get_first_objective_info
+        first_objective_id, first_objective_desc = get_first_objective_info(
+            args.direct_objectives, 
+            args.direct_objectives_start
+        )
+        if first_objective_id:
+            print(f"🎯 First objective: {first_objective_id} - {first_objective_desc}")
+        else:
+            print(f"⚠️  Could not retrieve first objective from '{args.direct_objectives}' (index {args.direct_objectives_start})")
+            print(f"    Using timestamp-based run_id format instead")
+    
     # Initialize run data manager for this run (client creates the run_id)
     from utils.run_data_manager import initialize_run_data_manager
     
-    run_manager = initialize_run_data_manager(run_name=args.run_name)
+    run_manager = initialize_run_data_manager(
+        run_name=args.run_name,
+        first_objective_id=first_objective_id,
+        first_objective_desc=first_objective_desc
+    )
     run_id = run_manager.run_id
     print(f"📁 Run data directory: {run_manager.get_run_directory()}")
     
@@ -258,17 +284,37 @@ def main():
     frame_server_process = None
     
     try:
+        # Restore from backup if requested
+        if args.backup_state:
+            from utils.backup_manager import restore_cache_from_backup
+            from utils.run_data_manager import get_cache_directory
+            
+            print(f"\n📦 Restoring from backup: {args.backup_state}")
+            
+            # Restore backup to run-specific cache directory
+            success = restore_cache_from_backup(
+                backup_file=args.backup_state,
+                create_backup_of_current=False  # Don't backup empty cache
+            )
+            
+            if success:
+                print(f"✅ Backup restored to: {get_cache_directory()}")
+                # Auto-load checkpoint from restored backup
+                args.load_checkpoint = True
+            else:
+                print(f"❌ Failed to restore backup, continuing with fresh state")
+        
         # Clear knowledge base if requested
         if args.clear_knowledge_base:
-            knowledge_base_file = os.path.join(".pokeagent_cache", "knowledge_base.json")
-            if os.path.exists(knowledge_base_file):
+            from utils.run_data_manager import get_cache_path
+            knowledge_base_file = get_cache_path("knowledge_base.json")
+            if knowledge_base_file.exists():
                 # Clear the file by writing empty JSON structure
                 import json
                 empty_data = {
                     "next_id": 1,
                     "entries": {}
                 }
-                os.makedirs(".pokeagent_cache", exist_ok=True)
                 with open(knowledge_base_file, 'w') as f:
                     json.dump(empty_data, f, indent=2)
                 print(f"🧹 Cleared knowledge base: {knowledge_base_file}")
@@ -283,6 +329,9 @@ def main():
             if not server_process:
                 print("❌ Failed to start server, exiting...")
                 return 1
+
+            # Single-writer metrics: client should not write to cache
+            os.environ["LLM_METRICS_WRITE_ENABLED"] = "false"
             
             # Also start frame server for web visualization
             frame_server_process = start_frame_server(args.port)

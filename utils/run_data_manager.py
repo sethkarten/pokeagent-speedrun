@@ -22,26 +22,41 @@ logger = logging.getLogger(__name__)
 class RunDataManager:
     """Manages structured data collection for a single run"""
     
-    def __init__(self, run_id: Optional[str] = None, base_dir: str = "run_data", run_name: Optional[str] = None):
+    def __init__(self, run_id: Optional[str] = None, base_dir: str = "run_data", run_name: Optional[str] = None,
+                 first_objective_id: Optional[str] = None, first_objective_desc: Optional[str] = None):
         """Initialize run data manager
         
         Args:
             run_id: Optional run identifier. If None, creates timestamped ID.
             base_dir: Base directory for all runs (default: run_data)
-            run_name: Optional name to append to run_id (e.g., "test_run" -> "run_20251129_191503_test_run")
+            run_name: Optional name to append to run_id (deprecated - use objectives)
+            first_objective_id: ID of the first objective (for consistent naming)
+            first_objective_desc: Description of the first objective (for consistent naming)
         """
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(exist_ok=True)
         
         if run_id is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            run_id = f"run_{timestamp}"
-            # Append run_name if provided
-            if run_name:
-                # Sanitize run_name (remove invalid characters for filesystem)
+            
+            # Use objective info for run_id if provided
+            if first_objective_id and first_objective_desc:
+                # Sanitize objective description (remove special chars, limit length)
+                safe_desc = "".join(c if c.isalnum() or c in ('_', '-', ' ') else '_' for c in first_objective_desc)
+                safe_desc = safe_desc.replace(' ', '_')[:50]  # Limit length
+                run_id = f"{timestamp}_{first_objective_id}_{safe_desc}"
+
+                # append run_name to run_id if provided
+                if run_name:
+                    run_id = f"{run_id}_{run_name}"
+            # Fallback to run_name if provided (deprecated)
+            elif run_name:
                 import re
                 sanitized_name = re.sub(r'[^\w\-_]', '_', run_name)
-                run_id = f"{run_id}_{sanitized_name}"
+                run_id = f"run_{timestamp}_{sanitized_name}"
+            else:
+                # Default format (no objectives specified)
+                run_id = f"run_{timestamp}"
         
         self.run_id = run_id
         self.run_dir = self.base_dir / run_id
@@ -94,7 +109,7 @@ class RunDataManager:
                      command_args: Dict[str, Any],
                      sys_argv: List[str],
                      additional_info: Optional[Dict[str, Any]] = None):
-        """Save run metadata including command line information
+        """Save run metadata to cumulative metrics (metadata.json deprecated)
         
         Args:
             command_args: Parsed command line arguments dictionary
@@ -106,34 +121,74 @@ class RunDataManager:
             "start_time": datetime.now().isoformat(),
             "command": " ".join(sys_argv),
             "command_args": command_args,
-            "sys_argv": sys_argv,
-            "python_version": sys.version,
-            "working_directory": os.getcwd(),
+            "sys": {
+                "platform": sys.platform,
+                "python_version": sys.version,
+            },
         }
         
-        # Try to get git commit hash
+        # Try to get git remote, branch, and commit to build a GitHub URL
         try:
+            commit = None
+            branch = None
+            remote_url = None
             result = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
                 capture_output=True,
                 text=True,
-                timeout=2
+                timeout=2,
             )
             if result.returncode == 0:
-                metadata["git_commit"] = result.stdout.strip()
+                commit = result.stdout.strip()
+            result = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0:
+                branch = result.stdout.strip()
+            result = subprocess.run(
+                ["git", "config", "--get", "remote.origin.url"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if result.returncode == 0:
+                remote_url = result.stdout.strip()
+
+            if remote_url:
+                if remote_url.startswith("git@github.com:"):
+                    remote_url = remote_url.replace("git@github.com:", "https://github.com/")
+                if remote_url.startswith("http://"):
+                    remote_url = "https://" + remote_url[len("http://") :]
+                if remote_url.endswith(".git"):
+                    remote_url = remote_url[: -len(".git")]
+            if remote_url and branch and commit:
+                metadata["github_url"] = f"{remote_url}/tree/{branch}/{commit}"
         except Exception as e:
-            logger.debug(f"Could not get git commit: {e}")
+            logger.debug(f"Could not build github_url: {e}")
         
         # Add any additional info
         if additional_info:
             metadata.update(additional_info)
-        
-        # Save metadata in end_state directory
-        metadata_file = self.run_dir / "end_state" / "metadata.json"
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        logger.info(f"Saved metadata: {metadata_file}")
+
+        # Map mode from additional_info if provided
+        if "mode" not in metadata:
+            if additional_info and additional_info.get("server_mode"):
+                metadata["mode"] = "server"
+            elif additional_info and additional_info.get("mode"):
+                metadata["mode"] = additional_info.get("mode")
+
+        # Save metadata into cumulative_metrics.json
+        try:
+            from utils.llm_logger import get_llm_logger
+
+            llm_logger = get_llm_logger()
+            if llm_logger:
+                llm_logger.set_run_metadata(metadata)
+        except Exception as e:
+            logger.warning(f"Failed to write run metadata to cumulative metrics: {e}")
     
     def log_trajectory(self,
                       step: int,
@@ -321,13 +376,25 @@ class RunDataManager:
             maps: Path to maps file
             knowledge_base: Path to knowledge_base.json
         """
+        from utils.run_data_manager import get_cache_path
+        
         game_state_dir = self.run_dir / "end_state" / "game_state"
         
+        # Use run-specific cache paths if not explicitly provided
+        if checkpoint_state is None:
+            checkpoint_state = str(get_cache_path("checkpoint.state"))
+        if milestones is None:
+            milestones = str(get_cache_path("milestones_progress.json"))
+        if maps is None:
+            maps = str(get_cache_path("checkpoint_maps.json"))
+        if knowledge_base is None:
+            knowledge_base = str(get_cache_path("knowledge_base.json"))
+        
         files_to_copy = {
-            "checkpoint.state": checkpoint_state or ".pokeagent_cache/checkpoint.state",
-            "milestones.json": milestones or ".pokeagent_cache/milestones_progress.json",
-            "maps.json": maps or ".pokeagent_cache/checkpoint_maps.json",
-            "knowledge_base.json": knowledge_base or ".pokeagent_cache/knowledge_base.json"
+            "checkpoint.state": checkpoint_state,
+            "milestones.json": milestones,
+            "maps.json": maps,
+            "knowledge_base.json": knowledge_base
         }
         
         for dest_name, src_path in files_to_copy.items():
@@ -344,8 +411,9 @@ class RunDataManager:
         Args:
             map_stitcher_file: Path to map_stitcher_data.json
         """
+        from utils.run_data_manager import get_cache_path
         if map_stitcher_file is None:
-            map_stitcher_file = ".pokeagent_cache/map_stitcher_data.json"
+            map_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
         
         if os.path.exists(map_stitcher_file):
             dest_file = self.run_dir / "end_state" / "map_data" / "map_stitcher_data.json"
@@ -356,12 +424,13 @@ class RunDataManager:
         """Copy submission.log to run_data end_state
         
         Args:
-            submission_log: Path to submission.log. If None, looks in .pokeagent_cache
+            submission_log: Path to submission.log. If None, looks in run-specific cache
         """
+        from utils.run_data_manager import get_cache_path
         if submission_log is None:
             # Check common locations
             possible_paths = [
-                ".pokeagent_cache/submission.log",
+                str(get_cache_path("submission.log")),
                 "submission.log",
             ]
             for path in possible_paths:
@@ -378,10 +447,11 @@ class RunDataManager:
         """Copy knowledge_base.json to agent_scratch_space
         
         Args:
-            knowledge_base_file: Path to knowledge_base.json. If None, looks in .pokeagent_cache
+            knowledge_base_file: Path to knowledge_base.json. If None, looks in run-specific cache
         """
+        from utils.run_data_manager import get_cache_path
         if knowledge_base_file is None:
-            knowledge_base_file = ".pokeagent_cache/knowledge_base.json"
+            knowledge_base_file = str(get_cache_path("knowledge_base.json"))
         
         if os.path.exists(knowledge_base_file):
             dest_file = self.run_dir / "agent_scratch_space" / "knowledge_base.json"
@@ -395,10 +465,11 @@ class RunDataManager:
         """Copy frame_cache.json to end_state/frame_cache
         
         Args:
-            frame_cache_file: Path to frame_cache.json. If None, looks in .pokeagent_cache
+            frame_cache_file: Path to frame_cache.json. If None, looks in run-specific cache
         """
+        from utils.run_data_manager import get_cache_path
         if frame_cache_file is None:
-            frame_cache_file = ".pokeagent_cache/frame_cache.json"
+            frame_cache_file = str(get_cache_path("frame_cache.json"))
         
         if os.path.exists(frame_cache_file):
             dest_file = self.run_dir / "end_state" / "frame_cache" / "frame_cache.json"
@@ -427,9 +498,11 @@ class RunDataManager:
         logger.info(f"🔍 [VIDEO] Run ID: {self.run_id}")
         
         # Find all .mp4 files matching the pattern in current directory
-        # Try multiple search patterns
+        # Try multiple search patterns (new format with run_id and old format)
         search_patterns = [
-            "pokegent_recording_*.mp4",
+            f"{self.run_id}.mp4",  # New format
+            f"./{self.run_id}.mp4",
+            "pokegent_recording_*.mp4",  # Old format (fallback)
             "./pokegent_recording_*.mp4",
             os.path.join(os.getcwd(), "pokegent_recording_*.mp4"),
         ]
@@ -503,39 +576,18 @@ class RunDataManager:
     def finalize_run(self, 
                     end_time: Optional[datetime] = None,
                     final_metrics: Optional[Dict[str, Any]] = None):
-        """Finalize the run by updating metadata with end time and metrics
-        
-        Args:
-            end_time: End time of the run
-            final_metrics: Final metrics (tokens, cost, steps, etc.)
-        """
-        metadata_file = self.run_dir / "end_state" / "metadata.json"
-        
-        if not metadata_file.exists():
-            logger.warning("No metadata.json found to finalize")
-            return
-        
-        with open(metadata_file, 'r') as f:
-            metadata = json.load(f)
-        
+        """Finalize the run (metadata.json deprecated)."""
         if end_time is None:
             end_time = datetime.now()
-        
-        metadata["end_time"] = end_time.isoformat()
-        
-        # Calculate duration
-        if "start_time" in metadata:
-            start = datetime.fromisoformat(metadata["start_time"])
-            duration = (end_time - start).total_seconds()
-            metadata["duration_seconds"] = duration
-        
-        if final_metrics:
-            metadata["final_metrics"] = final_metrics
-        
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        
-        logger.info(f"Finalized run: {self.run_id}")
+        try:
+            from utils.llm_logger import get_llm_logger
+
+            llm_logger = get_llm_logger()
+            if llm_logger:
+                llm_logger.set_run_metadata({"end_time": end_time.isoformat()})
+        except Exception as e:
+            logger.warning(f"Failed to write end_time to cumulative metrics metadata: {e}")
+        logger.info("Run finalization complete (metadata.json deprecated)")
     
     def get_run_directory(self) -> Path:
         """Get the run directory path"""
@@ -554,19 +606,65 @@ def get_run_data_manager() -> Optional[RunDataManager]:
     return _run_data_manager
 
 
-def initialize_run_data_manager(run_id: Optional[str] = None, run_name: Optional[str] = None) -> RunDataManager:
+def initialize_run_data_manager(run_id: Optional[str] = None, run_name: Optional[str] = None,
+                               first_objective_id: Optional[str] = None, 
+                               first_objective_desc: Optional[str] = None) -> RunDataManager:
     """Initialize the global run data manager
     
     Args:
         run_id: Optional run identifier
-        run_name: Optional name to append to run_id
+        run_name: Optional name to append to run_id (deprecated - use objectives)
+        first_objective_id: ID of the first objective (for consistent naming)
+        first_objective_desc: Description of the first objective (for consistent naming)
     
     Returns:
         RunDataManager instance
     """
     global _run_data_manager
-    _run_data_manager = RunDataManager(run_id=run_id, run_name=run_name)
+    _run_data_manager = RunDataManager(
+        run_id=run_id, 
+        run_name=run_name,
+        first_objective_id=first_objective_id,
+        first_objective_desc=first_objective_desc
+    )
     return _run_data_manager
+
+
+def get_cache_directory() -> Path:
+    """Get the cache directory for the current run
+    
+    Returns:
+        Path to .pokeagent_cache/{run_id}/ or .pokeagent_cache/ if no run_id
+    """
+    run_manager = get_run_data_manager()
+    if run_manager and run_manager.run_id:
+        cache_dir = Path(".pokeagent_cache") / run_manager.run_id
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir
+    else:
+        # Fallback: try to get run_id from environment
+        run_id = os.environ.get("RUN_DATA_ID")
+        if run_id:
+            cache_dir = Path(".pokeagent_cache") / run_id
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            return cache_dir
+        # Final fallback: use base cache directory (for backward compatibility)
+        cache_dir = Path(".pokeagent_cache")
+        cache_dir.mkdir(exist_ok=True)
+        return cache_dir
+
+
+def get_cache_path(relative_path: str) -> Path:
+    """Get a path within the run-specific cache directory
+    
+    Args:
+        relative_path: Relative path within cache (e.g., "checkpoint.state")
+    
+    Returns:
+        Full path to the file in the run-specific cache
+    """
+    cache_dir = get_cache_directory()
+    return cache_dir / relative_path
 
 
 def cleanup_old_cache_runs():
