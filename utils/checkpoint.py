@@ -24,11 +24,13 @@ def save_checkpoint(emulator, llm_logger=None, agent_step_count=0):
         bool: True if checkpoint saved successfully, False otherwise
     """
     try:
+        from utils.run_data_manager import get_cache_path
+        
         # Save emulator state
         print("💾 Saving checkpoint...")
-        os.makedirs(".pokeagent_cache", exist_ok=True)
-        emulator.save_state(".pokeagent_cache/checkpoint.state")
-        print(f"   ✅ Saved emulator state to .pokeagent_cache/checkpoint.state")
+        checkpoint_state = get_cache_path("checkpoint.state")
+        emulator.save_state(str(checkpoint_state))
+        print(f"   ✅ Saved emulator state to {checkpoint_state}")
         
         # Save milestones
         milestone_data = {
@@ -36,17 +38,17 @@ def save_checkpoint(emulator, llm_logger=None, agent_step_count=0):
             "step_count": agent_step_count,
             "timestamp": datetime.now().isoformat()
         }
-        os.makedirs(".pokeagent_cache", exist_ok=True)
-        with open(".pokeagent_cache/checkpoint_milestones.json", "w") as f:
+        milestones_file = get_cache_path("checkpoint_milestones.json")
+        with open(milestones_file, "w") as f:
             json.dump(milestone_data, f, indent=2)
-        print(f"   ✅ Saved milestones to .pokeagent_cache/checkpoint_milestones.json")
+        print(f"   ✅ Saved milestones to {milestones_file}")
         
         # Save location maps
         try:
             from utils.state_formatter import save_persistent_world_map
-            os.makedirs(".pokeagent_cache", exist_ok=True)
-            save_persistent_world_map(".pokeagent_cache/checkpoint_maps.json")
-            print(f"   ✅ Saved location maps to .pokeagent_cache/checkpoint_maps.json")
+            maps_file = get_cache_path("checkpoint_maps.json")
+            save_persistent_world_map(str(maps_file))
+            print(f"   ✅ Saved location maps to {maps_file}")
         except Exception as e:
             print(f"   ⚠️ Failed to save location maps: {e}")
         
@@ -72,9 +74,7 @@ def save_checkpoint(emulator, llm_logger=None, agent_step_count=0):
                 }
             
             # Save to cache folder
-            cache_dir = ".pokeagent_cache"
-            os.makedirs(cache_dir, exist_ok=True)
-            checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
+            checkpoint_file = get_cache_path("checkpoint_llm.txt")
             with open(checkpoint_file, "w") as f:
                 json.dump(checkpoint_data, f, indent=2)
             print(f"   ✅ Saved LLM history to {checkpoint_file}")
@@ -100,44 +100,45 @@ def load_checkpoint(emulator, llm_logger=None):
         dict: Checkpoint data including step_count, or None if failed
     """
     try:
+        from utils.run_data_manager import get_cache_path
+        
         checkpoint_data = {}
         
         # Load emulator state
-        if os.path.exists(".pokeagent_cache/checkpoint.state"):
+        checkpoint_state = get_cache_path("checkpoint.state")
+        if checkpoint_state.exists():
             print("🔄 Loading checkpoint...")
-            emulator.load_state(".pokeagent_cache/checkpoint.state")
-            print(f"   ✅ Loaded emulator state from .pokeagent_cache/checkpoint.state")
+            emulator.load_state(str(checkpoint_state))
+            print(f"   ✅ Loaded emulator state from {checkpoint_state}")
         else:
-            print("   ⚠️ No .pokeagent_cache/checkpoint.state found")
+            print(f"   ⚠️ No {checkpoint_state} found")
             return None
         
         # Load milestones
-        if os.path.exists(".pokeagent_cache/checkpoint_milestones.json"):
-            with open(".pokeagent_cache/checkpoint_milestones.json", "r") as f:
+        milestones_file = get_cache_path("checkpoint_milestones.json")
+        if milestones_file.exists():
+            with open(milestones_file, "r") as f:
                 milestone_data = json.load(f)
             if emulator.memory_reader:
                 emulator.memory_reader.milestones = milestone_data.get("milestones", {})
             checkpoint_data['step_count'] = milestone_data.get("step_count", 0)
-            print(f"   ✅ Loaded milestones from .pokeagent_cache/checkpoint_milestones.json")
+            print(f"   ✅ Loaded milestones from {milestones_file}")
         
         # Load location maps
         try:
             from utils.state_formatter import load_persistent_world_map
-            if os.path.exists(".pokeagent_cache/checkpoint_maps.json"):
-                load_persistent_world_map(".pokeagent_cache/checkpoint_maps.json")
-                print(f"   ✅ Loaded location maps from .pokeagent_cache/checkpoint_maps.json")
+            maps_file = get_cache_path("checkpoint_maps.json")
+            if maps_file.exists():
+                load_persistent_world_map(str(maps_file))
+                print(f"   ✅ Loaded location maps from {maps_file}")
             else:
-                print(f"   ⚠️ No .pokeagent_cache/checkpoint_maps.json found")
+                print(f"   ⚠️ No {maps_file} found")
         except Exception as e:
             print(f"   ⚠️ Failed to load location maps: {e}")
         
         # Load LLM history if logger available
-        cache_dir = ".pokeagent_cache"
-        checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt") if os.path.exists(cache_dir) else "checkpoint_llm.txt"
-        if not os.path.exists(checkpoint_file) and os.path.exists("checkpoint_llm.txt"):
-            checkpoint_file = "checkpoint_llm.txt"
-        
-        if llm_logger and os.path.exists(checkpoint_file):
+        checkpoint_file = get_cache_path("checkpoint_llm.txt")
+        if llm_logger and checkpoint_file.exists():
             with open(checkpoint_file, "r") as f:
                 llm_data = json.load(f)
             
@@ -146,7 +147,7 @@ def load_checkpoint(emulator, llm_logger=None):
                 llm_logger.set_conversation_history(llm_data['history'])
             
             checkpoint_data['llm_step_count'] = llm_data.get('step_counter', 0)
-            print(f"   ✅ Loaded LLM history from checkpoint_llm.txt")
+            print(f"   ✅ Loaded LLM history from {checkpoint_file}")
         
         print(f"✅ Checkpoint loaded successfully")
         return checkpoint_data

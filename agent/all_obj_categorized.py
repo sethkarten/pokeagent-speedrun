@@ -2528,7 +2528,7 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_033",
-        description="Catch Dark-type if missing (Mt. Pyre area)",
+        description="Catch Dark-type if missing (Mt. Pyre area). If already caught, transfer from PC into party at the nearest pokemon center asap. Use fly if you can.",
         action_type="catch",
         category="battling",
         target_location="Mt. Pyre / Route 120",

@@ -7,6 +7,7 @@ including input prompts, responses, and metadata. Logs are saved to dated
 files in the llm_logs directory.
 """
 
+from operator import ge
 import os
 import json
 import time
@@ -44,33 +45,94 @@ class LLMLogger:
         # Ensure log directory exists
         os.makedirs(log_dir, exist_ok=True)
         
-        # Initialize cumulative metrics
+        # Initialize cumulative metrics with enhanced structure
         self.cumulative_metrics = {
+            # Top-level aggregate metrics (backward compatible)
             "total_tokens": 0,
             "prompt_tokens": 0,
             "completion_tokens": 0,
+            "cached_tokens": 0,  # NEW: Track cached tokens separately
             "total_cost": 0.0,
             "total_actions": 0,
             "start_time": time.time(),
             "total_llm_calls": 0,
             "total_run_time": 0,  # Actual gameplay time in seconds
-            "last_update_time": time.time()  # Track when we last updated
+            "last_update_time": time.time(),  # Track when we last updated
+            "metadata": {},
+            
+            # NEW: Per-step granular tracking
+            "steps": [],  # List of {step, prompt_tokens, completion_tokens, cached_tokens, time_taken, timestamp}
+            
+            # NEW: Per-milestone tracking
+            "milestones": [],  # List of milestone completion data with cumulative and split metrics
+            
+            # Per-objective tracking (direct objective completions)
+            "objectives": [],  # List of {objective_id, category, objective_index, + same metrics as milestones}
+            
+            # Internal tracking for milestone deltas
+            "_last_milestone_step": 0,
+            "_last_milestone_tokens": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
+            "_last_milestone_time": None,
+            # Internal tracking for objective deltas (split = since last objective)
+            "_last_objective_step": 0,
+            "_last_objective_tokens": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
+            "_last_objective_time": None,
         }
         
         # Model pricing (per 1K tokens) - Updated January 2025
         self.pricing = {
-            # OpenAI models
-            "gpt-4o": {"prompt": 0.01, "completion": 0.03},
-            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
-            "o3-mini": {"prompt": 0.0012, "completion": 0.0048},
+            # OpenAI GPT-5
+            "gpt-5": {"prompt": 0.00125, "completion": 0.01},       # $1.25/$10 per 1M
+            "gpt-5-mini": {"prompt": 0.00025, "completion": 0.002},  # $0.25/$2 per 1M
+            "gpt-5-nano": {"prompt": 0.00005, "completion": 0.0004},  # $0.05/$0.40 per 1M
+            "gpt-5.1": {"prompt": 0.00125, "completion": 0.01},       # $1.25/$10 per 1M
+            "gpt-5.2": {"prompt": 0.00175, "completion": 0.014},       # $1.75/$14 per 1M
+            "gpt-5.2-pro": {"prompt": 0.021, "completion": 0.168},     # $21/$168 per 1M (no cached)
+            "gpt-5-pro": {"prompt": 0.015, "completion": 0.12},        # $15/$120 per 1M (no cached)
+            # GPT-5 chat-latest variants
+            "gpt-5.2-chat-latest": {"prompt": 0.00175, "completion": 0.014},
+            "gpt-5.1-chat-latest": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5-chat-latest": {"prompt": 0.00125, "completion": 0.01},
+            # GPT-5 codex variants
+            "gpt-5.2-codex": {"prompt": 0.00175, "completion": 0.014},
+            "gpt-5.1-codex-max": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5.1-codex": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5-codex": {"prompt": 0.00125, "completion": 0.01},
 
-            # Gemini 2.5 models (standard pricing, not thinking mode)
+            # OpenAI GPT-4
+            "gpt-4o": {"prompt": 0.0025, "completion": 0.01},       # $2.50/$10 per 1M
+            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},  # $0.15/$0.60 per 1M
+            "gpt-4.1": {"prompt": 0.002, "completion": 0.008},      # $2/$8 per 1M
+            "gpt-4.1-mini": {"prompt": 0.0004, "completion": 0.0016},  # $0.40/$1.60 per 1M
+            "gpt-4.1-nano": {"prompt": 0.0001, "completion": 0.0004},  # $0.10/$0.40 per 1M
+
+            # OpenAI o-series (reasoning)
+            "o4-mini": {"prompt": 0.0011, "completion": 0.0044},    # $1.10/$4.40 per 1M
+            "o3-mini": {"prompt": 0.0011, "completion": 0.0044},    # $1.10/$4.40 per 1M
+            "o3": {"prompt": 0.002, "completion": 0.008},           # $2/$8 per 1M
+            "o3-pro": {"prompt": 0.02, "completion": 0.08},         # $20/$80 per 1M
+            "o1": {"prompt": 0.015, "completion": 0.06},            # $15/$60 per 1M
+            "o1-pro": {"prompt": 0.15, "completion": 0.60},         # $150/$600 per 1M
+
+            # Anthropic Claude
+            "claude-sonnet-4.5": {"prompt": 0.003, "completion": 0.015},   # $3/$15 per 1M
+            "claude-sonnet-3.7": {"prompt": 0.003, "completion": 0.015},
+            "claude-sonnet-3.5": {"prompt": 0.003, "completion": 0.015},
+            "claude-opus-4.1": {"prompt": 0.015, "completion": 0.075},   # $15/$75 per 1M
+            "claude-opus-4": {"prompt": 0.015, "completion": 0.075},
+            "claude-opus-3": {"prompt": 0.015, "completion": 0.075},
+            "claude-haiku-3.5": {"prompt": 0.0008, "completion": 0.004},  # $0.80/$4 per 1M
+            "claude-haiku-3": {"prompt": 0.00025, "completion": 0.00125},  # $0.25/$1.25 per 1M
+
+            # Gemini 2.x
             "gemini-2.5-flash": {"prompt": 0.0003, "completion": 0.0006},  # $0.30/$0.60 per 1M
-            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01},      # $1.25/$10 per 1M
+            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01},     # $1.25/$10 per 1M
+            "gemini-2.0-flash": {"prompt": 0.00015, "completion": 0.0006},  # $0.15/$0.60 per 1M
 
-            # Gemini 3 models (≤200K context)
+            # Gemini 3.x
             "gemini-3-pro-preview": {"prompt": 0.002, "completion": 0.012},  # $2/$12 per 1M
-            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012},          # $2/$12 per 1M
+            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012},
+            "gemini-3-flash": {"prompt": 0.0005, "completion": 0.003},       # $0.50/$3 per 1M
 
             "default": {"prompt": 0.001, "completion": 0.002}  # Default pricing
         }
@@ -87,6 +149,18 @@ class LLMLogger:
             logger.warning(f"⚠️  LLM Logger initialized WITHOUT cumulative metrics - starting fresh")
 
         logger.info(f"LLM Logger initialized: {self.log_file}")
+
+    def _metrics_write_enabled(self) -> bool:
+        """Return True if this process should write cumulative metrics.
+
+        Controlled by LLM_METRICS_WRITE_ENABLED env var.
+        - unset: default to True (backward compatible)
+        - "false"/"0"/"no": disable writes in this process
+        """
+        flag = os.environ.get("LLM_METRICS_WRITE_ENABLED")
+        if flag is None:
+            return True
+        return flag.strip().lower() not in ("0", "false", "no")
     
     def _log_session_start(self):
         """Log session start information"""
@@ -104,7 +178,8 @@ class LLMLogger:
                        response: str,
                        metadata: Optional[Dict[str, Any]] = None,
                        duration: Optional[float] = None,
-                       model_info: Optional[Dict[str, Any]] = None):
+                       model_info: Optional[Dict[str, Any]] = None,
+                       step_number: Optional[int] = None):
         """Log a complete LLM interaction
         
         Args:
@@ -114,6 +189,7 @@ class LLMLogger:
             metadata: Additional metadata about the interaction
             duration: Time taken for the interaction in seconds
             model_info: Information about the model used
+            step_number: Optional step number for per-step tracking
         """
         log_entry = {
             "timestamp": datetime.now().isoformat(),
@@ -139,62 +215,71 @@ class LLMLogger:
         if time_since_last_update < 300:  # 5 minutes
             self.cumulative_metrics["total_run_time"] += time_since_last_update
         self.cumulative_metrics["last_update_time"] = current_time
-
-        # Save metrics to cache file after every interaction
-        self.save_cumulative_metrics()
         
         # Track token usage if available
+        step_tokens = {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
         if metadata and "token_usage" in metadata:
             token_usage = metadata["token_usage"]
             if token_usage:
-                self.cumulative_metrics["total_tokens"] += token_usage.get("total_tokens", 0)
-                self.cumulative_metrics["prompt_tokens"] += token_usage.get("prompt_tokens", 0)
-                self.cumulative_metrics["completion_tokens"] += token_usage.get("completion_tokens", 0)
+                step_tokens = {
+                    "prompt": token_usage.get("prompt_tokens", 0),
+                    "completion": token_usage.get("completion_tokens", 0),
+                    "total": token_usage.get("total_tokens", 0),
+                    "cached": token_usage.get("cached_tokens", 0)
+                }
                 
-                # Calculate cost based on model
-                model_name = model_info.get("model", "") if model_info else ""
+                self.cumulative_metrics["total_tokens"] += step_tokens["total"]
+                self.cumulative_metrics["prompt_tokens"] += step_tokens["prompt"]
+                self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
+                self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
+                
+                # Calculate cost based on model (exact match first, then longest-key match)
+                model_name = (model_info.get("model", "") or "").lower()
                 pricing = self.pricing.get("default")
-                for key in self.pricing:
-                    if key in model_name.lower():
-                        pricing = self.pricing[key]
-                        break
+                if model_name:
+                    # Prefer exact match
+                    if model_name in self.pricing:
+                        pricing = self.pricing[model_name]
+                    else:
+                        # Fall back to longest matching key (gpt-5-nano before gpt-5)
+                        candidates = [
+                            (k, self.pricing[k])
+                            for k in self.pricing
+                            if k != "default" and k in model_name
+                        ]
+                        if candidates:
+                            # Sort by key length descending; use most specific match
+                            candidates.sort(key=lambda x: len(x[0]), reverse=True)
+                            pricing = candidates[0][1]
                 
-                prompt_cost = (token_usage.get("prompt_tokens", 0) / 1000) * pricing["prompt"]
-                completion_cost = (token_usage.get("completion_tokens", 0) / 1000) * pricing["completion"]
+                prompt_cost = (step_tokens["prompt"] / 1000) * pricing["prompt"]
+                completion_cost = (step_tokens["completion"] / 1000) * pricing["completion"]
                 self.cumulative_metrics["total_cost"] += prompt_cost + completion_cost
         
-        # Track actions if this is an action interaction
-        if "action" in interaction_type.lower():
-            # Count actions in response - look for valid button presses
-            # Response could be single button like "A" or multiple like "A A B" or with commas
-            valid_buttons = ['A', 'B', 'SELECT', 'START', 'UP', 'DOWN', 'LEFT', 'RIGHT', 'L', 'R']
+        # NEW: Track per-step metrics
+        if step_number is None:
+            env_step = os.environ.get("LLM_STEP_NUMBER")
+            if env_step and env_step.isdigit():
+                step_number = int(env_step)
+
+        if step_number is not None and duration is not None:
+            step_entry = {
+                "step": step_number,
+                "prompt_tokens": step_tokens["prompt"],
+                "completion_tokens": step_tokens["completion"],
+                "cached_tokens": step_tokens["cached"],
+                "total_tokens": step_tokens["total"],
+                "time_taken": round(duration, 3),
+                "timestamp": time.time()
+            }
+            self.cumulative_metrics["steps"].append(step_entry)
             
-            # Convert response to uppercase and split by spaces or commas
-            response_upper = response.upper()
-            tokens = response_upper.replace(',', ' ').split()
-            
-            # Count each valid button found
-            action_count = sum(1 for token in tokens if token in valid_buttons)
-            
-            # If no actions found but response contains button names, count them
-            if action_count == 0:
-                # Also check for arrow notations
-                action_count += response_upper.count('UP')
-                action_count += response_upper.count('DOWN')
-                action_count += response_upper.count('LEFT')  
-                action_count += response_upper.count('RIGHT')
-                action_count += response.count('↑')
-                action_count += response.count('↓')
-                action_count += response.count('←')
-                action_count += response.count('→')
-                # Count single letter buttons
-                for char in 'ABLR':
-                    if char in response_upper:
-                        action_count += response_upper.count(char)
-            
-            if action_count > 0:
-                self.cumulative_metrics["total_actions"] += action_count
-                logger.debug(f"Counted {action_count} actions in response: {response[:50]}")
+            # Keep only last 1000 steps to prevent unbounded growth
+            if len(self.cumulative_metrics["steps"]) > 1000:
+                self.cumulative_metrics["steps"] = self.cumulative_metrics["steps"][-1000:]
+
+        # Save metrics to cache file after every interaction
+        self.save_cumulative_metrics()
         
         # Also log to console for debugging
         if duration is not None:
@@ -332,6 +417,173 @@ class LLMLogger:
         except Exception as e:
             logger.error(f"Failed to write log entry: {e}")
     
+    def increment_action_count(self, count: int = 1):
+        """Increment the action counter (called when buttons are actually queued)
+        
+        Args:
+            count: Number of actions to add (default 1)
+        """
+        self.cumulative_metrics["total_actions"] += count
+        # Note: We don't save immediately here to avoid excessive I/O
+        # Metrics will be saved on next log_interaction or explicit save
+    
+    def log_milestone_completion(self, milestone_id: str, step_number: int, timestamp: float = None):
+        """Log milestone completion with cumulative and split metrics
+        
+        Args:
+            milestone_id: ID of the completed milestone
+            step_number: Current agent step number
+            timestamp: Optional timestamp (defaults to current time)
+        """
+        if timestamp is None:
+            timestamp = time.time()
+        
+        # Calculate cumulative metrics (running totals)
+        cumulative_step = step_number
+        cumulative_prompt_tokens = self.cumulative_metrics.get("prompt_tokens", 0)
+        cumulative_completion_tokens = self.cumulative_metrics.get("completion_tokens", 0)
+        cumulative_cached_tokens = self.cumulative_metrics.get("cached_tokens", 0)
+        cumulative_total_tokens = self.cumulative_metrics.get("total_tokens", 0)
+        
+        # Calculate split metrics (delta since last milestone)
+        last_step = self.cumulative_metrics.get("_last_milestone_step", 0)
+        last_tokens = self.cumulative_metrics.get("_last_milestone_tokens", {"prompt": 0, "completion": 0, "total": 0, "cached": 0})
+        last_time = self.cumulative_metrics.get("_last_milestone_time")
+        
+        split_steps = cumulative_step - last_step
+        split_prompt_tokens = cumulative_prompt_tokens - last_tokens.get("prompt", 0)
+        split_completion_tokens = cumulative_completion_tokens - last_tokens.get("completion", 0)
+        split_cached_tokens = cumulative_cached_tokens - last_tokens.get("cached", 0)
+        split_total_tokens = cumulative_total_tokens - last_tokens.get("total", 0)
+        
+        # Calculate time elapsed for this milestone
+        if last_time is not None:
+            time_elapsed = timestamp - last_time
+        else:
+            time_elapsed = timestamp - self.cumulative_metrics.get("start_time", timestamp)
+        
+        # Create milestone entry
+        milestone_entry = {
+            "milestone_id": milestone_id,
+            "timestamp": timestamp,
+            
+            # Cumulative metrics (running total up to this milestone)
+            "cumulative_steps": cumulative_step,
+            "cumulative_prompt_tokens": cumulative_prompt_tokens,
+            "cumulative_completion_tokens": cumulative_completion_tokens,
+            "cumulative_cached_tokens": cumulative_cached_tokens,
+            "cumulative_total_tokens": cumulative_total_tokens,
+            
+            # Split metrics (delta for just this milestone)
+            "split_steps": split_steps,
+            "split_prompt_tokens": split_prompt_tokens,
+            "split_completion_tokens": split_completion_tokens,
+            "split_cached_tokens": split_cached_tokens,
+            "split_total_tokens": split_total_tokens,
+            "split_time_seconds": round(time_elapsed, 2)
+        }
+        
+        self.cumulative_metrics["milestones"].append(milestone_entry)
+        
+        # Update tracking for next milestone
+        self.cumulative_metrics["_last_milestone_step"] = cumulative_step
+        self.cumulative_metrics["_last_milestone_tokens"] = {
+            "prompt": cumulative_prompt_tokens,
+            "completion": cumulative_completion_tokens,
+            "cached": cumulative_cached_tokens,
+            "total": cumulative_total_tokens
+        }
+        self.cumulative_metrics["_last_milestone_time"] = timestamp
+        
+        logger.info(f"📊 Milestone '{milestone_id}': {split_steps} steps, {split_total_tokens} tokens, {time_elapsed:.1f}s")
+        
+        # Save updated metrics
+        self.save_cumulative_metrics()
+
+    def log_objective_completion(
+        self,
+        objective_id: str,
+        category: str,
+        objective_index: int,
+        step_number: int,
+        timestamp: Optional[float] = None,
+    ):
+        """Log direct objective completion with cumulative and split metrics.
+
+        Appends to cumulative_metrics["objectives"] with the same metric shape as
+        milestones plus objective_id, category, and objective_index. Split metrics
+        are deltas since the last objective completion.
+
+        Args:
+            objective_id: ID of the completed objective.
+            category: Category (e.g. story, battling, dynamics, legacy).
+            objective_index: Index of the objective within its sequence.
+            step_number: Current agent step number.
+            timestamp: Optional timestamp (defaults to current time).
+        """
+        if timestamp is None:
+            timestamp = time.time()
+
+        cumulative_step = step_number
+        cumulative_prompt_tokens = self.cumulative_metrics.get("prompt_tokens", 0)
+        cumulative_completion_tokens = self.cumulative_metrics.get("completion_tokens", 0)
+        cumulative_cached_tokens = self.cumulative_metrics.get("cached_tokens", 0)
+        cumulative_total_tokens = self.cumulative_metrics.get("total_tokens", 0)
+
+        last_step = self.cumulative_metrics.get("_last_objective_step", 0)
+        last_tokens = self.cumulative_metrics.get(
+            "_last_objective_tokens", {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
+        )
+        last_time = self.cumulative_metrics.get("_last_objective_time")
+
+        split_steps = cumulative_step - last_step
+        split_prompt_tokens = cumulative_prompt_tokens - last_tokens.get("prompt", 0)
+        split_completion_tokens = cumulative_completion_tokens - last_tokens.get("completion", 0)
+        split_cached_tokens = cumulative_cached_tokens - last_tokens.get("cached", 0)
+        split_total_tokens = cumulative_total_tokens - last_tokens.get("total", 0)
+
+        if last_time is not None:
+            time_elapsed = timestamp - last_time
+        else:
+            time_elapsed = timestamp - self.cumulative_metrics.get("start_time", timestamp)
+
+        objective_entry = {
+            "objective_id": objective_id,
+            "category": category,
+            "objective_index": objective_index,
+            "timestamp": timestamp,
+            "cumulative_steps": cumulative_step,
+            "cumulative_prompt_tokens": cumulative_prompt_tokens,
+            "cumulative_completion_tokens": cumulative_completion_tokens,
+            "cumulative_cached_tokens": cumulative_cached_tokens,
+            "cumulative_total_tokens": cumulative_total_tokens,
+            "split_steps": split_steps,
+            "split_prompt_tokens": split_prompt_tokens,
+            "split_completion_tokens": split_completion_tokens,
+            "split_cached_tokens": split_cached_tokens,
+            "split_total_tokens": split_total_tokens,
+            "split_time_seconds": round(time_elapsed, 2),
+        }
+
+        if "objectives" not in self.cumulative_metrics:
+            self.cumulative_metrics["objectives"] = []
+        self.cumulative_metrics["objectives"].append(objective_entry)
+
+        self.cumulative_metrics["_last_objective_step"] = cumulative_step
+        self.cumulative_metrics["_last_objective_tokens"] = {
+            "prompt": cumulative_prompt_tokens,
+            "completion": cumulative_completion_tokens,
+            "cached": cumulative_cached_tokens,
+            "total": cumulative_total_tokens,
+        }
+        self.cumulative_metrics["_last_objective_time"] = timestamp
+
+        logger.info(
+            f"📊 Objective '{objective_id}' (category={category}, index={objective_index}): "
+            f"{split_steps} steps, {split_total_tokens} tokens, {time_elapsed:.1f}s"
+        )
+        self.save_cumulative_metrics()
+
     def get_cumulative_metrics(self) -> Dict[str, Any]:
         """Get cumulative metrics for the session
 
@@ -386,15 +638,26 @@ class LLMLogger:
             metrics_file: Path to save metrics (defaults to cache folder)
         """
         try:
+            if not self._metrics_write_enabled():
+                logger.debug("Metrics write disabled; skipping save_cumulative_metrics()")
+                return
+
             # Determine metrics file path
             if metrics_file is None:
-                cache_dir = ".pokeagent_cache"
-                os.makedirs(cache_dir, exist_ok=True)
-                metrics_file = os.path.join(cache_dir, "cumulative_metrics.json")
+                from utils.run_data_manager import get_cache_path
+                metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
+            # Create a clean copy without internal tracking fields
+            metrics_to_save = self.cumulative_metrics.copy()
+            
+            # Remove internal tracking fields (these are only for runtime calculation)
+            for key in list(metrics_to_save.keys()):
+                if key.startswith("_"):
+                    del metrics_to_save[key]
+            
             # Save metrics
             with open(metrics_file, 'w', encoding='utf-8') as f:
-                json.dump(self.cumulative_metrics, f, indent=2)
+                json.dump(metrics_to_save, f, indent=2)
 
             logger.debug(f"Saved cumulative metrics to {metrics_file}")
 
@@ -413,8 +676,8 @@ class LLMLogger:
         try:
             # Determine metrics file path
             if metrics_file is None:
-                cache_dir = ".pokeagent_cache"
-                metrics_file = os.path.join(cache_dir, "cumulative_metrics.json")
+                from utils.run_data_manager import get_cache_path
+                metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
             if not os.path.exists(metrics_file):
                 logger.debug(f"No cumulative metrics file found at {metrics_file}")
@@ -424,17 +687,99 @@ class LLMLogger:
             with open(metrics_file, 'r', encoding='utf-8') as f:
                 saved_metrics = json.load(f)
 
-            # Update current metrics
+            # Update current metrics (including new arrays if present)
             self.cumulative_metrics.update(saved_metrics)
+            
+            # Ensure new fields exist even if loading old format
+            if "steps" not in self.cumulative_metrics:
+                self.cumulative_metrics["steps"] = []
+            if "milestones" not in self.cumulative_metrics:
+                self.cumulative_metrics["milestones"] = []
+            if "metadata" not in self.cumulative_metrics:
+                self.cumulative_metrics["metadata"] = {}
+            if "objectives" not in self.cumulative_metrics:
+                self.cumulative_metrics["objectives"] = []
+
+            # Restore internal tracking from last milestone if available
+            if self.cumulative_metrics["milestones"]:
+                last_milestone = self.cumulative_metrics["milestones"][-1]
+                self.cumulative_metrics["_last_milestone_step"] = last_milestone.get("cumulative_steps", 0)
+                self.cumulative_metrics["_last_milestone_tokens"] = {
+                    "prompt": last_milestone.get("cumulative_prompt_tokens", 0),
+                    "completion": last_milestone.get("cumulative_completion_tokens", 0),
+                    "cached": last_milestone.get("cumulative_cached_tokens", 0),
+                    "total": last_milestone.get("cumulative_total_tokens", 0)
+                }
+                self.cumulative_metrics["_last_milestone_time"] = last_milestone.get("timestamp")
+
+            # Restore internal tracking from last objective if available
+            if self.cumulative_metrics.get("objectives"):
+                last_obj = self.cumulative_metrics["objectives"][-1]
+                self.cumulative_metrics["_last_objective_step"] = last_obj.get("cumulative_steps", 0)
+                self.cumulative_metrics["_last_objective_tokens"] = {
+                    "prompt": last_obj.get("cumulative_prompt_tokens", 0),
+                    "completion": last_obj.get("cumulative_completion_tokens", 0),
+                    "cached": last_obj.get("cumulative_cached_tokens", 0),
+                    "total": last_obj.get("cumulative_total_tokens", 0),
+                }
+                self.cumulative_metrics["_last_objective_time"] = last_obj.get("timestamp")
 
             logger.info(f"✅ Loaded cumulative metrics: {saved_metrics.get('total_llm_calls', 0)} calls, {saved_metrics.get('total_actions', 0)} actions, ${saved_metrics.get('total_cost', 0):.4f}, {saved_metrics.get('total_run_time', 0):.0f}s runtime")
             logger.info(f"   - Total tokens: {saved_metrics.get('total_tokens', 0):,}")
             logger.info(f"   - Total cost: ${saved_metrics.get('total_cost', 0):.4f}")
+            logger.info(f"   - Steps tracked: {len(self.cumulative_metrics['steps'])}, Milestones tracked: {len(self.cumulative_metrics['milestones'])}")
             return True
 
         except Exception as e:
             logger.error(f"Failed to load cumulative metrics: {e}")
             return False
+
+    def set_run_metadata(self, metadata: Dict[str, Any], overwrite: bool = False):
+        """Set run metadata in cumulative metrics.
+
+        Args:
+            metadata: Run metadata to store under cumulative_metrics["metadata"]
+            overwrite: If True, replace existing metadata. Otherwise only fill missing keys.
+        """
+        if not metadata:
+            return
+        current = self.cumulative_metrics.get("metadata", {})
+        if overwrite or not current:
+            self.cumulative_metrics["metadata"] = metadata
+        else:
+            for key, value in metadata.items():
+                if key not in current:
+                    current[key] = value
+            self.cumulative_metrics["metadata"] = current
+        self.save_cumulative_metrics()
+
+    def add_step_tool_calls(self, step_number: int, tool_calls: list[Dict[str, Any]]):
+        """Attach tool call parameters to a step entry in cumulative metrics."""
+        if step_number is None:
+            return
+        if "steps" not in self.cumulative_metrics:
+            self.cumulative_metrics["steps"] = []
+
+        # Keep only name + args to avoid oversized entries
+        cleaned_calls = []
+        for call in tool_calls or []:
+            name = call.get("name")
+            args = call.get("args", {})
+            if name:
+                cleaned_calls.append({"name": name, "args": args})
+
+        # Update existing step entry if present
+        for entry in reversed(self.cumulative_metrics["steps"]):
+            if entry.get("step") == step_number:
+                entry["tool_calls"] = cleaned_calls
+                self.save_cumulative_metrics()
+                return
+
+        # If no step entry exists, append a minimal one
+        self.cumulative_metrics["steps"].append(
+            {"step": step_number, "tool_calls": cleaned_calls, "timestamp": time.time()}
+        )
+        self.save_cumulative_metrics()
 
     def save_checkpoint(self, checkpoint_file: str = None, agent_step_count: int = None):
         """Save current LLM interaction history to checkpoint file
@@ -446,9 +791,8 @@ class LLMLogger:
         try:
             # Use cache folder by default
             if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
-                cache_dir = ".pokeagent_cache"
-                os.makedirs(cache_dir, exist_ok=True)
-                checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
+                from utils.run_data_manager import get_cache_path
+                checkpoint_file = str(get_cache_path("checkpoint_llm.txt"))
             # Read all current log entries
             log_entries = []
             if os.path.exists(self.log_file):
@@ -500,8 +844,8 @@ class LLMLogger:
         try:
             # Use cache folder by default
             if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
-                cache_dir = ".pokeagent_cache"
-                checkpoint_file = os.path.join(cache_dir, "checkpoint_llm.txt")
+                from utils.run_data_manager import get_cache_path
+                checkpoint_file = str(get_cache_path("checkpoint_llm.txt"))
             
             if not os.path.exists(checkpoint_file):
                 logger.info(f"No checkpoint file found at {checkpoint_file}")
@@ -587,7 +931,8 @@ def setup_map_stitcher_checkpoint_integration(memory_reader):
 def log_llm_interaction(interaction_type: str, prompt: str, response: str, 
                        metadata: Optional[Dict[str, Any]] = None,
                        duration: Optional[float] = None,
-                       model_info: Optional[Dict[str, Any]] = None):
+                       model_info: Optional[Dict[str, Any]] = None,
+                       step_number: Optional[int] = None):
     """Convenience function to log an LLM interaction
     
     Args:
@@ -597,9 +942,10 @@ def log_llm_interaction(interaction_type: str, prompt: str, response: str,
         metadata: Additional metadata
         duration: Time taken
         model_info: Model information
+        step_number: Optional step number for per-step tracking
     """
     logger = get_llm_logger()
-    logger.log_interaction(interaction_type, prompt, response, metadata, duration, model_info)
+    logger.log_interaction(interaction_type, prompt, response, metadata, duration, model_info, step_number)
 
 def log_llm_error(interaction_type: str, prompt: str, error: str, 
                  metadata: Optional[Dict[str, Any]] = None):
@@ -612,4 +958,45 @@ def log_llm_error(interaction_type: str, prompt: str, error: str,
         metadata: Additional metadata
     """
     logger = get_llm_logger()
-    logger.log_error(interaction_type, prompt, error, metadata) 
+    logger.log_error(interaction_type, prompt, error, metadata)
+
+def increment_action_count(count: int = 1):
+    """Convenience function to increment action count from anywhere
+    
+    Args:
+        count: Number of actions to add
+    """
+    logger = get_llm_logger()
+    logger.increment_action_count(count)
+
+def log_milestone_completion(milestone_id: str, step_number: int, timestamp: float = None):
+    """Convenience function to log milestone completion
+    
+    Args:
+        milestone_id: ID of the milestone
+        step_number: Current agent step number
+        timestamp: Optional timestamp
+    """
+    logger = get_llm_logger()
+    logger.log_milestone_completion(milestone_id, step_number, timestamp)
+
+
+def log_objective_completion(
+    objective_id: str,
+    category: str,
+    objective_index: int,
+    step_number: int,
+    timestamp: Optional[float] = None,
+):
+    """Convenience function to log direct objective completion.
+
+    Args:
+        objective_id: ID of the completed objective.
+        category: Category (e.g. story, battling, dynamics, legacy).
+        objective_index: Index of the objective within its sequence.
+        step_number: Current agent step number.
+        timestamp: Optional timestamp.
+    """
+    get_llm_logger().log_objective_completion(
+        objective_id, category, objective_index, step_number, timestamp
+    ) 

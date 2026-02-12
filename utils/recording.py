@@ -42,9 +42,15 @@ class VideoRecorder:
             return False
         
         try:
-            # Create filename with timestamp
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.video_filename = f"pokegent_recording_{timestamp}.mp4"
+            # Create filename using run_id for consistency
+            from utils.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            if run_manager:
+                self.video_filename = f"{run_manager.run_id}.mp4"
+            else:
+                # Fallback to timestamp if no run manager
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                self.video_filename = f"pokegent_recording_{timestamp}.mp4"
             
             # Video settings (GBA resolution is 240x160)
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')

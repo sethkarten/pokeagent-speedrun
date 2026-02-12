@@ -234,11 +234,13 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 # Save state
                                 print("💾 Saving state...")
                                 try:
+                                    from utils.run_data_manager import get_cache_path
+                                    save_path = str(get_cache_path("manual_save.state"))
                                     response = requests.post(f"{server_url}/save_state", 
-                                                           json={"filepath": ".pokeagent_cache/manual_save.state"}, 
+                                                           json={"filepath": save_path}, 
                                                            timeout=5)
                                     if response.status_code == 200:
-                                        print("✅ State saved to .pokeagent_cache/manual_save.state")
+                                        print(f"✅ State saved to {save_path}")
                                     else:
                                         print(f"❌ Failed to save state: {response.status_code}")
                                 except Exception as e:
@@ -247,11 +249,13 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 # Load state
                                 print("📂 Loading state...")
                                 try:
+                                    from utils.run_data_manager import get_cache_path
+                                    load_path = str(get_cache_path("manual_save.state"))
                                     response = requests.post(f"{server_url}/load_state", 
-                                                           json={"filepath": ".pokeagent_cache/manual_save.state"}, 
+                                                           json={"filepath": load_path}, 
                                                            timeout=5)
                                     if response.status_code == 200:
-                                        print("✅ State loaded from .pokeagent_cache/manual_save.state")
+                                        print(f"✅ State loaded from {load_path}")
                                     else:
                                         print(f"❌ Failed to load state: {response.status_code}")
                                 except Exception as e:
