@@ -2601,7 +2601,7 @@ class DirectObjectiveManager:
                 description="Navigate upstairs to your bedroom and set the clock on the wall",
                 action_type="interact",
                 target_location="Player's Bedroom",
-                navigation_hint="Walk north to the stairs at position (8, 2) and go upstairs. Interact with the clock at position (5, 1) by standing at (5, 2) and facing UP. Press A to set the time",
+                navigation_hint="Walk north to the stairs at position and go upstairs. Interact with the clock. Press A to set the time",
                 completion_condition="clock_setting_screen_closes_and_player_control_returns",
                 priority=1
             ),
