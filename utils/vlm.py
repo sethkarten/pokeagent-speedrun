@@ -9,6 +9,7 @@ import time
 import threading
 import logging
 import hashlib
+from datetime import timedelta
 from abc import ABC, abstractmethod
 from typing import Union, List, Dict, Any, Optional
 import numpy as np
@@ -89,6 +90,25 @@ def _openai_text_part(text: str):
     part.function_call = None
     part.text = text
     return part
+
+
+def _normalize_token_counts(prompt_tokens: int, completion_tokens: int, total_tokens: int) -> tuple[int, int, int]:
+    """Normalize provider token counters to a consistent billing shape.
+
+    Some providers include hidden/thinking output tokens in total_tokens but not in
+    completion_tokens. To keep cost accounting conservative and consistent, treat
+    completion as at least (total - prompt) when total is present.
+    This means that thinking tokens are considered completion tokens.
+    """
+    p = max(0, int(prompt_tokens or 0))
+    c = max(0, int(completion_tokens or 0))
+    t = max(0, int(total_tokens or 0))
+    if t > 0:
+        c = max(c, max(0, t - p))
+        t = max(t, p + c)
+    else:
+        t = p + c
+    return p, c, t
 
 
 def _openai_responses_adapter(response) -> Any:
@@ -345,10 +365,13 @@ class OpenAIBackend(VLMBackend):
                 cached = 0
                 if hasattr(u, "input_tokens_details") and u.input_tokens_details:
                     cached = getattr(u.input_tokens_details, "cached_tokens", 0)
+                inp, out, total = _normalize_token_counts(
+                    inp, out, getattr(u, "total_tokens", 0) or (inp + out)
+                )
                 token_usage = {
                     "prompt_tokens": inp,
                     "completion_tokens": out,
-                    "total_tokens": getattr(u, "total_tokens", 0) or (inp + out),
+                    "total_tokens": total,
                     "cached_tokens": cached,
                 }
 
@@ -434,10 +457,13 @@ class OpenAIBackend(VLMBackend):
                 cached = 0
                 if hasattr(u, "input_tokens_details") and u.input_tokens_details:
                     cached = getattr(u.input_tokens_details, "cached_tokens", 0)
+                inp, out, total = _normalize_token_counts(
+                    inp, out, getattr(u, "total_tokens", 0) or (inp + out)
+                )
                 token_usage = {
                     "prompt_tokens": inp,
                     "completion_tokens": out,
-                    "total_tokens": getattr(u, "total_tokens", 0) or (inp + out),
+                    "total_tokens": total,
                     "cached_tokens": cached,
                 }
 
@@ -1214,12 +1240,21 @@ class OpenRouterBackend(VLMBackend):
                 token_usage = {
                     "prompt_tokens": getattr(u, "prompt_tokens", 0),
                     "completion_tokens": getattr(u, "completion_tokens", 0),
-                    "total_tokens": getattr(u, "total_tokens", 0) or (
-                        getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
-                    ),
+                    "total_tokens": 0,  # Set below after normalization
                     "cached_tokens": _extract_openrouter_cached_tokens(u),
                     "cache_write_tokens": _extract_openrouter_cache_write_tokens(u),
                 }
+                (
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    token_usage["total_tokens"],
+                ) = _normalize_token_counts(
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    getattr(u, "total_tokens", 0) or (
+                        token_usage["prompt_tokens"] + token_usage["completion_tokens"]
+                    ),
+                )
 
             if self.tools:
                 adapter = _openrouter_response_adapter(response)
@@ -1299,12 +1334,21 @@ class OpenRouterBackend(VLMBackend):
                 token_usage = {
                     "prompt_tokens": getattr(u, "prompt_tokens", 0),
                     "completion_tokens": getattr(u, "completion_tokens", 0),
-                    "total_tokens": getattr(u, "total_tokens", 0) or (
-                        getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
-                    ),
+                    "total_tokens": 0,  # Set below after normalization
                     "cached_tokens": _extract_openrouter_cached_tokens(u),
                     "cache_write_tokens": _extract_openrouter_cache_write_tokens(u),
                 }
+                (
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    token_usage["total_tokens"],
+                ) = _normalize_token_counts(
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    getattr(u, "total_tokens", 0) or (
+                        token_usage["prompt_tokens"] + token_usage["completion_tokens"]
+                    ),
+                )
 
             if self.tools:
                 adapter = _openrouter_response_adapter(response)
@@ -2359,6 +2403,7 @@ class GeminiBackend(VLMBackend):
         self.model_name = model_name
         self.tools = tools or []
         self.system_instruction = system_instruction
+        self._uses_cached_content_context = False
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
         if not self.api_key:
@@ -2405,11 +2450,20 @@ class GeminiBackend(VLMBackend):
 
         Falls back to regular model initialization when cache APIs are unavailable.
         """
+        # Option B: preserve strict tool-calling semantics for harnessed agents.
+        # Cached-content models reject per-request tool_config; when tools are active we
+        # intentionally disable explicit cached content so we can keep mode="ANY".
+        if self.tools:
+            self._uses_cached_content_context = False
+            return genai.GenerativeModel(model_name, **model_kwargs)
+
         if not self.system_instruction:
+            self._uses_cached_content_context = False
             return genai.GenerativeModel(model_name, **model_kwargs)
 
         caching = getattr(genai, "caching", None)
         if not caching or not hasattr(caching, "CachedContent"):
+            self._uses_cached_content_context = False
             return genai.GenerativeModel(model_name, **model_kwargs)
 
         try:
@@ -2418,12 +2472,14 @@ class GeminiBackend(VLMBackend):
                 model=model_for_cache,
                 system_instruction=self.system_instruction,
                 tools=self.tools or None,
-                ttl=f"{self._system_cache_ttl_seconds}s",
+                ttl=timedelta(seconds=self._system_cache_ttl_seconds),
             )
             logger.info("Gemini explicit system cache created: %s", getattr(cached, "name", "unknown"))
+            self._uses_cached_content_context = True
             return genai.GenerativeModel.from_cached_content(cached)
         except Exception as e:
             logger.warning("Gemini explicit system cache unavailable, using regular model init: %s", e)
+            self._uses_cached_content_context = False
             return genai.GenerativeModel(model_name, **model_kwargs)
 
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
@@ -2617,10 +2673,15 @@ class GeminiBackend(VLMBackend):
             token_usage = {}
             if hasattr(response, "usage_metadata"):
                 usage = response.usage_metadata
+                prompt_tokens, completion_tokens, total_tokens = _normalize_token_counts(
+                    getattr(usage, "prompt_token_count", 0),
+                    getattr(usage, "candidates_token_count", 0),
+                    getattr(usage, "total_token_count", 0),
+                )
                 token_usage = {
-                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
-                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
-                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                     "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
 
@@ -2733,10 +2794,15 @@ class GeminiBackend(VLMBackend):
             token_usage = {}
             if hasattr(response, "usage_metadata"):
                 usage = response.usage_metadata
+                prompt_tokens, completion_tokens, total_tokens = _normalize_token_counts(
+                    getattr(usage, "prompt_token_count", 0),
+                    getattr(usage, "candidates_token_count", 0),
+                    getattr(usage, "total_token_count", 0),
+                )
                 token_usage = {
-                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
-                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
-                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                     "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
 
