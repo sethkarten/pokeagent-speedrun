@@ -27,7 +27,7 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Player's Bedroom",
-        navigation_hint="Press A through dialogue. Walk north to stairs (S) at (8,2). Mom redirects you until you set the clock.",
+        navigation_hint="Press A through dialogue. Walk north to stairs. Mom redirects you until you set the clock.",
         completion_condition="player_bedroom_reached",
         priority=1
     ),
@@ -37,7 +37,7 @@ STORY_OBJECTIVES = [
         action_type="interact",
         category="story",
         target_location="Player's Bedroom",
-        navigation_hint="Clock (K) at position (5,1). Navigate to (5,2), press UP then A. Use D-pad to set time, confirm with A.",
+        navigation_hint="Identify the clock visually, navigate and face it, then press A. Use D-pad to set time, confirm with A.",
         completion_condition="clock_set",
         priority=1
     ),
