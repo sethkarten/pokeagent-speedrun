@@ -52,6 +52,7 @@ class LLMLogger:
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "cached_tokens": 0,  # NEW: Track cached tokens separately
+            "cache_write_tokens": 0,  # NEW: Track cache-write tokens separately (when provider exposes it)
             "total_cost": 0.0,
             "total_actions": 0,
             "start_time": time.time(),
@@ -61,7 +62,7 @@ class LLMLogger:
             "metadata": {},
             
             # NEW: Per-step granular tracking
-            "steps": [],  # List of {step, prompt_tokens, completion_tokens, cached_tokens, time_taken, timestamp}
+            "steps": [],  # List of {step, prompt_tokens, completion_tokens, cached_tokens, cache_write_tokens, time_taken, timestamp}
             
             # NEW: Per-milestone tracking
             "milestones": [],  # List of milestone completion data with cumulative and split metrics
@@ -79,60 +80,66 @@ class LLMLogger:
             "_last_objective_time": None,
         }
         
-        # Model pricing (per 1K tokens) - Updated January 2025
+        # Model pricing (per 1K tokens)
         self.pricing = {
             # OpenAI GPT-5
-            "gpt-5": {"prompt": 0.00125, "completion": 0.01},       # $1.25/$10 per 1M
-            "gpt-5-mini": {"prompt": 0.00025, "completion": 0.002},  # $0.25/$2 per 1M
-            "gpt-5-nano": {"prompt": 0.00005, "completion": 0.0004},  # $0.05/$0.40 per 1M
-            "gpt-5.1": {"prompt": 0.00125, "completion": 0.01},       # $1.25/$10 per 1M
-            "gpt-5.2": {"prompt": 0.00175, "completion": 0.014},       # $1.75/$14 per 1M
+            "gpt-5": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},       # $1.25/$10 per 1M, cached input $0.125 per 1M
+            "gpt-5-mini": {"prompt": 0.00025, "completion": 0.002, "cached_prompt": 0.000025},  # $0.25/$2 per 1M, cached input $0.025 per 1M
+            "gpt-5-nano": {"prompt": 0.00005, "completion": 0.0004, "cached_prompt": 0.000005},  # $0.05/$0.40 per 1M, cached input $0.005 per 1M
+            "gpt-5.1": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},       # $1.25/$10 per 1M, cached input $0.125 per 1M
+            "gpt-5.2": {"prompt": 0.00175, "completion": 0.014, "cached_prompt": 0.000175},       # $1.75/$14 per 1M, cached input $0.175 per 1M
             "gpt-5.2-pro": {"prompt": 0.021, "completion": 0.168},     # $21/$168 per 1M (no cached)
             "gpt-5-pro": {"prompt": 0.015, "completion": 0.12},        # $15/$120 per 1M (no cached)
             # GPT-5 chat-latest variants
-            "gpt-5.2-chat-latest": {"prompt": 0.00175, "completion": 0.014},
-            "gpt-5.1-chat-latest": {"prompt": 0.00125, "completion": 0.01},
-            "gpt-5-chat-latest": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5.2-chat-latest": {"prompt": 0.00175, "completion": 0.014, "cached_prompt": 0.000175},
+            "gpt-5.1-chat-latest": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},
+            "gpt-5-chat-latest": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},
             # GPT-5 codex variants
-            "gpt-5.2-codex": {"prompt": 0.00175, "completion": 0.014},
-            "gpt-5.1-codex-max": {"prompt": 0.00125, "completion": 0.01},
-            "gpt-5.1-codex": {"prompt": 0.00125, "completion": 0.01},
-            "gpt-5-codex": {"prompt": 0.00125, "completion": 0.01},
+            "gpt-5.2-codex": {"prompt": 0.00175, "completion": 0.014, "cached_prompt": 0.000175},
+            "gpt-5.1-codex-max": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},
+            "gpt-5.1-codex": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},
+            "gpt-5-codex": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},
 
-            # OpenAI GPT-4
-            "gpt-4o": {"prompt": 0.0025, "completion": 0.01},       # $2.50/$10 per 1M
-            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},  # $0.15/$0.60 per 1M
-            "gpt-4.1": {"prompt": 0.002, "completion": 0.008},      # $2/$8 per 1M
-            "gpt-4.1-mini": {"prompt": 0.0004, "completion": 0.0016},  # $0.40/$1.60 per 1M
-            "gpt-4.1-nano": {"prompt": 0.0001, "completion": 0.0004},  # $0.10/$0.40 per 1M
+            # OpenAI GPT-4 (Input / Cached input / Output per 1M from official pricing)
+            "gpt-4o": {"prompt": 0.0025, "completion": 0.01, "cached_prompt": 0.00125},       # $2.50/$1.25/$10 per 1M
+            "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006, "cached_prompt": 0.000075},  # $0.15/$0.075/$0.60 per 1M
+            "gpt-4.1": {"prompt": 0.002, "completion": 0.008, "cached_prompt": 0.0005},      # $2/$0.50/$8 per 1M
+            "gpt-4.1-mini": {"prompt": 0.0004, "completion": 0.0016, "cached_prompt": 0.0001},  # $0.40/$0.10/$1.60 per 1M
+            "gpt-4.1-nano": {"prompt": 0.0001, "completion": 0.0004, "cached_prompt": 0.000025},  # $0.10/$0.025/$0.40 per 1M
 
             # OpenAI o-series (reasoning)
-            "o4-mini": {"prompt": 0.0011, "completion": 0.0044},    # $1.10/$4.40 per 1M
-            "o3-mini": {"prompt": 0.0011, "completion": 0.0044},    # $1.10/$4.40 per 1M
-            "o3": {"prompt": 0.002, "completion": 0.008},           # $2/$8 per 1M
-            "o3-pro": {"prompt": 0.02, "completion": 0.08},         # $20/$80 per 1M
-            "o1": {"prompt": 0.015, "completion": 0.06},            # $15/$60 per 1M
-            "o1-pro": {"prompt": 0.15, "completion": 0.60},         # $150/$600 per 1M
+            "o4-mini": {"prompt": 0.0011, "completion": 0.0044, "cached_prompt": 0.000275},    # $1.10/$0.275/$4.40 per 1M
+            "o3-mini": {"prompt": 0.0011, "completion": 0.0044, "cached_prompt": 0.00055},   # $1.10/$0.55/$4.40 per 1M
+            "o3": {"prompt": 0.002, "completion": 0.008, "cached_prompt": 0.0005},           # $2/$0.50/$8 per 1M
+            "o3-pro": {"prompt": 0.02, "completion": 0.08},         # $20/$80 per 1M (no cached)
+            "o1": {"prompt": 0.015, "completion": 0.06, "cached_prompt": 0.0075},            # $15/$7.50/$60 per 1M
+            "o1-pro": {"prompt": 0.15, "completion": 0.60},         # $150/$600 per 1M (no cached)
 
-            # Anthropic Claude
-            "claude-sonnet-4.5": {"prompt": 0.003, "completion": 0.015},   # $3/$15 per 1M
-            "claude-sonnet-3.7": {"prompt": 0.003, "completion": 0.015},
-            "claude-sonnet-3.5": {"prompt": 0.003, "completion": 0.015},
-            "claude-opus-4.1": {"prompt": 0.015, "completion": 0.075},   # $15/$75 per 1M
-            "claude-opus-4": {"prompt": 0.015, "completion": 0.075},
-            "claude-opus-3": {"prompt": 0.015, "completion": 0.075},
-            "claude-haiku-3.5": {"prompt": 0.0008, "completion": 0.004},  # $0.80/$4 per 1M
-            "claude-haiku-3": {"prompt": 0.00025, "completion": 0.00125},  # $0.25/$1.25 per 1M
+            # Anthropic Claude (Base input / 5m cache write / Cache hits per MTok from official pricing)
+            "claude-sonnet-4.5": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},   # $3/$3.75/$0.30/$15 per 1M
+            "claude-sonnet-4": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
+            "claude-sonnet-3.7": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
+            "claude-sonnet-3.5": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
+            "claude-opus-4.1": {"prompt": 0.015, "completion": 0.075, "cached_prompt": 0.0015, "cache_write_prompt": 0.01875},   # $15/$18.75/$1.50/$75 per 1M
+            "claude-opus-4": {"prompt": 0.015, "completion": 0.075, "cached_prompt": 0.0015, "cache_write_prompt": 0.01875},
+            "claude-opus-3": {"prompt": 0.015, "completion": 0.075, "cached_prompt": 0.0015, "cache_write_prompt": 0.01875},
+            "claude-haiku-4.5": {"prompt": 0.001, "completion": 0.005, "cached_prompt": 0.0001, "cache_write_prompt": 0.00125},   # $1/$1.25/$0.10/$5 per 1M
+            "claude-haiku-3.5": {"prompt": 0.0008, "completion": 0.004, "cached_prompt": 0.00008, "cache_write_prompt": 0.001},  # $0.80/$1/$0.08/$4 per 1M
+            "claude-haiku-3": {"prompt": 0.00025, "completion": 0.00125, "cached_prompt": 0.00003, "cache_write_prompt": 0.0003},  # $0.25/$0.30/$0.03/$1.25 per 1M
 
-            # Gemini 2.x
-            "gemini-2.5-flash": {"prompt": 0.0003, "completion": 0.0006},  # $0.30/$0.60 per 1M
-            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01},     # $1.25/$10 per 1M
-            "gemini-2.0-flash": {"prompt": 0.00015, "completion": 0.0006},  # $0.15/$0.60 per 1M
+            # Gemini 2.x (Input / Output / Context caching per 1M from official pricing)
+            "gemini-2.5-flash": {"prompt": 0.0003, "completion": 0.0025, "cached_prompt": 0.00003},  # $0.30/$2.50/$0.03 per 1M
+            "gemini-2.5-flash-preview-09-2025": {"prompt": 0.0003, "completion": 0.0025, "cached_prompt": 0.00003},
+            "gemini-2.5-pro": {"prompt": 0.00125, "completion": 0.01, "cached_prompt": 0.000125},     # $1.25/$10/$0.125 per 1M (<=200k)
+            "gemini-2.5-flash-lite": {"prompt": 0.0001, "completion": 0.0004, "cached_prompt": 0.00001},  # $0.10/$0.40/$0.01 per 1M
+            "gemini-2.5-flash-lite-preview-09-2025": {"prompt": 0.0001, "completion": 0.0004, "cached_prompt": 0.00001},
+            "gemini-2.0-flash": {"prompt": 0.00015, "completion": 0.0006},  # $0.15/$0.60 per 1M (no cached in snippet)
 
             # Gemini 3.x
-            "gemini-3-pro-preview": {"prompt": 0.002, "completion": 0.012},  # $2/$12 per 1M
-            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012},
-            "gemini-3-flash": {"prompt": 0.0005, "completion": 0.003},       # $0.50/$3 per 1M
+            "gemini-3-pro-preview": {"prompt": 0.002, "completion": 0.012, "cached_prompt": 0.0002},  # $2/$12/$0.20 per 1M (<=200k)
+            "gemini-3-pro": {"prompt": 0.002, "completion": 0.012, "cached_prompt": 0.0002},
+            "gemini-3-flash": {"prompt": 0.0005, "completion": 0.003, "cached_prompt": 0.00005},     # $0.50/$3/$0.05 per 1M (gemini-3-flash-preview)
+            "gemini-3-flash-preview": {"prompt": 0.0005, "completion": 0.003, "cached_prompt": 0.00005},
 
             "default": {"prompt": 0.001, "completion": 0.002}  # Default pricing
         }
@@ -217,7 +224,7 @@ class LLMLogger:
         self.cumulative_metrics["last_update_time"] = current_time
         
         # Track token usage if available
-        step_tokens = {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
+        step_tokens = {"prompt": 0, "completion": 0, "total": 0, "cached": 0, "cache_write": 0}
         if metadata and "token_usage" in metadata:
             token_usage = metadata["token_usage"]
             if token_usage:
@@ -225,13 +232,15 @@ class LLMLogger:
                     "prompt": token_usage.get("prompt_tokens", 0),
                     "completion": token_usage.get("completion_tokens", 0),
                     "total": token_usage.get("total_tokens", 0),
-                    "cached": token_usage.get("cached_tokens", 0)
+                    "cached": token_usage.get("cached_tokens", 0),
+                    "cache_write": token_usage.get("cache_write_tokens", 0),
                 }
                 
                 self.cumulative_metrics["total_tokens"] += step_tokens["total"]
                 self.cumulative_metrics["prompt_tokens"] += step_tokens["prompt"]
                 self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
                 self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
+                self.cumulative_metrics["cache_write_tokens"] += step_tokens["cache_write"]
                 
                 # Calculate cost based on model (exact match first, then longest-key match)
                 model_name = (model_info.get("model", "") or "").lower()
@@ -252,7 +261,32 @@ class LLMLogger:
                             candidates.sort(key=lambda x: len(x[0]), reverse=True)
                             pricing = candidates[0][1]
                 
-                prompt_cost = (step_tokens["prompt"] / 1000) * pricing["prompt"]
+                prompt_tokens = max(0, step_tokens["prompt"])
+                cached_tokens = max(0, step_tokens["cached"])
+                cache_write_tokens = max(0, step_tokens["cache_write"])
+
+                # Providers report cache buckets in two common shapes:
+                # 1) Subset style: cached/cache_write are included in prompt_tokens.
+                # 2) Distinct style: prompt_tokens is uncached input, while cache buckets are separate.
+                # Handle both without double-counting or dropping billed tokens.
+                if (cached_tokens + cache_write_tokens) <= prompt_tokens:
+                    # Subset style (OpenAI/OpenRouter/Gemini style in most responses)
+                    uncached_prompt_tokens = prompt_tokens - cached_tokens - cache_write_tokens
+                    cached_prompt_tokens_billable = cached_tokens
+                    cache_write_tokens_billable = cache_write_tokens
+                else:
+                    # Distinct style (Anthropic can report large cache_write/cache_read outside input_tokens)
+                    uncached_prompt_tokens = prompt_tokens
+                    cached_prompt_tokens_billable = cached_tokens
+                    cache_write_tokens_billable = cache_write_tokens
+
+                cached_prompt_rate = pricing.get("cached_prompt", pricing["prompt"])
+                cache_write_prompt_rate = pricing.get("cache_write_prompt", pricing["prompt"])
+                prompt_cost = (
+                    (uncached_prompt_tokens / 1000) * pricing["prompt"]
+                    + (cached_prompt_tokens_billable / 1000) * cached_prompt_rate
+                    + (cache_write_tokens_billable / 1000) * cache_write_prompt_rate
+                )
                 completion_cost = (step_tokens["completion"] / 1000) * pricing["completion"]
                 self.cumulative_metrics["total_cost"] += prompt_cost + completion_cost
         
@@ -268,6 +302,7 @@ class LLMLogger:
                 "prompt_tokens": step_tokens["prompt"],
                 "completion_tokens": step_tokens["completion"],
                 "cached_tokens": step_tokens["cached"],
+                "cache_write_tokens": step_tokens["cache_write"],
                 "total_tokens": step_tokens["total"],
                 "time_taken": round(duration, 3),
                 "timestamp": time.time()
@@ -699,6 +734,8 @@ class LLMLogger:
                 self.cumulative_metrics["metadata"] = {}
             if "objectives" not in self.cumulative_metrics:
                 self.cumulative_metrics["objectives"] = []
+            if "cache_write_tokens" not in self.cumulative_metrics:
+                self.cumulative_metrics["cache_write_tokens"] = 0
 
             # Restore internal tracking from last milestone if available
             if self.cumulative_metrics["milestones"]:
