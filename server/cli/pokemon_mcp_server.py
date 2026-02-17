@@ -18,6 +18,7 @@ This server provides:
 import sys
 import logging
 import re
+import os
 from typing import Any, Dict, List, Optional, Tuple
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -38,7 +39,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # Server configuration
-SERVER_URL = "http://localhost:8000"
+SERVER_URL = os.environ.get("POKEMON_SERVER_URL", "http://localhost:8000")
 
 # Initialize MCP server
 mcp = FastMCP(name="pokemon-emerald")
