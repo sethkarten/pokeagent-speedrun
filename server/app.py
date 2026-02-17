@@ -2112,6 +2112,66 @@ latest_metrics = {
     "start_time": time.time(),  # Will be overwritten if checkpoint is loaded
 }
 
+
+@app.get("/termination_condition")
+async def get_termination_condition(condition_type: str = "gym_badge_count", threshold: int = 1):
+    """Check if a termination condition is met based on ground-truth memory data.
+    
+    This endpoint reads game state directly from ROM memory to provide reliable
+    termination conditions for external CLI agents (Claude Code, Codex, etc.).
+    
+    Args:
+        condition_type: Type of condition to check. Supported types:
+            - "gym_badge_count": Check number of gym badges obtained
+        threshold: Threshold value for the condition (e.g., 1 for first badge)
+    
+    Returns:
+        JSON with condition status:
+        {
+            "condition_type": str,
+            "threshold": int,
+            "current_value": int,
+            "condition_met": bool,
+            "badge_names": list (for gym_badge_count)
+        }
+    """
+    global env
+    
+    if env is None:
+        raise HTTPException(status_code=400, detail="Emulator not initialized")
+    
+    if not env.memory_reader:
+        raise HTTPException(status_code=500, detail="Memory reader not initialized")
+    
+    try:
+        if condition_type == "gym_badge_count":
+            # Read badges directly from ROM memory (ground truth)
+            badges = env.memory_reader.read_badges()
+            badge_count = len(badges) if badges else 0
+            
+            return {
+                "condition_type": condition_type,
+                "threshold": threshold,
+                "current_value": badge_count,
+                "badge_names": badges,
+                "condition_met": badge_count >= threshold
+            }
+        
+        # Future condition types can be added here:
+        # elif condition_type == "pokemon_count":
+        #     party_size = env.memory_reader.read_party_size()
+        #     return {...}
+        
+        else:
+            return {
+                "error": f"Unknown condition type: {condition_type}",
+                "supported_types": ["gym_badge_count"]
+            }
+    
+    except Exception as e:
+        logger.error(f"Error checking termination condition: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Flag to track whether checkpoint loading should be enabled
 checkpoint_loading_enabled = True  # Will be set based on startup args
 
