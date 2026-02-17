@@ -40,6 +40,7 @@ dependencies = [
     "google>=3.0.0",
     "pip>=25.2",
     "mcp>=1.18.0",
+    "pyboy==2.5.2",
 ]
 
 [project.optional-dependencies]
