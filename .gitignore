@@ -188,6 +188,7 @@ cython_debug/
 
 
 notes/*
+test_outputs/*
 
 *.mp4
 *scripts/*
