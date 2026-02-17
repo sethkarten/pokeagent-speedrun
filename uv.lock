@@ -1039,6 +1039,7 @@ dependencies = [
     { name = "pillow" },
     { name = "pip" },
     { name = "protobuf" },
+    { name = "pyboy" },
     { name = "pydantic" },
     { name = "pygame" },
     { name = "pytesseract" },
@@ -1094,6 +1095,7 @@ requires-dist = [
     { name = "pillow", specifier = "==10.2.0" },
     { name = "pip", specifier = ">=25.2" },
     { name = "protobuf", specifier = ">=3.19.6,!=4.24.0,<5.0.0" },
+    { name = "pyboy", specifier = "==2.5.2" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pygame", specifier = "==2.6.1" },
     { name = "pytesseract", specifier = ">=0.3.10" },
@@ -1165,6 +1167,27 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e9/e6/78ebbb10a8c8e4b61a59249394a4a594c1a7af95593dc933a349c8d00964/pyasn1_modules-0.4.2.tar.gz", hash = "sha256:677091de870a80aae844b1ca6134f54652fa2c8c5a52aa396440ac3106e941e6", size = 307892, upload-time = "2025-03-28T02:41:22.17Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl", hash = "sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a", size = 181259, upload-time = "2025-03-28T02:41:19.028Z" },
+]
+
+[[package]]
+name = "pyboy"
+version = "2.5.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "pysdl2" },
+    { name = "pysdl2-dll" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/16/2c/4fa9a3b46fd8f66bc899f1f83e8eda2c01dfa40c586e9af4f5d1236732ee/pyboy-2.5.2.tar.gz", hash = "sha256:c277387258d0fe573539b3adec364662b6c27d499a140fbe98afe804b68aabd5", size = 170232, upload-time = "2025-04-01T08:21:30.669Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/e0/682cdc00a69af8f602ff03583df2a972255f8fa5a254d65c0503aa6bc3d9/pyboy-2.5.2-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:e53beb1b5a7af03e3dea33c40721bf1756c304b605af1a2cabab8c4b45678a9e", size = 9351748, upload-time = "2025-04-01T08:26:43.852Z" },
+    { url = "https://files.pythonhosted.org/packages/45/96/cd891962323665bea3fda902a8187d16e0cde37838f58aa39aa8ba602a20/pyboy-2.5.2-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6c35f3de715f7eab7abc6b508983eb3dcea32aa8c5fe5806e3318625b4d49a44", size = 5517018, upload-time = "2025-04-01T08:39:22.705Z" },
+    { url = "https://files.pythonhosted.org/packages/19/8c/9d37bea9c1648facfc13c90acaa62c5e57642f5c10fb870b599b81573d89/pyboy-2.5.2-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:f6dd7905bec9d29f83796cb54cb87eb84b37a67e809e173990d0e21dac2c7c7f", size = 5547024, upload-time = "2025-04-01T08:37:21.613Z" },
+    { url = "https://files.pythonhosted.org/packages/70/53/498e22a3c40aeeb0d47ca5101ed9b4c3b0f9a81ee051aeaa322d1baea6aa/pyboy-2.5.2-cp310-cp310-win_amd64.whl", hash = "sha256:63cfa3217552309776c94d97f0ce01bbd8e9302ebe92649f679718e087e66e6d", size = 4023800, upload-time = "2025-04-01T08:33:21.163Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/15/fb3a70469a149e066b838fe02a3c8e0618ae74b9a8c73134bec8664fb001/pyboy-2.5.2-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:7a97df2f141e90f2285bc04cf76a2f18b0f1fdfee9998551152a2f5c83a06b12", size = 9341765, upload-time = "2025-04-01T08:43:55.227Z" },
+    { url = "https://files.pythonhosted.org/packages/88/9d/44bc84d476a6bc4e457e6dc87224d2792e7cc70ea85b03038f5c78e1f00a/pyboy-2.5.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:e519ab2f0915a32f75907fe716f75a5a1fe2ff508f69727353f22eedb82f396c", size = 5523811, upload-time = "2025-04-01T08:43:09.395Z" },
+    { url = "https://files.pythonhosted.org/packages/66/45/1b45f676a65d7fb4bbf6386fc492cf6f3b5c04f736a95b97999beb94d0c9/pyboy-2.5.2-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:1ae169123da40bee56e7f9a35e1428a175f467009c21672575ced350b948d707", size = 5552125, upload-time = "2025-04-01T08:45:27.363Z" },
+    { url = "https://files.pythonhosted.org/packages/45/0e/d34b4a541eef6b58ae5f82b434d05118ebcde14b20f3f420bbc75555883b/pyboy-2.5.2-cp311-cp311-win_amd64.whl", hash = "sha256:b208b8cca7134e5bf9743e18e7a9b83725358ce51c042f3eea0fd83ea3bc4a1d", size = 4034094, upload-time = "2025-04-01T08:32:00.9Z" },
 ]
 
 [[package]]
@@ -1299,6 +1322,31 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f2/a5/181488fc2b9d093e3972d2a472855aae8a03f000592dbfce716a512b3359/pyparsing-3.2.5.tar.gz", hash = "sha256:2df8d5b7b2802ef88e8d016a2eb9c7aeaa923529cd251ed0fe4608275d4105b6", size = 1099274, upload-time = "2025-09-21T04:11:06.277Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/5e/1aa9a93198c6b64513c9d7752de7422c06402de6600a8767da1524f9570b/pyparsing-3.2.5-py3-none-any.whl", hash = "sha256:e38a4f02064cf41fe6593d328d0512495ad1f3d8a91c4f73fc401b3079a59a5e", size = 113890, upload-time = "2025-09-21T04:11:04.117Z" },
+]
+
+[[package]]
+name = "pysdl2"
+version = "0.9.17"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/ff/8704d84ad4d25f0a7bf7912504f64575e432e8d57dfba2fe35f5b2db7e04/pysdl2-0.9.17.tar.gz", hash = "sha256:48c6ef01a4eb123db5f7e46e1a1b565675755b07e615f3fe20a623c94735b52b", size = 775955, upload-time = "2024-12-30T18:07:27.562Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/e2/399ea7900e7510096aeb41439e6f1540bef0bdf7e15cc2d8464e4adb71e8/PySDL2-0.9.17-py3-none-any.whl", hash = "sha256:fe923dbf5c7b27bbc1eb2bf58abfa793f8f13fd7ae8b27b1bc2de49920bcbd41", size = 583137, upload-time = "2024-12-30T18:07:25.987Z" },
+]
+
+[[package]]
+name = "pysdl2-dll"
+version = "2.32.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/9e/edc54eb68ebdb3e26302c330a6e2171ebb41179fa1245caa03b3ea89c930/pysdl2-dll-2.32.0.tar.gz", hash = "sha256:4ee29af075c0ca2f0f7a4478f9f01d1caa3b8bdcc5ea8492ef379d8528ddd821", size = 15377, upload-time = "2025-03-20T20:50:46.571Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/85/8e3290d674f96768efdf62c20630a018a4204d5192bc58af0eca55c2249c/pysdl2_dll-2.32.0-py2.py3-none-macosx_10_11_universal2.whl", hash = "sha256:61adecf7501e074a8b476eebffbc1661f1553681db8d01b3047a9674b737b9fa", size = 6579935, upload-time = "2025-03-20T20:53:03.319Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/7e/b699279c78f4ba978dbe17782b18f12909dc04ab1f42c6835aac365518c0/pysdl2_dll-2.32.0-py2.py3-none-macosx_10_11_x86_64.whl", hash = "sha256:745da0fd2bca264620fb65db8fbb473d230a2ddb649952c84b93592d663d95cc", size = 6579932, upload-time = "2025-03-20T20:53:04.686Z" },
+    { url = "https://files.pythonhosted.org/packages/6b/fe/8a8d56f3674b6ab685ffc64a5bb3819f643717972f06690b19ba6d72c3e6/pysdl2_dll-2.32.0-py2.py3-none-manylinux2014_i686.whl", hash = "sha256:9f8c5945dda098037be08ff480a995d7c34b9e2e8afcf743de26e8e1ffff0e22", size = 4536089, upload-time = "2025-03-20T20:58:20.977Z" },
+    { url = "https://files.pythonhosted.org/packages/ef/09/246560c698f6c857f522134b648e12b5a9fecb89a82abeb1ed36cf17f0f0/pysdl2_dll-2.32.0-py2.py3-none-manylinux2014_x86_64.whl", hash = "sha256:9086bd345be6d4e3463379703701a4ff6acdd2991a49f5722ad4f8bc86b26539", size = 4238730, upload-time = "2025-03-20T21:00:16.371Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/87/88203f9a7f72246a1388d7a8cb15045ba119ca4e79bb7d1ad624fe9519f6/pysdl2_dll-2.32.0-py2.py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:c9a5c97b0647f9ddf9ad52f5f95b90d1dbf362ab52fcad0ff091e3f32663b257", size = 4437888, upload-time = "2025-03-20T20:59:27.021Z" },
+    { url = "https://files.pythonhosted.org/packages/80/11/9bee58ff7aa742e7917d97a926ff3d1c2e9a67ac2e82244c4c50c51e3df8/pysdl2_dll-2.32.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:490f1525c47ab00d8150ed1245fb306f02628d1b43f0e162e6903ed5c1a4a1ef", size = 5176310, upload-time = "2025-03-20T20:59:43.748Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/9c/f09d804737501b4813b3612c95e4d74dcbc0c82a51a74542ed8e5a4a27b0/pysdl2_dll-2.32.0-py2.py3-none-win32.whl", hash = "sha256:0139ce2160d8387fa4f9bbd5272b374be521e9dd133cd9a2d76c20a20d599bed", size = 3405412, upload-time = "2025-03-20T20:51:54.036Z" },
+    { url = "https://files.pythonhosted.org/packages/47/ef/5ba6580e06aec8f1e3004269a6939457e63e4791ca1e36ab2e3492a120da/pysdl2_dll-2.32.0-py2.py3-none-win_amd64.whl", hash = "sha256:28f577907bf17df3b3600daebbf0534aeaa44af266430ba09c7e04ab3e22b41f", size = 4042963, upload-time = "2025-03-20T20:52:34.372Z" },
 ]
 
 [[package]]
