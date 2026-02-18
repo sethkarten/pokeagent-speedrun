@@ -1947,6 +1947,9 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                 "map": conn.get('map', '?')
             })
         
+        # BG events (PC, clock, TV, notebook, etc.)
+        bg_events_for_json = json_map.get('bg_events', [])
+        
         # Build compact JSON map (matching example format)
         compact_json_map = {
             "name": json_map.get('name'),
@@ -1954,6 +1957,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             "dimensions": json_map.get('dimensions'),
             "warps": simplified_warps,
             "objects": objects_for_json,
+            "bg_events": bg_events_for_json,
             "connections": simplified_connections
         }
         context_parts.append(json.dumps(compact_json_map, indent=2))
