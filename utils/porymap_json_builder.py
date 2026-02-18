@@ -480,6 +480,21 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                     "map": conn.get("map", "?")
                 })
     
+    # Extract bg_events (PC, clock, TV, notebook, etc.) - use override if provided, else porymap data
+    if override and 'bg_events' in override:
+        bg_events = override['bg_events']
+    else:
+        bg_events = []
+        for bg in map_data.get("bg_events", []):
+            bg_events.append({
+                "type": bg.get("type", "?"),
+                "x": bg.get("x", 0),
+                "y": bg.get("y", 0),
+                "elevation": bg.get("elevation", 0),
+                "player_facing_dir": bg.get("player_facing_dir", "?"),
+                "script": bg.get("script", "?")
+            })
+    
     # Use override warps if provided (already extracted above, but override takes precedence)
     if override and 'warps' in override:
         warps = override['warps']
@@ -493,6 +508,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
         "dimensions": dimensions,
         "warps": warps,
         "objects": objects,
+        "bg_events": bg_events,
         "connections": connections,
     }
     
