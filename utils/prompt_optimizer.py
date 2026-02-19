@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class PromptOptimizer:
     """Optimizes agent base prompt based on trajectory analysis."""
     
-    def __init__(self, vlm, run_data_manager, base_prompt_path: str = "base_prompt.md", system_prompt_path: str = "system_prompt.md"):
+    def __init__(self, vlm, run_data_manager, base_prompt_path: str = "agent/prompts/base_prompt.md", system_prompt_path: str = "agent/prompts/system_prompt.md"):
         """
         Initialize the prompt optimizer.
         
@@ -30,7 +30,7 @@ class PromptOptimizer:
         """
         # Load system prompt so optimizer knows what tools the agent has access to
         # We'll include this in the optimization prompt (not as system instruction)
-        system_prompt_file = Path(__file__).parent.parent / system_prompt_path
+        system_prompt_file = Path(__file__).resolve().parent.parent / system_prompt_path
         self.system_prompt_content = None
         if system_prompt_file.exists():
             with open(system_prompt_file, 'r') as f:
@@ -49,8 +49,9 @@ class PromptOptimizer:
             system_instruction=None  # No system instruction - we'll include system prompt in the optimization prompt instead
         )
         self.run_manager = run_data_manager
-        self.base_prompt_path = Path(base_prompt_path)
-        
+        _base = Path(base_prompt_path)
+        self.base_prompt_path = _base if _base.is_absolute() else Path(__file__).resolve().parent.parent / base_prompt_path
+
         # Load initial base prompt
         if self.base_prompt_path.exists():
             with open(self.base_prompt_path, 'r') as f:
@@ -327,7 +328,7 @@ IMPROVED BASE PROMPT:
         return self.current_base_prompt
 
 
-def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = "base_prompt.md", system_prompt_path: str = "system_prompt.md") -> PromptOptimizer:
+def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = "agent/prompts/base_prompt.md", system_prompt_path: str = "agent/prompts/system_prompt.md") -> PromptOptimizer:
     """Factory function to create a PromptOptimizer instance."""
     return PromptOptimizer(vlm, run_data_manager, base_prompt_path, system_prompt_path)
 

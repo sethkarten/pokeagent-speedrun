@@ -2159,7 +2159,8 @@ async def update_agent_step(request: Request = None):
                     step_num = request_data.get("step", agent_step_count)
                     # Write to a simple text file for the stream to read
                     try:
-                        with open("agent_thinking.txt", "w") as f:
+                        _thinking_path = Path(__file__).resolve().parent / "agent_thinking.txt"
+                        with open(_thinking_path, "w") as f:
                             f.write(f"Step {step_num}:\n{thinking_text}\n")
                     except Exception as e:
                         logger.debug(f"Could not write thinking: {e}")
