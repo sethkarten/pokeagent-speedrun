@@ -190,8 +190,8 @@ def main():
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="my_cli_agent",
-                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "cli", "my_cli_agent", "autonomous_cli", "vision_only"],
-                       help="Agent scaffold: my_cli_agent (default), simple, react, claudeplays, geminiplays, cli (server-only for external CLI agents), my_cli_agent (custom CLI agent), autonomous_cli (autonomous agent with all tools), or vision_only (vision-only agent without map/pathfinding)")
+                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "my_cli_agent", "autonomous_cli", "vision_only"],
+                       help="Agent scaffold: my_cli_agent (default), simple, react, claudeplays, geminiplays, autonomous_cli, or vision_only")
     parser.add_argument("--simple", action="store_true", 
                        help="DEPRECATED: Use --scaffold simple instead")
     
@@ -237,7 +237,7 @@ def main():
     first_objective_id = None
     first_objective_desc = None
     if args.direct_objectives:
-        from agent.direct_objectives import get_first_objective_info
+        from agent.objectives import get_first_objective_info
         first_objective_id, first_objective_desc = get_first_objective_info(
             args.direct_objectives, 
             args.direct_objectives_start
@@ -322,7 +322,7 @@ def main():
                 print(f"ℹ️  Knowledge base file does not exist yet: {knowledge_base_file}")
         
         # Auto-start server if requested
-        if args.agent_auto or args.manual or args.scaffold in ["cli", "my_cli_agent", "autonomous_cli", "geminiplays", "vision_only"]:
+        if args.agent_auto or args.manual or args.scaffold in ["my_cli_agent", "autonomous_cli", "geminiplays", "vision_only"]:
             print("\n📡 Starting server process...")
             server_process = start_server(args)
             
@@ -358,7 +358,6 @@ def main():
             "react": "ReAct agent (Thought→Action→Observation loop)",
             "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
             "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
-            "cli": "Gemini API with MCP tools (native function calling)",
             "my_cli_agent": "My Custom CLI Agent (customized Gemini API with MCP tools)",
             "autonomous_cli": "Autonomous CLI Agent (creates own objectives, all tools enabled)",
             "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)"
@@ -373,16 +372,6 @@ def main():
 
         # Configuration for CLI-based agents
         cli_agent_configs = {
-            "cli": {
-                "name": "CLI Scaffold Mode - Gemini API with MCP Tools",
-                "details": [
-                    "Using Gemini API directly (no gemini-cli dependency)",
-                    "MCP tools exposed via HTTP endpoints"
-                ],
-                "module": "agent.cli_agent",
-                "class": "CLIAgent",
-                "use_backend": False
-            },
             "my_cli_agent": {
                 "name": "My Custom CLI Agent Mode - Customized Gemini API with MCP Tools",
                 "details": [
