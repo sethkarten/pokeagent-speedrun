@@ -177,6 +177,20 @@ S......#.........#
 ##################""",
     },
 
+    # LittlerootTown_BrendansHouse_2F - partial override for early game
+    # ASCII: 9x8, no leading spaces so dimensions and player overlay stay correct
+    # P=PC(0,1), V=notebook(1,1)/GameCube(3,1), K=clock(5,1), S=stairs/warp(7,1)
+    "LittlerootTown_BrendansHouse_2F": {
+        "ascii": """#########
+PV##VK#S#
+.........
+.........
+...I.....
+.#...D...
+.........
+.........""",},
+
+
     # Petalburg Gym Lobby - Early game (< 4 badges)
     # Full override: smaller map with Norman in lobby position
     # ROM coordinates: lobby starts at y=105, so offset_y=105 translates ROM y=110 to local y=5
@@ -253,6 +267,9 @@ def ascii_to_metatiles(ascii_map: str, map_name: str = "") -> List[List[Tuple[in
     metatiles = []
 
     for line in lines:
+        line = line.strip()  # normalize so override indentation doesn't break dimensions
+        if not line:
+            continue
         row = []
         for char in line:
             if char == '#':
