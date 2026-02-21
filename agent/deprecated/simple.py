@@ -1,5 +1,5 @@
 """
-Simple Agent Module
+Simple Agent Module (deprecated path).
 
 Provides a streamlined approach for direct frame + state -> action processing,
 with enhanced history tracking to prevent getting stuck in loops.
