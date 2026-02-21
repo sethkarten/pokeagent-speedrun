@@ -6,7 +6,7 @@ Categorized Game Objectives
 - BATTLING_OBJECTIVES (55): Team building and training
 """
 
-from agent.objective_types import DirectObjective
+from .objective_types import DirectObjective
 
 
 # Story objectives (214 total)

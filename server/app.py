@@ -2219,7 +2219,8 @@ async def update_agent_step(request: Request = None):
                     step_num = request_data.get("step", agent_step_count)
                     # Write to a simple text file for the stream to read
                     try:
-                        with open("agent_thinking.txt", "w") as f:
+                        _thinking_path = Path(__file__).resolve().parent / "agent_thinking.txt"
+                        with open(_thinking_path, "w") as f:
                             f.write(f"Step {step_num}:\n{thinking_text}\n")
                     except Exception as e:
                         logger.debug(f"Could not write thinking: {e}")
@@ -2618,7 +2619,7 @@ async def mcp_get_game_state():
     try:
         from utils.state_formatter import format_state_for_llm
         from server.cli import pokemon_mcp_server
-        from agent.direct_objectives import DirectObjectiveManager
+        from agent.objectives import DirectObjectiveManager
 
         # Get recent button presses with position history
         global recent_button_presses, current_obs
@@ -2857,7 +2858,7 @@ async def mcp_complete_direct_objective(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.direct_objectives import DirectObjectiveManager
+        from agent.objectives import DirectObjectiveManager
 
         # Get current game state to check objective completion
         from utils.state_formatter import format_state_for_llm
@@ -2971,7 +2972,7 @@ async def mcp_complete_direct_objective(request: dict):
             # Advance the appropriate index, and inject guidance when a category ends
             if category == "story":
                 if direct_objectives_manager.story_index >= len(direct_objectives_manager.story_sequence) - 1:
-                    from agent.objective_types import DirectObjective
+                    from agent.objectives import DirectObjective
 
                     next_obj = DirectObjective(
                         id="autonomous_01_create_next_story_objectives",
@@ -3177,7 +3178,7 @@ async def mcp_complete_direct_objective(request: dict):
 
             # Automatically create a new objective to guide the agent through next steps
             try:
-                from agent.direct_objectives import DirectObjective
+                from agent.objectives import DirectObjective
 
                 # Get current game state for context
                 next_step_obj = DirectObjective(
@@ -3737,7 +3738,7 @@ async def mcp_create_direct_objectives(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.direct_objectives import DirectObjectiveManager
+        from agent.objectives import DirectObjectiveManager
 
         objectives_data = request.get("objectives", [])
         reasoning = request.get("reasoning", "")
