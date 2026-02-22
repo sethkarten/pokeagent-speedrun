@@ -19,11 +19,8 @@ import signal
 import threading
 import logging
 import shutil
-import pty
-import select
 import tempfile
 import json
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -38,7 +35,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 
 def _build_claude_bootstrap_prompt(directive_content: str, server_url: str) -> str:
@@ -54,38 +50,30 @@ def _build_claude_bootstrap_prompt(directive_content: str, server_url: str) -> s
     )
 
 
-def _stream_pty_output(
-    master_fd: int,
+def _stream_pipe_output(
+    stdout_pipe,
     stop_event: threading.Event,
-    auto_accept_bypass: bool = False,
 ) -> None:
-    """Stream PTY output to stdout for observability."""
-    pending = ""
-    accepted = False
-    while not stop_event.is_set():
-        try:
-            ready, _, _ = select.select([master_fd], [], [], 0.2)
-            if master_fd not in ready:
-                continue
-            data = os.read(master_fd, 4096)
-            if not data:
-                return
-            text = data.decode(errors="replace")
-            pending = (pending + text)[-8000:]
-            sys.stdout.write(text)
-            sys.stdout.flush()
+    """Stream subprocess stdout pipe to console for observability.
 
-            # Claude may block on first-time bypass permissions confirmation.
-            # Auto-confirm once so the orchestrator does not stall indefinitely.
-            if auto_accept_bypass and not accepted:
-                clean_pending = ANSI_ESCAPE_RE.sub("", pending)
-                clean_pending = " ".join(clean_pending.split())
-                normalized = re.sub(r"[^a-z]", "", clean_pending.lower())
-                if "bypasspermissionsmode" in normalized and "entertoconfirm" in normalized:
-                    os.write(master_fd, b"2\r")
-                    accepted = True
-        except OSError:
-            return
+    Uses unbuffered reads (bufsize=0 on the Popen) so each os-level read
+    returns as soon as data is available, giving real-time streaming.
+    """
+    first_data = True
+    logger.info("[cli-debug] stream_pipe_output: thread started")
+    try:
+        while not stop_event.is_set():
+            data = stdout_pipe.read(4096)
+            if not data:
+                logger.info("[cli-debug] stream_pipe_output: EOF from CLI")
+                return
+            if first_data:
+                logger.info("[cli-debug] stream_pipe_output: first data received (%d bytes)", len(data))
+                first_data = False
+            sys.stdout.write(data.decode(errors="replace"))
+            sys.stdout.flush()
+    except (OSError, ValueError) as e:
+        logger.info("[cli-debug] stream_pipe_output: error: %s", e)
 
 
 def _terminate_process(
@@ -118,6 +106,22 @@ def _terminate_process(
                 process.kill()
         except ProcessLookupError:
             return
+
+
+def _cleanup_cli_session(master_fd, stop_event, temp_mcp_config_path):
+    """Clean up resources from a single CLI agent session."""
+    if stop_event:
+        stop_event.set()
+    if master_fd is not None:
+        try:
+            os.close(master_fd)
+        except OSError:
+            pass
+    if temp_mcp_config_path:
+        try:
+            os.remove(temp_mcp_config_path)
+        except OSError:
+            pass
 
 
 def preflight_cli(args) -> bool:
@@ -271,52 +275,22 @@ def check_termination_condition(server_url: str, condition_type: str = "gym_badg
 
 def termination_monitor(
     server_url: str,
-    cli_process: subprocess.Popen,
+    termination_triggered: threading.Event,
     condition_type: str = "gym_badge_count",
     threshold: int = 1,
     poll_interval: int = 10,
-    graceful_timeout: int = 30,
-    termination_triggered: threading.Event | None = None,
 ):
-    """Monitor termination condition and terminate CLI agent when met.
-    
-    Runs in a separate thread, polls the server for termination condition,
-    and sends SIGTERM to CLI agent when condition is met.
-    
-    Args:
-        server_url: Base URL of the server
-        cli_process: CLI agent subprocess
-        condition_type: Type of termination condition
-        threshold: Threshold value for the condition
-        poll_interval: Seconds between polls
-        graceful_timeout: Seconds to wait after SIGTERM before SIGKILL
-    """
+    """Poll server for termination condition. Sets event when met."""
     logger.info(f"Termination monitor started: {condition_type} >= {threshold}, polling every {poll_interval}s")
-    
-    while cli_process.poll() is None:  # While CLI agent is running
+    while not termination_triggered.is_set():
         result = check_termination_condition(server_url, condition_type, threshold)
-        
         if result.get("condition_met"):
-            if termination_triggered is not None:
-                termination_triggered.set()
-            logger.info(f"🎉 Termination condition met! {condition_type}={result.get('current_value', '?')} >= {threshold}")
+            termination_triggered.set()
+            logger.info(f"Termination condition met: {condition_type}={result.get('current_value', '?')} >= {threshold}")
             if result.get("badge_names"):
                 logger.info(f"   Badges: {result['badge_names']}")
-            
-            # Graceful shutdown
-            print(f"\n🛑 Termination condition met - stopping CLI agent...")
-            _terminate_process(
-                process=cli_process,
-                graceful_timeout=graceful_timeout,
-                label="🤖 Stopping CLI agent",
-                use_process_group=True,
-            )
-            
             return
-        
         time.sleep(poll_interval)
-    
-    logger.info("CLI agent exited on its own")
 
 
 def launch_cli_agent(
@@ -351,12 +325,15 @@ def launch_cli_agent(
     
     temp_mcp_config_path = None
 
+    bootstrap = ""
+
     # Build command based on CLI type
     if cli_type == "claude":
-        cmd = ["claude"]
+        # --print: non-interactive batch mode (read prompt, process, print, exit).
+        # Without --print Claude enters TUI mode which hangs as a subprocess.
+        cmd = ["claude", "--print"]
         if dangerously_skip_permissions:
-            # Use non-interactive permission mode to avoid approval stalls.
-            cmd.extend(["--permission-mode", "dontAsk"])
+            cmd.append("--dangerously-skip-permissions")
 
         env = os.environ.copy()
         env["POKEMON_MCP_SERVER_URL"] = server_url
@@ -384,7 +361,8 @@ def launch_cli_agent(
         cmd.extend(["--mcp-config", temp_mcp_config_path])
 
         if directive_content:
-            cmd.append(_build_claude_bootstrap_prompt(directive_content, server_url))
+            bootstrap = _build_claude_bootstrap_prompt(directive_content, server_url)
+            logger.info("[cli-debug] launch_cli_agent: directive+bootstrap length=%s chars", len(bootstrap))
 
     elif cli_type == "codex":
         raise NotImplementedError(
@@ -398,30 +376,37 @@ def launch_cli_agent(
     print(f"   Working directory: {working_dir}")
     print(f"   MCP Server: {server_url}")
     
-    # Launch interactive CLI agent in PTY so Claude behaves like terminal mode
-    master_fd, slave_fd = pty.openpty()
+    # --print mode is non-interactive; regular pipes suffice (no PTY needed).
+    # Prompt is fed via stdin, matching the pattern from ralph.sh.
     process = subprocess.Popen(
         cmd,
         cwd=working_dir,
         env=env,
-        stdin=slave_fd,
-        stdout=slave_fd,
-        stderr=slave_fd,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
         preexec_fn=os.setsid,
-        close_fds=True,
+        bufsize=0,
     )
-    os.close(slave_fd)
 
+    # Feed directive via stdin then close (like: claude --print < directive.md)
+    if bootstrap:
+        process.stdin.write(bootstrap.encode())
+    process.stdin.close()
+
+    logger.info("[cli-debug] launch_cli_agent: subprocess spawned pid=%s, stdin fed+closed", process.pid)
     stream_stop_event = threading.Event()
     stream_thread = threading.Thread(
-        target=_stream_pty_output,
-        args=(master_fd, stream_stop_event, dangerously_skip_permissions),
+        target=_stream_pipe_output,
+        args=(process.stdout, stream_stop_event),
         daemon=True,
     )
     stream_thread.start()
+    logger.info("[cli-debug] launch_cli_agent: stream thread started")
 
     print(f"✅ CLI agent started with PID {process.pid}")
-    return process, master_fd, stream_stop_event, stream_thread, temp_mcp_config_path
+    # Return None for master_fd (no PTY); cleanup handles None gracefully.
+    return process, None, stream_stop_event, stream_thread, temp_mcp_config_path
 
 
 def main():
@@ -435,7 +420,7 @@ def main():
                        choices=["claude", "codex"],
                        help="Type of CLI agent to launch (default: claude)")
     parser.add_argument("--directive", type=str, 
-                       default="agent/cli_directives/pokemon_directive.md",
+                       default="agent/prompts/cli_directives/pokemon_directive.md",
                        help="Path to system prompt/directive file for CLI agent")
     
     # Server configuration
@@ -565,100 +550,90 @@ def main():
         except Exception as e:
             print(f"⚠️ Could not verify server health: {e}")
         
-        # Launch CLI agent
-        print(f"\n🤖 Launching {args.cli_type} CLI agent...")
-        (
-            cli_process,
-            cli_master_fd,
-            cli_stream_stop_event,
-            cli_stream_thread,
-            temp_mcp_config_path,
-        ) = launch_cli_agent(
-            cli_type=args.cli_type,
-            server_url=server_url,
-            directive_path=args.directive,
-            working_dir=os.getcwd(),
-            dangerously_skip_permissions=args.dangerously_skip_permissions,
-        )
-        
-        # Start termination monitor thread
-        print(f"\n👁️  Starting termination monitor...")
+        # Start termination monitor thread (flag-only; does not kill process)
+        print(f"\n Starting termination monitor...")
         print(f"   Condition: {args.termination_condition} >= {args.termination_threshold}")
         print(f"   Poll interval: {args.poll_interval}s")
-        
         monitor_thread = threading.Thread(
             target=termination_monitor,
             args=(
                 server_url,
-                cli_process,
+                termination_triggered,
                 args.termination_condition,
                 args.termination_threshold,
                 args.poll_interval,
-                args.graceful_timeout,
-                termination_triggered,
             ),
-            daemon=True
+            daemon=True,
         )
         monitor_thread.start()
-        
-        # Wait for CLI agent to complete, while ensuring server stays healthy
-        print("\n⏳ Waiting for CLI agent to complete or termination condition...")
-        while True:
-            cli_exit = cli_process.poll()
-            if cli_exit is not None:
+
+        cli_process = None
+        iteration = 0
+        while not termination_triggered.is_set():
+            iteration += 1
+            logger.info(f"--- Agent session #{iteration} ---")
+            (
+                cli_process,
+                cli_master_fd,
+                cli_stream_stop_event,
+                cli_stream_thread,
+                temp_mcp_config_path,
+            ) = launch_cli_agent(
+                cli_type=args.cli_type,
+                server_url=server_url,
+                directive_path=args.directive,
+                working_dir=os.getcwd(),
+                dangerously_skip_permissions=args.dangerously_skip_permissions,
+            )
+
+            logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_process.pid)
+            # Wait for Claude to exit naturally
+            wait_start = time.monotonic()
+            last_debug_log = 0.0
+            while cli_process.poll() is None:
+                if server_process.poll() is not None:
+                    logger.error("Server died, aborting")
+                    _terminate_process(
+                        cli_process, 10, "Stopping agent", use_process_group=True
+                    )
+                    return 1
+                now = time.monotonic()
+                if now - last_debug_log >= 15.0:
+                    elapsed = int(now - wait_start)
+                    logger.info(
+                        "[cli-debug] main: still waiting for CLI agent to exit (pid=%s, elapsed=%ds)",
+                        cli_process.pid,
+                        elapsed,
+                    )
+                    last_debug_log = now
+                time.sleep(1)
+
+            _cleanup_cli_session(cli_master_fd, cli_stream_stop_event, temp_mcp_config_path)
+
+            if termination_triggered.is_set():
+                logger.info("Termination condition met, not restarting agent.")
                 break
+            logger.info(
+                f"Agent session #{iteration} exited (code={cli_process.returncode}), restarting..."
+            )
+            time.sleep(3)
 
-            if server_process and server_process.poll() is not None:
-                print("\n❌ Server exited unexpectedly while CLI agent is still running.")
-                _terminate_process(
-                    process=cli_process,
-                    graceful_timeout=args.graceful_timeout,
-                    label="🤖 Stopping CLI agent",
-                    use_process_group=True,
-                )
-                return 1
-
-            time.sleep(1)
-
-        exit_code = cli_exit
         if termination_triggered.is_set():
-            print("\n✅ CLI agent stopped due to completion condition.")
-            return 0
-        if exit_code != 0:
-            print("\n⚠️ CLI agent exited with a non-zero code.")
-            print("   If this was unexpected, verify Claude login by running `claude` manually first.")
-        print(f"\n✅ CLI agent exited with code: {exit_code}")
-        return exit_code
+            print("\n✅ Task complete (termination condition met).")
+        return 0
         
     except KeyboardInterrupt:
         print("\n\n🛑 Shutdown requested by user")
         return 0
         
     finally:
-        # Clean up CLI agent
-        if cli_process and cli_process.poll() is None:
+        if cli_process is not None and cli_process.poll() is None:
             _terminate_process(
                 process=cli_process,
                 graceful_timeout=args.graceful_timeout if "args" in locals() else 30,
                 label="🤖 Stopping CLI agent",
                 use_process_group=True,
             )
-
-        if cli_stream_stop_event:
-            cli_stream_stop_event.set()
-
-        if cli_master_fd is not None:
-            try:
-                os.close(cli_master_fd)
-            except OSError:
-                pass
-
-        if temp_mcp_config_path:
-            try:
-                os.remove(temp_mcp_config_path)
-            except OSError:
-                pass
-        
         # Clean up server
         if server_process:
             print("📡 Stopping server process...")
