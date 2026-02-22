@@ -19,7 +19,6 @@ import signal
 import threading
 import logging
 import shutil
-import tempfile
 import json
 from datetime import datetime
 from pathlib import Path
@@ -29,51 +28,19 @@ import requests
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+from utils.cli_agent_backends import (
+    CliSession,
+    CliSessionMetrics,
+    get_backend,
+    log_session_to_llm_logger,
+)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-def _build_claude_bootstrap_prompt(directive_content: str, server_url: str) -> str:
-    """Build the first prompt sent to the interactive Claude session."""
-    return (
-        f"{directive_content}\n\n"
-        "Runtime context:\n"
-        f"- Pokemon server URL: {server_url}\n"
-        "- You are running in a long-lived interactive session.\n"
-        "- Act autonomously and continuously, using MCP tools directly as needed.\n"
-        "- Poll game state on your own via MCP tools; do not wait for additional operator prompts.\n"
-        "- Continue until externally terminated by the orchestrator when completion condition is met.\n"
-    )
-
-
-def _stream_pipe_output(
-    stdout_pipe,
-    stop_event: threading.Event,
-) -> None:
-    """Stream subprocess stdout pipe to console for observability.
-
-    Uses unbuffered reads (bufsize=0 on the Popen) so each os-level read
-    returns as soon as data is available, giving real-time streaming.
-    """
-    first_data = True
-    logger.info("[cli-debug] stream_pipe_output: thread started")
-    try:
-        while not stop_event.is_set():
-            data = stdout_pipe.read(4096)
-            if not data:
-                logger.info("[cli-debug] stream_pipe_output: EOF from CLI")
-                return
-            if first_data:
-                logger.info("[cli-debug] stream_pipe_output: first data received (%d bytes)", len(data))
-                first_data = False
-            sys.stdout.write(data.decode(errors="replace"))
-            sys.stdout.flush()
-    except (OSError, ValueError) as e:
-        logger.info("[cli-debug] stream_pipe_output: error: %s", e)
 
 
 def _terminate_process(
@@ -108,18 +75,19 @@ def _terminate_process(
             return
 
 
-def _cleanup_cli_session(master_fd, stop_event, temp_mcp_config_path):
+def _cleanup_cli_session(session: CliSession | None, log_file=None):
     """Clean up resources from a single CLI agent session."""
-    if stop_event:
-        stop_event.set()
-    if master_fd is not None:
+    if session:
+        if session.stop_event:
+            session.stop_event.set()
+        if session.temp_mcp_config_path:
+            try:
+                os.remove(session.temp_mcp_config_path)
+            except OSError:
+                pass
+    if log_file and not log_file.closed:
         try:
-            os.close(master_fd)
-        except OSError:
-            pass
-    if temp_mcp_config_path:
-        try:
-            os.remove(temp_mcp_config_path)
+            log_file.close()
         except OSError:
             pass
 
@@ -294,90 +262,31 @@ def termination_monitor(
 
 
 def launch_cli_agent(
-    cli_type: str,
+    backend,
     server_url: str,
     directive_path: str,
-    working_dir: str = None,
+    working_dir: str,
+    *,
+    project_root: str | None = None,
     dangerously_skip_permissions: bool = True,
-) -> tuple[subprocess.Popen, int, threading.Event, threading.Thread, str | None]:
-    """Launch an external CLI agent session as subprocess.
-    
-    Args:
-        cli_type: Type of CLI agent ("claude" or "codex")
-        server_url: MCP server URL for the agent to connect to
-        directive_path: Path to the system prompt/directive file
-        working_dir: Working directory for the CLI agent
-        
-    Returns:
-        Tuple containing process, pty master FD, stop event, stream thread, and temp mcp config path (if any)
-    """
-    if working_dir is None:
-        working_dir = os.getcwd()
-    
-    # Read directive content
-    directive_content = ""
-    if directive_path and os.path.exists(directive_path):
-        with open(directive_path, 'r') as f:
-            directive_content = f.read()
+    log_file=None,
+    metrics: CliSessionMetrics | None = None,
+) -> CliSession:
+    """Launch an external CLI agent session as subprocess using the given backend."""
+    cmd, env, bootstrap, temp_mcp_config_path = backend.build_launch_cmd(
+        directive_path,
+        server_url,
+        working_dir,
+        dangerously_skip_permissions=dangerously_skip_permissions,
+        project_root=project_root,
+    )
+    if directive_path:
         print(f"📜 Loaded directive from: {directive_path}")
-    else:
-        print(f"⚠️ Directive file not found: {directive_path}")
-    
-    temp_mcp_config_path = None
-
-    bootstrap = ""
-
-    # Build command based on CLI type
-    if cli_type == "claude":
-        # --print: non-interactive batch mode (read prompt, process, print, exit).
-        # Without --print Claude enters TUI mode which hangs as a subprocess.
-        cmd = ["claude", "--print"]
-        if dangerously_skip_permissions:
-            cmd.append("--dangerously-skip-permissions")
-
-        env = os.environ.copy()
-        env["POKEMON_MCP_SERVER_URL"] = server_url
-        env["POKEMON_SERVER_URL"] = server_url
-
-        # Build a run-local MCP config so Claude can invoke the Pokemon MCP server
-        # with the correct backend server URL/port.
-        mcp_config = {
-            "mcpServers": {
-                "pokemon-emerald": {
-                    "command": sys.executable,
-                    "args": ["-m", "server.cli.pokemon_mcp_server"],
-                    "env": {
-                        "POKEMON_SERVER_URL": server_url,
-                        "PYTHONPATH": os.getcwd(),
-                    },
-                }
-            }
-        }
-        temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
-        json.dump(mcp_config, temp_file, indent=2)
-        temp_file.flush()
-        temp_file.close()
-        temp_mcp_config_path = temp_file.name
-        cmd.extend(["--mcp-config", temp_mcp_config_path])
-
-        if directive_content:
-            bootstrap = _build_claude_bootstrap_prompt(directive_content, server_url)
-            logger.info("[cli-debug] launch_cli_agent: directive+bootstrap length=%s chars", len(bootstrap))
-
-    elif cli_type == "codex":
-        raise NotImplementedError(
-            "Codex CLI integration is not implemented yet. Use --cli-type claude for now."
-        )
-    else:
-        raise ValueError(f"Unknown CLI type: {cli_type}. Supported: claude, codex")
-    
-    print(f"🤖 Launching {cli_type} CLI agent...")
+    print(f"🤖 Launching {backend.name} CLI agent...")
     print(f"   Command: {' '.join(cmd)}")
     print(f"   Working directory: {working_dir}")
     print(f"   MCP Server: {server_url}")
-    
-    # --print mode is non-interactive; regular pipes suffice (no PTY needed).
-    # Prompt is fed via stdin, matching the pattern from ralph.sh.
+
     process = subprocess.Popen(
         cmd,
         cwd=working_dir,
@@ -388,8 +297,6 @@ def launch_cli_agent(
         preexec_fn=os.setsid,
         bufsize=0,
     )
-
-    # Feed directive via stdin then close (like: claude --print < directive.md)
     if bootstrap:
         process.stdin.write(bootstrap.encode())
     process.stdin.close()
@@ -397,16 +304,19 @@ def launch_cli_agent(
     logger.info("[cli-debug] launch_cli_agent: subprocess spawned pid=%s, stdin fed+closed", process.pid)
     stream_stop_event = threading.Event()
     stream_thread = threading.Thread(
-        target=_stream_pipe_output,
-        args=(process.stdout, stream_stop_event),
+        target=backend.run_stream_reader,
+        args=(process.stdout, stream_stop_event, log_file, metrics, server_url),
         daemon=True,
     )
     stream_thread.start()
     logger.info("[cli-debug] launch_cli_agent: stream thread started")
-
     print(f"✅ CLI agent started with PID {process.pid}")
-    # Return None for master_fd (no PTY); cleanup handles None gracefully.
-    return process, None, stream_stop_event, stream_thread, temp_mcp_config_path
+    return CliSession(
+        process=process,
+        stop_event=stream_stop_event,
+        stream_thread=stream_thread,
+        temp_mcp_config_path=temp_mcp_config_path,
+    )
 
 
 def main():
@@ -502,11 +412,8 @@ def main():
 
     server_process = None
     frame_server_process = None
-    cli_process = None
-    cli_master_fd = None
-    cli_stream_stop_event = None
-    cli_stream_thread = None
-    temp_mcp_config_path = None
+    cli_session = None
+    cli_log_file = None
     monitor_thread = None
     termination_triggered = threading.Event()
     
@@ -567,34 +474,50 @@ def main():
         )
         monitor_thread.start()
 
-        cli_process = None
+        cli_session = None
+        cli_log_file = None
         iteration = 0
+        backend = get_backend(args.cli_type)
+
+        # CLI agent cwd = run's agent_scratch_space so generated files stay per-run
+        agent_scratch_space = run_manager.get_scratch_space_dir()
+        agent_scratch_space.mkdir(parents=True, exist_ok=True)
+        working_dir = str(agent_scratch_space)
+        # Project root for MCP server PYTHONPATH (so it can import server.*, utils.*)
+        project_root = str(Path(__file__).resolve().parent)
+        logger.info("CLI agent working_dir=%s project_root=%s", working_dir, project_root)
+
+        log_dir = os.path.join(str(run_manager.get_run_directory()), "agent_logs")
+        os.makedirs(log_dir, exist_ok=True)
+
         while not termination_triggered.is_set():
             iteration += 1
             logger.info(f"--- Agent session #{iteration} ---")
-            (
-                cli_process,
-                cli_master_fd,
-                cli_stream_stop_event,
-                cli_stream_thread,
-                temp_mcp_config_path,
-            ) = launch_cli_agent(
-                cli_type=args.cli_type,
+
+            session_metrics = CliSessionMetrics()
+            log_path = os.path.join(log_dir, f"session_{iteration:03d}.jsonl")
+            cli_log_file = open(log_path, "w")
+            logger.info("Agent JSONL log: %s", log_path)
+
+            cli_session = launch_cli_agent(
+                backend,
                 server_url=server_url,
                 directive_path=args.directive,
-                working_dir=os.getcwd(),
+                working_dir=working_dir,
+                project_root=project_root,
                 dangerously_skip_permissions=args.dangerously_skip_permissions,
+                log_file=cli_log_file,
+                metrics=session_metrics,
             )
 
-            logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_process.pid)
-            # Wait for Claude to exit naturally
+            logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_session.process.pid)
             wait_start = time.monotonic()
             last_debug_log = 0.0
-            while cli_process.poll() is None:
+            while cli_session.process.poll() is None:
                 if server_process.poll() is not None:
                     logger.error("Server died, aborting")
                     _terminate_process(
-                        cli_process, 10, "Stopping agent", use_process_group=True
+                        cli_session.process, 10, "Stopping agent", use_process_group=True
                     )
                     return 1
                 now = time.monotonic()
@@ -602,19 +525,33 @@ def main():
                     elapsed = int(now - wait_start)
                     logger.info(
                         "[cli-debug] main: still waiting for CLI agent to exit (pid=%s, elapsed=%ds)",
-                        cli_process.pid,
+                        cli_session.process.pid,
                         elapsed,
                     )
                     last_debug_log = now
                 time.sleep(1)
 
-            _cleanup_cli_session(cli_master_fd, cli_stream_stop_event, temp_mcp_config_path)
+            _cleanup_cli_session(cli_session, cli_log_file)
+            cli_log_file = None
+
+            logger.info(
+                "Session #%d metrics: cost=$%.4f tokens=%d/%d turns=%d tools=%d",
+                iteration,
+                session_metrics.total_cost_usd,
+                session_metrics.input_tokens,
+                session_metrics.output_tokens,
+                session_metrics.num_turns,
+                session_metrics.tool_use_count,
+            )
+            log_session_to_llm_logger(session_metrics, iteration, backend.name)
 
             if termination_triggered.is_set():
                 logger.info("Termination condition met, not restarting agent.")
                 break
             logger.info(
-                f"Agent session #{iteration} exited (code={cli_process.returncode}), restarting..."
+                "Agent session #%d exited (code=%s), restarting...",
+                iteration,
+                cli_session.process.returncode,
             )
             time.sleep(3)
 
@@ -627,13 +564,15 @@ def main():
         return 0
         
     finally:
-        if cli_process is not None and cli_process.poll() is None:
+        if cli_session is not None and cli_session.process.poll() is None:
             _terminate_process(
-                process=cli_process,
+                process=cli_session.process,
                 graceful_timeout=args.graceful_timeout if "args" in locals() else 30,
                 label="🤖 Stopping CLI agent",
                 use_process_group=True,
             )
+        if cli_log_file and not cli_log_file.closed:
+            cli_log_file.close()
         # Clean up server
         if server_process:
             print("📡 Stopping server process...")

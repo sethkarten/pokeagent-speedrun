@@ -30,7 +30,7 @@ from agent.deprecated.action import action_step
 from agent.deprecated.memory import memory_step, extract_key_state_info
 from agent.deprecated.perception import perception_step
 from agent.deprecated.planning import planning_step
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from utils.state_formatter import format_state_for_llm, format_state_summary
 
 
