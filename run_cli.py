@@ -22,6 +22,7 @@ import shutil
 import json
 import secrets
 from datetime import datetime
+from dataclasses import dataclass, asdict
 from pathlib import Path
 
 import requests
@@ -275,6 +276,7 @@ def launch_cli_agent(
     dangerously_skip_permissions: bool = True,
     log_file=None,
     metrics: CliSessionMetrics | None = None,
+    snapshot_path=None,
 ) -> CliSession:
     """Launch an external CLI agent session as subprocess using the given backend."""
     cmd, env, bootstrap, temp_mcp_config_path = backend.build_launch_cmd(
@@ -307,9 +309,10 @@ def launch_cli_agent(
 
     logger.info("[cli-debug] launch_cli_agent: subprocess spawned pid=%s, stdin fed+closed", process.pid)
     stream_stop_event = threading.Event()
+    snapshot_path_arg = Path(snapshot_path) if snapshot_path else None
     stream_thread = threading.Thread(
         target=backend.run_stream_reader,
-        args=(process.stdout, stream_stop_event, log_file, metrics, server_url),
+        args=(process.stdout, stream_stop_event, log_file, metrics, server_url, snapshot_path_arg),
         daemon=True,
     )
     stream_thread.start()
@@ -503,6 +506,9 @@ def main():
             cli_log_file = open(log_path, "w")
             logger.info("Agent JSONL log: %s", log_path)
 
+            from utils.run_data_manager import get_cache_path
+            snapshot_path = get_cache_path("cli_metrics_snapshot.json")
+
             cli_session = launch_cli_agent(
                 backend,
                 server_url=server_url,
@@ -512,11 +518,13 @@ def main():
                 dangerously_skip_permissions=args.dangerously_skip_permissions,
                 log_file=cli_log_file,
                 metrics=session_metrics,
+                snapshot_path=snapshot_path,
             )
 
             logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_session.process.pid)
             wait_start = time.monotonic()
             last_debug_log = 0.0
+
             while cli_session.process.poll() is None:
                 if server_process.poll() is not None:
                     logger.error("Server died, aborting")
@@ -533,6 +541,14 @@ def main():
                         elapsed,
                     )
                     last_debug_log = now
+                    
+                    # Save intermediate metrics snapshot
+                    try:
+                        with open(snapshot_path, "w") as f:
+                            json.dump(asdict(session_metrics), f, indent=2)
+                    except Exception as e:
+                        logger.warning(f"Failed to save metrics snapshot: {e}")
+                        
                 time.sleep(1)
 
             _cleanup_cli_session(cli_session, cli_log_file)
