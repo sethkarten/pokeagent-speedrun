@@ -14,7 +14,7 @@ from typing import List, Optional, Tuple
 
 from utils.json_utils import serialize_for_json
 from utils.pathfinding import Pathfinder
-from utils.knowledge_basgee import get_knowledge_base
+from utils.knowledge_base import get_knowledge_base
 
 logger = logging.getLogger(__name__)
 
