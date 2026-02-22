@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from PIL import Image
 
+from .red_map_reader import RedMapReader
 from .red_memory_reader import RED_ADDR, RedMemoryReader
 from .red_milestone_tracker import RedMilestoneTracker
 
@@ -130,6 +131,11 @@ class RedEmulator:
             self.memory_reader = RedMemoryReader(self.pyboy)
             logger.info("RedMemoryReader attached.")
 
+            # Attach map reader
+            map_reader = RedMapReader(self.pyboy)
+            self.memory_reader.set_map_reader(map_reader)
+            logger.info("RedMapReader attached.")
+
             # Auto-load .state file if it sits next to the ROM
             state_path = Path(self.rom_path).with_suffix(".gbc.state")
             if not state_path.exists():
@@ -179,7 +185,7 @@ class RedEmulator:
         # Update dialog state cache (mirrors EmeraldEmulator behaviour)
         self._update_dialog_state_cache()
 
-        # Clear dialogue cache if A button was pressed (dismisses dialogue)
+        # Clear dialogue cache if button "A" was pressed (dismisses dialogue)
         if buttons and any(btn.lower() == "a" for btn in buttons):
             if self.memory_reader:
                 self.memory_reader.clear_dialogue_cache_on_button_press()
@@ -199,7 +205,7 @@ class RedEmulator:
                 if new_state != self._cached_dialog_state:
                     self._cached_dialog_state = new_state
                     if new_state:
-                        logger.debug("Dialog detected — switching to 4× FPS")
+                        logger.debug("Dialog detected — switching to 4x FPS")
                     else:
                         logger.debug("Dialog ended — reverting to normal FPS")
             self._last_dialog_check_time = current_time
@@ -280,6 +286,22 @@ class RedEmulator:
                 self.current_frame = np_frame
             elapsed = time.time() - start
             time.sleep(max(0.001, interval - elapsed))
+
+    # ------------------------------------------------------------------
+    # State-file persistence stubs (API parity with EmeraldEmulator)
+    # ------------------------------------------------------------------
+
+    def _save_persistent_grids_for_state(self, state_filename: str):
+        """Stub — Red map persistence not needed (processed_map is static)."""
+        pass
+
+    def _load_persistent_grids_for_state(self, state_filename: str):
+        """Stub — Red map persistence not needed (processed_map is static)."""
+        pass
+
+    def _copy_state_files_to_cache(self, state_filename: str):
+        """Stub — Red map file cache not needed."""
+        pass
 
     # ------------------------------------------------------------------
     # Save / load state
@@ -381,7 +403,9 @@ class RedEmulator:
         return None
 
     def get_map_tiles(self, radius: int = 7):
-        return None  # Needs Red map system (Phase 2)
+        if self.memory_reader:
+            return self.memory_reader.read_map_around_player(radius)
+        return None
 
     # ------------------------------------------------------------------
     # Comprehensive state (delegates to RedMemoryReader)

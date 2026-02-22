@@ -24,6 +24,8 @@ RED_ADDR: Dict[str, int] = {
     "player_dir":       0xC109,  # 1 byte: 0=down, 4=up, 8=left, 12=right
     # Map
     "map_id":           0xD35E,  # 1 byte
+    "map_height":       0xD368,  # wCurMapHeight (blocks)
+    "map_width":        0xD369,  # wCurMapWidth  (blocks)
     # Economy
     "money":            0xD347,  # 3 bytes BCD big-endian
     # Inventory
@@ -264,6 +266,8 @@ class RedMemoryReader:
         # Dialog state cache (updated by _update_dialog_state_cache in emulator)
         self._dialog_cache: bool = False
         self._dialog_cache_time: float = 0.0
+        # Map reader — set by RedEmulator.initialize() after construction
+        self.map_reader: Optional[object] = None
 
     # ------------------------------------------------------------------
     # Low-level read primitives
@@ -589,14 +593,63 @@ class RedMemoryReader:
         except Exception as e:
             logger.warning(f"RedMemoryReader.get_comprehensive_state error: {e}")
 
+        try:
+            if self.map_reader is not None:
+                tiles = self.read_map_around_player()
+                if tiles:
+                    tile_names = []
+                    metatile_behaviors = []
+                    metatile_info = []
+                    for row in tiles:
+                        row_names, row_behaviors, row_info = [], [], []
+                        for tile_id, type_str, collision, elevation in row:
+                            row_names.append(f"Tile_0x00({type_str})")
+                            row_behaviors.append(type_str)
+                            row_info.append({
+                                "id":                 tile_id,
+                                "behavior":           type_str,
+                                "collision":          collision,
+                                "elevation":          elevation,
+                                "passable":           collision == 0,
+                                "encounter_possible": type_str == "GRASS", # DOUBLE CHECK THIS
+                                "surfable":           type_str == "WATER",
+                            })
+                        tile_names.append(row_names)
+                        metatile_behaviors.append(row_behaviors)
+                        metatile_info.append(row_info)
+
+                    state["map"].update({
+                        "tiles":              tiles,
+                        "tile_names":         tile_names,
+                        "metatile_behaviors": metatile_behaviors,
+                        "metatile_info":      metatile_info,
+                        "traversability":     self.map_reader.get_traversability_grid(),
+                    })
+        except Exception as e:
+            logger.warning(f"RedMemoryReader map state error: {e}")
+
         return state
+
+    # ------------------------------------------------------------------
+    # Map reader wiring
+    # ------------------------------------------------------------------
+
+    def set_map_reader(self, map_reader) -> None:
+        """Attach a RedMapReader instance (called by RedEmulator.initialize())."""
+        self.map_reader = map_reader
+
+    def read_map_around_player(self, radius: int = 7) -> list:
+        """Delegate to map_reader.read_map_around_player(radius), or return []."""
+        if self.map_reader is not None:
+            return self.map_reader.read_map_around_player(radius)
+        return []
 
     # ------------------------------------------------------------------
     # Interface compatibility stubs
     # ------------------------------------------------------------------
 
     def invalidate_map_cache(self, **kwargs) -> None:
-        """No-op — Gen 1 map system not yet implemented."""
+        """No-op — processed_map data is static; no cache to invalidate."""
         pass
 
     def reset_dialog_tracking(self) -> None:
