@@ -1771,8 +1771,8 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                             for x in range(len(grid[y])):
                                 original_char = grid[y][x]
 
-                                # Always preserve special markers (warps, doors, NPCs, items)
-                                if original_char in ['D', 'S', 'T', 'K', 'N', 'I', '←', '→', '↑', '↓']:
+                                # Always preserve special markers (warps, doors, NPCs, items, PC, TV/notebook)
+                                if original_char in ['D', 'S', 'T', 'K', 'N', 'I', 'P', 'V', '←', '→', '↑', '↓']:
                                     filtered_row.append(original_char)
                                 elif y < len(raw_tiles) and x < len(raw_tiles[y]):
                                     tile = raw_tiles[y][x]
@@ -1871,9 +1871,11 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                         # Update the grid and ASCII map
                         json_map['grid'] = filtered_grid
 
-                        # Regenerate ASCII map from filtered grid
-                        ascii_lines = [''.join(row) for row in filtered_grid]
-                        json_map['ascii'] = '\n'.join(ascii_lines)
+                        # Regenerate ASCII from filtered grid unless this map uses override ASCII
+                        # (override ASCII must be kept verbatim so P/V/K/S/I/D match the override)
+                        if not json_map.get('ascii_from_override'):
+                            ascii_lines = [''.join(row) for row in filtered_grid]
+                            json_map['ascii'] = '\n'.join(ascii_lines)
 
                         # Count how many tiles were blocked by elevation filtering
                         blocked_count = sum(1 for row in filtered_grid for cell in row if cell == '#')
@@ -1915,7 +1917,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             
             context_parts.append("\nASCII Map:")
             context_parts.append(ascii_map)
-            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
+            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'I' = item, '~' = tall grass, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
         
         # NOTE: Warps, Objects/NPCs, and Connections lists are DEPRECATED
         # This data is already included in the Map Data (JSON) section below.
@@ -1947,6 +1949,9 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                 "map": conn.get('map', '?')
             })
         
+        # BG events (PC, clock, TV, notebook, etc.)
+        bg_events_for_json = json_map.get('bg_events', [])
+        
         # Build compact JSON map (matching example format)
         compact_json_map = {
             "name": json_map.get('name'),
@@ -1954,6 +1959,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             "dimensions": json_map.get('dimensions'),
             "warps": simplified_warps,
             "objects": objects_for_json,
+            "bg_events": bg_events_for_json,
             "connections": simplified_connections
         }
         context_parts.append(json.dumps(compact_json_map, indent=2))
