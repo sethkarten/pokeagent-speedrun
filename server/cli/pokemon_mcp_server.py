@@ -74,9 +74,16 @@ def get_game_state():
         result["raw_state"].get("visual", {}).pop("screenshot_base64", None)
 
     if screenshot_b64:
+        # Hint for the model: image is the next content block (helps when output is large/persisted)
+        result["_screenshot_location"] = (
+            "The game screenshot is the next content block: a PNG image. "
+            "Use the image immediately after this text to see the current game frame."
+        )
+        img_bytes = base64.b64decode(screenshot_b64)
+        logger.info("get_game_state: attached screenshot (PNG, %d KB) as next content block", len(img_bytes) // 1024)
         return [
             result,
-            MCPImage(data=base64.b64decode(screenshot_b64), format="png"),
+            MCPImage(data=img_bytes, format="png"),
         ]
     return result
 

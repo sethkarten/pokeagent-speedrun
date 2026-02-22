@@ -1941,7 +1941,7 @@ async def stream_agent_thinking():
                             sent_timestamps.add(interaction.get("timestamp", ""))
 
                     # Send periodic heartbeat to keep connection alive (every 10 cycles = 5 seconds)
-                    elif heartbeat_counter % 10 == 0:
+                    if not new_interactions and heartbeat_counter % 10 == 0:
                         yield f"data: {json.dumps({'heartbeat': True, 'timestamp': time.time(), 'step': current_step})}\n\n"
 
                     # Wait before checking again (increased from 500ms to 2s for better performance)
@@ -2193,7 +2193,7 @@ async def reset_metrics():
 
 @app.post("/agent_step")
 async def update_agent_step(request: Request = None):
-    """Update the agent step count and metrics (called by agent.py)"""
+    """Update the agent step count and metrics"""
     global agent_step_count, latest_metrics
 
     try:
@@ -2202,17 +2202,16 @@ async def update_agent_step(request: Request = None):
             try:
                 request_data = await request.json()
 
-                # Store agent thinking if provided
+                # Store agent thinking if provided (same path as VLM: log to LLM logger so SSE has one source)
                 if "thinking" in request_data:
                     thinking_text = request_data["thinking"]
-                    step_num = request_data.get("step", agent_step_count)
-                    # Write to a simple text file for the stream to read
+                    interaction_type = request_data.get("interaction_type", "thinking")
+                    duration = float(request_data.get("duration", 0))
                     try:
-                        _thinking_path = Path(__file__).resolve().parent / "agent_thinking.txt"
-                        with open(_thinking_path, "w") as f:
-                            f.write(f"Step {step_num}:\n{thinking_text}\n")
+                        from utils.llm_logger import get_llm_logger
+                        get_llm_logger().log_thinking(thinking_text, interaction_type, duration)
                     except Exception as e:
-                        logger.debug(f"Could not write thinking: {e}")
+                        logger.debug(f"Could not log thinking: {e}")
 
                 # Update metrics if provided (with thread safety)
                 if "metrics" in request_data and isinstance(request_data["metrics"], dict):
@@ -4250,13 +4249,33 @@ async def stop_server():
     return {"status": "stopping"}
 
 
+def _require_state_api_key(request: Request) -> Optional[JSONResponse]:
+    """
+    When POKEMON_STATE_API_KEY is set (e.g. by run_cli), require X-Internal-API-Key header.
+    Prevents the CLI agent from loading/saving state via Bash curl.
+    """
+    key = os.environ.get("POKEMON_STATE_API_KEY")
+    if not key:
+        return None
+    if request.headers.get("X-Internal-API-Key") != key:
+        logger.warning("Rejected state endpoint call: missing or invalid X-Internal-API-Key")
+        return JSONResponse(status_code=403, content={"error": "Forbidden: state API protected"})
+    return None
+
+
 @app.post("/save_state")
-async def save_state_endpoint(request: dict):
+async def save_state_endpoint(request: Request):
     """Save the current emulator state to a file"""
+    if err := _require_state_api_key(request):
+        return err
     try:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
         from utils.run_data_manager import get_cache_path
         default_filepath = str(get_cache_path("manual_save.state"))
-        filepath = request.get("filepath", default_filepath)
+        filepath = body.get("filepath", default_filepath)
         if env:
             env.save_state(filepath)
             logger.info(f"💾 State saved to: {filepath}")
@@ -4269,12 +4288,18 @@ async def save_state_endpoint(request: dict):
 
 
 @app.post("/load_state")
-async def load_state_endpoint(request: dict):
+async def load_state_endpoint(request: Request):
     """Load an emulator state from a file"""
+    if err := _require_state_api_key(request):
+        return err
     try:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
         from utils.run_data_manager import get_cache_path
         default_filepath = str(get_cache_path("manual_save.state"))
-        filepath = request.get("filepath", default_filepath)
+        filepath = body.get("filepath", default_filepath)
         if env:
             if not os.path.exists(filepath):
                 return JSONResponse(status_code=404, content={"error": f"State file not found: {filepath}"})
