@@ -144,18 +144,6 @@ Get the official Bulbapedia walkthrough.
 | UP/DOWN/LEFT/RIGHT | Movement |
 | L/R | Page navigation in menus |
 
-## Strategy Tips
-
-1. **Always observe first**: Call `get_game_state()` before acting, and re-check after each action sequence.
-
-2. **Use navigate_to for movement**: The pathfinder is more reliable than manual movement for reaching destinations.
-
-3. **Check the walkthrough**: If unsure what to do, use `get_walkthrough(part)` to understand the intended progression.
-
-4. **Save knowledge**: When you discover important information (item locations, NPC positions, etc.), use `add_knowledge()` to remember it.
-
-5. **Battle strategy**: In battles, consider type matchups and Pokemon levels. Use `lookup_pokemon_info()` for type charts and move details.
-
 ## Early Game Progression (For First Badge)
 
 1. **Littleroot Town**: Start in your room, go downstairs, meet your mom
