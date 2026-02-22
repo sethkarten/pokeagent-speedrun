@@ -20,6 +20,7 @@ import threading
 import logging
 import shutil
 import json
+import secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -156,6 +157,9 @@ def start_server(args, run_id=None):
 
     # Single-writer metrics: server is the only writer
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
+
+    # Protect state endpoints so the CLI agent cannot load/save state via Bash curl
+    server_env["POKEMON_STATE_API_KEY"] = secrets.token_urlsafe(16)
     
     # Pass through server-relevant arguments
     if hasattr(args, 'record') and args.record:

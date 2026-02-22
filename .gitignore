@@ -202,5 +202,5 @@ llm_logs/*
 backups/
 .pokeagent_cache/*
 run_data/*
-
+server/agent_thinking.txt
 
