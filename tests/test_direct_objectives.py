@@ -22,10 +22,10 @@ from datetime import datetime
 from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 
-# Add the project root to the path
+# Add the project root to the path (when run from tests/ or as script)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.direct_objectives import DirectObjective, DirectObjectiveManager
+from agent.objectives import DirectObjective, DirectObjectiveManager
 
 
 class TestDirectObjective:
@@ -541,4 +541,3 @@ class TestDirectObjectiveIntegration:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

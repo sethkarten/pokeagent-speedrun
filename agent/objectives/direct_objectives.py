@@ -14,7 +14,7 @@ import logging
 import json
 import os
 
-from agent.objective_types import DirectObjective
+from .objective_types import DirectObjective
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def get_first_objective_info(sequence_name: str, start_index: int = 0) -> tuple:
             return ("autonomous", "autonomous_objective_creation")
         elif sequence_name == "categorized_full_game":
             # Load the first story objective
-            from agent.all_obj_categorized import STORY_OBJECTIVES
+            from .all_obj_categorized import STORY_OBJECTIVES
             if start_index < len(STORY_OBJECTIVES):
                 obj = STORY_OBJECTIVES[start_index]
                 return (obj.id, obj.description)
@@ -2601,7 +2601,7 @@ class DirectObjectiveManager:
                 description="Navigate upstairs to your bedroom and set the clock on the wall",
                 action_type="interact",
                 target_location="Player's Bedroom",
-                navigation_hint="Walk north to the stairs at position (8, 2) and go upstairs. Interact with the clock at position (5, 1) by standing at (5, 2) and facing UP. Press A to set the time",
+                navigation_hint="Walk north to the stairs at position and go upstairs. Interact with the clock. Press A to set the time",
                 completion_condition="clock_setting_screen_closes_and_player_control_returns",
                 priority=1
             ),
@@ -2985,7 +2985,7 @@ class DirectObjectiveManager:
         self.sequence_name = "full_game"
 
         # Import ALL_OBJECTIVES from all_obj.py
-        from agent.all_obj import ALL_OBJECTIVES
+        from .all_obj import ALL_OBJECTIVES
 
         self.current_sequence = ALL_OBJECTIVES
         self.current_index = start_index
@@ -3363,7 +3363,7 @@ class DirectObjectiveManager:
                 - Index 45-50: Elite Four prep (prerequisite: league_219)
                 - Index 51-56: Post-game (prerequisite: post_237)
         """
-        from agent.all_obj_categorized import STORY_OBJECTIVES, BATTLING_OBJECTIVES
+        from .all_obj_categorized import STORY_OBJECTIVES, BATTLING_OBJECTIVES
 
         # Enable categorized mode
         self.enable_categorized_mode()
