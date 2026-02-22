@@ -476,15 +476,6 @@ def signal_handler(signum, frame):
             # Finalize with metrics
             run_manager.finalize_run(final_metrics=final_metrics)
             print(f"✅ Run data finalized: {run_manager.get_run_directory()}")
-
-            # Clean up deprecated run directories
-            from utils.run_data_manager import cleanup_old_cache_runs
-
-            try:
-                cleanup_old_cache_runs()
-                print("🧹 Cleaned up deprecated run directories")
-            except Exception as e:
-                logger.debug(f"Could not clean up old runs: {e}")
     except Exception as e:
         logger.error(f"❌ Error during run data finalization: {e}", exc_info=True)
 
