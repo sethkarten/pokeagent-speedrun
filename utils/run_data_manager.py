@@ -49,11 +49,11 @@ class RunDataManager:
                 # append run_name to run_id if provided
                 if run_name:
                     run_id = f"{run_id}_{run_name}"
-            # Fallback to run_name if provided (deprecated)
+            # Run name only (e.g. CLI): datetime then name, same pattern as run_data and .pokeagent_cache
             elif run_name:
                 import re
                 sanitized_name = re.sub(r'[^\w\-_]', '_', run_name)
-                run_id = f"run_{timestamp}_{sanitized_name}"
+                run_id = f"{timestamp}_{sanitized_name}"
             else:
                 # Default format (no objectives specified)
                 run_id = f"run_{timestamp}"
@@ -667,26 +667,9 @@ def get_cache_path(relative_path: str) -> Path:
     return cache_dir / relative_path
 
 
-def cleanup_old_cache_runs():
-    """Clean up old run_ directories in .pokeagent_cache (deprecated structure)
-    
-    This preserves the files but marks them as deprecated.
+def cleanup_old_cache_runs() -> None:
+    """Deprecated. No-op: CLI and other runs now use datetime_runname (no run_* prefix).
+    Kept for compatibility with server shutdown path; does nothing.
     """
-    cache_dir = Path(".pokeagent_cache")
-    if not cache_dir.exists():
-        return
-    
-    run_dirs = list(cache_dir.glob("run_*"))
-    if not run_dirs:
-        return
-    
-    deprecated_dir = cache_dir / "_deprecated_runs"
-    deprecated_dir.mkdir(exist_ok=True)
-    
-    for run_dir in run_dirs:
-        if run_dir.is_dir():
-            dest = deprecated_dir / run_dir.name
-            if not dest.exists():
-                shutil.move(str(run_dir), str(dest))
-                logger.info(f"Moved deprecated run: {run_dir} -> {dest}")
+    pass
 

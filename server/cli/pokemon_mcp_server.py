@@ -70,8 +70,9 @@ def get_game_state():
     """
     result = _post("/mcp/get_game_state", timeout=_TIMEOUT_SHORT)
     screenshot_b64 = result.pop("screenshot_base64", None)
-    if isinstance(result.get("raw_state"), dict):
-        result["raw_state"].get("visual", {}).pop("screenshot_base64", None)
+    # Drop raw_state so the tool result matches what the VLM sees (~9k tokens): state_text + key fields + image.
+    # In-process agents call the game server HTTP directly and still receive full raw_state.
+    result.pop("raw_state", None)
 
     if screenshot_b64:
         # Hint for the model: image is the next content block (helps when output is large/persisted)
