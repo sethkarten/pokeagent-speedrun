@@ -451,6 +451,22 @@ class LLMLogger:
                 f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
         except Exception as e:
             logger.error(f"Failed to write log entry: {e}")
+
+    def log_thinking(self, text: str, interaction_type: str = "thinking", duration: float = 0) -> None:
+        """Log agent thinking for UI streaming (same format as log_interaction, no metrics update).
+        Used by CLI agent and any path that POSTs thinking to /agent_step so the SSE has one source.
+        """
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "interaction",
+            "interaction_type": interaction_type,
+            "prompt": "",
+            "response": text,
+            "duration": duration,
+            "metadata": {},
+            "model_info": {},
+        }
+        self._write_log_entry(log_entry)
     
     def increment_action_count(self, count: int = 1):
         """Increment the action counter (called when buttons are actually queued)
@@ -983,6 +999,7 @@ def log_llm_interaction(interaction_type: str, prompt: str, response: str,
     """
     logger = get_llm_logger()
     logger.log_interaction(interaction_type, prompt, response, metadata, duration, model_info, step_number)
+
 
 def log_llm_error(interaction_type: str, prompt: str, error: str, 
                  metadata: Optional[Dict[str, Any]] = None):
