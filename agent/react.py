@@ -15,7 +15,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from utils.llm_logger import LLMLogger
 from agent.system_prompt import system_prompt
 

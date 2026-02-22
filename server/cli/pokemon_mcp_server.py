@@ -28,7 +28,9 @@ from typing import Any, Dict, List, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server.fastmcp import FastMCP
+import base64
 import requests
+from mcp.server.fastmcp.utilities.types import Image as MCPImage
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -58,15 +60,25 @@ def _post(path: str, body: dict | None = None, timeout: int = _TIMEOUT_MEDIUM) -
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_game_state() -> dict:
+def get_game_state():
     """
     Get the current game state including player position, party, map, items, and screenshot.
-    Use this to manually inspect the game state when needed.
+    The screenshot is returned as a native image so you can visually inspect the game.
 
     Returns:
-        Dictionary containing formatted state text and raw state data
+        State data as text content plus the game screenshot as an image
     """
-    return _post("/mcp/get_game_state", timeout=_TIMEOUT_SHORT)
+    result = _post("/mcp/get_game_state", timeout=_TIMEOUT_SHORT)
+    screenshot_b64 = result.pop("screenshot_base64", None)
+    if isinstance(result.get("raw_state"), dict):
+        result["raw_state"].get("visual", {}).pop("screenshot_base64", None)
+
+    if screenshot_b64:
+        return [
+            result,
+            MCPImage(data=base64.b64decode(screenshot_b64), format="png"),
+        ]
+    return result
 
 
 @mcp.tool()

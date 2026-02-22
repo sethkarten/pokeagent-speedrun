@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 # Local imports
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
