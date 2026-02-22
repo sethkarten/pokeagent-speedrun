@@ -57,7 +57,7 @@ class RedEmulator:
         self.memory_reader = None
 
         # Reuse MilestoneTracker from the existing codebase
-        from .emulator import MilestoneTracker
+        from ..pokemon_env.emulator import MilestoneTracker
 
         cache_dir = self._get_cache_dir()
         os.makedirs(cache_dir, exist_ok=True)
