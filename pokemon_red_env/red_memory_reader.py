@@ -590,7 +590,7 @@ class RedMemoryReader:
                     for row in tiles:
                         row_names, row_behaviors, row_info = [], [], []
                         for tile_id, type_str, collision, elevation in row:
-                            row_names.append(f"Tile_0x00({type_str})")
+                            row_names.append(type_str)
                             row_behaviors.append(type_str)
                             row_info.append({
                                 "id":                 tile_id,
@@ -612,6 +612,28 @@ class RedMemoryReader:
                         "metatile_info":      metatile_info,
                         "traversability":     self.map_reader.get_traversability_grid(),
                     })
+
+                # Populate object_events from live RAM sprite data
+                try:
+                    sprites = self.map_reader.read_sprites()
+                    player_x, player_y = self.map_reader.read_player_coords()
+                    object_events = []
+                    for s in sprites:
+                        distance = abs(s['map_x'] - player_x) + abs(s['map_y'] - player_y)
+                        object_events.append({
+                            'id': s['slot'],
+                            'local_id': s['slot'],
+                            'current_x': s['map_x'],
+                            'current_y': s['map_y'],
+                            'facing': s['facing'],
+                            'graphics_id': s['picture_id'],
+                            'sprite_name': s['sprite_name'],
+                            'distance': distance,
+                            'source': f"sprite_slot_{s['slot']}_ram",
+                        })
+                    state["map"]["object_events"] = object_events
+                except Exception as e:
+                    logger.debug(f"Could not read sprites for object_events: {e}")
         except Exception as e:
             logger.warning(f"RedMemoryReader map state error: {e}")
 
