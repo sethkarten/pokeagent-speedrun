@@ -3445,6 +3445,49 @@ class DirectObjectiveManager:
             except Exception as e:
                 logger.warning(f"Failed to save initial state: {e}")
 
+    def load_dummy_categorized_sequence(self):
+        """Load a small dummy sequence for testing categorized objectives."""
+        self.mode = "categorized"
+        self.sequence_name = "dummy_categorized"
+        
+        # Import DirectObjective if not available
+        from .objective_types import DirectObjective
+        
+        self.story_sequence = [
+            DirectObjective(
+                id="dummy_story_01",
+                description="Exit the moving truck to start your adventure",
+                action_type="navigate",
+                target_location="Littleroot Town",
+                completion_condition="map_is_littleroot_town"
+            ),
+            DirectObjective(
+                id="dummy_story_02",
+                description="Enter your house (Brendan's House)",
+                action_type="navigate",
+                target_location="Brendan's House",
+                completion_condition="map_is_brendans_house"
+            )
+        ]
+        
+        self.battling_sequence = [
+            DirectObjective(
+                id="dummy_battle_01",
+                description="Check your PC for a potion",
+                action_type="interact",
+                target_location="Bedroom PC",
+                completion_condition="withdrawn_potion"
+            )
+        ]
+        
+        self.dynamics_sequence = []
+        
+        self.story_index = 0
+        self.battling_index = 0
+        self.dynamics_index = 0
+        
+        logger.info("Loaded dummy categorized sequence for testing")
+
     def get_current_objectives_by_category(self) -> Dict[str, Optional[DirectObjective]]:
         """Get current objectives for all 3 categories
 

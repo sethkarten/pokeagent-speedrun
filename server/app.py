@@ -2684,6 +2684,8 @@ async def mcp_get_game_state():
                             start_battling_index=direct_objectives_battling_start_index,
                             run_dir=objectives_run_dir,
                         )
+                    elif direct_objectives_sequence == "dummy_categorized":
+                        direct_objectives_manager.load_dummy_categorized_sequence()
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
 
@@ -2908,6 +2910,8 @@ async def mcp_complete_direct_objective(request: dict):
                         start_battling_index=direct_objectives_battling_start_index,
                         run_dir=objectives_run_dir,
                     )
+                elif direct_objectives_sequence == "dummy_categorized":
+                    direct_objectives_manager.load_dummy_categorized_sequence()
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
 
