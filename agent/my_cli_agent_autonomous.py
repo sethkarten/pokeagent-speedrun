@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Local imports
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from utils.run_data_manager import get_run_data_manager
 from utils.prompt_optimizer import create_prompt_optimizer
 from utils.run_data_manager import get_run_data_manager

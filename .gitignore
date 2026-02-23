@@ -187,7 +187,9 @@ cython_debug/
 .pypirc
 .vscode
 
-notes/*
+System-Design/personal_notes/*
+test_outputs/*
+
 *.mp4
 *scripts/*
 test_gemini.py
@@ -200,7 +202,7 @@ llm_logs/*
 backups/
 .pokeagent_cache/*
 run_data/*
-
+server/agent_thinking.txt
 # tests
 PokemonRed-GBC/test_states/*
 pokemon_red_env/test/output/*

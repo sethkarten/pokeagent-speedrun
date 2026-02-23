@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import google.generativeai as genai
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)

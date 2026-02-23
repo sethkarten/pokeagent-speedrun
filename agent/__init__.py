@@ -2,7 +2,7 @@
 Agent modules for Pokemon Emerald speedrunning agent
 """
 
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from .deprecated.simple import SimpleAgent, get_simple_agent, simple_mode_processing_multiprocess, configure_simple_agent_defaults
 from .react import ReActAgent, create_react_agent
 from .claude_plays import ClaudePlaysAgent, create_claude_plays_agent
