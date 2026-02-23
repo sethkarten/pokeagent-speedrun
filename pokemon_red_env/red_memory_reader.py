@@ -7,10 +7,45 @@ All data sourced from the pokered decompilation (https://github.com/pret/pokered
 and validated against docs/pokemon_red_proposal.md.
 """
 
+import json
 import logging
+import os
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+
+
+def _load_json_mapping(filename: str) -> Dict[str, str]:
+    """Load a JSON file from the data directory; return {} on failure."""
+    path = os.path.join(_DATA_DIR, filename)
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception as e:
+        logger.warning(f"Could not load {filename}: {e}")
+        return {}
+
+
+# Internal species ID (stored in RAM) → species name
+# Gen 1 uses internal ordering that differs from Pokedex order
+_SPECIES_NAMES: Dict[str, str] = _load_json_mapping("species_names.json")
+
+# Move ID → move name
+_MOVE_NAMES: Dict[str, str] = _load_json_mapping("move_names.json")
+
+# Byte value (str) → display character; JSON null means string terminator
+_CHARMAP: Dict[str, Any] = _load_json_mapping("charmap.json")
+
+# Type ID → type name
+_TYPE_NAMES: Dict[str, str] = _load_json_mapping("type_names.json")
+
+# Item ID → item name
+_ITEM_NAMES: Dict[str, str] = _load_json_mapping("item_names.json")
+
+# Map ID → map name (248 entries, full coverage)
+_MAP_NAMES: Dict[str, str] = _load_json_mapping("map_names.json")
 
 # ---------------------------------------------------------------------------
 # RAM address table (from pokered decompilation)
@@ -28,9 +63,9 @@ RED_ADDR: Dict[str, int] = {
     "map_width":        0xD369,  # wCurMapWidth  (blocks)
     # Economy
     "money":            0xD347,  # 3 bytes BCD big-endian
-    # Inventory
-    "inventory_count":  0xD31C,  # 1 byte
-    "inventory_items":  0xD31D,  # 2*count bytes: alternating (item_id, quantity)
+    # Inventory (wNumBagItems / wBagItems from pokered decomp)
+    "inventory_count":  0xD31D,  # 1 byte  (wNumBagItems)
+    "inventory_items":  0xD31E,  # 2*count bytes: alternating (item_id, quantity) (wBagItems)
     # Party
     "party_count":      0xD163,  # 1 byte (0–6)
     "party_species":    0xD164,  # 6 bytes, species IDs
@@ -46,208 +81,40 @@ RED_ADDR: Dict[str, int] = {
     "link_state":       0xD72E,  # 0x05 = link battle
     "enemy_species":    0xCFE5,  # 1 byte
     "enemy_hp":         0xCFE6,  # 2 bytes big-endian
+    "enemy_status":     0xCFE9,  # 1 byte status condition
     "enemy_level":      0xCFF3,  # 1 byte
     "enemy_max_hp":     0xCFF4,  # 2 bytes big-endian
+    # Title screen detection (wTitleCheckDigit / wCurMap at title)
+    "title_check":      0xC0EF,  # 0x1F on title screen
+    "title_map_id":     0xD35C,  # 0x00 on title screen
     # Dialog / text
     "text_progress":    0xC6AC,  # 1 byte, non-zero = text printing active
     "vram_tilemap":     0xC3A0,  # 20×18 = 360 screen tiles
 }
 
-# Each party slot is 44 bytes.  Confirmed offsets (pokered decomp):
-#   +0x00: species_id
+# Each party slot is 44 bytes.  Confirmed offsets (pokered decomp wPartyMon1):
+#   +0x00: species_id (internal ID, NOT Pokedex number)
 #   +0x01–0x02: current_hp (big-endian)
-#   +0x03: level (battle copy)
 #   +0x04: status condition  (0=OK, 0x08=PSN, 0x10=BRN, 0x20=FRZ, 0x40=PAR, 0–7=SLP turns)
 #   +0x05: type1
 #   +0x06: type2
 #   +0x08–0x0B: move IDs (4 × 1 byte)
-#   +0x0D–0x0E: max_hp (big-endian)
-#   +0x0F–0x10: attack (big-endian)
-#   +0x11–0x12: defense (big-endian)
-#   +0x13–0x14: speed (big-endian)
-#   +0x15–0x16: special (big-endian)
-#   +0x1D: level (actual / display)
-#   +0x1E–0x21: PP for moves 1–4 (1 byte each)
+#   +0x1D–0x20: PP for moves 1–4 (1 byte each)
+#   +0x21: level
+#   +0x22–0x23: max_hp (big-endian)
+#   +0x24–0x25: attack (big-endian)
+#   +0x26–0x27: defense (big-endian)
+#   +0x28–0x29: speed (big-endian)
+#   +0x2A–0x2B: special (big-endian)
 PARTY_SLOT_SIZE = 0x2C  # 44 bytes
 
 # ---------------------------------------------------------------------------
-# Gen 1 character map
-# ---------------------------------------------------------------------------
-GEN1_CHARMAP: Dict[int, str] = {
-    0x50: "",    # string terminator (handled by stopping loop)
-    0x7F: " ",
-    **{0x80 + i: chr(ord("A") + i) for i in range(26)},   # A–Z
-    **{0xA0 + i: chr(ord("a") + i) for i in range(26)},   # a–z
-    # Digits (0xF6 = ♂ conflicts; digits appear in item/move names but rarely in
-    # player names.  Map them conservatively; override ♂/♀ below.)
-    **{0xF6 + i: str(i) for i in range(10)},
-    0xF5: "♀",
-    0xF6: "♂",  # takes priority over digit '0' above — fine for names
-    0xE0: "'",
-    0xE8: ".",
-    0xE9: ",",
-    0xEA: "!",
-    0xEB: "?",
-    0xED: "-",
-    0xF3: "×",
-    0xF4: ".",
-}
-
-# ---------------------------------------------------------------------------
-# Badge names (bit 0 = Boulder, bit 7 = Earth)
+# Badge names (bit 0 = Boulder, bit 7 = Earth) — no JSON equivalent needed
 # ---------------------------------------------------------------------------
 RED_BADGE_NAMES: List[str] = [
     "Boulder", "Cascade", "Thunder", "Rainbow",
     "Soul", "Marsh", "Volcano", "Earth",
 ]
-
-# ---------------------------------------------------------------------------
-# Gen 1 type names
-# ---------------------------------------------------------------------------
-GEN1_TYPES: Dict[int, str] = {
-    0: "Normal", 1: "Fighting", 2: "Flying", 3: "Poison", 4: "Ground",
-    5: "Rock", 7: "Bug", 8: "Ghost", 20: "Fire", 21: "Water",
-    22: "Grass", 23: "Electric", 24: "Psychic", 25: "Ice",
-    26: "Dragon",
-}
-
-# ---------------------------------------------------------------------------
-# Gen 1 species names (151 Pokemon)
-# ---------------------------------------------------------------------------
-GEN1_SPECIES: Dict[int, str] = {
-    1: "Bulbasaur", 2: "Ivysaur", 3: "Venusaur",
-    4: "Charmander", 5: "Charmeleon", 6: "Charizard",
-    7: "Squirtle", 8: "Wartortle", 9: "Blastoise",
-    10: "Caterpie", 11: "Metapod", 12: "Butterfree",
-    13: "Weedle", 14: "Kakuna", 15: "Beedrill",
-    16: "Pidgey", 17: "Pidgeotto", 18: "Pidgeot",
-    19: "Rattata", 20: "Raticate",
-    21: "Spearow", 22: "Fearow",
-    23: "Ekans", 24: "Arbok",
-    25: "Pikachu", 26: "Raichu",
-    27: "Sandshrew", 28: "Sandslash",
-    29: "Nidoran♀", 30: "Nidorina", 31: "Nidoqueen",
-    32: "Nidoran♂", 33: "Nidorino", 34: "Nidoking",
-    35: "Clefairy", 36: "Clefable",
-    37: "Vulpix", 38: "Ninetales",
-    39: "Jigglypuff", 40: "Wigglytuff",
-    41: "Zubat", 42: "Golbat",
-    43: "Oddish", 44: "Gloom", 45: "Vileplume",
-    46: "Paras", 47: "Parasect",
-    48: "Venonat", 49: "Venomoth",
-    50: "Diglett", 51: "Dugtrio",
-    52: "Meowth", 53: "Persian",
-    54: "Psyduck", 55: "Golduck",
-    56: "Mankey", 57: "Primeape",
-    58: "Growlithe", 59: "Arcanine",
-    60: "Poliwag", 61: "Poliwhirl", 62: "Poliwrath",
-    63: "Abra", 64: "Kadabra", 65: "Alakazam",
-    66: "Machop", 67: "Machoke", 68: "Machamp",
-    69: "Bellsprout", 70: "Weepinbell", 71: "Victreebel",
-    72: "Tentacool", 73: "Tentacruel",
-    74: "Geodude", 75: "Graveler", 76: "Golem",
-    77: "Ponyta", 78: "Rapidash",
-    79: "Slowpoke", 80: "Slowbro",
-    81: "Magnemite", 82: "Magneton",
-    83: "Farfetch'd",
-    84: "Doduo", 85: "Dodrio",
-    86: "Seel", 87: "Dewgong",
-    88: "Grimer", 89: "Muk",
-    90: "Shellder", 91: "Cloyster",
-    92: "Gastly", 93: "Haunter", 94: "Gengar",
-    95: "Onix",
-    96: "Drowzee", 97: "Hypno",
-    98: "Krabby", 99: "Kingler",
-    100: "Voltorb", 101: "Electrode",
-    102: "Exeggcute", 103: "Exeggutor",
-    104: "Cubone", 105: "Marowak",
-    106: "Hitmonlee", 107: "Hitmonchan",
-    108: "Lickitung",
-    109: "Koffing", 110: "Weezing",
-    111: "Rhyhorn", 112: "Rhydon",
-    113: "Chansey",
-    114: "Tangela",
-    115: "Kangaskhan",
-    116: "Horsea", 117: "Seadra",
-    118: "Goldeen", 119: "Seaking",
-    120: "Staryu", 121: "Starmie",
-    122: "Mr. Mime",
-    123: "Scyther",
-    124: "Jynx",
-    125: "Electabuzz",
-    126: "Magmar",
-    127: "Pinsir",
-    128: "Tauros",
-    129: "Magikarp", 130: "Gyarados",
-    131: "Lapras",
-    132: "Ditto",
-    133: "Eevee", 134: "Vaporeon", 135: "Jolteon", 136: "Flareon",
-    137: "Porygon",
-    138: "Omanyte", 139: "Omastar",
-    140: "Kabuto", 141: "Kabutops",
-    142: "Aerodactyl",
-    143: "Snorlax",
-    144: "Articuno", 145: "Zapdos", 146: "Moltres",
-    147: "Dratini", 148: "Dragonair", 149: "Dragonite",
-    150: "Mewtwo",
-    151: "Mew",
-}
-
-# ---------------------------------------------------------------------------
-# Map ID → name (partial; extend from pokered/data/maps/mapHeaders.asm)
-# ---------------------------------------------------------------------------
-RED_MAP_NAMES: Dict[int, str] = {
-    # Towns / cities
-    0x00: "PALLET_TOWN",
-    0x01: "VIRIDIAN_CITY",
-    0x02: "PEWTER_CITY",
-    0x03: "CERULEAN_CITY",
-    0x04: "LAVENDER_TOWN",
-    0x05: "VERMILION_CITY",
-    0x06: "CELADON_CITY",
-    0x07: "FUCHSIA_CITY",
-    0x08: "CINNABAR_ISLAND",
-    0x09: "INDIGO_PLATEAU",
-    0x0A: "SAFFRON_CITY",
-    # Routes
-    0x0C: "ROUTE_1",  0x0D: "ROUTE_2",  0x0E: "ROUTE_3",  0x0F: "ROUTE_4",
-    0x10: "ROUTE_5",  0x11: "ROUTE_6",  0x12: "ROUTE_7",  0x13: "ROUTE_8",
-    0x14: "ROUTE_9",  0x15: "ROUTE_10", 0x16: "ROUTE_11", 0x17: "ROUTE_12",
-    0x18: "ROUTE_13", 0x19: "ROUTE_14", 0x1A: "ROUTE_15", 0x1B: "ROUTE_16",
-    0x1C: "ROUTE_17", 0x1D: "ROUTE_18", 0x1E: "ROUTE_19", 0x1F: "ROUTE_20",
-    0x20: "ROUTE_21", 0x21: "ROUTE_22", 0x22: "ROUTE_23",
-    0x23: "ROUTE_24", 0x24: "ROUTE_25",
-    # Buildings
-    0x25: "PALLET_TOWN_PLAYER_HOUSE_1F",
-    0x26: "PALLET_TOWN_RIVAL_HOUSE",
-    0x27: "OAKS_LAB",
-    0x28: "VIRIDIAN_CITY_GYM",
-    0x29: "PEWTER_CITY_GYM",
-    0x2C: "CERULEAN_CITY_GYM",
-    0x2E: "VERMILION_CITY_GYM",
-    0x33: "CELADON_CITY_GYM",
-    0x34: "FUCHSIA_CITY_GYM",
-    0x35: "SAFFRON_CITY_GYM",
-    0x38: "CINNABAR_ISLAND_GYM",
-    0x39: "SILPH_CO_1F",
-    # Dungeons
-    0xE2: "SS_ANNE_1F",
-    0xE9: "VIRIDIAN_FOREST",
-    0xED: "ROCK_TUNNEL_1F",
-    0xEE: "ROCK_TUNNEL_2F",
-    0xF3: "SAFARI_ZONE_CENTER",
-    0xF4: "SAFARI_ZONE_EAST",
-    0xF5: "MT_MOON_1F",
-    0xF6: "MT_MOON_2F",
-    0xF7: "MT_MOON_3F",
-    # Elite Four
-    0xDE: "LORELEIS_ROOM",
-    0xDF: "BRUNOS_ROOM",
-    0xE0: "AGATHAS_ROOM",
-    0xE1: "LANCES_ROOM",
-    0xE3: "CHAMPIONS_ROOM",
-    # TODO: extend from pokered/data/maps/mapHeaders.asm (~250 total entries)
-}
 
 
 # ---------------------------------------------------------------------------
@@ -310,13 +177,16 @@ class RedMemoryReader:
         """Decode Gen 1 custom character encoding to a Python string."""
         out = []
         for b in byte_array:
-            if b == 0x50:
+            if b == 0x50:  # Gen 1 string terminator (not in charmap.json)
                 break
-            ch = GEN1_CHARMAP.get(b)
-            if ch is None:
-                ch = "?"
-                logger.debug(f"Unknown Gen1 char byte: 0x{b:02X}")
-            out.append(ch)
+            key = str(b)
+            if key not in _CHARMAP:
+                continue  # unknown control byte, skip
+            ch = _CHARMAP[key]
+            if ch is None or ch == "<NULL>":
+                break  # JSON-null or explicit null marker = terminator
+            if ch:  # skip empty-string control codes
+                out.append(ch)
         return "".join(out)
 
     @staticmethod
@@ -342,7 +212,7 @@ class RedMemoryReader:
 
     def read_player_name(self) -> str:
         raw = self._read_bytes(RED_ADDR["player_name"], 11)
-        return self._decode_gen1_text(raw) or "RED"
+        return self._decode_gen1_text(raw)
 
     def read_money(self) -> int:
         raw = self._read_bytes(RED_ADDR["money"], 3)
@@ -357,13 +227,29 @@ class RedMemoryReader:
     def read_location(self) -> str:
         """Return the map name string for the current map ID."""
         map_id = self._read_u8(RED_ADDR["map_id"])
-        return RED_MAP_NAMES.get(map_id, f"MAP_{map_id}")
+        return _MAP_NAMES.get(str(map_id), f"MAP_{map_id}")
 
     def read_party_size(self) -> int:
         return min(self._read_u8(RED_ADDR["party_count"]), 6)
 
     def read_party_pokemon(self) -> List[Dict[str, Any]]:
-        """Parse all party Pokemon from RAM. Returns a list of dicts."""
+        """Parse all party Pokemon from RAM. Returns a list of dicts.
+
+        Slot layout (pokered decompilation wPartyMon1, 0x2C bytes per slot):
+          +0x00: species_id (internal ID, NOT Pokedex number)
+          +0x01-0x02: current HP (big-endian)
+          +0x04: status condition
+          +0x05: type1
+          +0x06: type2
+          +0x08-0x0B: move IDs (4 bytes)
+          +0x1D-0x20: PP for moves 1-4
+          +0x21: level
+          +0x22-0x23: max HP (big-endian)
+          +0x24-0x25: attack
+          +0x26-0x27: defense
+          +0x28-0x29: speed
+          +0x2A-0x2B: special
+        """
         count = self.read_party_size()
         party = []
         for i in range(count):
@@ -376,34 +262,43 @@ class RedMemoryReader:
             type1_id    = slot[0x05]
             type2_id    = slot[0x06]
             move_ids    = [slot[0x08], slot[0x09], slot[0x0A], slot[0x0B]]
-            max_hp      = (slot[0x0D] << 8) | slot[0x0E]
-            attack      = (slot[0x0F] << 8) | slot[0x10]
-            defense     = (slot[0x11] << 8) | slot[0x12]
-            speed       = (slot[0x13] << 8) | slot[0x14]
-            special     = (slot[0x15] << 8) | slot[0x16]
-            level       = slot[0x1D]
-            move_pp     = [slot[0x1E], slot[0x1F], slot[0x20], slot[0x21]]
+            move_pp     = [slot[0x1D], slot[0x1E], slot[0x1F], slot[0x20]]
+            level       = slot[0x21]
+            max_hp      = (slot[0x22] << 8) | slot[0x23]
+            attack      = (slot[0x24] << 8) | slot[0x25]
+            defense     = (slot[0x26] << 8) | slot[0x27]
+            speed       = (slot[0x28] << 8) | slot[0x29]
+            special     = (slot[0x2A] << 8) | slot[0x2B]
 
             nick_raw  = self._read_bytes(RED_ADDR["party_nicknames"] + i * 11, 11)
             nickname  = self._decode_gen1_text(nick_raw)
 
+            # Use internal-ID → name mapping (internal ID ≠ Pokedex number in Gen 1)
+            species_name = _SPECIES_NAMES.get(str(species_id), f"Species_{species_id}")
+            type1_name   = _TYPE_NAMES.get(str(type1_id), f"Type_{type1_id}")
+            type2_name   = _TYPE_NAMES.get(str(type2_id), f"Type_{type2_id}")
+            # Monotype Pokemon store the same type in both slots; deduplicate
+            types        = [type1_name] if type1_name == type2_name else [type1_name, type2_name]
+            # Always return 4 move slots; use "NONE" for empty slots (matches move_pp length)
+            move_names   = [
+                _MOVE_NAMES.get(str(mid), "NONE") if mid != 0 else "NONE"
+                for mid in move_ids
+            ]
+
             party.append({
                 "species_id":   species_id,
-                "species":      GEN1_SPECIES.get(species_id, f"Species_{species_id}"),
-                "species_name": GEN1_SPECIES.get(species_id, f"Species_{species_id}"),
+                "species_name": species_name,
                 "nickname":     nickname,
                 "level":        level,
                 "current_hp":   current_hp,
                 "max_hp":       max_hp,
                 "status":       self._status_name(status),
-                "type1":        GEN1_TYPES.get(type1_id, f"Type_{type1_id}"),
-                "type2":        GEN1_TYPES.get(type2_id, f"Type_{type2_id}"),
+                "types":        types,
                 "attack":       attack,
                 "defense":      defense,
                 "speed":        speed,
                 "special":      special,
-                "moves":        [f"Move_{mid}" for mid in move_ids if mid != 0],
-                "move_ids":     move_ids,
+                "moves":        move_names,
                 "move_pp":      move_pp,
             })
         return party
@@ -446,8 +341,15 @@ class RedMemoryReader:
             # If VRAM read fails, trust text_progress alone
             return True
 
+    def is_on_title_screen(self) -> bool:
+        """Detect the title screen (title_check == 0x1F and title_map_id == 0x00)."""
+        return (self._read_u8(RED_ADDR["title_check"]) == 0x1F and
+                self._read_u8(RED_ADDR["title_map_id"]) == 0x00)
+
     def get_game_state(self) -> str:
-        """Return game state string: 'overworld', 'battle', or 'dialog'."""
+        """Return game state string matching pyboy_runner: 'title', 'battle', 'dialog', or 'overworld'."""
+        if self.is_on_title_screen():
+            return "title"
         if self.is_in_battle():
             return "battle"
         if self.is_in_dialog():
@@ -462,8 +364,8 @@ class RedMemoryReader:
     def read_item_count(self) -> int:
         return self._read_u8(RED_ADDR["inventory_count"])
 
-    def read_items(self) -> List[Tuple[int, int]]:
-        """Return list of (item_id, quantity) tuples from player's bag."""
+    def read_items(self) -> List[Dict[str, Any]]:
+        """Return list of {item_id, name, quantity} dicts from player's bag."""
         count = self.read_item_count()
         base = RED_ADDR["inventory_items"]
         items = []
@@ -472,7 +374,11 @@ class RedMemoryReader:
             qty = self._read_u8(base + i * 2 + 1)
             if item_id == 0xFF:  # inventory terminator
                 break
-            items.append((item_id, qty))
+            items.append({
+                "item_id":  item_id,
+                "name":     _ITEM_NAMES.get(str(item_id), f"Item_{item_id}"),
+                "quantity": qty,
+            })
         return items
 
     def read_pokedex_caught_count(self) -> int:
@@ -506,19 +412,72 @@ class RedMemoryReader:
             return None
         enemy_species = self._read_u8(RED_ADDR["enemy_species"])
         enemy_hp      = self._read_u16_be(RED_ADDR["enemy_hp"])
+        enemy_status  = self._read_u8(RED_ADDR["enemy_status"])
         enemy_level   = self._read_u8(RED_ADDR["enemy_level"])
         enemy_max_hp  = self._read_u16_be(RED_ADDR["enemy_max_hp"])
         return {
             "in_battle":    True,
             "battle_type":  "wild" if battle_type == 1 else "trainer",
             "opponent": {
-                "species_id":   enemy_species,
-                "species":      GEN1_SPECIES.get(enemy_species, f"Species_{enemy_species}"),
-                "level":        enemy_level,
-                "current_hp":   enemy_hp,
-                "max_hp":       enemy_max_hp,
+                "species_id":    enemy_species,
+                "species":       _SPECIES_NAMES.get(str(enemy_species), f"Species_{enemy_species}"),
+                "level":         enemy_level,
+                "current_hp":    enemy_hp,
+                "max_hp":        enemy_max_hp,
                 "hp_percentage": round(enemy_hp / max(enemy_max_hp, 1) * 100, 1),
+                "status":        self._status_name(enemy_status),
             },
+        }
+
+    def _build_progress_context(self, party: List[Dict], badges: List[str]) -> Dict[str, Any]:
+        """Build progress_context dict mirroring EmeraldEmulator's shape.
+
+        visited_locations is seeded with the current map location and then
+        augmented by badge-based city inference (earned badge → city visited).
+        """
+        badge_byte = self._read_u8(RED_ADDR["badges"])
+        # Numbered badge flags (badge_01..badge_08) matching Emerald's pattern
+        badge_flags = {
+            f"badge_{i + 1:02d}": bool(badge_byte & (1 << i))
+            for i in range(8)
+        }
+
+        # Infer visited cities from earned badges
+        _BADGE_LOCATIONS = [
+            ("Boulder", "pewter_city"),
+            ("Cascade", "cerulean_city"),
+            ("Thunder", "vermilion_city"),
+            ("Rainbow", "celadon_city"),
+            ("Soul",    "fuchsia_city"),
+            ("Marsh",   "saffron_city"),
+            ("Volcano", "cinnabar_island"),
+            ("Earth",   "viridian_city"),
+        ]
+        current_loc = self.read_location().lower().replace(" ", "_")
+        visited_set: set = {f"visited_{current_loc}"}
+        for badge_name, city in _BADGE_LOCATIONS:
+            if badge_name in badges:
+                visited_set.add(f"visited_{city}")
+        visited_locations = sorted(visited_set)
+
+        has_pokedex = (self.read_pokedex_caught_count() > 0
+                       or self.read_pokedex_seen_count() > 0)
+        is_champion = len(badges) == 8
+
+        flags: Dict[str, Any] = {**badge_flags, "has_pokedex": has_pokedex, "is_champion": is_champion}
+        for v in visited_locations:
+            flags[v] = True
+
+        return {
+            "badges_obtained":   len(badges),
+            "badge_names":       badges,
+            "party_size":        len(party),
+            "has_pokedex":       has_pokedex,
+            "is_champion":       is_champion,
+            "visited_locations": visited_locations,
+            "flags":             flags,
+            "party_levels":      [p["level"] for p in party],
+            "party_species":     [p["species_name"] for p in party],
         }
 
     # ------------------------------------------------------------------
@@ -550,6 +509,8 @@ class RedMemoryReader:
                 "pokedex_caught": None,
                 "pokedex_seen":   None,
                 "battle_info":    None,
+                "dialog_text":    None,
+                "progress_context": None,
                 "dialogue_detected": None,
             },
             "map": {
@@ -558,6 +519,7 @@ class RedMemoryReader:
                 "metatile_behaviors": None,
                 "metatile_info":      None,
                 "traversability":     None,
+                "object_events":      [],
             },
         }
 
@@ -573,17 +535,22 @@ class RedMemoryReader:
             in_dialog   = self.is_in_dialog() if not in_battle else False
             game_state  = self.get_game_state()
 
+            dialog_text = self.read_screen_text() if in_dialog else None
+
+            badges = self.read_badges()
             state["game"].update({
                 "money":        self.read_money(),
                 "party":        party,
                 "game_state":   game_state,
                 "is_in_battle": in_battle,
-                "badges":       self.read_badges(),
+                "badges":       badges,
                 "items":        self.read_items(),
                 "item_count":   self.read_item_count(),
                 "pokedex_caught": self.read_pokedex_caught_count(),
                 "pokedex_seen":   self.read_pokedex_seen_count(),
                 "battle_info":  self.read_battle_details() if in_battle else None,
+                "dialog_text":  dialog_text,
+                "progress_context": self._build_progress_context(party, badges),
                 "dialogue_detected": {
                     "has_dialogue": in_dialog,
                     "confidence":   1.0 if in_dialog else 0.0,
@@ -611,7 +578,7 @@ class RedMemoryReader:
                                 "collision":          collision,
                                 "elevation":          elevation,
                                 "passable":           collision == 0,
-                                "encounter_possible": type_str == "GRASS", # DOUBLE CHECK THIS
+                                "encounter_possible": type_str in ("GRASS", "WATER"),
                                 "surfable":           type_str == "WATER",
                             })
                         tile_names.append(row_names)

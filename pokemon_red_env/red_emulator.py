@@ -18,7 +18,7 @@ import numpy as np
 from PIL import Image
 
 from .red_map_reader import RedMapReader
-from .red_memory_reader import RED_ADDR, RedMemoryReader
+from .red_memory_reader import RedMemoryReader
 from .red_milestone_tracker import RedMilestoneTracker
 
 logger = logging.getLogger(__name__)
@@ -344,24 +344,6 @@ class RedEmulator:
                 self.milestone_tracker.load_milestones_for_state(path)
         except Exception as e:
             logger.error(f"Failed to load state: {e}")
-
-    # ------------------------------------------------------------------
-    # Raw memory access (kept for backwards-compatibility / diagnostics)
-    # ------------------------------------------------------------------
-
-    def read_memory(self, address: int, size: int = 1) -> bytes:
-        return bytes([self.pyboy.memory[address + i] for i in range(size)])
-
-    def read_u8(self, address: int) -> int:
-        return self.pyboy.memory[address]
-
-    def read_u16(self, address: int) -> int:
-        return self.pyboy.memory[address] | (self.pyboy.memory[address + 1] << 8)
-
-    def read_u32(self, address: int) -> int:
-        lo = self.read_u16(address)
-        hi = self.read_u16(address + 2)
-        return lo | (hi << 16)
 
     # ------------------------------------------------------------------
     # Game-state helpers (thin wrappers over RedMemoryReader)
