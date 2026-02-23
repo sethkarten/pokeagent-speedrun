@@ -8,6 +8,8 @@ import random
 import time
 import threading
 import logging
+import hashlib
+from datetime import timedelta
 from abc import ABC, abstractmethod
 from typing import Union, List, Dict, Any, Optional
 import numpy as np
@@ -90,6 +92,25 @@ def _openai_text_part(text: str):
     return part
 
 
+def _normalize_token_counts(prompt_tokens: int, completion_tokens: int, total_tokens: int) -> tuple[int, int, int]:
+    """Normalize provider token counters to a consistent billing shape.
+
+    Some providers include hidden/thinking output tokens in total_tokens but not in
+    completion_tokens. To keep cost accounting conservative and consistent, treat
+    completion as at least (total - prompt) when total is present.
+    This means that thinking tokens are considered completion tokens.
+    """
+    p = max(0, int(prompt_tokens or 0))
+    c = max(0, int(completion_tokens or 0))
+    t = max(0, int(total_tokens or 0))
+    if t > 0:
+        c = max(c, max(0, t - p))
+        t = max(t, p + c)
+    else:
+        t = p + c
+    return p, c, t
+
+
 def _openai_responses_adapter(response) -> Any:
     """Adapt OpenAI Responses API output to Gemini-like structure for agents.
 
@@ -165,6 +186,7 @@ class OpenAIBackend(VLMBackend):
         self.model_name = model_name
         self.tools = tools or []
         self.system_instruction = system_instruction
+        self._prompt_cache_key = self._build_prompt_cache_key()
         self.api_key = os.getenv("OPENAI_API_KEY")
 
         if not self.api_key:
@@ -187,6 +209,14 @@ class OpenAIBackend(VLMBackend):
         """Update tools (called when agent dynamically updates tool list)."""
         self._tools_openai = self._convert_tools_to_openai_format() if self.tools else []
         logger.info(f"OpenAI model updated with {len(self.tools) if self.tools else 0} tools")
+
+    def _build_prompt_cache_key(self) -> Optional[str]:
+        """Build stable cache key for static system instruction."""
+        if not self.system_instruction:
+            return None
+        material = f"{self.model_name}::{self.system_instruction}".encode("utf-8")
+        digest = hashlib.sha256(material).hexdigest()
+        return f"sys-{digest[:32]}"
 
     def _convert_tools_to_openai_format(self) -> list:
         """Convert Gemini-style tool declarations to OpenAI format.
@@ -246,6 +276,8 @@ class OpenAIBackend(VLMBackend):
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
+        if self._prompt_cache_key:
+            kwargs["prompt_cache_key"] = self._prompt_cache_key
         return self.client.responses.create(**kwargs)
 
     def _prepare_image_base64(self, img: Union[Image.Image, np.ndarray]) -> str:
@@ -333,10 +365,13 @@ class OpenAIBackend(VLMBackend):
                 cached = 0
                 if hasattr(u, "input_tokens_details") and u.input_tokens_details:
                     cached = getattr(u.input_tokens_details, "cached_tokens", 0)
+                inp, out, total = _normalize_token_counts(
+                    inp, out, getattr(u, "total_tokens", 0) or (inp + out)
+                )
                 token_usage = {
                     "prompt_tokens": inp,
                     "completion_tokens": out,
-                    "total_tokens": getattr(u, "total_tokens", 0) or (inp + out),
+                    "total_tokens": total,
                     "cached_tokens": cached,
                 }
 
@@ -422,10 +457,13 @@ class OpenAIBackend(VLMBackend):
                 cached = 0
                 if hasattr(u, "input_tokens_details") and u.input_tokens_details:
                     cached = getattr(u.input_tokens_details, "cached_tokens", 0)
+                inp, out, total = _normalize_token_counts(
+                    inp, out, getattr(u, "total_tokens", 0) or (inp + out)
+                )
                 token_usage = {
                     "prompt_tokens": inp,
                     "completion_tokens": out,
-                    "total_tokens": getattr(u, "total_tokens", 0) or (inp + out),
+                    "total_tokens": total,
                     "cached_tokens": cached,
                 }
 
@@ -522,8 +560,8 @@ def _anthropic_response_adapter(response) -> Any:
         inp = getattr(u, "input_tokens", 0)
         out = getattr(u, "output_tokens", 0)
         total = inp + out
-        cached = getattr(u, "cache_creation_input_tokens", 0) or 0
-        cached += getattr(u, "cache_read_input_tokens", 0) or 0
+        # Adapter cached tokens represent cache reads only.
+        cached = getattr(u, "cache_read_input_tokens", 0) or 0
         adapter.usage_metadata = type(
             "UsageMetadata",
             (),
@@ -720,11 +758,14 @@ class AnthropicBackend(VLMBackend):
             token_usage = {}
             if hasattr(response, "usage") and response.usage:
                 u = response.usage
+                cache_write_tokens = getattr(u, "cache_creation_input_tokens", 0) or 0
+                cache_read_tokens = getattr(u, "cache_read_input_tokens", 0) or 0
                 token_usage = {
                     "prompt_tokens": getattr(u, "input_tokens", 0),
                     "completion_tokens": getattr(u, "output_tokens", 0),
                     "total_tokens": getattr(u, "input_tokens", 0) + getattr(u, "output_tokens", 0),
-                    "cached_tokens": (getattr(u, "cache_creation_input_tokens", 0) or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0),
+                    "cached_tokens": cache_read_tokens,
+                    "cache_write_tokens": cache_write_tokens,
                 }
 
             if self.tools:
@@ -787,11 +828,14 @@ class AnthropicBackend(VLMBackend):
             token_usage = {}
             if hasattr(response, "usage") and response.usage:
                 u = response.usage
+                cache_write_tokens = getattr(u, "cache_creation_input_tokens", 0) or 0
+                cache_read_tokens = getattr(u, "cache_read_input_tokens", 0) or 0
                 token_usage = {
                     "prompt_tokens": getattr(u, "input_tokens", 0),
                     "completion_tokens": getattr(u, "output_tokens", 0),
                     "total_tokens": getattr(u, "input_tokens", 0) + getattr(u, "output_tokens", 0),
-                    "cached_tokens": (getattr(u, "cache_creation_input_tokens", 0) or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0),
+                    "cached_tokens": cache_read_tokens,
+                    "cache_write_tokens": cache_write_tokens,
                 }
 
             if self.tools:
@@ -994,6 +1038,7 @@ class OpenRouterBackend(VLMBackend):
         self.model_name = model_name
         self.tools = tools or []
         self.system_instruction = system_instruction
+        self._prompt_cache_key = self._build_prompt_cache_key()
         self.api_key = os.getenv("OPENROUTER_API_KEY")
 
         if not self.api_key:
@@ -1018,6 +1063,14 @@ class OpenRouterBackend(VLMBackend):
         """Update tools when agent dynamically updates tool list."""
         self._tools_openrouter = self._convert_tools_to_openrouter_format() if self.tools else []
         logger.info(f"OpenRouter model updated with {len(self.tools) if self.tools else 0} tools")
+
+    def _build_prompt_cache_key(self) -> Optional[str]:
+        """Build stable cache key for static system instruction."""
+        if not self.system_instruction:
+            return None
+        material = f"{self.model_name}::{self.system_instruction}".encode("utf-8")
+        digest = hashlib.sha256(material).hexdigest()
+        return f"sys-{digest[:32]}"
 
     def _is_claude_model(self) -> bool:
         """Check if the model is an Anthropic Claude model (requires explicit cache_control)."""
@@ -1137,6 +1190,8 @@ class OpenRouterBackend(VLMBackend):
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
+        if self._prompt_cache_key:
+            kwargs["extra_body"] = {"prompt_cache_key": self._prompt_cache_key}
         return self.client.chat.completions.create(**kwargs)
 
     def get_query(
@@ -1185,11 +1240,21 @@ class OpenRouterBackend(VLMBackend):
                 token_usage = {
                     "prompt_tokens": getattr(u, "prompt_tokens", 0),
                     "completion_tokens": getattr(u, "completion_tokens", 0),
-                    "total_tokens": getattr(u, "total_tokens", 0) or (
-                        getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
-                    ),
+                    "total_tokens": 0,  # Set below after normalization
                     "cached_tokens": _extract_openrouter_cached_tokens(u),
+                    "cache_write_tokens": _extract_openrouter_cache_write_tokens(u),
                 }
+                (
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    token_usage["total_tokens"],
+                ) = _normalize_token_counts(
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    getattr(u, "total_tokens", 0) or (
+                        token_usage["prompt_tokens"] + token_usage["completion_tokens"]
+                    ),
+                )
 
             if self.tools:
                 adapter = _openrouter_response_adapter(response)
@@ -1269,11 +1334,21 @@ class OpenRouterBackend(VLMBackend):
                 token_usage = {
                     "prompt_tokens": getattr(u, "prompt_tokens", 0),
                     "completion_tokens": getattr(u, "completion_tokens", 0),
-                    "total_tokens": getattr(u, "total_tokens", 0) or (
-                        getattr(u, "prompt_tokens", 0) + getattr(u, "completion_tokens", 0)
-                    ),
+                    "total_tokens": 0,  # Set below after normalization
                     "cached_tokens": _extract_openrouter_cached_tokens(u),
+                    "cache_write_tokens": _extract_openrouter_cache_write_tokens(u),
                 }
+                (
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    token_usage["total_tokens"],
+                ) = _normalize_token_counts(
+                    token_usage["prompt_tokens"],
+                    token_usage["completion_tokens"],
+                    getattr(u, "total_tokens", 0) or (
+                        token_usage["prompt_tokens"] + token_usage["completion_tokens"]
+                    ),
+                )
 
             if self.tools:
                 adapter = _openrouter_response_adapter(response)
@@ -2328,6 +2403,7 @@ class GeminiBackend(VLMBackend):
         self.model_name = model_name
         self.tools = tools or []
         self.system_instruction = system_instruction
+        self._uses_cached_content_context = False
         self.api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
         if not self.api_key:
@@ -2339,13 +2415,14 @@ class GeminiBackend(VLMBackend):
         genai.configure(api_key=self.api_key)
 
         # Initialize the model WITH tools and system instructions if provided
+        self._system_cache_ttl_seconds = int(kwargs.get("cache_ttl_seconds", 3600))
         model_kwargs = {}
         if self.system_instruction:
             model_kwargs["system_instruction"] = self.system_instruction
         if self.tools:
             model_kwargs["tools"] = self.tools
 
-        self.model = genai.GenerativeModel(model_name, **model_kwargs)
+        self.model = self._build_model_with_optional_cache(genai, model_name, model_kwargs)
 
         # Log initialization details
         log_parts = [f"Gemini backend initialized with model: {model_name}"]
@@ -2365,8 +2442,45 @@ class GeminiBackend(VLMBackend):
         if self.tools:
             model_kwargs["tools"] = self.tools
 
-        self.model = self.genai.GenerativeModel(self.model_name, **model_kwargs)
+        self.model = self._build_model_with_optional_cache(self.genai, self.model_name, model_kwargs)
         logger.info(f"Gemini model updated with {len(self.tools) if self.tools else 0} tools")
+
+    def _build_model_with_optional_cache(self, genai, model_name: str, model_kwargs: Dict[str, Any]):
+        """Build Gemini model and explicitly cache static system instruction when supported.
+
+        Falls back to regular model initialization when cache APIs are unavailable.
+        """
+        # Option B: preserve strict tool-calling semantics for harnessed agents.
+        # Cached-content models reject per-request tool_config; when tools are active we
+        # intentionally disable explicit cached content so we can keep mode="ANY".
+        if self.tools:
+            self._uses_cached_content_context = False
+            return genai.GenerativeModel(model_name, **model_kwargs)
+
+        if not self.system_instruction:
+            self._uses_cached_content_context = False
+            return genai.GenerativeModel(model_name, **model_kwargs)
+
+        caching = getattr(genai, "caching", None)
+        if not caching or not hasattr(caching, "CachedContent"):
+            self._uses_cached_content_context = False
+            return genai.GenerativeModel(model_name, **model_kwargs)
+
+        try:
+            model_for_cache = model_name if str(model_name).startswith("models/") else f"models/{model_name}"
+            cached = caching.CachedContent.create(
+                model=model_for_cache,
+                system_instruction=self.system_instruction,
+                tools=self.tools or None,
+                ttl=timedelta(seconds=self._system_cache_ttl_seconds),
+            )
+            logger.info("Gemini explicit system cache created: %s", getattr(cached, "name", "unknown"))
+            self._uses_cached_content_context = True
+            return genai.GenerativeModel.from_cached_content(cached)
+        except Exception as e:
+            logger.warning("Gemini explicit system cache unavailable, using regular model init: %s", e)
+            self._uses_cached_content_context = False
+            return genai.GenerativeModel(model_name, **model_kwargs)
 
     def _prepare_image(self, img: Union[Image.Image, np.ndarray]) -> Image.Image:
         """Prepare image for Gemini API - upscale to 4x resolution (HD)"""
@@ -2559,10 +2673,15 @@ class GeminiBackend(VLMBackend):
             token_usage = {}
             if hasattr(response, "usage_metadata"):
                 usage = response.usage_metadata
+                prompt_tokens, completion_tokens, total_tokens = _normalize_token_counts(
+                    getattr(usage, "prompt_token_count", 0),
+                    getattr(usage, "candidates_token_count", 0),
+                    getattr(usage, "total_token_count", 0),
+                )
                 token_usage = {
-                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
-                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
-                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                     "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
 
@@ -2675,10 +2794,15 @@ class GeminiBackend(VLMBackend):
             token_usage = {}
             if hasattr(response, "usage_metadata"):
                 usage = response.usage_metadata
+                prompt_tokens, completion_tokens, total_tokens = _normalize_token_counts(
+                    getattr(usage, "prompt_token_count", 0),
+                    getattr(usage, "candidates_token_count", 0),
+                    getattr(usage, "total_token_count", 0),
+                )
                 token_usage = {
-                    "prompt_tokens": getattr(usage, "prompt_token_count", 0),
-                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
-                    "total_tokens": getattr(usage, "total_token_count", 0),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
                     "cached_tokens": getattr(usage, "cached_content_token_count", 0),
                 }
 

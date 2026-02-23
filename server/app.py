@@ -41,18 +41,7 @@ from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
 
 # MCP tool imports - lazy loaded to avoid circular imports
-_pokemon_mcp_tools = None
 _baseline_mcp_tools = None
-
-
-def _get_pokemon_mcp_tools():
-    """Lazy load Pokemon MCP tools"""
-    global _pokemon_mcp_tools
-    if _pokemon_mcp_tools is None:
-        from server.cli import pokemon_mcp_server
-
-        _pokemon_mcp_tools = pokemon_mcp_server
-    return _pokemon_mcp_tools
 
 
 def _get_baseline_mcp_tools():
@@ -2159,7 +2148,8 @@ async def update_agent_step(request: Request = None):
                     step_num = request_data.get("step", agent_step_count)
                     # Write to a simple text file for the stream to read
                     try:
-                        with open("agent_thinking.txt", "w") as f:
+                        _thinking_path = Path(__file__).resolve().parent / "agent_thinking.txt"
+                        with open(_thinking_path, "w") as f:
                             f.write(f"Step {step_num}:\n{thinking_text}\n")
                     except Exception as e:
                         logger.debug(f"Could not write thinking: {e}")
@@ -2557,8 +2547,8 @@ async def mcp_get_game_state():
 
     try:
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
-        from agent.direct_objectives import DirectObjectiveManager
+        from server import game_tools
+        from agent.objectives import DirectObjectiveManager
 
         # Get recent button presses with position history
         global recent_button_presses, current_obs
@@ -2567,8 +2557,8 @@ async def mcp_get_game_state():
         with obs_lock:
             obs_copy = current_obs.copy() if current_obs is not None else None
 
-        # Use helper function from pokemon_mcp_server with action history and current frame
-        result = pokemon_mcp_server.get_game_state_direct(
+        # Use helper function from game_tools with action history and current frame
+        result = game_tools.get_game_state_direct(
             env,
             format_state_for_llm,
             action_history=recent_button_presses,
@@ -2701,7 +2691,7 @@ async def mcp_get_game_state():
                         result["direct_objective_context"] = objective_context
 
         # Ensure all data is JSON-serializable (objectives data may contain enums/numpy types)
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         return serialize_for_json(result)
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
@@ -2797,13 +2787,13 @@ async def mcp_complete_direct_objective(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.direct_objectives import DirectObjectiveManager
+        from agent.objectives import DirectObjectiveManager
 
         # Get current game state to check objective completion
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         if not game_state_result.get("success", False):
             return {"success": False, "error": "Failed to get game state"}
 
@@ -2911,7 +2901,7 @@ async def mcp_complete_direct_objective(request: dict):
             # Advance the appropriate index, and inject guidance when a category ends
             if category == "story":
                 if direct_objectives_manager.story_index >= len(direct_objectives_manager.story_sequence) - 1:
-                    from agent.objective_types import DirectObjective
+                    from agent.objectives import DirectObjective
 
                     next_obj = DirectObjective(
                         id="autonomous_01_create_next_story_objectives",
@@ -3080,7 +3070,7 @@ async def mcp_complete_direct_objective(request: dict):
                     "completed": sum(1 for obj in direct_objectives_manager.dynamics_sequence if obj.completed),
                 },
             }
-            from server.cli.pokemon_mcp_server import serialize_for_json
+            from utils.json_utils import serialize_for_json
             return serialize_for_json({
                 "success": True,
                 "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3091,7 +3081,7 @@ async def mcp_complete_direct_objective(request: dict):
             next_obj = direct_objectives_manager.get_current_objective()
         if next_obj:
             next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
-            from server.cli.pokemon_mcp_server import serialize_for_json
+            from utils.json_utils import serialize_for_json
             return serialize_for_json({
                 "success": True,
                 "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3117,7 +3107,7 @@ async def mcp_complete_direct_objective(request: dict):
 
             # Automatically create a new objective to guide the agent through next steps
             try:
-                from agent.direct_objectives import DirectObjective
+                from agent.objectives import DirectObjective
 
                 # Get current game state for context
                 next_step_obj = DirectObjective(
@@ -3136,7 +3126,7 @@ async def mcp_complete_direct_objective(request: dict):
                 # Get guidance for the new objective
                 next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
 
-                from server.cli.pokemon_mcp_server import serialize_for_json
+                from utils.json_utils import serialize_for_json
                 return serialize_for_json({
                     "success": True,
                     "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3149,7 +3139,7 @@ async def mcp_complete_direct_objective(request: dict):
             except Exception as e:
                 logger.error(f"Failed to create auto objective: {e}")
                 # Fallback to original behavior if auto-objective creation fails
-                from server.cli.pokemon_mcp_server import serialize_for_json
+                from utils.json_utils import serialize_for_json
                 return serialize_for_json({
                     "success": True,
                     "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3171,7 +3161,7 @@ async def mcp_navigate_to(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
         x = request.get("x")
         y = request.get("y")
@@ -3189,7 +3179,7 @@ async def mcp_navigate_to(request: dict):
             return {"success": False, "error": f"Invalid coordinates: x={x}, y={y}"}
 
         # Calculate path and get buttons
-        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason=reason, variance=variance)
+        result = game_tools.navigate_to_direct(env, x, y, reason=reason, variance=variance)
 
         if not result.get("success"):
             return result
@@ -3220,9 +3210,9 @@ async def mcp_navigate_to(request: dict):
 async def mcp_add_knowledge(request: dict):
     """MCP Tool: Add knowledge to knowledge base (persistent across runs)"""
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        result = pokemon_mcp_server.add_knowledge_direct(
+        result = game_tools.add_knowledge_direct(
             category=request.get("category"),
             title=request.get("title"),
             content=request.get("content"),
@@ -3252,9 +3242,9 @@ async def mcp_add_knowledge(request: dict):
 async def mcp_search_knowledge(request: dict):
     """MCP Tool: Search knowledge base (persistent across runs)"""
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        return pokemon_mcp_server.search_knowledge_direct(
+        return game_tools.search_knowledge_direct(
             category=request.get("category"),
             query=request.get("query"),
             location=request.get("location"),
@@ -3269,9 +3259,9 @@ async def mcp_search_knowledge(request: dict):
 async def mcp_search_knowledge_summary(request: dict):
     """MCP Tool: Get knowledge summary (persistent across runs)"""
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        return pokemon_mcp_server.get_knowledge_summary_direct(min_importance=request.get("min_importance", 3))
+        return game_tools.get_knowledge_summary_direct(min_importance=request.get("min_importance", 3))
     except Exception as e:
         logger.error(f"Error getting knowledge summary: {e}")
         return {"success": False, "error": str(e)}
@@ -3677,7 +3667,7 @@ async def mcp_create_direct_objectives(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.direct_objectives import DirectObjectiveManager
+        from agent.objectives import DirectObjectiveManager
 
         objectives_data = request.get("objectives", [])
         reasoning = request.get("reasoning", "")
@@ -3769,9 +3759,9 @@ async def mcp_create_direct_objectives(request: dict):
 
         # Get current game state for context
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         game_state = game_state_result.get("raw_state", {})
 
         # Get next objective guidance (should now be the first of the newly created objectives)
@@ -3798,7 +3788,7 @@ async def mcp_create_direct_objectives(request: dict):
             next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
             sequence_status = direct_objectives_manager.get_sequence_status()
 
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         return serialize_for_json({
             "success": True,
             "message": f"Created {len(objectives_data)} objectives",
@@ -3836,9 +3826,9 @@ async def mcp_get_progress_summary():
 
         # Get current game state
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         game_state = game_state_result.get("raw_state", {})
 
         # Get direct objective status
@@ -3871,14 +3861,14 @@ async def mcp_get_progress_summary():
                             completed_history = history_data.get("sequences", [])
 
         # Get knowledge summary (persistent)
-        kb_result = pokemon_mcp_server.get_knowledge_summary_direct(min_importance=3)
+        kb_result = game_tools.get_knowledge_summary_direct(min_importance=3)
         kb_summary = kb_result.get("summary", "No knowledge yet") if isinstance(kb_result, dict) else "No knowledge yet"
 
         # Get location and coordinates
         location = game_state.get("player", {}).get("location", "Unknown")
         player_pos = game_state_result.get("player_position", {}) if game_state_result.get("success") else {}
 
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         return serialize_for_json({
             "success": True,
             "progress": {
@@ -3986,9 +3976,9 @@ async def mcp_reflect(request: dict):
 
         # Get current game state
         from utils.state_formatter import format_state_for_llm, _format_porymap_info
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         state_text = game_state_result.get("state_text", "")
         player_pos = game_state_result.get("player_position", {})
         location = game_state_result.get("raw_state", {}).get("player", {}).get("location", "Unknown")
@@ -4027,7 +4017,7 @@ async def mcp_reflect(request: dict):
             )
 
         # Return all context for agent to analyze
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         
         # Build objective info based on mode
         if categorized_objectives:

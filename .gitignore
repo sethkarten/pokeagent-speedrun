@@ -5,6 +5,7 @@
 *.pem
 *.gba
 llm_log_*
+.cursor/*
 CLAUDE.md
 agents.md
 .pokeagent_cache*
@@ -186,19 +187,22 @@ cython_debug/
 .pypirc
 .vscode
 
-
 notes/*
-
 *.mp4
 *scripts/*
 test_gemini.py
 out.txt
 out_2.txt
 *.sh
+llm_logs/*
 
 # Agent backups
 backups/
 .pokeagent_cache/*
 run_data/*
 
+# tests
+PokemonRed-GBC/test_states/*
+pokemon_red_env/test/*
+tests/output/*
 
