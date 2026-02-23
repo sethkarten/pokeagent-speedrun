@@ -135,6 +135,9 @@ class RedMemoryReader:
         self._dialog_cache_time: float = 0.0
         # Map reader — set by RedEmulator.initialize() after construction
         self.map_reader: Optional[object] = None
+        # Area transition detection (used by server/app.py step_environment)
+        self._last_map_id: Optional[int] = None
+        self._area_transition_detected: bool = False
 
     # ------------------------------------------------------------------
     # Low-level read primitives
@@ -657,6 +660,21 @@ class RedMemoryReader:
     # Interface compatibility stubs
     # ------------------------------------------------------------------
 
+    def _check_area_transition(self) -> bool:
+        """Detect if player moved to a different map.
+
+        Called every frame by server/app.py step_environment().
+        Returns True on the frame where wCurMap changes.
+        """
+        current_map_id = self._read_u8(RED_ADDR["map_id"])
+        if self._last_map_id is None:
+            self._last_map_id = current_map_id
+            return False
+        if current_map_id != self._last_map_id:
+            self._last_map_id = current_map_id
+            return True
+        return False
+
     def invalidate_map_cache(self, **kwargs) -> None:
         """No-op — processed_map data is static; no cache to invalidate."""
         pass
@@ -694,3 +712,7 @@ class RedMemoryReader:
             results["status"] = "error"
             results["error"]  = str(e)
         return results
+
+    def test_memory_access(self) -> Dict[str, Any]:
+        """Alias for server /debug/memory endpoint compatibility."""
+        return self.test_memory_reading()

@@ -41,6 +41,10 @@ def start_server(args, run_id=None):
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
     
     # Pass through server-relevant arguments
+    if args.game:
+        server_cmd.extend(["--game", args.game])
+        server_env["GAME_TYPE"] = args.game
+
     if args.record:
         server_cmd.append("--record")
     
@@ -171,9 +175,11 @@ def main():
     parser = argparse.ArgumentParser(description="Pokemon Emerald AI Agent")
     
     # Core arguments
-    parser.add_argument("--rom", type=str, default="Emerald-GBAdvance/rom.gba", 
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
+                       help="Which game to run: 'red' (Pokemon Red, Game Boy) or 'emerald' (Pokemon Emerald, GBA)")
+    parser.add_argument("--rom", type=str, default="Emerald-GBAdvance/rom.gba",
                        help="Path to ROM file")
-    parser.add_argument("--port", type=int, default=8000, 
+    parser.add_argument("--port", type=int, default=8000,
                        help="Port for web interface")
     
     # State loading
