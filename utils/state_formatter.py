@@ -718,7 +718,17 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
                 logger.debug(f"Stored elevation-filtered porymap grid: {len(stored_grid)}x{len(stored_grid[0]) if stored_grid else 0}")
     elif porymap_result:
         context_parts.extend(porymap_result)
-    
+
+    # Fallback: display existing visual_map (e.g. from Red's map reader) if no porymap map was added
+    has_map_content = any("MAP" in p.upper() or "Grid" in p for p in context_parts[2:] if isinstance(p, str))
+    if not has_map_content:
+        visual_map = map_info.get("visual_map")
+        if visual_map:
+            context_parts.append(f"\n--- MAP (viewport) ---")
+            context_parts.append(visual_map)
+            source = map_info.get("map_source", "memory")
+            context_parts.append(f"(Source: {source})")
+
     return context_parts
 
 def _add_local_map_fallback(context_parts, map_info, include_npcs, location_name=None):

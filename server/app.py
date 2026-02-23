@@ -2826,8 +2826,17 @@ async def mcp_press_buttons(request: dict):
         if not buttons:
             return {"success": False, "error": "No buttons specified"}
 
+        # GBC (Red) has no shoulder buttons — reject L/R
+        if game_type == "red":
+            invalid_shoulder = [b for b in buttons if str(b).upper().strip() in ("L", "R")]
+            if invalid_shoulder:
+                return {"success": False, "error": f"Game Boy has no shoulder buttons: {invalid_shoulder}"}
+
         # Valid buttons (including WAIT for no-op)
-        valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
+        if game_type == "red":
+            valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "WAIT"]
+        else:
+            valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
 
         # Validate and normalize buttons with fallback to 'A'
         normalized_buttons = []
@@ -3540,13 +3549,17 @@ async def mcp_get_walkthrough(request: dict):
         except (ValueError, TypeError):
             return {"success": False, "error": f"Invalid part number: {part}"}
 
-        if not 1 <= part <= 21:
-            return {"success": False, "error": f"Part must be between 1 and 21 (got {part})"}
-
-        # Build Bulbapedia walkthrough URL
-        url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
-
-        logger.info(f"📖 Fetching Emerald walkthrough part {part}")
+        # Build Bulbapedia walkthrough URL (game-specific)
+        if game_type == "red":
+            if not 1 <= part <= 17:
+                return {"success": False, "error": f"Red walkthrough only has parts 1-17 (got {part})"}
+            url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Red_and_Blue/Part_{part}"
+            logger.info(f"📖 Fetching Red walkthrough part {part}")
+        else:
+            if not 1 <= part <= 21:
+                return {"success": False, "error": f"Part must be between 1 and 21 (got {part})"}
+            url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
+            logger.info(f"📖 Fetching Emerald walkthrough part {part}")
 
         # Fetch the page
         response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; PokeAgent/1.0)"})
@@ -4075,7 +4088,7 @@ async def mcp_reflect(request: dict):
                 sequence_name = obj_status.get("sequence_name")
 
         # Get current game state
-        from utils.state_formatter import format_state_for_llm, _format_porymap_info
+        from utils.state_formatter import format_state_for_llm
         from server import game_tools
 
         game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
@@ -4083,16 +4096,26 @@ async def mcp_reflect(request: dict):
         player_pos = game_state_result.get("player_position", {})
         location = game_state_result.get("raw_state", {}).get("player", {}).get("location", "Unknown")
 
-        # Get porymap ground truth data
+        # Get map context (game-specific)
         porymap_text = ""
-        if location and location != "Unknown" and location != "TITLE_SEQUENCE":
-            try:
-                player_coords = (player_pos.get("x"), player_pos.get("y")) if player_pos else None
-                porymap_parts = _format_porymap_info(location, player_coords)
-                if porymap_parts:
-                    porymap_text = "\n".join(porymap_parts)
-            except Exception as e:
-                logger.warning(f"Could not get porymap info for reflection: {e}")
+        if game_type == "red":
+            # Use Red's map reader instead of porymap
+            if env and hasattr(env, "memory_reader") and hasattr(env.memory_reader, "map_reader"):
+                try:
+                    porymap_text = env.memory_reader.map_reader.format_map_for_llm(radius=7) or ""
+                except Exception as e:
+                    logger.warning(f"Could not get Red map info for reflection: {e}")
+        else:
+            # Emerald: use porymap ground truth data
+            if location and location != "Unknown" and location != "TITLE_SEQUENCE":
+                try:
+                    from utils.state_formatter import _format_porymap_info
+                    player_coords = (player_pos.get("x"), player_pos.get("y")) if player_pos else None
+                    porymap_parts = _format_porymap_info(location, player_coords)
+                    if porymap_parts:
+                        porymap_text = "\n".join(porymap_parts)
+                except Exception as e:
+                    logger.warning(f"Could not get porymap info for reflection: {e}")
 
         # Get progress summary
         progress_result = await mcp_get_progress_summary()
