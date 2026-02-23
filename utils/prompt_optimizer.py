@@ -41,7 +41,7 @@ class PromptOptimizer:
         
         # Create a separate VLM instance WITHOUT tools for text-only optimization calls
         # This ensures get_text_query returns a string, not a GenerateContentResponse object
-        from utils.vlm import VLM
+        from utils.vlm_backends import VLM
         self.vlm = VLM(
             backend=vlm.backend_type,
             model_name=vlm.model_name,

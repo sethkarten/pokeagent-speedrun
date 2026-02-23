@@ -3,7 +3,7 @@ import random
 import sys
 from agent.system_prompt import system_prompt
 from utils.state_formatter import format_state_for_llm, format_state_summary, get_movement_options, get_party_health_summary
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 
 # Set up module logging
 logger = logging.getLogger(__name__)
