@@ -311,7 +311,7 @@ class RedMemoryReader:
     def is_in_battle(self) -> bool:
         return self._read_u8(RED_ADDR["in_battle"]) != 0
 
-    def is_in_dialog(self) -> bool:
+    def is_in_dialog(self) -> bool:  # may DOUBLE CHECK
         """Two-signal dialog detection: text_progress register + VRAM border check."""
         if self.is_in_battle():
             return False
@@ -391,16 +391,36 @@ class RedMemoryReader:
         raw = self._read_bytes(RED_ADDR["pokedex_seen"], 19)
         return sum(bin(b).count("1") for b in raw)
 
+    # Box-drawing characters that form the Gen 1 dialog box border
+    _BOX_BORDER_CHARS = frozenset("┌─┐│└┘")
+
     def read_screen_text(self) -> str:
-        """Decode VRAM tilemap to a string (useful for reading dialog/menus)."""
+        """Decode VRAM tilemap to readable dialog text.
+
+        Strips the leading empty (overworld) rows and the box-drawing border
+        that surrounds the Gen 1 dialog window, returning only the text lines.
+        Input rows look like:
+          (empty)×10, ┌──────────────────┐, │                  │,
+          │Some NPC text here│, │                  │, └──────────────────┘
+        Output: "Some NPC text here"
+        """
         try:
             tiles = self._read_bytes(RED_ADDR["vram_tilemap"], 360)
-            # Each row is 20 tiles wide
-            rows = []
+            lines = []
             for row in range(18):
                 row_bytes = tiles[row * 20: row * 20 + 20]
-                rows.append(self._decode_gen1_text(row_bytes))
-            return "\n".join(rows)
+                decoded = self._decode_gen1_text(row_bytes)
+                # Strip │ frame characters and surrounding whitespace
+                stripped = decoded.strip()
+                if stripped.startswith("│"):
+                    stripped = stripped[1:]
+                if stripped.endswith("│"):
+                    stripped = stripped[:-1]
+                stripped = stripped.strip()
+                # Drop empty rows and pure border rows (only box-drawing chars)
+                if stripped and not all(c in self._BOX_BORDER_CHARS for c in stripped):
+                    lines.append(stripped)
+            return "\n".join(lines)
         except Exception as e:
             logger.warning(f"read_screen_text failed: {e}")
             return ""
