@@ -79,7 +79,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            /* GBA aspect ratio 3:2 (240x160) - 895/597 = 1.5:1 */
+            /* Default GBA aspect ratio 3:2 (240x160) - dynamically adjusted via /config */
         }
 
         .frame {
@@ -730,6 +730,19 @@
 
         console.log(`Using server URL: ${serverUrl}`);
         console.log(`Using WebSocket URL: ${frameWebSocketUrl}`);
+
+        // Fetch game config to set correct aspect ratio (GB: 160x144, GBA: 240x160)
+        fetch(`${serverUrl}/config`)
+            .then(r => r.json())
+            .then(cfg => {
+                const aspect = cfg.width / cfg.height;
+                const container = document.querySelector('.frame-container');
+                const containerWidth = 895;
+                container.style.width = containerWidth + 'px';
+                container.style.height = Math.round(containerWidth / aspect) + 'px';
+                console.log(`Game: ${cfg.game}, resolution: ${cfg.width}x${cfg.height}, aspect: ${aspect.toFixed(3)}`);
+            })
+            .catch(e => console.warn('Could not fetch /config, using default aspect ratio:', e));
 
         // WebSocket frame streaming (REAL-TIME PUSH - no polling!)
         function connectFrameWebSocket() {
