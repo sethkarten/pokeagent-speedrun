@@ -368,6 +368,15 @@ class RedEmulator:
                 logger.warning(f"Failed to read map location: {e}")
         return None
 
+    # Aliases for server/app.py compatibility
+    def get_coordinates(self):
+        """Alias for get_player_position() — used by server's periodic_milestone_updater."""
+        return self.get_player_position()
+
+    def get_location(self):
+        """Alias for get_map_location() — used by server's periodic_milestone_updater."""
+        return self.get_map_location()
+
     def get_money(self) -> Optional[int]:
         if self.memory_reader:
             try:
@@ -388,6 +397,12 @@ class RedEmulator:
         if self.memory_reader:
             return self.memory_reader.read_map_around_player(radius)
         return None
+
+    def get_whole_map(self) -> dict:
+        """Get complete map data for current location (for /whole_map endpoint)."""
+        if self.memory_reader and self.memory_reader.map_reader:
+            return self.memory_reader.map_reader.get_whole_map_data()
+        return {}
 
     # ------------------------------------------------------------------
     # Comprehensive state (delegates to RedMemoryReader)

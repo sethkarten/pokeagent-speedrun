@@ -406,6 +406,106 @@ class RedMapReader:
             "coll_map":   coll_map,
         }
 
+    def get_whole_map_data(self) -> dict:
+        """Return complete map data for /whole_map endpoint.
+
+        Returns a dict matching the shape of Emerald's /whole_map response:
+          location, player_position, dimensions, grid (ASCII),
+          raw_tiles (4-tuples), elevation_map, behavior_map,
+          special_tiles, warps, objects
+        """
+        CELL_SYMBOLS = {
+            'WALKABLE': '.', 'WALL': '#', 'GRASS': 'G', 'WATER': '~',
+            'WARP':     'W', 'NPC':  'N', 'SIGN':  's', 'CUT':   'T',
+            'COUNTER':  'c', 'LEDGE_D': 'v', 'LEDGE_L': '<', 'LEDGE_R': '>',
+            'UNKNOWN':  '?',
+        }
+
+        map_name = self.read_map_name()
+        coll_map = self._load_coll_map(map_name)
+        player_x, player_y = self.read_player_coords()
+
+        if not coll_map:
+            return {
+                "location": map_name,
+                "player_position": {"x": player_x, "y": player_y},
+                "dimensions": {"width": 0, "height": 0},
+                "grid": [], "raw_tiles": [], "elevation_map": [],
+                "behavior_map": [], "special_tiles": {},
+                "warps": [], "objects": [],
+            }
+
+        map_h = len(coll_map)
+        map_w = len(coll_map[0]) if map_h > 0 else 0
+
+        grid = []
+        raw_tiles = []
+        behavior_map = []
+        elevation_map = []
+        special_tiles = {}
+        warps = []
+
+        for y, row in enumerate(coll_map):
+            grid_row = []
+            tile_row = []
+            behav_row = []
+            elev_row = []
+            for x, cell in enumerate(row):
+                type_str, collision_int = self._classify_cell(cell)
+
+                # ASCII grid
+                grid_row.append(_type_str_to_symbol(type_str, CELL_SYMBOLS))
+
+                # Raw tile 4-tuple
+                tile_row.append((0, type_str, collision_int, 0))
+
+                # Behavior and elevation
+                behav_row.append(type_str)
+                elev_row.append(0)  # Gen 1 has no elevation
+
+                # Collect special tiles
+                if cell.startswith('WarpPoint'):
+                    warps.append({"x": x, "y": y, "name": cell})
+                    special_tiles.setdefault("WARP", []).append(
+                        {"x": x, "y": y, "elevation": 0, "behavior_id": cell}
+                    )
+                elif cell.startswith('SIGN_') or cell.startswith('TalkTo'):
+                    special_tiles.setdefault("SIGN", []).append(
+                        {"x": x, "y": y, "elevation": 0, "behavior_id": cell}
+                    )
+
+            grid.append(grid_row)
+            raw_tiles.append(tile_row)
+            behavior_map.append(behav_row)
+            elevation_map.append(elev_row)
+
+        # NPC/object data from RAM
+        objects = []
+        try:
+            for s in self.read_sprites():
+                objects.append({
+                    "x": s["map_x"], "y": s["map_y"],
+                    "sprite_name": s["sprite_name"],
+                    "facing": s["facing"],
+                    "graphics_id": s["picture_id"],
+                })
+        except Exception:
+            pass
+
+        return {
+            "location": map_name,
+            "player_position": {"x": player_x, "y": player_y},
+            "player_elevation": 0,
+            "dimensions": {"width": map_w, "height": map_h},
+            "grid": grid,
+            "raw_tiles": raw_tiles,
+            "elevation_map": elevation_map,
+            "behavior_map": behavior_map,
+            "special_tiles": special_tiles,
+            "warps": warps,
+            "objects": objects,
+        }
+
     def get_traversability_grid(self, radius: int = 4) -> list:
         """Return 2D bool grid.  True = walkable.  Clamped to map bounds."""
         map_name = self.read_map_name()
