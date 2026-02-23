@@ -203,6 +203,6 @@ run_data/*
 
 # tests
 PokemonRed-GBC/test_states/*
-pokemon_red_env/test/*
+pokemon_red_env/test/output/*
 tests/output/*
 
