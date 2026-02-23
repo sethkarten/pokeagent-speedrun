@@ -524,6 +524,7 @@ def main():
             logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_session.process.pid)
             wait_start = time.monotonic()
             last_debug_log = 0.0
+            last_checkpoint_time = time.monotonic()
 
             while cli_session.process.poll() is None:
                 if server_process.poll() is not None:
@@ -533,6 +534,19 @@ def main():
                     )
                     return 1
                 now = time.monotonic()
+                
+                # Checkpoint every 60 seconds
+                if now - last_checkpoint_time >= 60.0:
+                    try:
+                        # Save checkpoint (game state + milestones)
+                        requests.post(f"{server_url}/checkpoint", timeout=5)
+                        # Save agent history (LLM logs)
+                        requests.post(f"{server_url}/save_agent_history", timeout=5)
+                        logger.info("[cli-debug] Saved checkpoint and agent history")
+                    except Exception as e:
+                        logger.warning(f"Failed to save checkpoint: {e}")
+                    last_checkpoint_time = now
+
                 if now - last_debug_log >= 15.0:
                     elapsed = int(now - wait_start)
                     logger.info(
