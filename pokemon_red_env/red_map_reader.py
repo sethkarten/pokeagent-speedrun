@@ -168,7 +168,7 @@ class RedMapReader:
         return rows
 
     def get_traversability_grid(self, radius: int = 4) -> list:
-        """Return 2D bool grid (default radius 4 = 9×9).  True = walkable."""
+        """Return 2D bool grid (default radius 4 = 9x9).  True = walkable."""
         map_name = self.read_map_name()
         coll_map = self._load_coll_map(map_name)
         player_x, player_y = self.read_player_coords()

@@ -201,4 +201,8 @@ backups/
 .pokeagent_cache/*
 run_data/*
 
+# tests
+PokemonRed-GBC/test_states/*
+pokemon_red_env/test/*
+tests/output/*
 
