@@ -226,7 +226,31 @@ def navigate_to_direct(
 
         location_name = state.get("player", {}).get("location", "Unknown")
         coord_offset = None
-        if location_name and location_name not in ("Unknown", "TITLE_SEQUENCE"):
+
+        # --- Red: load native map data as porymap-compatible format ---
+        _game_type = os.environ.get("GAME_TYPE", "emerald")
+        if _game_type == "red":
+            try:
+                if hasattr(env, "memory_reader") and hasattr(env.memory_reader, "map_reader"):
+                    whole_map = env.memory_reader.map_reader.get_whole_map_data()
+                    if whole_map and whole_map.get("grid"):
+                        if "map" not in state:
+                            state["map"] = {}
+                        state["map"]["porymap"] = {
+                            "grid": whole_map["grid"],
+                            "objects": whole_map.get("objects", []),
+                            "dimensions": whole_map.get("dimensions", {}),
+                            "warps": whole_map.get("warps", []),
+                            "raw_tiles": whole_map.get("raw_tiles"),
+                        }
+                        logger.info(
+                            f"Loaded Red map for pathfinding: '{whole_map.get('location')}', "
+                            f"grid: {whole_map['dimensions'].get('width')}x{whole_map['dimensions'].get('height')}"
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to load Red map data for pathfinding: {e}")
+
+        elif location_name and location_name not in ("Unknown", "TITLE_SEQUENCE"):
             try:
                 from utils.porymap_json_builder import build_json_map_for_llm
                 from utils.ascii_map_loader import get_effective_map_name, get_override

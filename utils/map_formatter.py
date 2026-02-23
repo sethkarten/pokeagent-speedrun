@@ -169,7 +169,10 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         collision = 0
     
     # Convert behavior to symbol using unified logic
-    if hasattr(behavior, 'name'):
+    if isinstance(behavior, str):
+        # Red uses string behavior names directly (e.g. "WALL", "WALKABLE", "GRASS")
+        behavior_name = behavior.upper()
+    elif hasattr(behavior, 'name'):
         behavior_name = behavior.name
     else:
         # Handle both int and numpy integer types
