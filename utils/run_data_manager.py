@@ -667,6 +667,18 @@ def get_cache_path(relative_path: str) -> Path:
     return cache_dir / relative_path
 
 
+def get_checkpoint_llm_path() -> Path:
+    """Get path to checkpoint_llm.txt (cache folder first, then legacy location).
+    
+    Returns:
+        Path to checkpoint_llm.txt
+    """
+    checkpoint_file = get_cache_path("checkpoint_llm.txt")
+    if not checkpoint_file.exists() and Path("checkpoint_llm.txt").exists():
+        return Path("checkpoint_llm.txt")
+    return checkpoint_file
+
+
 def cleanup_old_cache_runs() -> None:
     """Deprecated. No-op: CLI and other runs now use datetime_runname (no run_* prefix).
     Kept for compatibility with server shutdown path; does nothing.

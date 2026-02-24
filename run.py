@@ -53,8 +53,8 @@ def start_server(args, run_id=None):
             # Set environment variable to enable LLM checkpoint loading
             server_env["LOAD_CHECKPOINT_MODE"] = "true"
             print(f"🔄 Server will load checkpoint: {checkpoint_state}")
-            checkpoint_llm = get_cache_path("checkpoint_llm.txt")
-            print(f"🔄 LLM metrics will be restored from {checkpoint_llm}")
+            metrics_file = get_cache_path("cumulative_metrics.json")
+            print(f"🔄 LLM metrics will be restored from {metrics_file}")
         else:
             print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
     elif args.load_state:

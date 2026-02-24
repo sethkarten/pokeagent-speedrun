@@ -18,15 +18,15 @@ Acts as the working directory for the active agent run. It stores the immediate 
 - **Location**: `.pokeagent_cache/{run_id}/` (Run-specific isolation).
 - **Key Files**:
   - `checkpoint.state`: Binary emulator state (mGBA save state).
-  - `checkpoint_llm.txt`: Full LLM conversation history.
-  - `cumulative_metrics.json`: Current metrics snapshot (tokens, cost, actions).
+  - `checkpoint_llm.txt`: LLM conversation history and step count (`log_entries`, `agent_step_count`). **NO metrics** are stored here.
+  - `cumulative_metrics.json`: Complete metrics history (tokens, cost, actions, all steps). **Single source of truth** for metrics; loaded separately from checkpoint.
   - `checkpoint_milestones.json`: Tracker for game milestones.
   - `checkpoint_maps.json`: Discovered map data.
   - `knowledge_base.json`: Agent's accumulated knowledge.
   - `frame_cache.json`: Recent frame data.
 
 ### Management
-- **Access**: Managed via `utils/run_data_manager.py` (specifically `get_cache_directory()`).
+- **Access**: Managed via `utils/run_data_manager.py` (e.g. `get_cache_directory()`, `get_checkpoint_llm_path()`).
 - **Isolation**: Each run gets a unique subdirectory based on its ID, preventing collisions between parallel or sequential runs.
 
 ## 2. Backups (`backups/`)
@@ -40,7 +40,7 @@ Provides recovery points to restore the agent's state in case of crashes, errors
 
 ### Management (`utils/backup_manager.py`)
 - **Creation**: `create_cache_backup()` is called automatically upon objective completion.
-- **Restoration**: `restore_cache_from_backup()` allows rolling back to a previous state. It creates a safety backup of the current state before overwriting.
+- **Restoration**: `restore_cache_from_backup()` rolls back state. Restores metrics from `cumulative_metrics.json` if present; otherwise metrics reset (logs and step count are restored from `checkpoint_llm.txt`). It creates a safety backup before overwriting.
 - **Cleanup**: `_cleanup_old_backups()` automatically maintains a window of recent backups (keeping the last 50 runs) to manage disk space.
 
 ## 3. Analysis Data (`run_data/`)
