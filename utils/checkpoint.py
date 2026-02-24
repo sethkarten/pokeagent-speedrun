@@ -137,6 +137,8 @@ def load_checkpoint(emulator, llm_logger=None):
             print(f"   ⚠️ Failed to load location maps: {e}")
         
         # Load LLM history if logger available
+        # NOTE: This expects deprecated SimpleAgent format (history, step_counter).
+        # LLMLogger uses log_entries, agent_step_count - use llm_logger.load_checkpoint() for that.
         checkpoint_file = get_cache_path("checkpoint_llm.txt")
         if llm_logger and checkpoint_file.exists():
             with open(checkpoint_file, "r") as f:

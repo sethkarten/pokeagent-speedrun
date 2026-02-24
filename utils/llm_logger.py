@@ -168,7 +168,20 @@ class LLMLogger:
         if flag is None:
             return True
         return flag.strip().lower() not in ("0", "false", "no")
-    
+
+    def _ensure_metrics_structure(self) -> None:
+        """Ensure cumulative_metrics has all required fields (for loading old format)."""
+        if "steps" not in self.cumulative_metrics:
+            self.cumulative_metrics["steps"] = []
+        if "milestones" not in self.cumulative_metrics:
+            self.cumulative_metrics["milestones"] = []
+        if "metadata" not in self.cumulative_metrics:
+            self.cumulative_metrics["metadata"] = {}
+        if "objectives" not in self.cumulative_metrics:
+            self.cumulative_metrics["objectives"] = []
+        if "cache_write_tokens" not in self.cumulative_metrics:
+            self.cumulative_metrics["cache_write_tokens"] = 0
+
     def _log_session_start(self):
         """Log session start information"""
         session_info = {
@@ -308,10 +321,6 @@ class LLMLogger:
                 "timestamp": time.time()
             }
             self.cumulative_metrics["steps"].append(step_entry)
-            
-            # Keep only last 1000 steps to prevent unbounded growth
-            if len(self.cumulative_metrics["steps"]) > 1000:
-                self.cumulative_metrics["steps"] = self.cumulative_metrics["steps"][-1000:]
 
         # Save metrics to cache file after every interaction
         self.save_cumulative_metrics()
@@ -740,18 +749,7 @@ class LLMLogger:
 
             # Update current metrics (including new arrays if present)
             self.cumulative_metrics.update(saved_metrics)
-            
-            # Ensure new fields exist even if loading old format
-            if "steps" not in self.cumulative_metrics:
-                self.cumulative_metrics["steps"] = []
-            if "milestones" not in self.cumulative_metrics:
-                self.cumulative_metrics["milestones"] = []
-            if "metadata" not in self.cumulative_metrics:
-                self.cumulative_metrics["metadata"] = {}
-            if "objectives" not in self.cumulative_metrics:
-                self.cumulative_metrics["objectives"] = []
-            if "cache_write_tokens" not in self.cumulative_metrics:
-                self.cumulative_metrics["cache_write_tokens"] = 0
+            self._ensure_metrics_structure()
 
             # Restore internal tracking from last milestone if available
             if self.cumulative_metrics["milestones"]:
@@ -858,14 +856,13 @@ class LLMLogger:
             
             # Don't recalculate run time - it's already tracked accurately per-interaction
 
-            # Add checkpoint metadata
+            # Add checkpoint metadata (cumulative_metrics stored only in cumulative_metrics.json)
             checkpoint_data = {
                 "checkpoint_timestamp": datetime.now().isoformat(),
                 "session_id": self.session_id,
                 "original_log_file": self.log_file,
                 "total_entries": len(log_entries),
-                "agent_step_count": agent_step_count,  # Save current step count
-                "cumulative_metrics": self.cumulative_metrics,  # Save metrics
+                "agent_step_count": agent_step_count,
                 "log_entries": log_entries
             }
             
@@ -907,19 +904,9 @@ class LLMLogger:
                 checkpoint_data = json.load(f)
             
             log_entries = checkpoint_data.get("log_entries", [])
-            
-            # Restore cumulative metrics if available
-            if "cumulative_metrics" in checkpoint_data:
-                saved_metrics = checkpoint_data["cumulative_metrics"]
-                # Restore all metrics including the original start_time
-                self.cumulative_metrics.update(saved_metrics)
-                
-                # If the checkpoint has a start_time, use it to preserve the original session start
-                if "start_time" in saved_metrics:
-                    logger.info(f"Restored original start time from checkpoint: {saved_metrics['start_time']}")
-                else:
-                    logger.warning("No start_time found in checkpoint, using current time")
-            
+
+            # Cumulative metrics are loaded from cumulative_metrics.json only (not from checkpoint)
+
             # Restore log entries to current log file
             with open(self.log_file, 'w', encoding='utf-8') as f:
                 for entry in log_entries:

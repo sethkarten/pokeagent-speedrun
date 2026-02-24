@@ -22,7 +22,7 @@ The metric tracking system provides comprehensive visibility into the agent's pe
     "total_actions": 0,
     "total_llm_calls": 0,
     "total_run_time": 0,
-    "steps": [],        // Detailed step-by-step metrics (last 1000)
+    "steps": [],        // Detailed step-by-step metrics (unbounded; all steps preserved)
     "milestones": [],   // Milestones with cumulative + delta metrics
     "objectives": []    // Objectives with cumulative + delta metrics
   }
@@ -34,14 +34,14 @@ The metric tracking system provides comprehensive visibility into the agent's pe
 - **Functionality**:
   - **Logging**: Records every LLM interaction (prompt, response, usage) to `llm_logs/llm_log_{session_id}.jsonl`.
   - **Aggregation**: Updates cumulative metrics in memory and persists them to disk after each interaction.
-  - **Checkpointing**: Saves/loads metrics alongside emulator state.
+  - **Checkpointing**: Saves metrics to `cumulative_metrics.json` and logs/state to `checkpoint_llm.txt`. Metrics are restored from JSON, not the text checkpoint.
   - **Cost Calculation**: Applies model-specific pricing (e.g., Claude vs. Gemini rates) including cache hit discounts.
 
 ### Metric Granularity
 
 #### 1. Step-Level Metrics
 - Tracks tokens, cost, time, and tool calls for individual agent steps.
-- **Limitation**: Only the last 1000 steps are kept in the JSON to prevent unlimited file growth.
+- **Note**: All steps are preserved (no truncation). Long runs may produce large files.
 
 #### 2. Milestone Metrics
 - Triggered when a significant game event occurs (e.g., obtaining a badge, entering a new area).
@@ -74,7 +74,7 @@ The metric tracking system provides comprehensive visibility into the agent's pe
 - **Impact**: Developers must write custom scripts to perform cross-run analysis.
 
 **Unbounded Log Growth (Scalability)**
-- **Issue**: While `steps` are capped at 1000, the main `llm_log.jsonl` file grows indefinitely.
+- **Issue**: Both `steps` in cumulative_metrics.json and the main `llm_log.jsonl` file grow indefinitely.
 - **Principle**: *Scalability*.
 - **Impact**: Long runs can produce massive log files (GBs), making them difficult to open or process. Log rotation or splitting should be implemented.
 

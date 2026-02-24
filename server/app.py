@@ -2039,30 +2039,24 @@ async def get_metrics():
             metrics = latest_metrics.copy()
             metrics["agent_step_count"] = agent_step_count
 
-        # If metrics haven't been initialized by client yet, try to load from checkpoint
+        # If metrics haven't been initialized by client yet, try to load from cumulative_metrics.json
         # BUT only if checkpoint loading is enabled (not for fresh starts with --load-state)
         if metrics.get("total_llm_calls", 0) == 0 and checkpoint_loading_enabled:
-            # Check cache folder first, then fall back to old location
-            from utils.run_data_manager import get_cache_path
-            checkpoint_file = get_cache_path("checkpoint_llm.txt")
-            if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
-                checkpoint_file = Path("checkpoint_llm.txt")
+            from utils.llm_logger import get_llm_logger
+            llm_logger = get_llm_logger()
+            if llm_logger and llm_logger.load_cumulative_metrics():
+                metrics.update(llm_logger.cumulative_metrics)
+            # agent_step_count comes from checkpoint_llm.txt (not cumulative_metrics.json)
+            from utils.run_data_manager import get_checkpoint_llm_path
+            checkpoint_file = get_checkpoint_llm_path()
             if checkpoint_file.exists():
                 try:
                     with open(checkpoint_file, "r", encoding="utf-8") as f:
                         checkpoint_data = json.load(f)
-                        if "cumulative_metrics" in checkpoint_data:
-                            checkpoint_metrics = checkpoint_data["cumulative_metrics"]
-                            metrics.update(checkpoint_metrics)
-
-                            # Don't recalculate total_run_time - use the saved value which tracks actual gameplay time
-                            # The saved total_run_time only counts time between interactions (not idle time)
-
-                            # Update agent step count from checkpoint
-                            if "agent_step_count" in checkpoint_data:
-                                metrics["agent_step_count"] = checkpoint_data["agent_step_count"]
-                except:
-                    pass
+                        if "agent_step_count" in checkpoint_data:
+                            metrics["agent_step_count"] = checkpoint_data["agent_step_count"]
+                except (json.JSONDecodeError, OSError) as e:
+                    logger.debug(f"Could not read agent_step_count from checkpoint: {e}")
 
         return metrics
 
@@ -4551,16 +4545,13 @@ def main():
 
     if env_load_checkpoint_mode == "true":
         checkpoint_loading_enabled = True
-        print("🔄 Checkpoint loading enabled - will restore LLM metrics from checkpoint_llm.txt")
+        print("🔄 Checkpoint loading enabled - will restore LLM metrics from cumulative_metrics.json")
 
         # Initialize LLM logger and load checkpoint immediately during server startup
         from utils.llm_logger import get_llm_logger
-        from utils.run_data_manager import get_cache_path
+        from utils.run_data_manager import get_checkpoint_llm_path
         llm_logger = get_llm_logger()
-        # Check both cache folder and old location
-        checkpoint_file = get_cache_path("checkpoint_llm.txt")
-        if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
-            checkpoint_file = Path("checkpoint_llm.txt")
+        checkpoint_file = get_checkpoint_llm_path()
         
         # First try to load lightweight cumulative metrics
         metrics_loaded = llm_logger.load_cumulative_metrics() if llm_logger else False
@@ -4589,12 +4580,12 @@ def main():
             print("ℹ️ Server startup: no checkpoint_llm.txt file found")
     elif env_load_checkpoint_mode == "false":
         checkpoint_loading_enabled = False
-        print("✨ Fresh start mode - will NOT load LLM metrics from checkpoint_llm.txt")
+        print("✨ Fresh start mode - will NOT load LLM metrics from cumulative_metrics.json")
     else:
         # Default behavior: allow checkpoint loading unless explicitly disabled
         checkpoint_loading_enabled = True
         print(
-            "🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available"
+            "🔄 Checkpoint loading enabled by default - will restore LLM metrics from cumulative_metrics.json if available"
         )
 
     # ALWAYS try to load cumulative metrics, regardless of checkpoint mode
