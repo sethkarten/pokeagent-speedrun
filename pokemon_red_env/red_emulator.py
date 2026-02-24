@@ -166,7 +166,7 @@ class RedEmulator:
         """Advance emulator by *frames* frames."""
         if self.pyboy:
             for _ in range(frames):
-                self.pyboy.tick(render=not self.headless)
+                self.pyboy.tick(render=True)
 
     def run_frame_with_buttons(self, buttons: List[str]):
         """Press buttons for one frame then release — matches EmeraldEmulator."""
@@ -176,7 +176,7 @@ class RedEmulator:
             key = btn.lower()
             if key in self.KEY_MAP:
                 self.pyboy.button_press(key)
-        self.pyboy.tick(render=not self.headless)
+        self.pyboy.tick(render=True)
         for btn in buttons:
             key = btn.lower()
             if key in self.KEY_MAP:
