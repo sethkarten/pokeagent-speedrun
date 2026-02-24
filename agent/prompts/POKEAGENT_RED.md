@@ -127,9 +127,9 @@ The game runs continuously while you think. This means dialogue and animations p
 Use the `speed` parameter in `press_buttons()` to control timing:
 
 **`speed="fast"`** - Quick actions (9 frames = ~0.09s)
-- **Use for:** Dialogue advancement, menu navigation, button spam
-- **Best for:** When you need rapid button presses
-- **Example:** `press_buttons(["A", "A", "A", "A"], speed="fast", reasoning="Advancing through NPC dialogue quickly")`
+- **Use for:** Dialogue advancement (1-2 A presses), menu navigation
+- **Best for:** When you need responsive button presses
+- **Example:** `press_buttons(["A", "A"], speed="fast", reasoning="Advancing dialogue")`
 
 **`speed="normal"`** - Standard actions (18 frames = ~0.18s) **[DEFAULT]**
 - **Use for:** Movement, pathfinding, general gameplay
@@ -161,23 +161,22 @@ press_buttons(["WAIT"], release_frames=60, reasoning="Wait exactly 60 frames for
 
 ### Dialogue Strategy
 
-**IMPORTANT:** The game continues running while you think! Dialogue may advance during your decision-making.
+**CRITICAL: DO NOT spam A presses!** Queuing many A presses will cause the extra presses to re-trigger the same NPC after dialog ends, creating an infinite dialog loop.
 
-**When you see NPC/Story dialogue (NON-BATTLE):**
-1. Queue multiple fast A presses to advance through dialogue boxes
-2. Use `speed="fast"` for rapid advancement
-3. Don't worry about missing text - the game already advanced it while you were thinking
+**When you see dialogue (game_state = "dialog"):**
+1. Press A **once** to advance the current text box: `press_buttons(["A"], speed="fast")` to avoid infinite loops
+2. The step ends and you get a fresh `get_game_state` — check if `game_state` is still `"dialog"` or has changed to `"overworld"`
+3. If still in dialog, press A once or twice again next step
+4. If overworld, stop pressing A and proceed with navigation
 
 **Example (NPC dialogue):**
 ```python
-ANALYSIS: I see an NPC talking to me. There's dialogue text visible.
-
-PLAN: The game has been running for 2-3 seconds while I thought about this, so the dialogue likely already advanced. I'll queue several fast A presses to catch up and advance through the remaining dialogue boxes.
-
-ACTION: press_buttons(["A", "A", "A", "A"], speed="fast", reasoning="Advancing through NPC dialogue")
+ANALYSIS: game_state is "dialog" with text "MOM: Right. All boys leave..."
+PLAN: Press A once to advance, then observe state on next step.
+ACTION: press_buttons(["A"], speed="fast", reasoning="Advancing dialogue - will check state next step")
 ```
 
-**EXCEPTION - Battle Dialogue:**
+**Battle Dialogue:**
 - **DO NOT spam A during battles!** See Battle Mechanics section below for proper battle dialogue handling
 - Battles require WAIT actions and deliberate move selection
 - Spamming A in battles can select wrong moves
@@ -187,9 +186,6 @@ ACTION: press_buttons(["A", "A", "A", "A"], speed="fast", reasoning="Advancing t
 For precision timing, override frames explicitly:
 
 ```python
-# Ultra-fast NPC dialogue advancement (4 frames hold, 2 frames release) - NON-BATTLE ONLY
-press_buttons(["A"]*10, hold_frames=4, release_frames=2, reasoning="Quickly advancing through long NPC cutscene dialogue")
-
 # Single precise tile movement (16 frames to complete one tile)
 press_buttons(["UP"], hold_frames=16, release_frames=5, reasoning="Move exactly 1 tile up")
 
@@ -377,10 +373,11 @@ When there's conflicting information, trust these sources in priority order:
 
 ## Navigation Quick Reference
 
-- **Stairs (S)**: walk onto them (no A press).
-- **Doors (D)**: walk into them to open.
-- **Warps**: step onto the warp tile.
-- If stuck on a floor, find S/D tiles and walk onto them to change floors.
+- **Stairs (S)**: walk onto them to change floors.
+- **Doors (D) / Warps (W)**: navigate to the warp tile, then press the direction
+  you want to exit (e.g., press DOWN to walk through a door at the bottom of a room).
+  Warps do NOT auto-trigger — you must press a direction after arriving.
+- If stuck on a floor, find S/D/W tiles on the map and navigate to them.
 - **Coordinates**: UP (x, y-1), DOWN (x, y+1), LEFT (x-1, y), RIGHT (x+1, y).
 
 ## Game State Format

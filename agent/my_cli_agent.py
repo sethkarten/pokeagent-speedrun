@@ -8,6 +8,7 @@ import requests
 import base64
 import io
 import threading
+import concurrent.futures
 import re
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
@@ -540,7 +541,13 @@ class MyCLIAgent:
                 return False, "No frames"
             if self._is_black_frame(frames[-1]):
                 return True, "WAIT"
-            res = self.vlm.get_query(frames, prompt, "CLI_Agent")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.vlm.get_query, frames, prompt, "CLI_Agent")
+                try:
+                    res = future.result(timeout=120)
+                except concurrent.futures.TimeoutError:
+                    logger.error("VLM query timed out after 120 seconds")
+                    return False, "VLM timeout"
             thinking_text, parts = "", []
             if self.backend == "gemini":
                 parts = res.candidates[0].content.parts if hasattr(res, "candidates") else []
