@@ -14,6 +14,9 @@ import os
 import pathlib
 import sys
 
+# Set GAME_TYPE before importing state_formatter so it detects Red mode
+os.environ["GAME_TYPE"] = "red"
+
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO))
 
@@ -63,7 +66,14 @@ def print_formatted_state(result, indent="    ", max_lines=80):
 # Sample Red state data (matches real emulator output)
 # ---------------------------------------------------------------
 
-def make_red_map_info(visual_map=None, map_source=None):
+CELL_SYMBOLS = {
+    'WALKABLE': '.', 'WALL': '#', 'GRASS': 'G', 'WATER': '~',
+    'WARP': 'W', 'NPC': 'N', 'SIGN': 's',
+}
+
+
+def make_red_map_info(visual_map=None, map_source=None, include_whole_map=False,
+                      location="OaksLab", player_x=5, player_y=6):
     """Create a Red-style map dict (no porymap, tiles are 4-tuples)."""
     tiles = [
         [(0, "WALL", 1, 0)] * 10,
@@ -82,22 +92,59 @@ def make_red_map_info(visual_map=None, map_source=None):
     # Convert to lists for JSON compatibility
     tiles = [[list(t) for t in row] for row in tiles]
 
+    objects = [
+        {"id": 1, "local_id": 1, "current_x": 5, "current_y": 2,
+         "facing": "down", "graphics_id": 3, "sprite_name": "SPRITE_OAK",
+         "distance": 3, "source": "sprite_slot_1_ram"},
+    ]
+
     m = {
         "tiles": tiles,
         "tile_names": [["WALL" if t[1] == "WALL" else "WALKABLE" for t in row] for row in tiles],
         "metatile_behaviors": [[t[1] for t in row] for row in tiles],
         "metatile_info": [[{"type": t[1], "collision": t[2]} for t in row] for row in tiles],
         "traversability": [[True] * 9 for _ in range(9)],
-        "object_events": [
-            {"id": 1, "local_id": 1, "current_x": 5, "current_y": 2,
-             "facing": "down", "graphics_id": 3, "sprite_name": "SPRITE_OAK",
-             "distance": 3, "source": "sprite_slot_1_ram"},
-        ],
+        "object_events": objects,
     }
     if visual_map is not None:
         m["visual_map"] = visual_map
     if map_source is not None:
         m["map_source"] = map_source
+
+    # Build red_whole_map (matching get_whole_map_data() output)
+    if include_whole_map:
+        grid = []
+        raw_tiles_wm = []
+        for row in tiles:
+            grid_row = []
+            rt_row = []
+            for t in row:
+                type_str = t[1]
+                grid_row.append(CELL_SYMBOLS.get(type_str, '?'))
+                rt_row.append(tuple(t))
+            grid.append(grid_row)
+            raw_tiles_wm.append(rt_row)
+
+        warps = [{"x": 2, "y": 9, "name": "WarpPoint1_PalletTown"},
+                 {"x": 3, "y": 9, "name": "WarpPoint2_PalletTown"}]
+
+        m["red_whole_map"] = {
+            "location": location,
+            "player_position": {"x": player_x, "y": player_y},
+            "player_elevation": 0,
+            "dimensions": {"width": len(tiles[0]) if tiles else 0,
+                           "height": len(tiles)},
+            "grid": grid,
+            "raw_tiles": raw_tiles_wm,
+            "elevation_map": [[0] * len(tiles[0])] * len(tiles),
+            "behavior_map": [[t[1] for t in row] for row in tiles],
+            "special_tiles": {"WARP": [{"x": 2, "y": 9, "elevation": 0},
+                                       {"x": 3, "y": 9, "elevation": 0}]},
+            "warps": warps,
+            "objects": [{"x": 5, "y": 2, "sprite_name": "SPRITE_OAK",
+                         "facing": "down", "graphics_id": 3}],
+        }
+
     return m
 
 
@@ -133,7 +180,7 @@ def make_red_player_data(location="OaksLab", x=5, y=6):
 
 
 def make_red_full_state(visual_map=None, map_source=None, location="OaksLab",
-                        game_state="overworld"):
+                        game_state="overworld", include_whole_map=False):
     return {
         "visual": {"screenshot": None, "resolution": [160, 144]},
         "player": make_red_player_data(location=location),
@@ -161,7 +208,8 @@ def make_red_full_state(visual_map=None, map_source=None, location="OaksLab",
                 "reason": "gen1_text_progress + vram_border_check",
             },
         },
-        "map": make_red_map_info(visual_map=visual_map, map_source=map_source),
+        "map": make_red_map_info(visual_map=visual_map, map_source=map_source,
+                                 include_whole_map=include_whole_map, location=location),
     }
 
 
@@ -221,8 +269,40 @@ def test_format_map_info_has_player_position():
           f"output: {text[:200]}")
 
 
+def test_format_map_info_full_map():
+    """When red_whole_map is present, full map with warps/objects is rendered."""
+    print(f"\n{SEP}")
+    print("--- _format_map_info: full map from red_whole_map ---")
+    map_info = make_red_map_info(include_whole_map=True)
+    player_data = make_red_player_data()
+    full_state = make_red_full_state(include_whole_map=True)
+
+    result = _format_map_info(map_info, player_data=player_data,
+                              full_state_data=full_state)
+    text = "\n".join(str(p) for p in result)
+
+    check("MAP (FULL) header present", "MAP (FULL)" in text, f"output: {text[:300]}")
+    check("ASCII Map present", "ASCII Map" in text)
+    check("player 'P' marked in map", "P" in text)
+    check("location in output", "OaksLab" in text)
+    check("dimensions present", "10x12" in text)
+    check("JSON warps present", "WarpPoint" in text)
+    check("JSON objects present", "SPRITE_OAK" in text)
+    check("legend present", "Legend" in text)
+
+    # Verify porymap data was stored for pathfinding
+    # (map_info may be reassigned inside _format_map_info, check full_state['map'])
+    porymap = full_state["map"].get('porymap', {})
+    check("porymap grid stored", porymap.get('grid') is not None,
+          f"porymap keys: {list(porymap.keys())}")
+    check("porymap dimensions stored", porymap.get('dimensions') is not None)
+
+    print("\n  Formatted map output (full map):")
+    print_formatted_map(result)
+
+
 def test_format_map_info_visual_map_fallback():
-    """When visual_map is present and porymap is absent, the fallback renders it."""
+    """When only visual_map is present (no red_whole_map), the fallback renders it."""
     print(f"\n{SEP}")
     print("--- _format_map_info: visual_map fallback ---")
     map_info = make_red_map_info(visual_map=SAMPLE_VISUAL_MAP,
@@ -299,11 +379,10 @@ def test_format_map_info_empty_map():
 # ---------------------------------------------------------------
 
 def test_format_state_for_llm_no_crash():
-    """format_state_for_llm must not crash on full Red state."""
+    """format_state_for_llm must not crash on full Red state with whole_map."""
     print(f"\n{SEP}")
     print("--- format_state_for_llm: no crash ---")
-    state = make_red_full_state(visual_map=SAMPLE_VISUAL_MAP,
-                                map_source="red_map_reader")
+    state = make_red_full_state(include_whole_map=True)
     try:
         result = format_state_for_llm(state)
         check("no exception raised", True)
@@ -320,8 +399,7 @@ def test_format_state_for_llm_contains_key_info():
     """Output text includes player name, location, party info."""
     print(f"\n{SEP}")
     print("--- format_state_for_llm: key info present ---")
-    state = make_red_full_state(visual_map=SAMPLE_VISUAL_MAP,
-                                map_source="red_map_reader")
+    state = make_red_full_state(include_whole_map=True)
     result = format_state_for_llm(state)
 
     check("contains player name 'RED'", "RED" in result)
@@ -330,10 +408,23 @@ def test_format_state_for_llm_contains_key_info():
     check("contains money '3000'", "3000" in result)
 
 
-def test_format_state_for_llm_contains_visual_map():
-    """When visual_map is present, it shows up in the formatted output."""
+def test_format_state_for_llm_contains_full_map():
+    """When red_whole_map is present, full map shows up in the formatted output."""
     print(f"\n{SEP}")
-    print("--- format_state_for_llm: visual_map in output ---")
+    print("--- format_state_for_llm: full map in output ---")
+    state = make_red_full_state(include_whole_map=True)
+    result = format_state_for_llm(state)
+
+    check("MAP (FULL) in output", "MAP (FULL)" in result,
+          f"output length: {len(result)}")
+    check("ASCII Map in output", "ASCII Map" in result)
+    check("warps JSON in output", "WarpPoint" in result)
+
+
+def test_format_state_for_llm_visual_map_fallback():
+    """When only visual_map is present (no red_whole_map), fallback works."""
+    print(f"\n{SEP}")
+    print("--- format_state_for_llm: visual_map fallback ---")
     state = make_red_full_state(visual_map=SAMPLE_VISUAL_MAP,
                                 map_source="red_map_reader")
     result = format_state_for_llm(state)
@@ -457,12 +548,37 @@ def test_with_real_states():
                 # Skip if not a valid state (must have player + game + map)
                 if not all(k in data for k in ("player", "game", "map")):
                     continue
-                # Add a fake visual_map to simulate server behavior
+                loc = data["player"].get("location", "?")
+                # Add fake red_whole_map to simulate server behavior
+                # (build from tiles if available)
+                if "red_whole_map" not in data["map"] and "tiles" in data["map"]:
+                    tiles = data["map"]["tiles"]
+                    grid = []
+                    raw_tiles_wm = []
+                    for row in tiles:
+                        grid_row = []
+                        rt_row = []
+                        for t in row:
+                            type_str = t[1] if len(t) > 1 else "WALKABLE"
+                            grid_row.append(CELL_SYMBOLS.get(type_str, '?'))
+                            rt_row.append(tuple(t))
+                        grid.append(grid_row)
+                        raw_tiles_wm.append(rt_row)
+                    data["map"]["red_whole_map"] = {
+                        "location": loc,
+                        "player_position": data["player"].get("position", {}),
+                        "dimensions": {"width": len(tiles[0]) if tiles else 0,
+                                       "height": len(tiles)},
+                        "grid": grid,
+                        "raw_tiles": raw_tiles_wm,
+                        "warps": [],
+                        "objects": [],
+                        "special_tiles": {},
+                    }
+                # Also keep visual_map as fallback
                 if "visual_map" not in data["map"]:
                     data["map"]["visual_map"] = "P . . .\n. . . .\n. . # #"
                     data["map"]["map_source"] = "test_fallback"
-
-                loc = data["player"].get("location", "?")
 
                 # --- _format_map_info ---
                 map_result = _format_map_info(
@@ -505,6 +621,7 @@ def main():
     test_format_map_info_no_crash()
     test_format_map_info_has_location()
     test_format_map_info_has_player_position()
+    test_format_map_info_full_map()
     test_format_map_info_visual_map_fallback()
     test_format_map_info_no_visual_map()
     test_format_map_info_title_sequence()
@@ -513,7 +630,8 @@ def main():
     # format_state_for_llm tests
     test_format_state_for_llm_no_crash()
     test_format_state_for_llm_contains_key_info()
-    test_format_state_for_llm_contains_visual_map()
+    test_format_state_for_llm_contains_full_map()
+    test_format_state_for_llm_visual_map_fallback()
     test_format_state_for_llm_battle_state()
     test_format_state_for_llm_dialog_state()
     test_format_state_for_llm_gen1_party_fields()

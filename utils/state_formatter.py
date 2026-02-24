@@ -678,28 +678,34 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         elif isinstance(badges, int):
             badge_count = badges
     
-    # Check for coordinate offset if using an override map
-    # This translates ROM coordinates to the local override map coordinate space
-    from utils.ascii_map_loader import get_effective_map_name, get_override
-    porymap_map_name = _get_porymap_map_name(location_name)
-    coord_offset = None
-    if porymap_map_name:
-        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
-        override = get_override(effective_map_name)
-        if override and ('offset_x' in override or 'offset_y' in override):
-            offset_x = override.get('offset_x', 0)
-            offset_y = override.get('offset_y', 0)
-            coord_offset = (offset_x, offset_y)
-            if rom_player_coords:
-                # Translate ROM coordinates to local map coordinates
-                player_coords = (rom_player_coords[0] - offset_x, rom_player_coords[1] - offset_y)
-    
+    # Game-type detection for map data source
+    _game_type = os.environ.get("GAME_TYPE", "emerald")
+
+    # Coordinate offset (Emerald porymap overrides only — Red doesn't use porymap)
+    if _game_type != "red":
+        from utils.ascii_map_loader import get_effective_map_name, get_override
+        porymap_map_name = _get_porymap_map_name(location_name)
+        coord_offset = None
+        if porymap_map_name:
+            effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
+            override = get_override(effective_map_name)
+            if override and ('offset_x' in override or 'offset_y' in override):
+                offset_x = override.get('offset_x', 0)
+                offset_y = override.get('offset_y', 0)
+                coord_offset = (offset_x, offset_y)
+                if rom_player_coords:
+                    # Translate ROM coordinates to local map coordinates
+                    player_coords = (rom_player_coords[0] - offset_x, rom_player_coords[1] - offset_y)
+
     # Display player position (translated if using override map)
     if player_coords:
         context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
-    
-    # Add porymap ground truth data (JSON and ASCII map)
-    porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count)
+
+    # Add map data (game-specific)
+    if _game_type == "red":
+        porymap_result = _format_red_map_info(location_name, player_coords, map_info)
+    else:
+        porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count)
     if isinstance(porymap_result, tuple):
         porymap_info, porymap_data = porymap_result
         if porymap_info:
@@ -1558,6 +1564,67 @@ def _get_porymap_map_name(location_name: Optional[str]) -> Optional[str]:
     if not location_name:
         return None
     return ROM_TO_PORYMAP_MAP.get(location_name)
+
+
+def _format_red_map_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]], map_info: dict):
+    """Format Red's native map data for the agent (equivalent to _format_porymap_info for Emerald).
+
+    Returns same shape as _format_porymap_info: either (context_parts, map_data) tuple or plain list.
+    """
+    context_parts = []
+
+    if not location_name or location_name in ('TITLE_SEQUENCE', 'Unknown'):
+        return context_parts
+
+    whole_map = map_info.get('red_whole_map')
+    if not whole_map or not whole_map.get('grid'):
+        return context_parts
+
+    grid = whole_map['grid']
+    dims = whole_map.get('dimensions', {})
+    w, h = dims.get('width', 0), dims.get('height', 0)
+
+    context_parts.append("\n=== MAP (FULL) ===")
+    context_parts.append(f"Location: {location_name}")
+    context_parts.append(f"Dimensions: {w}x{h}")
+
+    # Build ASCII map string with player marked as 'P'
+    ascii_lines = []
+    for y, row in enumerate(grid):
+        line = list(row)
+        if player_coords and y == player_coords[1]:
+            px = player_coords[0]
+            if 0 <= px < len(line):
+                line[px] = 'P'
+        ascii_lines.append(''.join(line))
+    ascii_map = '\n'.join(ascii_lines)
+
+    context_parts.append("\nASCII Map:")
+    context_parts.append(ascii_map)
+    context_parts.append("(Legend: 'P'=Player '.'=walkable '#'=wall 'G'=grass '~'=water 'W'=warp 'N'=NPC 's'=sign 'v'/'<'/'>'=ledge)")
+
+    # Compact JSON summary (warps, objects)
+    compact_json = {
+        "name": location_name,
+        "dimensions": dims,
+        "warps": whole_map.get('warps', []),
+        "objects": whole_map.get('objects', []),
+        "special_tiles": whole_map.get('special_tiles', {}),
+    }
+    context_parts.append("\nMap Data (JSON):")
+    context_parts.append(json.dumps(compact_json, indent=2))
+
+    # Return same tuple shape as _format_porymap_info
+    map_data = {
+        'grid': grid,
+        'raw_tiles': whole_map.get('raw_tiles'),
+        'dimensions': dims,
+        'objects': whole_map.get('objects', []),
+        'warps': whole_map.get('warps', []),
+    }
+
+    logger.info(f"Red map: formatted '{location_name}' ({w}x{h}) with {len(whole_map.get('warps', []))} warps, {len(whole_map.get('objects', []))} objects")
+    return context_parts, map_data
 
 
 def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None, badge_count: int = 0) -> List[str]:
