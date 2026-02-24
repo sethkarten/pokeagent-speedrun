@@ -164,6 +164,27 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             logger.debug("Using env.get_screenshot() (direct video buffer - may be stale)")
 
         state = env.get_comprehensive_state(screenshot=screenshot)
+
+        # For Red: inject red_whole_map and porymap grid (mirrors app.py:1339-1351)
+        # Without this, movement preview uses the raw_tiles path which has a
+        # viewport-center assumption that breaks on small maps (e.g. 8x8 houses).
+        game_type = os.environ.get("GAME_TYPE", "emerald")
+        if game_type == "red":
+            try:
+                if hasattr(env, 'memory_reader') and hasattr(env.memory_reader, 'map_reader'):
+                    whole_map = env.memory_reader.map_reader.get_whole_map_data()
+                    if whole_map and whole_map.get("grid"):
+                        state.setdefault("map", {})["red_whole_map"] = whole_map
+                        state["map"]["porymap"] = {
+                            "grid": whole_map["grid"],
+                            "objects": whole_map.get("objects", []),
+                            "dimensions": whole_map.get("dimensions", {}),
+                            "warps": whole_map.get("warps", []),
+                            "raw_tiles": whole_map.get("raw_tiles"),
+                        }
+            except Exception as e:
+                logger.warning(f"Failed to inject red_whole_map in get_game_state_direct: {e}")
+
         state_text = state_formatter(state, action_history=action_history)
 
         screenshot_b64 = None
