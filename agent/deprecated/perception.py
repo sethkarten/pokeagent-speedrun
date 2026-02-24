@@ -1,6 +1,6 @@
 import time
 import logging
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from utils.state_formatter import format_state_for_llm, format_state_summary
 from agent.system_prompt import system_prompt
 

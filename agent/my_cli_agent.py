@@ -8,6 +8,7 @@ import requests
 import base64
 import io
 import threading
+import concurrent.futures
 import re
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
@@ -18,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import google.generativeai as genai
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -65,13 +66,19 @@ class MyCLIAgent:
         model="gemini-2.5-flash",
         backend="gemini",
         max_steps=None,
-        system_instructions_file="agent/prompts/POKEAGENT.md",
+        system_instructions_file=None,
         max_context_chars=100000,
         target_context_chars=50000,
         enable_prompt_optimization=False,
         optimization_frequency=10,
     ):
-        print(f"🚀 Initializing MyCLIAgent with backend={backend}, model={model}, server={server_url}")
+        self._game_type = os.environ.get("GAME_TYPE", "emerald")
+        if system_instructions_file is None:
+            system_instructions_file = (
+                "agent/prompts/POKEAGENT_RED.md" if self._game_type == "red"
+                else "agent/prompts/POKEAGENT.md"
+            )
+        print(f"🚀 Initializing MyCLIAgent with backend={backend}, model={model}, server={server_url}, game={self._game_type}")
         self.server_url, self.model, self.backend, self.max_steps = server_url, model, backend, max_steps
         self.step_count, self.max_context_chars, self.target_context_chars = 0, max_context_chars, target_context_chars
         self.optimization_enabled, self.optimization_frequency = enable_prompt_optimization, optimization_frequency
@@ -80,18 +87,21 @@ class MyCLIAgent:
         self.recent_function_results = []
         self.defeated_trainers = set()
         self.blocked_coords = set()
-        self.turnstile_states = {
-            (15, 21): "H",
-            (13, 5): "H",
-            (5, 6): "H",
-            (9, 11): "H",
-            (9, 13): "V",
-            (7, 17): "H",
-            (4, 18): "V",
-            (4, 3): "H",
-            (12, 13): "H",
-            (12, 11): "V",
-        }
+        if self._game_type != "red":
+            self.turnstile_states = {
+                (15, 21): "H",
+                (13, 5): "H",
+                (5, 6): "H",
+                (9, 11): "H",
+                (9, 13): "V",
+                (7, 17): "H",
+                (4, 18): "V",
+                (4, 3): "H",
+                (12, 13): "H",
+                (12, 11): "V",
+            }
+        else:
+            self.turnstile_states = {}
 
         self.system_instructions = self._load_system_instructions(system_instructions_file)
         self.mcp_adapter = MCPToolAdapter(server_url)
@@ -105,10 +115,12 @@ class MyCLIAgent:
 
     def _load_system_instructions(self, f):
         p = Path(__file__).resolve().parent.parent / f
-        return p.read_text() if p.exists() else "AI agent playing Pokemon Emerald."
+        game_name = "Pokemon Red" if self._game_type == "red" else "Pokemon Emerald"
+        return p.read_text() if p.exists() else f"AI agent playing {game_name}."
 
     def _load_base_prompt(self):
-        p = Path(__file__).resolve().parent.parent / "agent" / "prompts" / "base_prompt.md"
+        prompt_file = "base_prompt_red.md" if self._game_type == "red" else "base_prompt.md"
+        p = Path(__file__).resolve().parent.parent / "agent" / "prompts" / prompt_file
         return p.read_text() if p.exists() else "Make intelligent decisions."
 
     def _sample_frames_loop(self):
@@ -324,13 +336,20 @@ class MyCLIAgent:
             },
             {
                 "name": "get_walkthrough",
-                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+                "description": (
+                    "Get official Red walkthrough (Parts 1-17). Part 1: Pallet Town, Part 2: Viridian City, Part 16: Indigo Plateau (Elite Four)."
+                    if self._game_type == "red" else
+                    "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four."
+                ),
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
                         "part": {
                             "type_": "INTEGER",
-                            "description": "Walkthrough part 1-21",
+                            "description": (
+                                "Walkthrough part 1-17" if self._game_type == "red"
+                                else "Walkthrough part 1-21"
+                            ),
                         }
                     },
                     "required": ["part"],
@@ -522,7 +541,13 @@ class MyCLIAgent:
                 return False, "No frames"
             if self._is_black_frame(frames[-1]):
                 return True, "WAIT"
-            res = self.vlm.get_query(frames, prompt, "CLI_Agent")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.vlm.get_query, frames, prompt, "CLI_Agent")
+                try:
+                    res = future.result(timeout=120)
+                except concurrent.futures.TimeoutError:
+                    logger.error("VLM query timed out after 120 seconds")
+                    return False, "VLM timeout"
             thinking_text, parts = "", []
             if self.backend == "gemini":
                 parts = res.candidates[0].content.parts if hasattr(res, "candidates") else []
@@ -701,14 +726,15 @@ class MyCLIAgent:
             else ""
         )
         prog = ""
-        try:
-            pp = gd.get("player_position", {})
-            if pp:
-                dist = abs(pp["x"] - 15) + abs(pp["y"] - 2)
-                radar = self._get_local_radar(gd)
-                prog = f"\n### PROGRESS METRICS:\n- Distance to Winona (15,2): {dist} tiles\n- DONT BACKTRACK!\n{radar}"
-        except:
-            pass
+        if self._game_type != "red":
+            try:
+                pp = gd.get("player_position", {})
+                if pp:
+                    dist = abs(pp["x"] - 15) + abs(pp["y"] - 2)
+                    radar = self._get_local_radar(gd)
+                    prog = f"\n### PROGRESS METRICS:\n- Distance to Winona (15,2): {dist} tiles\n- DONT BACKTRACK!\n{radar}"
+            except:
+                pass
         warning = ""
         if "Gym" in loc and self.conversation_history:
             if "STAYED AT SAME POS" in self.conversation_history[-1].get("llm_response", ""):

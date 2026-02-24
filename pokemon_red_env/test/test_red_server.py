@@ -193,6 +193,90 @@ def test_action():
 
 
 # ---------------------------------------------------------------
+# MCP endpoint tests
+# ---------------------------------------------------------------
+
+def test_mcp_get_game_state():
+    print("\n--- /mcp/get_game_state ---")
+    r = requests.post(f"{BASE}/mcp/get_game_state")
+    check("status 200", r.status_code == 200)
+    data = r.json()
+    check("success", data.get("success") == True)
+    check("has state_text", bool(data.get("state_text")))
+    check("has screenshot_base64", bool(data.get("screenshot_base64")))
+    check("has raw_state", "raw_state" in data)
+
+
+def test_mcp_press_buttons():
+    print("\n--- /mcp/press_buttons ---")
+    # Valid button
+    r = requests.post(f"{BASE}/mcp/press_buttons", json={"buttons": ["A"], "reasoning": "test"})
+    check("status 200", r.status_code == 200)
+    check("success", r.json().get("success") == True)
+    # L/R should be rejected for Red
+    r2 = requests.post(f"{BASE}/mcp/press_buttons", json={"buttons": ["L"], "reasoning": "test"})
+    check("L button rejected", r2.json().get("success") == False)
+    r3 = requests.post(f"{BASE}/mcp/press_buttons", json={"buttons": ["R"], "reasoning": "test"})
+    check("R button rejected", r3.json().get("success") == False)
+
+
+def test_mcp_navigate_to():
+    print("\n--- /mcp/navigate_to ---")
+    r = requests.post(f"{BASE}/mcp/navigate_to", json={"x": 5, "y": 5, "reason": "test"})
+    check("status 200", r.status_code == 200)
+    data = r.json()
+    check("success or graceful error", "success" in data)
+    if data.get("success"):
+        check("has buttons_queued", "buttons_queued" in data)
+
+
+def test_mcp_knowledge():
+    print("\n--- /mcp/add_knowledge ---")
+    r = requests.post(f"{BASE}/mcp/add_knowledge", json={
+        "category": "test", "title": "Test Entry", "content": "Test content", "importance": 5
+    })
+    check("add status 200", r.status_code == 200)
+    check("add success", r.json().get("success") == True)
+
+    print("\n--- /mcp/search_knowledge ---")
+    r = requests.post(f"{BASE}/mcp/search_knowledge", json={"query": "Test"})
+    check("search status 200", r.status_code == 200)
+    check("search found results", r.json().get("count", 0) > 0)
+
+    print("\n--- /mcp/get_knowledge_summary ---")
+    r = requests.post(f"{BASE}/mcp/get_knowledge_summary", json={"min_importance": 1})
+    check("summary status 200", r.status_code == 200)
+    check("summary success", r.json().get("success") == True)
+
+
+def test_mcp_reflect():
+    print("\n--- /mcp/reflect ---")
+    r = requests.post(f"{BASE}/mcp/reflect", json={"situation": "test reflection"})
+    check("status 200", r.status_code == 200)
+    data = r.json()
+    check("success", data.get("success") == True)
+    check("has context", "context" in data)
+
+
+def test_mcp_get_walkthrough():
+    print("\n--- /mcp/get_walkthrough ---")
+    r = requests.post(f"{BASE}/mcp/get_walkthrough", json={"part": 1})
+    check("status 200", r.status_code == 200)
+    data = r.json()
+    check("success", data.get("success") == True)
+    check("is Red walkthrough", "Red" in data.get("url", ""))
+
+
+def test_mcp_progress_summary():
+    print("\n--- /mcp/get_progress_summary ---")
+    r = requests.post(f"{BASE}/mcp/get_progress_summary")
+    check("status 200", r.status_code == 200)
+    data = r.json()
+    check("success", data.get("success") == True)
+    check("has progress", "progress" in data)
+
+
+# ---------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------
 
@@ -222,6 +306,15 @@ def main():
         test_state()
         test_whole_map()
         test_action()
+
+        # MCP tool endpoints
+        test_mcp_get_game_state()
+        test_mcp_press_buttons()
+        test_mcp_navigate_to()
+        test_mcp_knowledge()
+        test_mcp_reflect()
+        test_mcp_get_walkthrough()
+        test_mcp_progress_summary()
 
         print(f"\n{'='*60}")
         print(f"Results: {PASSED} passed, {FAILED} failed")

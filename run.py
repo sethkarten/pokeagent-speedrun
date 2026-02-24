@@ -44,6 +44,8 @@ def start_server(args, run_id=None):
     if args.game:
         server_cmd.extend(["--game", args.game])
         server_env["GAME_TYPE"] = args.game
+        # Also set in current (client) process so agent scaffolds can detect game type
+        os.environ["GAME_TYPE"] = args.game
 
     if args.record:
         server_cmd.append("--record")
@@ -234,9 +236,14 @@ def main():
                        help="Enable SLAM (map building) for vision_only agent")
 
     args = parser.parse_args()
-    
+
+    # Fix ROM default for Red (parser default is Emerald ROM)
+    if args.rom == "Emerald-GBAdvance/rom.gba" and args.game == "red":
+        args.rom = "PokemonRed-GBC/pokered.gbc"
+
     print("=" * 60)
-    print("🎮 Pokemon Emerald AI Agent")
+    game_label = "Pokemon Red" if args.game == "red" else "Pokemon Emerald"
+    print(f"🎮 {game_label} AI Agent")
     print("=" * 60)
     
     # Get first objective info for consistent run naming
