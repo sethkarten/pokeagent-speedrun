@@ -1345,6 +1345,11 @@ async def get_comprehensive_state():
                             state["map"]["visual_map"] = visual_map
                             state["map"]["map_source"] = "red_map_reader"
                             logger.debug(f"Generated visual_map from Red map reader for {current_location}")
+                        # Also inject full map data for state_formatter's _format_red_map_info
+                        whole_map = env.memory_reader.map_reader.get_whole_map_data()
+                        if whole_map and whole_map.get("grid"):
+                            state["map"]["red_whole_map"] = whole_map
+                            logger.debug(f"Injected red_whole_map for {current_location}: {whole_map['dimensions']}")
                 except Exception as e:
                     logger.error(f"Failed to generate Red visual_map: {e}")
             elif not ENABLE_MAP_STITCHER and current_location and current_location != "Unknown":
@@ -4588,9 +4593,10 @@ def main():
 
     args = parser.parse_args()
 
-    # Set game type from args
+    # Set game type from args (also sync env var for modules like state_formatter)
     global game_type
     game_type = args.game
+    os.environ["GAME_TYPE"] = game_type
     print(f"Game type: {game_type}")
 
     # Set global direct objectives sequence
