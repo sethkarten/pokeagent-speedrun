@@ -128,6 +128,9 @@ python pokemon_red_env/test/test_red_map.py               # 14 states
 
 # Run the agent
 python run.py --game red
+
+# Run the agent with walkthrough objectives
+python run.py --game red --direct-objectives categorized_full_game
 ```
 
 ## What Remains
