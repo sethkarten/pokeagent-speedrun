@@ -27,29 +27,66 @@ logger = logging.getLogger(__name__)
 # Red-specific milestone list (ordered by expected completion)
 # ---------------------------------------------------------------------------
 RED_MILESTONES_ORDER = [
+    # Phase 1: Game Start
     "GAME_RUNNING",
-    "PALLET_TOWN_START",
-    "OAK_ENCOUNTER",
+    "PALLET_TOWN",
+    # Phase 2: Getting Starter
+    "OAKS_LAB",
+    "STARTER_OBTAINED",
+    # Phase 3: Viridian & Pewter
+    "ROUTE_1",
     "VIRIDIAN_CITY",
+    "ROUTE_2",
+    "VIRIDIAN_FOREST",
     "PEWTER_CITY",
-    "BROCK_DEFEATED",
-    "MT_MOON_CROSSED",
+    "PEWTER_GYM",
+    "BOULDER_BADGE",
+    # Phase 4: Mt. Moon & Cerulean
+    "ROUTE_3",
+    "MT_MOON",
     "CERULEAN_CITY",
-    "MISTY_DEFEATED",
+    "CERULEAN_GYM",
+    "CASCADE_BADGE",
+    # Phase 5: Vermilion & SS Anne
+    "ROUTE_5",
+    "VERMILION_CITY",
     "SS_ANNE",
-    "SURGE_DEFEATED",
+    "VERMILION_GYM",
+    "THUNDER_BADGE",
+    # Phase 6: Rock Tunnel & Lavender
+    "ROUTE_9",
     "ROCK_TUNNEL",
     "LAVENDER_TOWN",
+    # Phase 7: Celadon & Team Rocket
     "CELADON_CITY",
-    "ERIKA_DEFEATED",
+    "CELADON_GYM",
+    "RAINBOW_BADGE",
     "ROCKET_HIDEOUT",
+    "POKEMON_TOWER",
+    # Phase 8: Fuchsia & Safari Zone
+    "FUCHSIA_CITY",
+    "FUCHSIA_GYM",
+    "SOUL_BADGE",
+    # Phase 9: Saffron & Silph Co
+    "SAFFRON_CITY",
     "SILPH_CO",
-    "KOGA_DEFEATED",
-    "SABRINA_DEFEATED",
-    "BLAINE_DEFEATED",
-    "GIOVANNI_DEFEATED",
+    "SAFFRON_GYM",
+    "MARSH_BADGE",
+    # Phase 10: Cinnabar Island
+    "CINNABAR_ISLAND",
+    "CINNABAR_GYM",
+    "VOLCANO_BADGE",
+    # Phase 11: Viridian Gym & Victory Road
+    "VIRIDIAN_GYM",
+    "EARTH_BADGE",
+    "ROUTE_23",
     "VICTORY_ROAD",
-    "ELITE_FOUR_START",
+    # Phase 12: Elite Four & Champion
+    "INDIGO_PLATEAU",
+    "ELITE_FOUR_LORELEI",
+    "ELITE_FOUR_BRUNO",
+    "ELITE_FOUR_AGATHA",
+    "ELITE_FOUR_LANCE",
     "CHAMPION",
 ]
 
@@ -460,68 +497,140 @@ class RedEmulator:
             logger.warning(f"Error checking milestones: {e}")
 
     def _check_red_milestone(self, milestone_id: str, game_state: Dict[str, Any]) -> bool:
-        """Return True if the given milestone's condition is satisfied."""
+        """Return True if the given milestone's condition is satisfied.
+
+        Location strings use PascalCase from map_names.json (e.g. "PalletTown",
+        "ViridianCity", "SsAnne1f").  Substring checks handle multi-floor maps.
+        """
         try:
-            location = str(game_state.get("player", {}).get("location", "")).upper()
+            location = str(game_state.get("player", {}).get("location", ""))
             badges = game_state.get("game", {}).get("badges", [])
             badge_count = len(badges) if isinstance(badges, list) else 0
             party = game_state.get("player", {}).get("party") or []
+            done = self.milestone_tracker.is_completed
 
+            # --- Phase 1: Game Start ---
             if milestone_id == "GAME_RUNNING":
                 return True
-            elif milestone_id == "PALLET_TOWN_START":
-                return "PALLET_TOWN" in location
-            elif milestone_id == "OAK_ENCOUNTER":
+            elif milestone_id == "PALLET_TOWN":
+                return location == "PalletTown"
+
+            # --- Phase 2: Getting Starter ---
+            elif milestone_id == "OAKS_LAB":
+                return location == "OaksLab"
+            elif milestone_id == "STARTER_OBTAINED":
                 return len(party) >= 1
+
+            # --- Phase 3: Viridian & Pewter ---
+            elif milestone_id == "ROUTE_1":
+                return location == "Route1"
             elif milestone_id == "VIRIDIAN_CITY":
-                return "VIRIDIAN_CITY" in location
+                return location == "ViridianCity"
+            elif milestone_id == "ROUTE_2":
+                return location == "Route2"
+            elif milestone_id == "VIRIDIAN_FOREST":
+                return location == "ViridianForest"
             elif milestone_id == "PEWTER_CITY":
-                return ("PEWTER_CITY" in location and
-                        self.milestone_tracker.is_completed("VIRIDIAN_CITY"))
-            elif milestone_id == "BROCK_DEFEATED":
-                return badge_count >= 1 or "Boulder" in badges
-            elif milestone_id == "MT_MOON_CROSSED":
-                return ("CERULEAN" in location and
-                        self.milestone_tracker.is_completed("BROCK_DEFEATED"))
+                return location == "PewterCity" and done("VIRIDIAN_FOREST")
+            elif milestone_id == "PEWTER_GYM":
+                return location == "PewterGym"
+            elif milestone_id == "BOULDER_BADGE":
+                return badge_count >= 1
+
+            # --- Phase 4: Mt. Moon & Cerulean ---
+            elif milestone_id == "ROUTE_3":
+                return location == "Route3" and done("BOULDER_BADGE")
+            elif milestone_id == "MT_MOON":
+                return "MtMoon" in location
             elif milestone_id == "CERULEAN_CITY":
-                return "CERULEAN_CITY" in location
-            elif milestone_id == "MISTY_DEFEATED":
-                return badge_count >= 2 or "Cascade" in badges
+                return location == "CeruleanCity" and done("BOULDER_BADGE")
+            elif milestone_id == "CERULEAN_GYM":
+                return location == "CeruleanGym"
+            elif milestone_id == "CASCADE_BADGE":
+                return badge_count >= 2
+
+            # --- Phase 5: Vermilion & SS Anne ---
+            elif milestone_id == "ROUTE_5":
+                return location == "Route5" and done("CASCADE_BADGE")
+            elif milestone_id == "VERMILION_CITY":
+                return location == "VermilionCity" and done("CASCADE_BADGE")
             elif milestone_id == "SS_ANNE":
-                return "SS_ANNE" in location
-            elif milestone_id == "SURGE_DEFEATED":
-                return badge_count >= 3 or "Thunder" in badges
+                return "SsAnne" in location
+            elif milestone_id == "VERMILION_GYM":
+                return location == "VermilionGym"
+            elif milestone_id == "THUNDER_BADGE":
+                return badge_count >= 3
+
+            # --- Phase 6: Rock Tunnel & Lavender ---
+            elif milestone_id == "ROUTE_9":
+                return location == "Route9" and done("THUNDER_BADGE")
             elif milestone_id == "ROCK_TUNNEL":
-                return ("LAVENDER_TOWN" in location and
-                        self.milestone_tracker.is_completed("MISTY_DEFEATED"))
+                return "RockTunnel" in location
             elif milestone_id == "LAVENDER_TOWN":
-                return "LAVENDER_TOWN" in location
+                return location == "LavenderTown" and done("THUNDER_BADGE")
+
+            # --- Phase 7: Celadon & Team Rocket ---
             elif milestone_id == "CELADON_CITY":
-                return "CELADON_CITY" in location
-            elif milestone_id == "ERIKA_DEFEATED":
-                return badge_count >= 4 or "Rainbow" in badges
+                return location == "CeladonCity"
+            elif milestone_id == "CELADON_GYM":
+                return location == "CeladonGym"
+            elif milestone_id == "RAINBOW_BADGE":
+                return badge_count >= 4
             elif milestone_id == "ROCKET_HIDEOUT":
-                # No direct RAM flag without further research; gate on Erika defeated
-                return self.milestone_tracker.is_completed("ERIKA_DEFEATED")
+                return "RocketHideout" in location
+            elif milestone_id == "POKEMON_TOWER":
+                return "PokemonTower" in location and done("RAINBOW_BADGE")
+
+            # --- Phase 8: Fuchsia & Safari Zone ---
+            elif milestone_id == "FUCHSIA_CITY":
+                return location == "FuchsiaCity"
+            elif milestone_id == "FUCHSIA_GYM":
+                return location == "FuchsiaGym"
+            elif milestone_id == "SOUL_BADGE":
+                return badge_count >= 5
+
+            # --- Phase 9: Saffron & Silph Co ---
+            elif milestone_id == "SAFFRON_CITY":
+                return location == "SaffronCity"
             elif milestone_id == "SILPH_CO":
-                return "SILPH_CO" in location
-            elif milestone_id == "KOGA_DEFEATED":
-                return badge_count >= 5 or "Soul" in badges
-            elif milestone_id == "SABRINA_DEFEATED":
-                return badge_count >= 6 or "Marsh" in badges
-            elif milestone_id == "BLAINE_DEFEATED":
-                return badge_count >= 7 or "Volcano" in badges
-            elif milestone_id == "GIOVANNI_DEFEATED":
-                return badge_count >= 8 or "Earth" in badges
+                return "SilphCo" in location
+            elif milestone_id == "SAFFRON_GYM":
+                return location == "SaffronGym"
+            elif milestone_id == "MARSH_BADGE":
+                return badge_count >= 6
+
+            # --- Phase 10: Cinnabar Island ---
+            elif milestone_id == "CINNABAR_ISLAND":
+                return location == "CinnabarIsland"
+            elif milestone_id == "CINNABAR_GYM":
+                return location == "CinnabarGym"
+            elif milestone_id == "VOLCANO_BADGE":
+                return badge_count >= 7
+
+            # --- Phase 11: Viridian Gym & Victory Road ---
+            elif milestone_id == "VIRIDIAN_GYM":
+                return location == "ViridianGym" and done("VOLCANO_BADGE")
+            elif milestone_id == "EARTH_BADGE":
+                return badge_count >= 8
+            elif milestone_id == "ROUTE_23":
+                return location == "Route23" and done("EARTH_BADGE")
             elif milestone_id == "VICTORY_ROAD":
-                return "VICTORY_ROAD" in location or "ROUTE_23" in location
-            elif milestone_id == "ELITE_FOUR_START":
-                return any(
-                    name in location
-                    for name in ["LORELEIS_ROOM", "BRUNOS_ROOM", "AGATHAS_ROOM", "LANCES_ROOM"]
-                )
+                return "VictoryRoad" in location
+
+            # --- Phase 12: Elite Four & Champion ---
+            elif milestone_id == "INDIGO_PLATEAU":
+                return location in ("IndigoPlateau", "IndigoPlateauLobby")
+            elif milestone_id == "ELITE_FOUR_LORELEI":
+                return location == "LoreleisRoom"
+            elif milestone_id == "ELITE_FOUR_BRUNO":
+                return location == "BrunosRoom"
+            elif milestone_id == "ELITE_FOUR_AGATHA":
+                return location == "AgathasRoom"
+            elif milestone_id == "ELITE_FOUR_LANCE":
+                return location == "LancesRoom"
             elif milestone_id == "CHAMPION":
-                return "CHAMPIONS_ROOM" in location
+                return location == "ChampionsRoom"
+
         except Exception as e:
             logger.warning(f"Error checking milestone condition {milestone_id}: {e}")
         return False

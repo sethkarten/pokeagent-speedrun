@@ -386,13 +386,26 @@ def periodic_milestone_updater():
                 if env and env.memory_reader:
                     try:
                         # Use lightweight state for milestone updates only
+                        party = env.get_party_pokemon() or []
+                        location = env.get_location()
+                        badges = []
+                        if hasattr(env, 'memory_reader') and env.memory_reader and hasattr(env.memory_reader, 'read_badges'):
+                            try:
+                                badges = env.memory_reader.read_badges() or []
+                            except Exception:
+                                badges = []
                         basic_state = {
                             "player": {
                                 "money": env.get_money(),
-                                "party_size": len(env.get_party_pokemon() or []),
+                                "party_size": len(party),
+                                "party": party,
                                 "position": env.get_coordinates(),
+                                "location": location,
                             },
-                            "map": {"location": env.get_location()},
+                            "game": {
+                                "badges": badges,
+                            },
+                            "map": {"location": location},
                         }
                         env.check_and_update_milestones(basic_state, agent_step_count=agent_step_count)
                         last_milestone_update = current_time
