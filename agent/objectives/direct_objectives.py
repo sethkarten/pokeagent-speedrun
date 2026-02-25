@@ -35,7 +35,11 @@ def get_first_objective_info(sequence_name: str, start_index: int = 0) -> tuple:
             return ("autonomous", "autonomous_objective_creation")
         elif sequence_name == "categorized_full_game":
             # Load the first story objective
-            from .all_obj_categorized import STORY_OBJECTIVES
+            import os
+            if os.environ.get("GAME_TYPE", "emerald") == "red":
+                from .all_obj_categorized_red import STORY_OBJECTIVES
+            else:
+                from .all_obj_categorized import STORY_OBJECTIVES
             if start_index < len(STORY_OBJECTIVES):
                 obj = STORY_OBJECTIVES[start_index]
                 return (obj.id, obj.description)
@@ -3363,7 +3367,11 @@ class DirectObjectiveManager:
                 - Index 45-50: Elite Four prep (prerequisite: league_219)
                 - Index 51-56: Post-game (prerequisite: post_237)
         """
-        from .all_obj_categorized import STORY_OBJECTIVES, BATTLING_OBJECTIVES
+        import os
+        if os.environ.get("GAME_TYPE", "emerald") == "red":
+            from .all_obj_categorized_red import STORY_OBJECTIVES, BATTLING_OBJECTIVES
+        else:
+            from .all_obj_categorized import STORY_OBJECTIVES, BATTLING_OBJECTIVES
 
         # Enable categorized mode
         self.enable_categorized_mode()
