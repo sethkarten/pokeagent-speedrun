@@ -78,7 +78,10 @@ def start_server(args, run_id=None):
             server_cmd.extend(["--direct-objectives-start", str(args.direct_objectives_start)])
         if args.direct_objectives_battling_start > 0:
             server_cmd.extend(["--direct-objectives-battling-start", str(args.direct_objectives_battling_start)])
-    
+
+    if args.debug_state:
+        server_cmd.append("--debug-state")
+
     # Server always runs headless - display handled by client
     
     # Start server as subprocess
@@ -234,6 +237,8 @@ def main():
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",
                        help="Enable SLAM (map building) for vision_only agent")
+    parser.add_argument("--debug-state", action="store_true",
+                       help="Save full game state to debug_states.json on each get_game_state call")
 
     args = parser.parse_args()
 

@@ -73,6 +73,9 @@ direct_objectives_battling_start_index = 0
 direct_objectives_manager = None
 current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
+debug_state_enabled = False  # Save game state JSON on each get_game_state call (--debug-state)
+_debug_state_counter = 0  # Step index for debug state entries
+_debug_state_log = []  # Accumulates all debug state snapshots (written to debug_states.json)
 current_obs = None
 fps = 80
 
@@ -2795,7 +2798,22 @@ async def mcp_get_game_state():
 
         # Ensure all data is JSON-serializable (objectives data may contain enums/numpy types)
         from utils.json_utils import serialize_for_json
-        return serialize_for_json(result)
+        serialized = serialize_for_json(result)
+
+        # Save debug state to a single accumulated JSON file if --debug-state is enabled
+        if debug_state_enabled:
+            global _debug_state_counter, _debug_state_log
+            try:
+                from utils.run_data_manager import get_cache_path
+                _debug_state_log.append({"step": _debug_state_counter, "timestamp": time.time(), "state": serialized})
+                _debug_state_counter += 1
+                debug_file = get_cache_path("debug_states.json")
+                with open(debug_file, 'w') as f:
+                    json.dump(_debug_state_log, f, indent=2)
+            except Exception as e:
+                logger.warning(f"Failed to save debug state: {e}")
+
+        return serialized
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
         return {"success": False, "error": str(e)}
@@ -4589,6 +4607,11 @@ def main():
         default=0,
         help="Start index for battling objectives (only used in categorized mode)",
     )
+    parser.add_argument(
+        "--debug-state",
+        action="store_true",
+        help="Save full game state to debug_states.json on each get_game_state call",
+    )
     # Server always runs headless - display handled by client
 
     args = parser.parse_args()
@@ -4598,6 +4621,12 @@ def main():
     game_type = args.game
     os.environ["GAME_TYPE"] = game_type
     print(f"Game type: {game_type}")
+
+    # Enable debug state saving if requested
+    global debug_state_enabled
+    debug_state_enabled = args.debug_state
+    if debug_state_enabled:
+        print("🔍 Debug state enabled: saving all game states to debug_states.json")
 
     # Set global direct objectives sequence
     global direct_objectives_sequence, direct_objectives_start_index, direct_objectives_battling_start_index
