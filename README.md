@@ -7,6 +7,7 @@ An AI agent that plays Pokémon Emerald using vision-language models to perceive
 ## Table of Contents
 
 - [Overview](#overview)
+- [Architecture](#architecture)
 - [Features](#features)
 - [Directory Structure](#directory-structure)
 - [Requirements](#requirements)
@@ -36,24 +37,35 @@ An AI agent that plays Pokémon Emerald using vision-language models to perceive
 
 This project implements an AI agent capable of playing Pokémon Emerald on a Game Boy Advance emulator. The agent uses a vision-language model (VLM) to analyze game frames, understand the current game state, and make intelligent decisions to progress through the game.
 
-The system is built with a modular architecture that separates perception, planning, memory, and action execution into distinct components that communicate through a message-passing system.
+The system uses a **headless server architecture**: the game and emulator run in a server process, while agents and UIs run as clients. Communication is via HTTP REST, with optional WebSocket streaming for the web UI and MCP (Model Context Protocol) for external CLI agents (e.g., Claude Code).
+
+## Architecture
+
+The design follows the structure documented in `System-Design/architecture/`:
+
+- **Server** (`server/app.py`): FastAPI server on port 8000. Runs the mGBA emulator, game loop, state caching (100ms for full state, 5s for map data), and exposes REST endpoints (`/action`, `/state`, `/status`, `/screenshot`, `/save_state`, `/load_state`, `/checkpoint`, etc.). WebSocket `/ws/frames` streams frames to the web UI. MCP tool endpoints under `/mcp/*` allow external agents to interact with the game.
+- **Clients**:
+  - **run.py**: Starts the server as a subprocess, then runs an in-repo agent client (pygame display optional). The client polls `/state`, runs the selected agent scaffold (VLM + logic), and submits actions via `POST /action`.
+  - **run_cli.py**: For external CLI agents (e.g., Claude Code). Spawns the game server and an MCP server (`server/cli/pokemon_mcp_server.py`) that translates MCP tool calls into HTTP requests to the game server. The external agent talks to the MCP server over stdio.
+- **VLM layer** (`utils/vlm_backends.py`): `VLM` facade over multiple backends (OpenAI, Anthropic, OpenRouter, Google Gemini, local HuggingFace, etc.). All backends implement `VLMBackend`; the facade handles tool-format conversion per provider.
+- **Persistence**: Runtime cache in `.pokeagent_cache/{run_id}/` (checkpoint state, LLM history, `cumulative_metrics.json`, milestones, maps, knowledge base). Backups in `backups/{run_id}/`. Analysis data in `run_data/{run_id}/` (prompt_evolution, end_state, agent_logs). See `System-Design/architecture/data_persistence/persistence.md`.
+- **Metrics**: `LLMLogger` in `utils/llm_logger.py` records LLM interactions and aggregates tokens, cost, and actions into `cumulative_metrics.json`. Step-, milestone-, and objective-level granularity. See `System-Design/architecture/metrics/tracking.md`.
+- **Game infrastructure**: `pokemon_env/emulator.py` (EmeraldEmulator), `pokemon_env/memory_reader.py` (PokemonEmeraldReader), Porymap-based map data. See `System-Design/architecture/pokemon_infrastructure/emerald_data.md`.
+
+For deeper detail and known deviations (e.g., monolithic server, polling-based state), see the markdown files under `System-Design/architecture/`.
 
 ## Features
 
-- **Multiple VLM Backends**: Support for OpenAI, OpenRouter, Google Gemini, and local HuggingFace models
-- **Vision-based game perception**: Uses VLMs to analyze and understand game frames
-- **Strategic planning**: Develops high-level plans based on game observations
-- **Memory management**: Maintains context about the game state and progress
-- **Intelligent action selection**: Chooses appropriate GBA button inputs based on the current situation
-- **Advanced Map System**: Location-based persistent maps with portal coordinate tracking
-- **Spatial Navigation**: Bidirectional portal connections show exact transition coordinates between locations
-- **NPC Detection**: Real-time NPC detection and display on maps to help avoid blocked movement
-- **Movement Memory**: Tracks failed movements and NPC interactions for better navigation
-- **LLM-Controlled Pathfinding**: Intelligent pathfinding decisions made directly by the language model
-- **Checkpoint Persistence**: Maps and connections persist across game sessions with checkpoint system
-- **Web interface**: Visualize the agent's thought process and game state in real-time
-- **Modular architecture**: Easily extendable with new capabilities
-- **Customizable prompts**: Easy-to-edit prompt system for different agent behaviors
+- **Multiple VLM backends**: OpenAI, OpenRouter, Google Gemini, Anthropic, local HuggingFace (via `utils/vlm_backends.py`)
+- **Vision-based perception**: VLMs analyze game frames and state
+- **Agent scaffolds**: Four-module (perception/planning/memory/action), simple, ReAct, ClaudePlays, GeminiPlays, MyCLIAgent, AutonomousCLI, vision-only
+- **MCP support**: External CLI agents (e.g., Claude Code) interact via Model Context Protocol
+- **Checkpoints & backups**: Save/resume runs; backups in `backups/`; analysis data in `run_data/`
+- **Metrics & logging**: Per-step and cumulative tokens, cost, actions; LLM logs and session logs
+- **Map system**: Porymap integration, NPC display, movement preview, portal tracking
+- **Web interface**: Real-time stream at `http://localhost:8000/stream`
+- **Video recording**: Optional MP4 recording of gameplay
+- **Customizable prompts**: Edit `agent/system_prompt.py` and module prompts to change behavior
 
 ## Directory Structure
 
@@ -61,58 +73,65 @@ The system is built with a modular architecture that separates perception, plann
 pokeagent-speedrun/
 ├── README.md
 ├── requirements.txt
-├── run.py                 # Main AI agent implementation (direct emulator integration)
-├── server/                  # Server components (multiprocess mode)
-│   ├── __init__.py
-│   ├── app.py               # FastAPI server for multiprocess mode
-│   ├── frame_server.py      # Frame streaming server
-│   └── stream.html          # Web interface for streaming
-├── agent/                   # Four-module agent architecture (EDIT THESE FILES TO CUSTOMIZE BEHAVIOR)
-│   ├── __init__.py
-│   ├── system_prompt.py     # Main system prompt 
-│   ├── perception.py        # Perception module + prompts
-│   ├── planning.py          # Planning module + prompts
-│   ├── memory.py            # Memory module + prompts
-│   ├── action.py            # Action module + prompts
-│   └── simple.py            # Simple mode implementation (bypasses four-module architecture)
+├── run.py                    # Multiprocess entry: starts server + in-repo agent client
+├── run_cli.py                # Entry for external CLI agents (MCP); spawns server + MCP proxy
+├── server/
+│   ├── app.py                # FastAPI game server (emulator, /state, /action, /mcp/*, etc.)
+│   ├── client.py             # In-repo client used by run.py (agent loop, optional pygame)
+│   ├── frame_server.py       # Frame streaming
+│   ├── stream.html           # Web UI for streaming
+│   └── cli/
+│       └── pokemon_mcp_server.py   # MCP proxy: stdio ↔ HTTP to game server
+├── agent/
+│   ├── __init__.py           # Agent factory (scaffold selection)
+│   ├── system_prompt.py      # Main system prompt
+│   ├── my_cli_agent.py       # MyCLIAgent (CLI scaffolding)
+│   ├── my_cli_agent_autonomous.py  # AutonomousCLIAgent (objectives, knowledge base)
+│   ├── react.py              # ReAct agent
+│   ├── claude_plays.py       # ClaudePlaysPokemon
+│   ├── gemini_plays.py       # GeminiPlaysPokemon
+│   ├── vision_only_agent.py  # Vision-only agent
+│   ├── objectives/           # Direct objectives, types, categorization
+│   └── deprecated/           # Legacy four-module (perception, planning, memory, action, simple)
 ├── utils/
-│   ├── __init__.py
-│   ├── vlm.py               # VLM backend implementations (OpenAI, Gemini, local models)
-│   ├── helpers.py           # Helper functions
-│   ├── state_formatter.py   # Game state formatting utilities
-│   ├── anticheat.py         # Anti-cheat tracking and verification
-│   ├── llm_logger.py        # Comprehensive LLM interaction logging
-│   ├── ocr_dialogue.py      # OCR-based dialogue detection
-│   ├── map_formatter.py     # Map visualization and formatting
-│   ├── map_stitcher.py      # Map stitching utilities
-│   ├── map_visualizer.py    # Map visualization tools
-│   ├── headless_recorder.py # Video recording capabilities
-│   └── get_local_ip.py      # Network utilities
-├── pokemon_env/             # Pokémon environment wrapper (mGBA integration)
-│   ├── __init__.py
-│   ├── emulator.py          # Core emulator integration
-│   ├── memory_reader.py     # Game state memory reading (DO NOT MODIFY)
-│   ├── emerald_utils.py     # Pokémon Emerald specific utilities
-│   ├── enums.py             # Game enumerations
-│   ├── types.py             # Type definitions
-│   └── utils.py             # Environment utilities
-├── tests/                   # Test suite and validation
-│   ├── run_tests.py         # Main test runner
-│   ├── states/              # Test save states with ground truth data
-│   ├── ground_truth/        # Reference data for validation
-│   └── test_*.py            # Individual test files
-├── Emerald-GBAdvance/       # Game ROM and save states
-│   ├── rom.gba              # Pokémon Emerald ROM (not included)
-│   └── *.state              # Various starting save states
-├── llm_logs/                # LLM interaction logs (auto-generated)
-└── *.mp4                    # Video recordings (auto-generated with --record)
+│   ├── vlm_backends.py       # VLM facade and backends (OpenAI, Gemini, etc.)
+│   ├── state_formatter.py   # Game state formatting for LLM
+│   ├── llm_logger.py        # LLM interaction logging and cumulative metrics
+│   ├── run_data_manager.py  # Cache paths, run_data layout
+│   ├── backup_manager.py    # Checkpoint backups
+│   ├── cli_agent_backends.py # CLI agent backends (e.g., Claude Code)
+│   ├── anticheat.py, ocr_dialogue.py, map_formatter.py, map_stitcher.py, ...
+│   └── ...
+├── pokemon_env/
+│   ├── emulator.py           # EmeraldEmulator (mGBA, input, frame advance)
+│   ├── memory_reader.py      # PokemonEmeraldReader (DO NOT MODIFY for submissions)
+│   ├── emerald_utils.py, enums.py, types.py, utils.py
+│   └── ...
+├── tests/
+│   ├── run_tests.py, states/, ground_truth/, test_*.py
+│   └── ...
+├── System-Design/            # Architecture documentation (living)
+│   ├── README.md
+│   └── architecture/
+│       ├── client_server/communication.md
+│       ├── autonomous_agent/vlm_agents.md
+│       ├── cli_agents/scaffolding.md
+│       ├── data_persistence/persistence.md
+│       ├── metrics/tracking.md
+│       └── pokemon_infrastructure/emerald_data.md
+├── Emerald-GBAdvance/        # rom.gba (not included), *.state
+├── .pokeagent_cache/        # Runtime cache per run (checkpoints, metrics, maps)
+├── backups/                 # Backup archives
+├── run_data/                # Per-run analysis data
+└── llm_logs/                # LLM interaction logs (auto-generated)
 ```
 
 ## Requirements
 
-- Python 3.10 - 3.11
-- Pokémon Emerald ROM (not included - obtain legally)
-- One of the supported VLM backends (see VLM Setup section)
+- Python 3.10–3.11
+- Pokémon Emerald ROM (not included; obtain legally)
+- One of the supported VLM backends (see VLM Backend Setup)
+- mGBA system library for Python bindings
 
 ## Installation
 
@@ -123,652 +142,146 @@ git clone https://github.com/sethkarten/pokeagent-speedrun
 cd pokeagent-speedrun
 ```
 
-### 2. Install uv and Set Up Environment
+### 2. Environment (uv or Conda)
+
+**Option A – uv (recommended in repo):**
 
 ```bash
-# Install uv if not already installed
 curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Create virtual environment and install dependencies
 uv sync
-
-# Activate the virtual environment
 source .venv/bin/activate
 ```
 
-### 3. Install mgba System Library (Required for Python bindings)
+**Option B – Conda:** Create and use a conda env (e.g. `pokeagent`) and install dependencies from `requirements.txt`. If you use conda, install a compatible `libffi` in the env (e.g. `conda install libffi`) so mGBA Python bindings work.
 
-Download and install the official Ubuntu package from the [mGBA downloads page](https://mgba.io/downloads.html):
+### 3. mGBA System Library
 
-Example for 20.04:
+Required for Python bindings. Example (Ubuntu 20.04):
+
 ```bash
 wget https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-ubuntu64-focal.tar.xz
 tar -xf mGBA-0.10.5-ubuntu64-focal.tar.xz
 sudo dpkg -i mGBA-0.10.5-ubuntu64-focal/libmgba.deb
 ```
 
-Mac OS x86_64 Instructions:
-```bash
-# arch -x86_64 /bin/zsh     # m-series Macs for backwards compatibility
-brew install mgba
-```
+macOS (x86_64): `brew install mgba`
 
-### 4. Install Python Dependencies
+### 4. Python Dependencies
 
-The dependencies are automatically installed when you run `uv sync` in step 2.
+With uv: `uv sync` (or `uv sync --dev` for dev deps). With pip: `pip install -r requirements.txt`.
 
-If you need to reinstall or update dependencies:
+### 5. Game ROM
 
-```bash
-uv sync
-```
-
-For development dependencies:
-
-```bash
-uv sync --dev
-```
-
-### 5. Set up Game ROM
-
-**Important**: You must obtain a Pokémon Emerald ROM file legally (e.g., dump from your own cartridge).
-
-1. Place your ROM file in the `Emerald-GBAdvance/` directory and rename it to `rom.gba`:
-   ```
-   pokeagent-speedrun/
-   └── Emerald-GBAdvance/
-       └── rom.gba  # Your Pokémon Emerald ROM file here
-   ```
-
-2. Ensure it's a valid Pokémon Emerald ROM. The SHA-1 hash should be `f3ae088181bf583e55daf962a92bb46f4f1d07b7` for the US English version.
+Place your Pokémon Emerald ROM in `Emerald-GBAdvance/rom.gba`. US English SHA-1: `f3ae088181bf583e55daf962a92bb46f4f1d07b7`.
 
 ## VLM Backend Setup
 
-The agent supports multiple VLM backends. Choose one based on your needs:
+Set the appropriate API key and run with the chosen backend.
 
-### 🔸 OpenAI (GPT-4V, o3-mini, etc.)
+| Backend   | Env var                | Example run |
+|----------|-------------------------|-------------|
+| OpenAI   | `OPENAI_API_KEY`        | `python run.py --backend openai --model-name gpt-4o` |
+| OpenRouter | `OPENROUTER_API_KEY`  | `python run.py --backend openrouter --model-name anthropic/claude-3.5-sonnet` |
+| Google Gemini | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | `python run.py --backend gemini --model-name gemini-2.5-flash` |
+| Local HuggingFace | (optional) | `python run.py --backend local --model-name Qwen/Qwen2-VL-2B-Instruct` |
 
-**Best for: Quick setup, reliable performance**
-
-1. Set environment variable:
-```bash
-export OPENAI_API_KEY="your-api-key-here"
-```
-
-2. Run agent:
-```bash
-python run.py --backend openai --model-name "gpt-4o"
-```
-
-Supported models: `gpt-4o`, `gpt-4-turbo`, `o3-mini`, etc.
-
-### 🔸 OpenRouter (Access to many models)
-
-**Best for: Trying different models, cost optimization**
-
-1. Set environment variable:
-```bash
-export OPENROUTER_API_KEY="your-api-key-here"
-```
-
-2. Run agent:
-```bash
-python run.py --backend openrouter --model-name "anthropic/claude-3.5-sonnet"
-```
-
-Supported models: `anthropic/claude-3.5-sonnet`, `google/gemini-pro-vision`, `openai/gpt-4o`, etc.
-
-### 🔸 Google Gemini
-
-**Best for: Google ecosystem integration**
-
-1. Set environment variable:
-```bash
-export GEMINI_API_KEY="your-api-key-here"
-# OR
-export GOOGLE_API_KEY="your-api-key-here"
-```
-
-2. Run agent:
-```bash
-python run.py --backend gemini --model-name "gemini-2.5-flash"
-```
-
-Supported models: `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`, etc.
-
-### 🔸 Local HuggingFace Models
-
-**Best for: Privacy, no API costs, customization**
-
-1. Install additional dependencies:
-```bash
-pip install torch transformers bitsandbytes accelerate
-```
-
-2. Run agent:
-```bash
-python run.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
-```
-
-Supported models: `Qwen/Qwen2-VL-2B-Instruct`, `Qwen/Qwen2-VL-7B-Instruct`, `microsoft/Phi-3.5-vision-instruct`, `llava-hf/llava-1.5-7b-hf`, etc.
+Auto-detection: `--backend auto` picks a backend based on available keys.
 
 ## Running the Agent
 
-`run.py` runs the emulator and agent in a single process, providing better integration and real-time control.
-
-### Quick Start
+**run.py** (in-repo agent): Starts the game server, then runs the selected agent client (with optional pygame display).
 
 ```bash
-# Start with default settings (Gemini backend, agent mode)
+# Default (my_cli_agent scaffold, Gemini)
 python run.py
 
-# OpenAI example
-python run.py --backend openai --model-name "gpt-4o"
+# OpenAI
+python run.py --backend openai --model-name gpt-4o
 
-# Local model example
-python run.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
+# Auto agent, headless, record
+python run.py --agent-auto --headless --record
+
+# Load state / checkpoint
+python run.py --load-state Emerald-GBAdvance/start.state
+python run.py --load-checkpoint
 ```
 
-### Starting from Saved States
+**run_cli.py** (external CLI agents via MCP): Starts the game server and MCP server; the external agent (e.g., Claude Code) connects via MCP and uses tools to play.
 
 ```bash
-# Load from a saved state
-python run.py --load-state Emerald-GBAdvance/start.state --backend gemini --model-name gemini-2.5-flash
-
-# Load from test states
-python run.py --load-state tests/states/torchic.state --backend gemini --model-name gemini-2.5-flash
+python run_cli.py --cli-type claude --directive path/to/directive.txt
 ```
 
-### Advanced Options
+**Debug controls (with display):** M = state overlay, Shift+M = map, S = screenshot, Tab = cycle mode, Space = one agent step, 1/2 = save/load state, arrows/WASD = move, Z/X = A/B.
 
-```bash
-# Start in manual mode (keyboard control)
-python run.py --manual
+**Web UI:** `http://localhost:8000/stream` (or `--port`).
 
-# Enable auto agent (agent acts continuously)
-python run.py --agent-auto
+## Agent Scaffolds
 
-# Run without display window (headless)
-python run.py --headless --agent-auto
+Choose behavior with `--scaffold` (default: `my_cli_agent`).
 
-# Custom port for web interface
-python run.py --port 8080
+| Scaffold          | Description |
+|-------------------|-------------|
+| `my_cli_agent`    | Default. CLI-style agent with frame buffering and game-state tracking. |
+| `autonomous_cli`  | Autonomous agent with objectives and knowledge base. |
+| `fourmodule`      | Perception → Planning → Memory → Action (legacy). |
+| `simple`          | Direct frame + state → VLM → action; faster, no perception/planning/memory. |
+| `react`           | ReAct loop: thought → action → observation. |
+| `claudeplays`     | Tool-based (e.g. press_buttons, navigate_to), pathfinding, history summarization. |
+| `geminiplays`     | Gemini-native tool-based agent. |
+| `vision_only`     | Vision-only agent. |
 
-# Video recording (saves MP4 file with timestamp)
-python run.py --record --agent-auto
-
-# Simple mode (lightweight processing, frame + LLM only, skips perception/planning/memory)
-python run.py --simple --agent-auto
-
-# Disable OCR dialogue detection (forces overworld state, no dialogue processing)
-python run.py --no-ocr --agent-auto
-
-# Combine multiple features (recommended for production runs)
-python run.py --record --simple --no-ocr --agent-auto --backend gemini
-```
-
-### Debug Controls
-
-When running with display (default):
-- **M**: Display comprehensive state (exactly what the LLM sees)
-- **Shift+M**: Display map visualization
-- **S**: Save screenshot
-- **Tab**: Toggle agent/manual mode
-- **A**: Toggle auto agent mode
-- **1/2**: Save/Load state
-- **Space**: Trigger single agent step
-- **Arrow Keys/WASD**: Manual movement
-- **X/Z**: A/B buttons
-
-### Web Interface
-
-The agent automatically starts a web server at `http://localhost:8000/stream` (or custom port) that serves the game stream and agent status in real-time.
-
-#### Other Options
-
-```bash
-# With additional debugging options
-python run.py \
-    --backend openai \
-    --model-name "gpt-4o" \
-    --debug-state  # Enable detailed state logging
-```
-
-### 3. Monitor the Agent
-
-- **Web Interface**: View game state at `http://localhost:8000/stream`
-- **Logs**: Monitor agent decisions in the terminal
-- **Debug**: Use `--debug-state` flag for detailed state information
-
-## Feature Documentation
-
-### 🎬 Video Recording (`--record`)
-
-Automatically records gameplay to MP4 files with timestamps.
-
-**How it works:**
-- Records at 30 FPS (intelligent frame skipping from 120 FPS emulator)
-- Files saved as `pokegent_recording_YYYYMMDD_HHMMSS.mp4`
-- Works in both direct and multiprocess modes
-- Automatically cleaned up on graceful shutdown
-
-**Usage:**
-```bash
-# Recording gameplay to MP4
-python run.py --record --agent-auto
-```
-
-### 🏗️ Agent Scaffolds (`--scaffold`)
-
-Choose from different agent architectures to suit your needs:
-
-#### Four-Module Architecture (Default)
-The standard architecture with separate Perception → Planning → Memory → Action modules:
-```bash
-python run.py --agent-auto  # Uses fourmodule by default
-python run.py --scaffold fourmodule --agent-auto
-```
-
-#### Simple Mode
-Lightweight processing mode that bypasses the four-module agent architecture.
-
-**Benefits:**
-- 3-5x faster processing (skips perception/planning/memory modules)
-- Direct frame + state → VLM → action pipeline
-- Ideal for rapid prototyping and resource-constrained environments
-- Maintains action history (last 20 actions)
+Examples:
 
 ```bash
 python run.py --scaffold simple --agent-auto
-
-# Backward compatibility with deprecated --simple flag
-python run.py --simple --agent-auto  # Still works, but shows deprecation warning
-```
-
-#### ReAct Agent
-Implements the ReAct (Reasoning and Acting) pattern with explicit thought-action-observation loops:
-- **Interpretable reasoning** before each action
-- **Structured decision-making** with confidence scores
-- **Periodic reflection** on progress and strategy
-- **History management** for context-aware decisions
-
-```bash
 python run.py --scaffold react --agent-auto
-```
-
-#### ClaudePlaysPokemon Agent
-Based on David Hershey's ClaudePlaysPokemonStarter with enhanced tool-based interaction:
-- **Tool-based control** (press_buttons, navigate_to)
-- **Advanced A* pathfinding** with collision detection and NPC avoidance
-- **Automatic history summarization** when context gets too long
-- **Button sequence queuing** for multi-step actions
-- **Works with any VLM** (not just Claude)
-- **Smart navigation** that finds optimal paths around obstacles
-
-```bash
-python run.py --scaffold claudeplays --agent-auto
-
-# With different models
 python run.py --scaffold claudeplays --backend openai --model-name gpt-4o --agent-auto
-python run.py --scaffold claudeplays --backend gemini --model-name gemini-2.5-flash --agent-auto
 ```
 
-### 🔇 No OCR Mode (`--no-ocr`)
-
-Completely disables dialogue detection and forces overworld state.
-
-**When to use:**
-- When dialogue detection is unreliable or causing issues
-- For speedrunning where dialogue should be skipped quickly
-- To ensure the agent never gets stuck in dialogue states
-- When OCR processing is consuming too many resources
-
-**Usage:**
-```bash
-# Disable all dialogue detection
-python run.py --no-ocr --agent-auto
-
-# Recommended for production speedruns
-python run.py --no-ocr --simple --agent-auto
-```
-
-### 🔄 Architecture
-
-The agent uses a multiprocess architecture for improved stability and performance:
-
-**Components:**
-- **Server Process**: Runs emulator, pygame display, handles game state (automatically launched by run.py)
-- **Client Process**: Runs agent decision-making, sends actions via HTTP
-- **Communication**: RESTful API between processes
-
-**Advantages:**
-- **Improved Stability**: Isolates emulator from agent crashes
-- **Better Performance**: Eliminates memory corruption from multithreading
-- **Resource Separation**: Agent and emulator can use different CPU cores
-
-### 🧭 Navigation & Pathfinding System
-
-The agent includes an intelligent navigation system that helps with spatial reasoning:
-
-**Movement Preview System:**
-- Shows immediate results of directional actions (UP, DOWN, LEFT, RIGHT)
-- Displays target coordinates and tile information for each direction
-- Handles special terrain like ledges (only walkable in arrow direction)
-
-**NPC Detection & Avoidance:**
-- Real-time NPC detection from game memory displays NPCs as `N` markers on maps
-- Visual frame analysis allows LLM to identify NPCs not shown on maps
-- Movement memory system tracks locations where movement failed (usually NPCs/obstacles)
-
-**LLM-Controlled Pathfinding:**
-- All pathfinding decisions made directly by the language model for maximum flexibility
-- Movement preview provides the LLM with complete information about movement consequences  
-- No automatic pathfinding algorithms - the LLM plans routes step-by-step based on current state
-
-**Map Features:**
-- `P` = Player position
-- `N` = NPC/Trainer location  
-- `?` = Unexplored areas at map edges (only shown for walkable boundaries)
-- `#` = Walls/obstacles, `~` = Tall grass, `.` = Walkable paths
-- Directional arrows (`↑↓←→`) = Ledges (one-way movement)
-
-This system provides the LLM with complete spatial awareness while maintaining flexibility in navigation decisions.
-
-### 🚀 Recommended Production Setup
-
-For the most stable and efficient agent runs:
-
-```bash
-python run.py \
-    --record \
-    --simple \
-    --no-ocr \
-    --agent-auto \
-    --backend gemini \
-    --model-name gemini-2.5-flash \
-    --load-state your_starting_state.state
-```
-
-This combination provides:
-- ✅ Maximum stability (multiprocess architecture)
-- ✅ Video evidence (automatic recording)
-- ✅ Fast processing (simple mode)
-- ✅ No dialogue hanging (no-ocr)
-- ✅ Continuous operation (agent-auto)
-- ✅ Intelligent navigation (movement preview + NPC detection)
+Deprecated: `--simple` still maps to `--scaffold simple` but triggers a deprecation warning.
 
 ## Command Line Options
 
-```bash
-python run.py [OPTIONS]
-
-Basic Options:
-  --rom PATH               Path to Pokemon Emerald ROM (default: Emerald-GBAdvance/rom.gba)
-  --load-state PATH        Load from a saved state file
-  --load-checkpoint        Load from checkpoint.state and checkpoint_milestones.json
-  --backend TEXT           VLM backend (openai/gemini/local/auto, default: gemini)
-  --model-name TEXT        Model name (default: gemini-2.5-flash)
-  --port INTEGER           Server port for web interface (default: 8000)
-
-Mode Options:
-  --headless              Run without PyGame display window
-  --agent-auto            Enable automatic agent actions on startup
-  --manual                Start in manual mode instead of agent mode
-
-Feature Options:
-  --record                Record video of gameplay (saves MP4 with timestamp)
-  --scaffold SCAFFOLD     Agent scaffold: fourmodule (default), simple, react, or claudeplays
-  --simple                DEPRECATED: Use --scaffold simple instead
-  --no-ocr                Disable OCR dialogue detection (forces overworld state)
-
-VLM Options:
-  --vlm-port INTEGER       Port for Ollama server (default: 11434)
+```text
+run.py:
+  --rom PATH, --load-state PATH, --load-checkpoint
+  --backend (openai|gemini|local|openrouter|anthropic|auto), --model-name TEXT
+  --port INT (default 8000)
+  --headless, --agent-auto, --manual
+  --record, --scaffold (fourmodule|simple|react|claudeplays|geminiplays|my_cli_agent|autonomous_cli|vision_only)
+  --no-ocr (disable OCR dialogue detection)
+  --simple (deprecated; use --scaffold simple)
 ```
 
 ## Customizing Agent Behavior (Prompt Editing Guide)
 
-This starter kit is designed to be easily customizable. Here's how to edit the agent's behavior:
+- **System prompt**: `agent/system_prompt.py` — overall role and behavior.
+- **Perception**: `agent/deprecated/perception.py` — how the agent interprets the screen (fourmodule).
+- **Planning**: `agent/deprecated/planning.py` — high-level strategy (fourmodule).
+- **Memory**: `agent/deprecated/memory.py` — what to remember (fourmodule).
+- **Action**: `agent/deprecated/action.py` — button decisions (fourmodule).
 
-### 🎯 Main System Prompt
-
-**File: `agent/system_prompt.py`**
-
-This is the core personality of your agent. Edit this to change the overall behavior:
-
-```python
-# Current system prompt
-system_prompt = """
-You are an AI agent playing Pokémon Emerald on a Game Boy Advance emulator...
-"""
-
-# Example: Speedrunner personality
-system_prompt = """
-You are an expert Pokémon Emerald speedrunner. Your goal is to beat the game as quickly as possible using optimal strategies, routing, and tricks. Always think about efficiency and time-saving strategies.
-"""
-
-# Example: Casual player personality  
-system_prompt = """
-You are a casual Pokémon player exploring Emerald for fun. You enjoy catching different Pokémon, talking to NPCs, and thoroughly exploring each area. Take your time and enjoy the experience.
-"""
-```
-
-### 🔍 Perception Module Prompts
-
-**File: `agent/perception.py`**
-
-Control how the agent observes and interprets the game state:
-
-```python
-# Find and edit the perception_prompt around line 24
-perception_prompt = f"""
-★★★ VISUAL ANALYSIS TASK ★★★
-
-You are the agent, actively playing Pokemon Emerald...
-"""
-
-# Example customization for battle focus:
-perception_prompt = f"""
-★★★ BATTLE-FOCUSED VISUAL ANALYSIS ★★★
-
-You are a competitive Pokemon battler. Pay special attention to:
-- Pokemon types and weaknesses
-- Move effectiveness and damage calculations  
-- Status conditions and stat changes
-- Switching opportunities
-...
-"""
-```
-
-### 🧠 Planning Module Prompts
-
-**File: `agent/planning.py`**
-
-Modify strategic planning behavior:
-
-```python
-# Find the planning_prompt around line 55
-planning_prompt = f"""
-★★★ STRATEGIC PLANNING TASK ★★★
-
-You are the agent playing Pokemon Emerald with a speedrunning mindset...
-"""
-
-# Example: Exploration-focused planning
-planning_prompt = f"""
-★★★ EXPLORATION PLANNING TASK ★★★
-
-You are curious explorer who wants to discover everything in Pokemon Emerald:
-1. DISCOVERY GOALS: What new areas, Pokemon, or secrets can you find?
-2. COLLECTION OBJECTIVES: What Pokemon should you catch or items should you collect?
-3. INTERACTION STRATEGY: Which NPCs should you talk to for lore and tips?
-...
-"""
-```
-
-### 🎮 Action Module Prompts
-
-**File: `agent/action.py`**
-
-Control decision-making and button inputs:
-
-```python
-# Find the action_prompt around line 69
-action_prompt = f"""
-★★★ ACTION DECISION TASK ★★★
-
-You are the agent playing Pokemon Emerald with a speedrunning mindset...
-"""
-
-# Example: Cautious player style
-action_prompt = f"""
-★★★ CAREFUL ACTION DECISIONS ★★★
-
-You are a careful player who wants to avoid risks:
-- Always heal Pokemon before they reach critical HP
-- Avoid wild Pokemon encounters when possible
-- Stock up on items before challenging gyms
-- Save frequently at Pokemon Centers
-...
-"""
-```
-
-### 🧵 Memory Module Behavior
-
-**File: `agent/memory.py`**
-
-Customize what the agent remembers and prioritizes:
-
-```python
-# Edit the memory_step function around line 70
-# Add custom key events tracking:
-
-# Example: Track more specific events
-if 'new_pokemon_caught' in state:
-    key_events.append(f"Caught new Pokemon: {state['new_pokemon_caught']}")
-
-if 'item_found' in state:
-    key_events.append(f"Found item: {state['item_found']}")
-```
-
-### 🎨 Example: Creating a "Nuzlocke Challenge" Agent
-
-Create a specialized agent for Nuzlocke rules:
-
-1. **Edit `agent/system_prompt.py`**:
-```python
-system_prompt = """
-You are playing Pokemon Emerald under strict Nuzlocke rules:
-1. You may only catch the first Pokemon in each area
-2. If a Pokemon faints, it's considered "dead" and must be released
-3. You must nickname all caught Pokemon  
-4. Play very cautiously to avoid losing Pokemon
-"""
-```
-
-2. **Edit action prompts** to be more cautious about battles
-3. **Edit memory** to track "living" vs "dead" Pokemon
-4. **Edit perception** to emphasize Pokemon health monitoring
-
-### 🔧 Testing Your Changes
-
-1. Make your prompt edits
-2. Restart the agent: `python run.py --backend your-backend --model-name your-model`
-3. Monitor the logs to see how behavior changes
-4. Use `--debug-state` flag for detailed insights
-
-### 💡 Prompt Engineering Tips
-
-- **Be specific**: Instead of "play well", say "prioritize type advantages and stat buffs"
-- **Use examples**: Show the agent exactly what you want with concrete examples
-- **Test iteratively**: Make small changes and observe the effects
-- **Use sections**: Break complex prompts into clear sections with headers
-- **Consider context**: Remember the agent sees game state, not just the screen
+Edit the prompts in those files and restart the agent. Use `--debug-state` for detailed state in logs. For Nuzlocke-style behavior, change the system prompt and action/memory logic accordingly.
 
 ## Advanced Configuration
 
-### Environment Variables
-
-```bash
-# VLM API Keys
-export OPENAI_API_KEY="your-openai-key"
-export OPENROUTER_API_KEY="your-openrouter-key"  
-export GEMINI_API_KEY="your-gemini-key"
-
-# Optional: Custom logging
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-```
-
-### Local Model Optimization
-
-For better performance with local models:
-
-```bash
-# Use local models with appropriate hardware
-python run.py --backend local --model-name "Qwen/Qwen2-VL-2B-Instruct"
-```
+- **Environment**: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`; optional `PYTHONPATH` for development.
+- **Persistence**: Checkpoints and run data are under `.pokeagent_cache/{run_id}/` and `run_data/{run_id}/`; see `System-Design/architecture/data_persistence/persistence.md`. Backups of the .pokeagent_cache/{run_id}/ are saved upon objective or milestone completion for our custom scaffold for vlm agents and proprietary CLI agent scaffold agents, respectively.
+- **Metrics**: `cumulative_metrics.json` and LLM logs; see `System-Design/architecture/metrics/tracking.md`.
 
 ## Troubleshooting
 
-### Common Issues
-
-1. **"Module not found" errors**:
-   ```bash
-   uv sync
-   export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-   ```
-
-2. **Out of memory with local models**:
-   ```bash
-   # Try a smaller model or use cloud-based VLMs
-   python run.py --backend gemini --model-name "gemini-2.5-flash"
-   ```
-
-3. **Web interface connection issues**:
-   - Ensure run.py is running
-   - Check that the specified port (default 8000) is available
-   - Try accessing http://localhost:8000/stream directly
-
-4. **API rate limits**:
-   - Use OpenRouter for better rate limits
-   - Switch to local models for unlimited usage
-
-### Performance Tips
-
-- **OpenAI**: Fastest for quick prototyping
-- **Local models**: Best for extended runs, no API costs
-- **Debug mode**: Use `--debug-state` only when needed (verbose output)
+- **Module not found**: Ensure deps are installed (`uv sync` or `pip install -r requirements.txt`) and `PYTHONPATH` includes the repo root if needed.
+- **Out of memory (local models)**: Use a smaller model or a cloud backend (e.g. `--backend gemini --model-name gemini-2.5-flash`).
+- **Web UI**: Ensure the server is running and the port (default 8000) is free; open `http://localhost:8000/stream`.
+- **API rate limits**: Consider OpenRouter or local models.
 
 ## Fair Use and Modification Guidelines
 
-### ✅ Allowed Modifications
+**Allowed:** Changing agent behavior (prompts, planning, memory), adding or changing VLM backends in `utils/vlm_backends.py`, improving logging, tests, docs, performance, UI, and utilities.
 
-You are encouraged to modify and improve the agent in the following ways:
-
-- **Agent Behavior**: Edit prompts in `agent/` directory to change how the agent thinks and acts, adding new planning, memory, or training
-- **VLM Backends**: Add new VLM backends or modify existing ones in `utils/vlm.py`
-- **Error Handling**: Improve error handling, retry logic, and fallback mechanisms
-- **Logging and Debugging**: Enhance logging, add debugging tools, and improve observability
-- **Testing**: Add new tests, improve test coverage, and enhance the testing framework
-- **Documentation**: Update README, add comments, and improve code documentation
-- **Performance**: Optimize code performance, add caching, and improve efficiency
-- **UI/UX**: Enhance the web interface, add new visualizations, and improve user experience
-- **Utilities**: Add helper functions, improve state formatting, and enhance utility modules
-
-### ❌ Restricted Modifications
-
-The following modifications are **NOT ALLOWED** for competitive submissions:
-
-- **Memory Reading**: Do not modify `pokemon_env/memory_reader.py` or any memory reading logic (e.g., read additional memory addresses not already being read). Feel free to use the already given information as you please (e.g., use the provided map OR do not use the provided map and use the VLM for mapping).
-- **State Observation**: Do not change how game state is extracted or interpreted from memory
-- **Emulator Core**: Do not modify the mGBA emulator integration or core emulation logic
-- **Anti-Cheat Bypass**: Do not attempt to bypass or modify the anti-cheat verification system
-- **Game State Manipulation**: Do not directly manipulate game memory or state outside of normal button inputs
-
-### 🎯 What This Means
-
-- **Focus on AI/ML**: Improve the agent's decision-making, planning, and reasoning
-- **Enhance Infrastructure**: Make the system more robust, debuggable, and maintainable
-- **Preserve Fairness**: Keep the core game state observation system unchanged for fair competition
+**Not allowed (for competitive submissions):** Modifying `pokemon_env/memory_reader.py` or memory-reading logic, changing how game state is extracted, altering emulator core or anti-cheat, or manipulating game memory outside normal button input.
 
 ## Submission Instructions
 
