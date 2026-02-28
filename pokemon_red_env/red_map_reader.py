@@ -90,6 +90,23 @@ class RedMapReader:
         except Exception as e:
             logger.warning(f"Could not load map_names.json: {e}")
 
+    @staticmethod
+    def _resolve_path_ci(directory: str, filename: str) -> str:
+        """Return the real path for *filename* inside *directory*, matching
+        case-insensitively on Linux.  Returns the exact-case path whether or
+        not it exists (caller checks existence)."""
+        exact = os.path.join(directory, filename)
+        if os.path.exists(exact):
+            return exact
+        lower = filename.lower()
+        try:
+            for entry in os.listdir(directory):
+                if entry.lower() == lower:
+                    return os.path.join(directory, entry)
+        except OSError:
+            pass
+        return exact  # not found; return original so caller gets a clear miss
+
     def _load_coll_map(self, map_name: str) -> list:
         """Load and cache coll_map from processed_map/{map_name}.py.
 
@@ -98,7 +115,8 @@ class RedMapReader:
         if map_name in self._map_cache:
             return self._map_cache[map_name]
 
-        path = os.path.join(self.DATA_DIR, "processed_map", f"{map_name}.py")
+        pm_dir = os.path.join(self.DATA_DIR, "processed_map")
+        path = self._resolve_path_ci(pm_dir, f"{map_name}.py")
         if not os.path.exists(path):
             logger.debug(f"No processed_map file for '{map_name}'")
             self._map_cache[map_name] = []
@@ -126,9 +144,8 @@ class RedMapReader:
         if map_name in self._sprite_name_cache:
             return self._sprite_name_cache[map_name]
 
-        asm_path = os.path.join(
-            self.DATA_DIR, "pokered", "data", "maps", "objects", f"{map_name}.asm"
-        )
+        asm_dir = os.path.join(self.DATA_DIR, "pokered", "data", "maps", "objects")
+        asm_path = self._resolve_path_ci(asm_dir, f"{map_name}.asm")
         names = []
         if os.path.exists(asm_path):
             try:
