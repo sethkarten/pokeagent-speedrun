@@ -4,6 +4,7 @@ Fixed Simple Pokemon Emerald server - headless FastAPI server
 """
 
 # Standard library imports
+import asyncio
 import base64
 import datetime
 import glob
@@ -108,6 +109,11 @@ video_filename = ""
 video_frame_counter = 0
 video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
 
+# Playwright WebUI recording state
+playwright_recording = False       # signal flag: set False to stop the recording thread
+playwright_thread = None           # background thread running the async recording loop
+playwright_video_path = None       # final .mp4 path set when recording finishes
+
 # Frame cache for separate frame server
 # Use cache directory instead of /tmp
 # Note: CACHE_DIR is now dynamic based on run_id - use get_cache_directory() when needed
@@ -120,9 +126,9 @@ frame_cache_skip_frames = 30  # Only update cache every 30 frames (4x/sec at 120
 # Set to False when using ground truth porymap data to avoid expensive updates
 ENABLE_MAP_STITCHER = False  # Disabled - using porymap ground truth instead
 
-# State endpoint cache - cache map data by location to avoid expensive regeneration
-_state_cache = {"location": None, "map_data": None, "portal_data": None, "timestamp": 0}
-_state_cache_ttl = 5.0  # Cache for 5 seconds per location
+# State endpoint cache - cache map data by location+position to avoid expensive regeneration
+_state_cache = {"location": None, "player_coords": None, "map_data": None, "portal_data": None, "timestamp": 0}
+_state_cache_ttl = 5.0  # Cache TTL (invalidated immediately on player movement)
 
 # Server runs headless - display handled by client
 
@@ -321,6 +327,159 @@ def cleanup_video_recording():
             video_recording = False
 
 
+async def _playwright_async_loop(port, video_path, record_fps=15):
+    """Async loop: opens /stream in headless Chromium, captures screenshots,
+    encodes them into an mp4 via OpenCV.  Runs in its own thread/event-loop so
+    it never conflicts with uvicorn's asyncio loop."""
+    global playwright_recording, playwright_video_path
+
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        print("⚠️ playwright package missing inside async loop — this should not happen")
+        playwright_recording = False
+        return
+
+    import urllib.request
+
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            page = await browser.new_page(viewport={"width": 1920, "height": 1080})
+
+            # --- wait for /health to be up (FastAPI may still be starting) ---
+            health_url = f"http://localhost:{port}/health"
+            loop = asyncio.get_event_loop()
+            for _ in range(30):
+                try:
+                    await loop.run_in_executor(
+                        None, lambda: urllib.request.urlopen(health_url, timeout=1)
+                    )
+                    break
+                except Exception:
+                    await asyncio.sleep(1)
+
+            # --- load the stream page; use domcontentloaded so continuous polling
+            #     endpoints never prevent the navigation from completing ----------
+            await page.goto(
+                f"http://localhost:{port}/stream",
+                wait_until="domcontentloaded",
+                timeout=15000,
+            )
+            # Give WebSocket time to connect and first game frames to arrive
+            await asyncio.sleep(3)
+            print("📹 Playwright: /stream loaded, starting screen capture…")
+
+            # --- set up OpenCV writer -------------------------------------------
+            # Prefer H.264 (avc1) — much sharper for text/UI and smaller files.
+            # Fall back to mp4v if avc1 is unavailable (Linux without VideoToolbox).
+            fourcc_h264 = cv2.VideoWriter_fourcc(*"avc1")
+            writer = cv2.VideoWriter(video_path, fourcc_h264, float(record_fps), (1920, 1080))
+            if not writer.isOpened():
+                print("⚠️ avc1/H.264 unavailable, falling back to mp4v for WebUI recording")
+                fourcc_mp4v = cv2.VideoWriter_fourcc(*"mp4v")
+                writer = cv2.VideoWriter(video_path, fourcc_mp4v, float(record_fps), (1920, 1080))
+            if not writer.isOpened():
+                raise RuntimeError(f"OpenCV could not open writer for {video_path}")
+
+            frame_interval = 1.0 / record_fps
+            loop = asyncio.get_event_loop()
+            record_start = loop.time()
+            frames_written = 0
+            last_frame = None  # last decoded BGR frame, reused to fill skipped slots
+            try:
+                while playwright_recording:
+                    png_bytes = await page.screenshot(type="png")
+                    nparr = np.frombuffer(png_bytes, np.uint8)
+                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if frame is not None:
+                        if frame.shape[:2] != (1080, 1920):
+                            frame = cv2.resize(frame, (1920, 1080))
+                        last_frame = frame
+
+                    # How many frames should have been written by now (wall-clock)?
+                    elapsed_total = loop.time() - record_start
+                    target_frames = int(elapsed_total * record_fps) + 1
+
+                    # Write current frame once, then duplicate to fill any skipped slots
+                    # so the video stays in sync with real time even if screenshots are slow
+                    frames_to_write = max(1, target_frames - frames_written)
+                    if last_frame is not None:
+                        for _ in range(frames_to_write):
+                            writer.write(last_frame)
+                        frames_written += frames_to_write
+
+                    # Sleep only the remaining time in this frame slot (if any)
+                    next_frame_time = record_start + frames_written * frame_interval
+                    sleep_time = next_frame_time - loop.time()
+                    if sleep_time > 0:
+                        await asyncio.sleep(sleep_time)
+            finally:
+                writer.release()
+                playwright_video_path = video_path
+                print(f"📹 Playwright WebUI recording saved: {video_path}")
+
+            await browser.close()
+
+    except Exception as e:
+        print(f"⚠️ Playwright recording error: {e}")
+    finally:
+        playwright_recording = False
+
+
+def init_playwright_recording(port, run_id=None):
+    """Start Playwright WebUI recording in a background thread.
+    Returns True immediately if Playwright is available; False to fall back."""
+    global playwright_recording, playwright_thread, playwright_video_path
+
+    try:
+        from playwright.async_api import async_playwright  # noqa: F401 – just an import check
+    except ImportError:
+        print("⚠️ Playwright not installed, falling back to frame recording")
+        return False
+
+    try:
+        # Determine output filename (same directory as frame recording)
+        if run_id:
+            video_path = f"{run_id}_webui.mp4"
+        else:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            video_path = f"pokegent_webui_{timestamp}.mp4"
+
+        playwright_recording = True
+        playwright_video_path = video_path
+
+        def _thread_target():
+            asyncio.run(_playwright_async_loop(port, video_path))
+
+        playwright_thread = threading.Thread(
+            target=_thread_target, daemon=True, name="playwright-recording"
+        )
+        playwright_thread.start()
+        print(f"📹 Playwright WebUI recording started (output: {video_path})")
+        return True
+
+    except Exception as e:
+        print(f"⚠️ Playwright recording failed to start: {e}, falling back to frame recording")
+        playwright_recording = False
+        return False
+
+
+def cleanup_playwright_recording():
+    """Signal the recording thread to stop and wait for it to finish.
+    Returns the recorded video path, or None."""
+    global playwright_recording, playwright_thread
+
+    playwright_recording = False  # signals the loop to exit
+
+    if playwright_thread and playwright_thread.is_alive():
+        playwright_thread.join(timeout=15)  # wait for writer.release()
+
+    playwright_thread = None
+    path = playwright_video_path  # set by the async loop when it finishes
+    return path
+
+
 # Milestone tracking is now handled by the emulator
 
 # FastAPI app
@@ -434,8 +593,9 @@ def signal_handler(signum, frame):
     state_update_running = False
 
     # IMPORTANT: Finalize run data BEFORE cleanup
-    # Check video_recording flag BEFORE cleanup_video_recording() resets it
+    # Check recording flags BEFORE cleanup resets them
     was_recording = video_recording
+    was_recording_pw = playwright_recording
 
     try:
         from utils.run_data_manager import get_run_data_manager
@@ -490,6 +650,22 @@ def signal_handler(signum, frame):
 
             # Copy video if recording was enabled (check flag BEFORE cleanup)
             logger.info(f"🔍 [DEBUG] Video recording flag: {was_recording}, video_filename: {video_filename}")
+            logger.info(f"🔍 [DEBUG] Playwright recording flag: {was_recording_pw}")
+
+            # Finalize Playwright recording first (closes browser, finalizes .webm)
+            pw_video_path = None
+            if was_recording_pw:
+                pw_video_path = cleanup_playwright_recording()
+                if pw_video_path and os.path.exists(pw_video_path):
+                    # Copy Playwright video to run_data
+                    import shutil
+                    dest_dir = run_manager.run_dir / "end_state" / "videos"
+                    dest_dir.mkdir(parents=True, exist_ok=True)
+                    dest_file = dest_dir / os.path.basename(pw_video_path)
+                    shutil.copy2(pw_video_path, dest_file)
+                    print(f"📹 Playwright video copied to: {dest_file}")
+
+            # Also copy frame-based video if it was running
             run_manager.copy_video_recording(record_enabled=was_recording)
 
             # Finalize with metrics
@@ -498,7 +674,10 @@ def signal_handler(signum, frame):
     except Exception as e:
         logger.error(f"❌ Error during run data finalization: {e}", exc_info=True)
 
-    # Cleanup video recording AFTER copying (so file is still available)
+    # Cleanup frame-based video recording AFTER copying (so file is still available)
+    # Playwright was already cleaned up in the block above (inside run_manager section)
+    # Call again as no-op safety net in case run_manager block was skipped
+    cleanup_playwright_recording()
     cleanup_video_recording()
 
     if env:
@@ -594,7 +773,8 @@ def step_environment(actions_pressed):
     try:
         screenshot = env.get_screenshot()
         if screenshot:
-            record_frame(screenshot)
+            if not playwright_recording:
+                record_frame(screenshot)
             update_frame_cache(screenshot)  # Update frame cache for separate frame server
             with obs_lock:
                 current_obs = np.array(screenshot)
@@ -1297,10 +1477,13 @@ async def get_comprehensive_state():
         if not "map" in state:
             state["map"] = {}
 
-        # Check if we can use cached map data (location-based cache)
+        # Check if we can use cached map data (location + coords cache)
+        # Player coords are included so moving within a map invalidates the cache immediately
         current_time = time.time()
         cache_valid = (
-            _state_cache["location"] == current_location and current_time - _state_cache["timestamp"] < _state_cache_ttl
+            _state_cache["location"] == current_location
+            and _state_cache["player_coords"] == player_coords
+            and current_time - _state_cache["timestamp"] < _state_cache_ttl
         )
 
         # Initialize slam_map_loaded before the cache check
@@ -1603,8 +1786,9 @@ async def get_comprehensive_state():
         # Include action queue info for multiprocess coordination
         queue_length = len(action_queue)  # Action queue access is atomic for len()
 
-        # Cache map data for this location (5 second TTL) - reduces load on subsequent requests
+        # Cache map data for this location+position - reduces load on rapid repeated requests
         _state_cache["location"] = current_location
+        _state_cache["player_coords"] = player_coords
         _state_cache["map_data"] = state.get("map", {}).copy()
         _state_cache["portal_data"] = {"location_connections": state.get("location_connections", {})}
         _state_cache["timestamp"] = time.time()
@@ -4776,9 +4960,6 @@ def main():
         print("Failed to initialize emulator")
         return
 
-    # Initialize video recording AFTER emulator so resolution is known
-    init_video_recording(args.record)
-
     # Disable dialogue detection if --no-ocr flag is set
     if args.no_ocr:
         if env and env.memory_reader and hasattr(env.memory_reader, '_dialog_detection_enabled'):
@@ -4824,7 +5005,8 @@ def main():
     state_update_thread = threading.Thread(target=periodic_milestone_updater, daemon=True)
     state_update_thread.start()
 
-    # Start FastAPI server in background thread
+    # Start FastAPI server in background thread BEFORE video recording
+    # (Playwright needs /stream endpoint to be ready)
     server_thread = threading.Thread(target=run_fastapi_server, args=(args.port,), daemon=True)
     server_thread.start()
 
@@ -4838,6 +5020,16 @@ def main():
     print(f"   Local: http://localhost:{args.port}")
     print(f"   Network: http://{local_ip}:{args.port}")
     print(f"📺 Stream interface: http://{local_ip}:{args.port}/stream")
+
+    # Initialize video recording AFTER FastAPI server starts
+    # Try Playwright WebUI recording first; fall back to frame-based recording
+    if args.record:
+        pw_success = init_playwright_recording(args.port, run_id=run_id)
+        if not pw_success:
+            init_video_recording(True)
+    else:
+        # No recording requested
+        pass
     print("Available endpoints:")
     print("  /status - Server status")
     print("  /screenshot - Current screenshot")
