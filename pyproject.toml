@@ -41,6 +41,7 @@ dependencies = [
     "pip>=25.2",
     "mcp>=1.18.0",
     "pyboy==2.5.2",
+    "playwright==1.58.0",
 ]
 
 [project.optional-dependencies]
