@@ -10,6 +10,7 @@ import io
 import json
 import logging
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -18,7 +19,6 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class CliAgentBackend(ABC):
         event: dict,
         metrics: CliSessionMetrics | None,
         server_url: str | None = None,
-        snapshot_path: Optional[Path] = None,
+        snapshot_path: Path | None = None,
     ) -> None:
         """Process one stream event (e.g. system, assistant, user, result). Update metrics and optionally POST thinking to server."""
         pass
@@ -98,10 +98,10 @@ class CliAgentBackend(ABC):
         log_file: io.TextIOWrapper | None,
         metrics: CliSessionMetrics | None,
         server_url: str | None = None,
-        snapshot_path: Optional[Path] = None,
+        snapshot_path: Path | None = None,
     ) -> None:
         """Read stdout line-by-line (JSONL), tee to log_file, parse and handle events."""
-        logger.info("[cli-debug] stream reader started: %s", self.name)
+        logger.debug("stream reader started: %s", self.name)
         try:
             buffered = io.BufferedReader(stdout_pipe)
             for raw_line in buffered:
@@ -123,8 +123,8 @@ class CliAgentBackend(ABC):
                     continue
                 self.handle_stream_event(event, metrics, server_url, snapshot_path)
         except (OSError, ValueError) as e:
-            logger.info("[cli-debug] stream reader error: %s", e)
-        logger.info("[cli-debug] stream reader exiting: %s", self.name)
+            logger.debug("stream reader error: %s", e)
+        logger.debug("stream reader exiting: %s", self.name)
 
 
 class ClaudeCodeBackend(CliAgentBackend):
@@ -158,10 +158,8 @@ class ClaudeCodeBackend(CliAgentBackend):
         env["POKEMON_MCP_SERVER_URL"] = server_url
         env["POKEMON_SERVER_URL"] = server_url
 
-        # MCP server must resolve project modules; use project root, not working_dir
         pythonpath = project_root if project_root else os.getcwd()
 
-        # Read directive for bootstrap prompt
         directive_content = ""
         if directive_path and os.path.exists(directive_path):
             with open(directive_path, "r") as f:
@@ -175,39 +173,73 @@ class ClaudeCodeBackend(CliAgentBackend):
             "- Poll game state on your own via MCP tools; do not wait for additional operator prompts.\n"
             "- Continue until externally terminated by the orchestrator when completion condition is met.\n"
         ) if directive_content else "Start the Pokemon Emerald agent session."
-        
-        # Base claude command
-        # --verbose required by Claude Code when using --output-format stream-json
-        # Pass bootstrap prompt as command argument (Claude doesn't read from stdin in this mode)
-        claude_cmd = ["claude", "--print", bootstrap, "--output-format", "stream-json", "--verbose"]
-        if dangerously_skip_permissions:
-            claude_cmd.append("--dangerously-skip-permissions")
-        
-        # Resume previous session by ID (avoids interleaving when multiple instances run)
-        if resume_session_id:
-            claude_cmd.extend(["--resume", resume_session_id])
-        
-        # Add thinking effort budget (if specified)
-        if thinking_effort:
-            effort_map = {"low": "low", "medium": "medium", "high": "high"}
-            if thinking_effort in effort_map:
-                claude_cmd.extend(["--thinking-budget", effort_map[thinking_effort]])
 
-        # MCP config: use SSE URL for containerized, command for local
-        if containerized and mcp_sse_port:
-            # Docker Containerized mode: MCP server is an SSE server on the host
-            # CRITICAL: The "type" field is REQUIRED for remote servers (sse/http).
-            # Without it, Claude Code silently ignores the MCP config and exits with no output.
+        if containerized:
+            if not run_id or not claude_memory_dir:
+                raise ValueError("containerized mode requires run_id and claude_memory_dir")
+            if not mcp_sse_port:
+                raise ValueError("containerized mode requires mcp_sse_port")
+
+            claude_memory_path = Path(claude_memory_dir).resolve()
+            working_dir_abs = Path(working_dir).resolve()
+
+            # Write bootstrap prompt to a file inside the workspace.
+            # @file syntax avoids shell mangling of multi-line content passed as a CLI argument.
+            bootstrap_file = working_dir_abs / ".agent_directive.txt"
+            with open(bootstrap_file, "w") as f:
+                f.write(bootstrap)
+
+            # Write MCP config into the workspace and lock it read-only so the agent
+            # cannot tamper with it mid-session (connection is established at startup anyway).
+            # "type": "sse" is REQUIRED — Claude Code silently exits without output if absent.
             mcp_config = {
                 "mcpServers": {
                     "pokemon-emerald": {
                         "type": "sse",
-                        "url": f"http://host.docker.internal:{mcp_sse_port}/sse"
+                        "url": f"http://host.docker.internal:{mcp_sse_port}/sse",
                     }
                 }
             }
+            mcp_config_path = working_dir_abs / ".mcp_config.json"
+            mcp_config_path.write_text(json.dumps(mcp_config, indent=2))
+            # CRITICAL: Read-only for all: prevents agent from overwriting the file via Edit/Bash tools
+            mcp_config_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+
+            claude_cmd = [
+                "claude", "--print", "@/workspace/.agent_directive.txt",
+                "--output-format", "stream-json", "--verbose",
+                # Block tools that hang waiting for user input in headless/print mode
+                "--disallowedTools", "AskUserQuestion,EnterPlanMode,ExitPlanMode",
+            ]
+            if dangerously_skip_permissions:
+                claude_cmd.append("--dangerously-skip-permissions")
+            if resume_session_id:
+                claude_cmd.extend(["--resume", resume_session_id])
+            if thinking_effort and thinking_effort in ("low", "medium", "high"):
+                claude_cmd.extend(["--thinking-budget", thinking_effort])
+            claude_cmd.extend(["--mcp-config", "/workspace/.mcp_config.json"])
+
+            game_port = server_url.rstrip("/").split(":")[-1]
+            docker_cmd = [
+                "docker", "run", "--rm",
+                "--name", f"claude-agent-{run_id}",
+                "--cap-add=NET_ADMIN",
+                "--security-opt=seccomp=unconfined",
+                "--network=bridge",
+                # Make host.docker.internal resolve to the host gateway on Linux
+                "--add-host=host.docker.internal:host-gateway",
+                "-v", f"{claude_memory_path}:/home/claude-agent/.claude",
+                "-v", f"{working_dir_abs}:/workspace",
+                "-e", f"MCP_PORT={mcp_sse_port}",
+                "-e", f"GAME_SERVER_PORT={game_port}",
+                "-e", f"RUN_DATA_ID={run_id}",
+                "claude-agent-devcontainer",
+            ] + claude_cmd
+
+            return docker_cmd, env, None, str(mcp_config_path)
+
         else:
-            # Local mode: MCP server is spawned as subprocess
+            # Local (non-containerized) mode: spawn MCP server as a subprocess
             mcp_config = {
                 "mcpServers": {
                     "pokemon-emerald": {
@@ -220,67 +252,26 @@ class ClaudeCodeBackend(CliAgentBackend):
                     }
                 }
             }
-        
-        # Return docker run command if containerized, else return bare claude command
-        if containerized:
-            # Build docker run command
-            if not run_id or not claude_memory_dir:
-                raise ValueError("containerized mode requires run_id and claude_memory_dir")
-            
-            # Resolve paths
-            project_abs = Path(project_root if project_root else os.getcwd()).resolve()
-            claude_memory_path = Path(claude_memory_dir).resolve()
-            working_dir_abs = Path(working_dir).resolve()
-            
-            # Write MCP config to workspace so it's accessible inside the container
-            mcp_config_path = working_dir_abs / ".mcp_config.json"
-            with open(mcp_config_path, "w") as f:
-                json.dump(mcp_config, f, indent=2)
-            
-            # Write bootstrap prompt to workspace file (accessible at /workspace inside container)
-            # Use @file syntax to avoid passing multi-line content as shell argument
-            bootstrap_file = working_dir_abs / ".agent_directive.txt"
-            with open(bootstrap_file, "w") as f:
-                f.write(bootstrap)
-
-            # Build claude command - use @/workspace/.agent_directive.txt to read prompt from file
-            # This avoids shell mangling of multi-line bootstrap content passed as CLI argument
-            container_claude_cmd = [
-                "claude", "--print", "@/workspace/.agent_directive.txt",
-                "--output-format", "stream-json", "--verbose",
-            ]
-            if dangerously_skip_permissions:
-                container_claude_cmd.append("--dangerously-skip-permissions")
-            if resume_session_id:
-                container_claude_cmd.extend(["--resume", resume_session_id])
-            if thinking_effort and thinking_effort in ("low", "medium", "high"):
-                container_claude_cmd.extend(["--thinking-budget", thinking_effort])
-            container_claude_cmd.extend(["--mcp-config", "/workspace/.mcp_config.json"])
-            
-            docker_cmd = [
-                "docker", "run",
-                "--rm",
-                "--name", f"claude-agent-{run_id}",
-                "--cap-add=NET_ADMIN",
-                "--security-opt=seccomp=unconfined",
-                "--network=bridge",
-                "-v", f"{claude_memory_path}:/home/claude-agent/.claude",
-                "-v", f"{working_dir_abs}:/workspace",
-                "-e", f"MCP_PORT={mcp_sse_port or ''}",
-                "-e", f"GAME_SERVER_PORT={server_url.rstrip('/').split(':')[-1]}",
-                "-e", f"RUN_DATA_ID={run_id}",
-                "claude-agent-devcontainer",
-            ] + container_claude_cmd
-            
-            return docker_cmd, env, None, str(mcp_config_path)
-        else:
-            # Local mode: write MCP config to /tmp as before
             temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
             json.dump(mcp_config, temp_file, indent=2)
             temp_file.flush()
             temp_file.close()
             temp_mcp_config_path = temp_file.name
+
+            claude_cmd = [
+                "claude", "--print", bootstrap,
+                "--output-format", "stream-json", "--verbose",
+                # Block tools that hang waiting for user input in headless/print mode
+                "--disallowedTools", "AskUserQuestion,EnterPlanMode,ExitPlanMode",
+            ]
+            if dangerously_skip_permissions:
+                claude_cmd.append("--dangerously-skip-permissions")
+            if resume_session_id:
+                claude_cmd.extend(["--resume", resume_session_id])
+            if thinking_effort and thinking_effort in ("low", "medium", "high"):
+                claude_cmd.extend(["--thinking-budget", thinking_effort])
             claude_cmd.extend(["--mcp-config", temp_mcp_config_path])
+
             return claude_cmd, env, None, temp_mcp_config_path
 
     def handle_stream_event(
@@ -288,7 +279,7 @@ class ClaudeCodeBackend(CliAgentBackend):
         event: dict,
         metrics: CliSessionMetrics | None,
         server_url: str | None = None,
-        snapshot_path: Optional[Path] = None,
+        snapshot_path: Path | None = None,
     ) -> None:
         etype = event.get("type", "")
 

@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import argparse
+import socket
 import subprocess
 import signal
 import threading
@@ -222,62 +223,66 @@ def start_frame_server(port):
         return None
 
 
-def start_mcp_sse_server(server_url: str, mcp_port: int, project_root: str | None = None):
-    """Start the MCP server in SSE transport mode for containerized agents.
-    
+def start_mcp_sse_server(
+    server_url: str,
+    mcp_port: int,
+    project_root: str | None = None,
+    log_path: Path | None = None,
+) -> "subprocess.Popen | None":
+    """Start the MCP SSE server used by containerized agents.
+
     Args:
-        server_url: Game server URL (for the MCP proxy to forward to)
-        mcp_port: Port for the MCP SSE server
-        project_root: Project root for PYTHONPATH
-        
+        server_url:   Game server URL the MCP proxy forwards to.
+        mcp_port:     Port to bind the SSE server on.
+        project_root: Added to PYTHONPATH so server modules resolve.
+        log_path:     File to capture server stdout/stderr (avoids pipe-buffer deadlock).
+
     Returns:
-        subprocess.Popen: MCP server process
+        Running Popen handle, or None on failure.
     """
     try:
-        python_exe = sys.executable
-        mcp_cmd = [python_exe, "-m", "server.cli.pokemon_mcp_server"]
-        
-        # Set up environment for SSE transport
         mcp_env = os.environ.copy()
         mcp_env["MCP_TRANSPORT"] = "sse"
         mcp_env["MCP_PORT"] = str(mcp_port)
         mcp_env["POKEMON_SERVER_URL"] = server_url
         if project_root:
             mcp_env["PYTHONPATH"] = project_root
-        
+
+        # Route output to a log file (avoids pipe-buffer deadlock when uvicorn is verbose)
+        log_fh = open(log_path, "w") if log_path else subprocess.DEVNULL
         mcp_process = subprocess.Popen(
-            mcp_cmd,
+            [sys.executable, "-m", "server.cli.pokemon_mcp_server"],
             env=mcp_env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT  # Merge stderr into stdout for easier capture
+            stdout=log_fh,
+            stderr=subprocess.STDOUT,
         )
-        print(f"🌐 MCP SSE server started with PID {mcp_process.pid} on port {mcp_port}")
-        print(f"   Remote clients can connect via: http://localhost:{mcp_port}/sse")
-        time.sleep(3)  # Give the server time to start (uvicorn needs a moment)
-        
-        # Verify MCP server started and is listening
-        import socket as _socket
-        poll_result = mcp_process.poll()
-        port_listening = False
-        try:
-            with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                port_listening = (s.connect_ex(('127.0.0.1', mcp_port)) == 0)
-        except Exception:
-            pass
-        
-        if not port_listening:
-            print(f"   ⚠️  MCP server port {mcp_port} is NOT listening!")
-            if poll_result is not None:
-                try:
-                    stdout_data = mcp_process.stdout.read(4096).decode("utf-8", errors="replace") if mcp_process.stdout else ""
-                    print(f"   MCP server exited with code {poll_result}:")
-                    print(f"   {stdout_data[:300]}")
-                except Exception:
-                    pass
-        else:
-            print(f"   ✓ MCP server listening on port {mcp_port}")
-        
+        print(f"🌐 MCP SSE server started (PID {mcp_process.pid}, port {mcp_port})")
+
+        # Poll until the port is accepting connections (up to 5 s)
+        deadline = time.monotonic() + 5.0
+        port_up = False
+        while time.monotonic() < deadline:
+            if mcp_process.poll() is not None:
+                break
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.5)
+                    if s.connect_ex(("127.0.0.1", mcp_port)) == 0:
+                        port_up = True
+                        break
+            except OSError:
+                pass
+            time.sleep(0.2)
+
+        if not port_up:
+            hint = f" (see {log_path})" if log_path else ""
+            if mcp_process.poll() is not None:
+                print(f"   ❌ MCP server exited early (code {mcp_process.poll()}){hint}")
+            else:
+                print(f"   ⚠️  MCP server port {mcp_port} not responding after 5 s{hint}")
+            return None
+
+        print(f"   ✓ MCP server listening on port {mcp_port}")
         return mcp_process
     except Exception as e:
         print(f"❌ Failed to start MCP SSE server: {e}")
@@ -383,7 +388,6 @@ def launch_cli_agent(
     # (Claude Code --print mode doesn't read from stdin)
     process.stdin.close()
 
-    logger.info("[cli-debug] launch_cli_agent: subprocess spawned pid=%s, stdin fed+closed", process.pid)
     stream_stop_event = threading.Event()
     snapshot_path_arg = Path(snapshot_path) if snapshot_path else None
     stream_thread = threading.Thread(
@@ -392,8 +396,7 @@ def launch_cli_agent(
         daemon=True,
     )
     stream_thread.start()
-    logger.info("[cli-debug] launch_cli_agent: stream thread started")
-    print(f"✅ CLI agent started with PID {process.pid}")
+    print(f"✅ CLI agent started (PID {process.pid})")
     return CliSession(
         process=process,
         stop_event=stream_stop_event,
@@ -559,10 +562,12 @@ def main():
         # Start MCP SSE server if containerized mode is enabled
         mcp_process = None
         if args.containerized:
-            print(f"\n🐳 Containerized mode enabled")
-            print(f"   MCP SSE server will run on port {args.mcp_sse_port}")
+            print(f"\n🐳 Containerized mode enabled (MCP SSE port {args.mcp_sse_port})")
             project_root_for_mcp = str(Path(__file__).resolve().parent)
-            mcp_process = start_mcp_sse_server(server_url, args.mcp_sse_port, project_root_for_mcp)
+            mcp_log = Path(run_manager.get_run_directory()) / "mcp_server.log"
+            mcp_process = start_mcp_sse_server(
+                server_url, args.mcp_sse_port, project_root_for_mcp, log_path=mcp_log
+            )
             if not mcp_process:
                 print("❌ Failed to start MCP SSE server, exiting...")
                 return 1
@@ -667,9 +672,8 @@ def main():
                 claude_memory_dir=str(claude_memory_dir),
             )
 
-            logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_session.process.pid)
             wait_start = time.monotonic()
-            last_debug_log = 0.0
+            last_heartbeat = 0.0
             last_checkpoint_time = time.monotonic()
 
             while cli_session.process.poll() is None:
@@ -680,28 +684,22 @@ def main():
                     )
                     return 1
                 now = time.monotonic()
-                
+
                 # Checkpoint every 60 seconds
                 if now - last_checkpoint_time >= 60.0:
                     try:
-                        # Save checkpoint (game state + milestones)
                         requests.post(f"{server_url}/checkpoint", timeout=5)
-                        # Save agent history (LLM logs)
                         requests.post(f"{server_url}/save_agent_history", timeout=5)
-                        logger.info("[cli-debug] Saved checkpoint and agent history")
+                        logger.debug("Saved checkpoint and agent history")
                     except Exception as e:
                         logger.warning(f"Failed to save checkpoint: {e}")
                     last_checkpoint_time = now
 
-                if now - last_debug_log >= 15.0:
+                if now - last_heartbeat >= 15.0:
                     elapsed = int(now - wait_start)
-                    logger.info(
-                        "[cli-debug] main: still waiting for CLI agent to exit (pid=%s, elapsed=%ds)",
-                        cli_session.process.pid,
-                        elapsed,
-                    )
-                    last_debug_log = now
-                    
+                    logger.info("Agent running (pid=%s, elapsed=%ds)", cli_session.process.pid, elapsed)
+                    last_heartbeat = now
+
                     # Save intermediate metrics snapshot
                     try:
                         with open(snapshot_path, "w") as f:
