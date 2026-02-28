@@ -138,6 +138,8 @@ class RedMemoryReader:
         # Area transition detection (used by server/app.py step_environment)
         self._last_map_id: Optional[int] = None
         self._area_transition_detected: bool = False
+        # Dialog detection flag — set to False by --no-ocr to suppress VRAM dialog text
+        self._dialog_detection_enabled: bool = True
 
     # ------------------------------------------------------------------
     # Low-level read primitives
@@ -555,10 +557,14 @@ class RedMemoryReader:
             state["player"]["party"]    = party
 
             in_battle   = self.is_in_battle()
-            in_dialog   = self.is_in_dialog() if not in_battle else False
             game_state  = self.get_game_state()
 
-            dialog_text = self.read_screen_text() if in_dialog else None
+            if self._dialog_detection_enabled:
+                in_dialog   = self.is_in_dialog() if not in_battle else False
+                dialog_text = self.read_screen_text() if in_dialog else None
+            else:
+                in_dialog   = False
+                dialog_text = None
 
             badges = self.read_badges()
             state["game"].update({
