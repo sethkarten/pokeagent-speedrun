@@ -196,7 +196,7 @@ def navigate_to(
 # These endpoints remain available in server/app.py for VLM agents.
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+# @mcp.tool()
 def lookup_pokemon_info(topic: str, source: str = "bulbapedia") -> dict:
     """
     Look up information about Pokemon Emerald from trusted wiki sources.
@@ -217,7 +217,7 @@ def lookup_pokemon_info(topic: str, source: str = "bulbapedia") -> dict:
     return _post("/mcp/lookup_pokemon_info", {"topic": topic, "source": source}, timeout=_TIMEOUT_MEDIUM)
 
 
-@mcp.tool()
+# @mcp.tool()
 def list_wiki_sources() -> dict:
     """
     List available Pokemon wiki sources and what they're good for.
@@ -229,7 +229,7 @@ def list_wiki_sources() -> dict:
     return _post("/mcp/list_wiki_sources", timeout=_TIMEOUT_SHORT)
 
 
-@mcp.tool()
+# @mcp.tool()
 def get_walkthrough(part: int) -> dict:
     """
     Get the official Bulbapedia walkthrough for Pokemon Emerald.
@@ -273,7 +273,7 @@ def get_walkthrough(part: int) -> dict:
 # Objective / progress tools
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+# @mcp.tool()
 def complete_direct_objective(
     objective_id: str,
     completion_notes: str = "",
@@ -299,7 +299,7 @@ def complete_direct_objective(
     return _post("/mcp/complete_direct_objective", body)
 
 
-@mcp.tool()
+# @mcp.tool()
 def create_direct_objectives(
     objectives: List[Dict[str, Any]],
     reasoning: str = "",
@@ -332,7 +332,7 @@ def create_direct_objectives(
     return _post("/mcp/create_direct_objectives", body)
 
 
-@mcp.tool()
+# @mcp.tool()
 def get_progress_summary() -> dict:
     """
     Get comprehensive progress summary including milestones, completed objectives, and knowledge.
@@ -348,7 +348,7 @@ def get_progress_summary() -> dict:
     return _post("/mcp/get_progress_summary", timeout=_TIMEOUT_SHORT)
 
 
-@mcp.tool()
+# @mcp.tool()
 def reflect(situation: str = "Agent requested reflection") -> dict:
     """
     Return context data for self-reflection on current progress.
