@@ -8,12 +8,13 @@ logic lives here — this module is purely a transport adapter between the
 MCP protocol (used by Claude Code / Codex CLI / Gemini CLI) and the game server's
 REST API.
 
-Available tools (13 total):
-  Game:        get_game_state, press_buttons, navigate_to
-  Knowledge:   add_knowledge, search_knowledge, get_knowledge_summary
-  Wiki:        lookup_pokemon_info, list_wiki_sources, get_walkthrough
-  Objectives:  complete_direct_objective, create_direct_objectives, get_progress_summary
-  Reflection:  reflect
+TOOL RESTRICTION: For CLI agent experiments, only core game interaction tools
+are exposed. CLI agents are expected to implement their own internal reflection,
+memory, and planning systems. The objective system is not exposed as CLI agents
+use milestones for progress tracking.
+
+Available tools (3 total):
+  Game: get_game_state, press_buttons, navigate_to
 """
 
 import logging
@@ -38,7 +39,12 @@ logger = logging.getLogger(__name__)
 # Server configuration
 SERVER_URL = os.environ.get("POKEMON_SERVER_URL", "http://localhost:8000")
 
-mcp = FastMCP(name="pokemon-emerald")
+# MCP server port and host (for SSE transport -- note, the mcp-config may need to know we are using SSE transport)
+# Port/host are set at FastMCP init time, not at run() time
+_MCP_PORT = int(os.environ.get("MCP_PORT", "8001"))
+_MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")  # Bind to all interfaces for Docker access
+
+mcp = FastMCP(name="pokemon-emerald", host=_MCP_HOST, port=_MCP_PORT)
 
 _TIMEOUT_SHORT = 10   # seconds — lightweight reads
 _TIMEOUT_MEDIUM = 30  # seconds — actions/pathfinding
@@ -177,78 +183,17 @@ def navigate_to(
 
 
 # ---------------------------------------------------------------------------
-# Knowledge tools
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
-def add_knowledge(
-    category: str, title: str, content: str, location: str = "", coordinates: str = "", importance: int = 3
-) -> dict:
-    """
-    Store important information in your persistent knowledge base.
-    Use this to remember locations, NPCs, items, strategies, or any other useful information you discover.
-
-    Args:
-        category: Category of knowledge (location, npc, item, pokemon, strategy, custom)
-        title: Brief title for this knowledge
-        content: Detailed description or notes
-        location: Map name where this applies (optional)
-        coordinates: Coordinates like 'X:10,Y:20' (optional)
-        importance: Importance level 1-5 (5 = critical, 3 = normal, 1 = minor)
-
-    Returns:
-        Dictionary with success status and entry ID
-    """
-    return _post("/mcp/add_knowledge", {
-        "category": category,
-        "title": title,
-        "content": content,
-        "location": location,
-        "coordinates": coordinates,
-        "importance": importance,
-    })
-
-
-@mcp.tool()
-def search_knowledge(category: str = "all", query: str = "", location: str = "", min_importance: int = 1) -> dict:
-    """
-    Search your knowledge base for stored information.
-    Use this to recall what you've learned about locations, NPCs, items, or strategies.
-
-    Args:
-        category: Category to search (location, npc, item, pokemon, strategy, custom, all)
-        query: Text to search for in titles and content (optional)
-        location: Filter by map name (optional)
-        min_importance: Minimum importance level (1-5, default 1)
-
-    Returns:
-        Dictionary with success status, count, and search results
-    """
-    return _post("/mcp/search_knowledge", {
-        "category": category,
-        "query": query,
-        "location": location,
-        "min_importance": min_importance,
-    })
-
-
-@mcp.tool()
-def get_knowledge_summary(min_importance: int = 3) -> dict:
-    """
-    Get a summary of the most important things you've learned.
-    Shows your top discoveries and notes.
-
-    Args:
-        min_importance: Minimum importance level to include (1-5, default 3)
-
-    Returns:
-        Dictionary with success status and formatted summary
-    """
-    return _post("/mcp/get_knowledge_summary", {"min_importance": min_importance})
-
-
-# ---------------------------------------------------------------------------
-# Wiki / walkthrough tools
+# Removed tools for CLI agent experiments:
+# - Knowledge tools (add_knowledge, search_knowledge, get_knowledge_summary)
+#   CLI agents should implement their own internal memory systems
+# - Wiki tools (lookup_pokemon_info, list_wiki_sources, get_walkthrough)
+#   CLI agents can access web information through their native capabilities
+# - Objective tools (complete_direct_objective, create_direct_objectives, get_progress_summary)
+#   CLI agents use milestone-based tracking instead of objectives
+# - Reflection tools (reflect)
+#   CLI agents implement their own reflection mechanisms
+#
+# These endpoints remain available in server/app.py for VLM agents.
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
@@ -431,11 +376,22 @@ if __name__ == "__main__":
     logger.info("Pokemon MCP Server starting (thin proxy mode)...")
     logger.info(f"Proxying to game server at: {SERVER_URL}")
     logger.info("Server name: pokemon-emerald")
-    logger.info("Available tools (13):")
-    logger.info("  Game:       get_game_state, press_buttons, navigate_to")
-    logger.info("  Knowledge:  add_knowledge, search_knowledge, get_knowledge_summary")
-    logger.info("  Wiki:       lookup_pokemon_info, list_wiki_sources, get_walkthrough")
-    logger.info("  Objectives: complete_direct_objective, create_direct_objectives, get_progress_summary")
-    logger.info("  Reflection: reflect")
+    logger.info("Available tools (3 total, CLI agent minimal set):")
+    logger.info("  Game: get_game_state, press_buttons, navigate_to")
+    logger.info("")
+    logger.info("Note: Knowledge, Wiki, Objectives, and Reflection tools removed for CLI experiments.")
+    logger.info("      CLI agents implement their own internal memory and planning systems.")
 
-    mcp.run(transport="stdio")
+    # Check for SSE transport mode (used when running in containerized environment)
+    transport_mode = os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    
+    if transport_mode == "sse":
+        # SSE mode: run as HTTP server for remote MCP clients
+        # Port/host were configured in FastMCP() init above
+        logger.info(f"🌐 Starting SSE transport on {_MCP_HOST}:{_MCP_PORT}")
+        logger.info(f"   Remote clients can connect via: http://<host>:{_MCP_PORT}/sse")
+        mcp.run(transport="sse")
+    else:
+        # Stdio mode (default): for local subprocess spawning
+        logger.info("📡 Starting stdio transport (local subprocess mode)")
+        mcp.run(transport="stdio")
