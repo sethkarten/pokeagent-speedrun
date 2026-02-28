@@ -371,31 +371,33 @@ async def _playwright_async_loop(port, video_path, record_fps=15):
             print("📹 Playwright: /stream loaded, starting screen capture…")
 
             # --- set up OpenCV writer -------------------------------------------
-            # Prefer H.264 (avc1) — much sharper for text/UI and smaller files.
-            # Fall back to mp4v if avc1 is unavailable (Linux without VideoToolbox).
-            fourcc_h264 = cv2.VideoWriter_fourcc(*"avc1")
-            writer = cv2.VideoWriter(video_path, fourcc_h264, float(record_fps), (1920, 1080))
-            if not writer.isOpened():
-                print("⚠️ avc1/H.264 unavailable, falling back to mp4v for WebUI recording")
-                fourcc_mp4v = cv2.VideoWriter_fourcc(*"mp4v")
-                writer = cv2.VideoWriter(video_path, fourcc_mp4v, float(record_fps), (1920, 1080))
-            if not writer.isOpened():
-                raise RuntimeError(f"OpenCV could not open writer for {video_path}")
+            # Use imageio-ffmpeg for H.264 encoding (works on Linux without sudo).
+            # Falls back to OpenCV mp4v if imageio is not installed.
+            import imageio.v2 as iio2
+            writer = iio2.get_writer(
+                video_path,
+                fps=record_fps,
+                codec="h264",
+                quality=None,
+                ffmpeg_params=["-crf", "23", "-preset", "fast"],
+            )
+            print("📹 WebUI recording: using H.264 via imageio-ffmpeg")
 
             frame_interval = 1.0 / record_fps
             loop = asyncio.get_event_loop()
             record_start = loop.time()
             frames_written = 0
-            last_frame = None  # last decoded BGR frame, reused to fill skipped slots
+            last_frame = None  # last decoded RGB frame, reused to fill skipped slots
             try:
                 while playwright_recording:
                     png_bytes = await page.screenshot(type="png")
                     nparr = np.frombuffer(png_bytes, np.uint8)
-                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    if frame is not None:
-                        if frame.shape[:2] != (1080, 1920):
-                            frame = cv2.resize(frame, (1920, 1080))
-                        last_frame = frame
+                    # Decode as BGR then flip to RGB for imageio
+                    frame_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    if frame_bgr is not None:
+                        if frame_bgr.shape[:2] != (1080, 1920):
+                            frame_bgr = cv2.resize(frame_bgr, (1920, 1080))
+                        last_frame = frame_bgr[:, :, ::-1]  # BGR → RGB
 
                     # How many frames should have been written by now (wall-clock)?
                     elapsed_total = loop.time() - record_start
@@ -406,7 +408,7 @@ async def _playwright_async_loop(port, video_path, record_fps=15):
                     frames_to_write = max(1, target_frames - frames_written)
                     if last_frame is not None:
                         for _ in range(frames_to_write):
-                            writer.write(last_frame)
+                            writer.append_data(last_frame)
                         frames_written += frames_to_write
 
                     # Sleep only the remaining time in this frame slot (if any)
@@ -415,7 +417,7 @@ async def _playwright_async_loop(port, video_path, record_fps=15):
                     if sleep_time > 0:
                         await asyncio.sleep(sleep_time)
             finally:
-                writer.release()
+                writer.close()
                 playwright_video_path = video_path
                 print(f"📹 Playwright WebUI recording saved: {video_path}")
 
