@@ -222,6 +222,68 @@ def start_frame_server(port):
         return None
 
 
+def start_mcp_sse_server(server_url: str, mcp_port: int, project_root: str | None = None):
+    """Start the MCP server in SSE transport mode for containerized agents.
+    
+    Args:
+        server_url: Game server URL (for the MCP proxy to forward to)
+        mcp_port: Port for the MCP SSE server
+        project_root: Project root for PYTHONPATH
+        
+    Returns:
+        subprocess.Popen: MCP server process
+    """
+    try:
+        python_exe = sys.executable
+        mcp_cmd = [python_exe, "-m", "server.cli.pokemon_mcp_server"]
+        
+        # Set up environment for SSE transport
+        mcp_env = os.environ.copy()
+        mcp_env["MCP_TRANSPORT"] = "sse"
+        mcp_env["MCP_PORT"] = str(mcp_port)
+        mcp_env["POKEMON_SERVER_URL"] = server_url
+        if project_root:
+            mcp_env["PYTHONPATH"] = project_root
+        
+        mcp_process = subprocess.Popen(
+            mcp_cmd,
+            env=mcp_env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT  # Merge stderr into stdout for easier capture
+        )
+        print(f"🌐 MCP SSE server started with PID {mcp_process.pid} on port {mcp_port}")
+        print(f"   Remote clients can connect via: http://localhost:{mcp_port}/sse")
+        time.sleep(3)  # Give the server time to start (uvicorn needs a moment)
+        
+        # Verify MCP server started and is listening
+        import socket as _socket
+        poll_result = mcp_process.poll()
+        port_listening = False
+        try:
+            with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                port_listening = (s.connect_ex(('127.0.0.1', mcp_port)) == 0)
+        except Exception:
+            pass
+        
+        if not port_listening:
+            print(f"   ⚠️  MCP server port {mcp_port} is NOT listening!")
+            if poll_result is not None:
+                try:
+                    stdout_data = mcp_process.stdout.read(4096).decode("utf-8", errors="replace") if mcp_process.stdout else ""
+                    print(f"   MCP server exited with code {poll_result}:")
+                    print(f"   {stdout_data[:300]}")
+                except Exception:
+                    pass
+        else:
+            print(f"   ✓ MCP server listening on port {mcp_port}")
+        
+        return mcp_process
+    except Exception as e:
+        print(f"❌ Failed to start MCP SSE server: {e}")
+        return None
+
+
 def check_termination_condition(server_url: str, condition_type: str = "gym_badge_count", threshold: int = 1) -> dict:
     """Check if termination condition is met by polling the server.
     
@@ -277,6 +339,13 @@ def launch_cli_agent(
     log_file=None,
     metrics: CliSessionMetrics | None = None,
     snapshot_path=None,
+    containerized: bool = False,
+    session_number: int = 1,
+    resume_session_id: str | None = None,
+    thinking_effort: str | None = None,
+    mcp_sse_port: int | None = None,
+    run_id: str | None = None,
+    claude_memory_dir: str | None = None,
 ) -> CliSession:
     """Launch an external CLI agent session as subprocess using the given backend."""
     cmd, env, bootstrap, temp_mcp_config_path = backend.build_launch_cmd(
@@ -285,6 +354,13 @@ def launch_cli_agent(
         working_dir,
         dangerously_skip_permissions=dangerously_skip_permissions,
         project_root=project_root,
+        containerized=containerized,
+        session_number=session_number,
+        resume_session_id=resume_session_id,
+        thinking_effort=thinking_effort,
+        mcp_sse_port=mcp_sse_port,
+        run_id=run_id,
+        claude_memory_dir=claude_memory_dir,
     )
     if directive_path:
         print(f"📜 Loaded directive from: {directive_path}")
@@ -303,8 +379,8 @@ def launch_cli_agent(
         preexec_fn=os.setsid,
         bufsize=0,
     )
-    if bootstrap:
-        process.stdin.write(bootstrap.encode())
+    # Bootstrap is now passed as a command argument, not via stdin
+    # (Claude Code --print mode doesn't read from stdin)
     process.stdin.close()
 
     logger.info("[cli-debug] launch_cli_agent: subprocess spawned pid=%s, stdin fed+closed", process.pid)
@@ -381,6 +457,17 @@ def main():
     parser.add_argument("--run-name", type=str, default=None,
                        help="Optional name for the run directory")
     
+    # Containerization
+    parser.add_argument("--containerized", action="store_true", default=False,
+                       help="Run CLI agent in containerized environment (default: disabled for compatibility)")
+    parser.add_argument("--mcp-sse-port", type=int, default=None,
+                       help="Port for MCP SSE server when containerized (default: game_port + 2)")
+    
+    # Agent thinking effort
+    parser.add_argument("--agent-thinking-effort", type=str, 
+                       choices=["low", "medium", "high"],
+                       help="Thinking effort level for CLI agent (low/medium/high)")
+    
     args = parser.parse_args()
     
     print("=" * 60)
@@ -400,6 +487,7 @@ def main():
     llm_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.environ["LLM_SESSION_ID"] = llm_session_id
     os.environ["RUN_DATA_ID"] = run_id
+    os.environ["POKEAGENT_CLI_MODE"] = "1"
     print(f"📝 Session ID: {llm_session_id}")
     
     # Save metadata
@@ -464,6 +552,56 @@ def main():
         except Exception as e:
             print(f"⚠️ Could not verify server health: {e}")
         
+        # Resolve MCP SSE port: default to game_port + 2 (game_port + 1 is frame server)
+        if args.mcp_sse_port is None:
+            args.mcp_sse_port = args.port + 2
+        
+        # Start MCP SSE server if containerized mode is enabled
+        mcp_process = None
+        if args.containerized:
+            print(f"\n🐳 Containerized mode enabled")
+            print(f"   MCP SSE server will run on port {args.mcp_sse_port}")
+            project_root_for_mcp = str(Path(__file__).resolve().parent)
+            mcp_process = start_mcp_sse_server(server_url, args.mcp_sse_port, project_root_for_mcp)
+            if not mcp_process:
+                print("❌ Failed to start MCP SSE server, exiting...")
+                return 1
+        
+        # Prepare claude_memory directory for session persistence
+        from utils.run_data_manager import get_cache_path
+        claude_memory_dir = get_cache_path("claude_memory")
+        claude_memory_dir.mkdir(parents=True, exist_ok=True)
+        
+        # For containerized mode: seed with host's Claude Code subscription auth
+        if args.containerized:
+            host_claude_dir = Path.home() / ".claude"
+            host_claude_json = Path.home() / ".claude.json"  # Config lives in home directory
+            if host_claude_dir.exists() or host_claude_json.exists():
+                import shutil
+                # Copy auth files (not session history) from host to container mount
+                # Note: .claude.json config is in home dir, .credentials.json is in .claude/ subdir
+                auth_files = [
+                    (host_claude_dir / "settings.json", "settings.json"),
+                    (host_claude_dir / ".credentials.json", ".credentials.json"),  # Credentials in .claude/ subdir
+                    (host_claude_json, ".claude.json"),  # Config from home directory
+                ]
+                seeded_any = False
+                for src, dst_name in auth_files:
+                    if src.exists():
+                        dst = claude_memory_dir / dst_name
+                        if not dst.exists():  # Only seed on first run
+                            shutil.copy2(src, dst)
+                            print(f"   ✓ Seeded {src.name} -> {dst_name}")
+                            seeded_any = True
+                if not seeded_any:
+                    print("⚠️  No Claude auth files found")
+                    print("   Run 'claude auth login' first, then retry.")
+            else:
+                print("⚠️  Host ~/.claude/ not found. Run 'claude auth login' first.")
+                print("   Container will not be able to authenticate.")
+        
+        print(f"\n💾 Claude memory directory: {claude_memory_dir}")
+        
         # Start termination monitor thread (flag-only; does not kill process)
         print(f"\n Starting termination monitor...")
         print(f"   Condition: {args.termination_condition} >= {args.termination_threshold}")
@@ -484,6 +622,7 @@ def main():
         cli_session = None
         cli_log_file = None
         iteration = 0
+        last_session_id: str | None = None  # track for --resume across iterations
         backend = get_backend(args.cli_type)
 
         # CLI agent cwd = run's agent_scratch_space so generated files stay per-run
@@ -519,6 +658,13 @@ def main():
                 log_file=cli_log_file,
                 metrics=session_metrics,
                 snapshot_path=snapshot_path,
+                containerized=args.containerized,
+                session_number=iteration,
+                resume_session_id=last_session_id,
+                thinking_effort=args.agent_thinking_effort,
+                mcp_sse_port=args.mcp_sse_port if args.containerized else None,
+                run_id=run_id,
+                claude_memory_dir=str(claude_memory_dir),
             )
 
             logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_session.process.pid)
@@ -568,14 +714,19 @@ def main():
             _cleanup_cli_session(cli_session, cli_log_file)
             cli_log_file = None
 
+            # Persist session_id for --resume on next iteration
+            if session_metrics.session_id:
+                last_session_id = session_metrics.session_id
+
             logger.info(
-                "Session #%d metrics: cost=$%.4f tokens=%d/%d turns=%d tools=%d",
+                "Session #%d metrics: cost=$%.4f tokens=%d/%d turns=%d tools=%d session_id=%s",
                 iteration,
                 session_metrics.total_cost_usd,
                 session_metrics.input_tokens,
                 session_metrics.output_tokens,
                 session_metrics.num_turns,
                 session_metrics.tool_use_count,
+                last_session_id or "none",
             )
             log_session_to_llm_logger(session_metrics, iteration, backend.name)
 
@@ -625,6 +776,15 @@ def main():
                 frame_server_process.wait(timeout=2)
             except:
                 frame_server_process.kill()
+        
+        # Clean up MCP SSE server (if containerized mode was used)
+        if 'mcp_process' in locals() and mcp_process:
+            print("🌐 Stopping MCP SSE server...")
+            mcp_process.terminate()
+            try:
+                mcp_process.wait(timeout=2)
+            except:
+                mcp_process.kill()
         
         print("👋 Goodbye!")
 
