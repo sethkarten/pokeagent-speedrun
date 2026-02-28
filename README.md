@@ -115,7 +115,7 @@ pokeagent-speedrun/
 │   └── architecture/
 │       ├── client_server/communication.md
 │       ├── autonomous_agent/vlm_agents.md
-│       ├── cli_agents/scaffolding.md
+│       ├── cli_agents/external_mcp_agents.md
 │       ├── data_persistence/persistence.md
 │       ├── metrics/tracking.md
 │       └── pokemon_infrastructure/emerald_data.md
@@ -210,6 +210,33 @@ python run.py --load-checkpoint
 
 ```bash
 python run_cli.py --cli-type claude --directive path/to/directive.txt
+```
+
+### Containerized CLI Agent (Recommended)
+
+For security and isolation, it is recommended to run the Claude Code agent in a Docker container. This prevents the agent from modifying files outside the game workspace or accessing your local network.
+
+**Prerequisites:**
+1. **Docker**: Ensure Docker Desktop or Docker Engine is installed and running.
+2. **Claude Code CLI**: Install the CLI tool on your host machine.
+   ```bash
+   npm install -g @anthropic-ai/claude-code
+   ```
+3. **Authentication**: Authenticate with Anthropic on your host machine. The container will mount these credentials.
+   ```bash
+   claude auth login
+   ```
+
+**1. Build the Container Image**
+You only need to do this once (or when dependencies change).
+```bash
+docker build -f .devcontainer/Dockerfile -t claude-agent-devcontainer .
+```
+
+**2. Run the Agent**
+Run the orchestrator with the `--containerized` flag to isolate the cli agent instance and prevent it from reading the codebase/modifying files it should not have access to.
+```bash
+python run_cli.py --cli-type claude --containerized --directive agent/prompts/cli_directives/pokemon_directive.md
 ```
 
 **Debug controls (with display):** M = state overlay, Shift+M = map, S = screenshot, Tab = cycle mode, Space = one agent step, 1/2 = save/load state, arrows/WASD = move, Z/X = A/B.
