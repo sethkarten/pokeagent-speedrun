@@ -57,6 +57,22 @@ class CliAgentBackend(ABC):
         """Backend identifier (e.g. 'claude', 'codex')."""
         pass
 
+    @property
+    def agent_memory_subdir(self) -> str:
+        """Cache subdir for agent memory (e.g. 'claude_memory'). Override for other backends."""
+        return "claude_memory"
+
+    @property
+    def container_image(self) -> str:
+        """Docker image name for containerized runs. Override for other backends."""
+        return "claude-agent-devcontainer"
+
+    @property
+    def devcontainer_build_context(self) -> str:
+        """Path to devcontainer build context (Dockerfile dir), relative to project root.
+        Used for docker build -f {context}/Dockerfile {context}. Override for other backends."""
+        return ".devcontainer/claude-agent"
+
     @abstractmethod
     def build_launch_cmd(
         self,
@@ -89,6 +105,16 @@ class CliAgentBackend(ABC):
         snapshot_path: Path | None = None,
     ) -> None:
         """Process one stream event (e.g. system, assistant, user, result). Update metrics and optionally POST thinking to server."""
+        pass
+
+    def is_auth_fatal_error(self, text: str) -> bool:
+        """Return True if text indicates a fatal auth error (e.g. expired OAuth token).
+        Override in subclasses for backend-specific detection. Default: False."""
+        return False
+
+    def seed_agent_auth(self, agent_memory_dir: Path) -> None:
+        """Seed container agent memory with host auth files. Override in subclasses.
+        Default: no-op (backends that don't need auth seeding do nothing)."""
         pass
 
     def run_stream_reader(
@@ -130,6 +156,25 @@ class CliAgentBackend(ABC):
 class ClaudeCodeBackend(CliAgentBackend):
     """Backend for Anthropic Claude Code CLI (--print --output-format stream-json)."""
 
+    # Container paths (Codex/Gemini backends would use their own, e.g. /home/codex-agent/.codex)
+    WORKSPACE_PATH = "/workspace"
+    AGENT_MEMORY_PATH = "/home/claude-agent/.claude"
+
+    @property
+    def agent_memory_subdir(self) -> str:
+        return "claude_memory"
+
+    @property
+    def container_image(self) -> str:
+        return "claude-agent-devcontainer"
+
+    @property
+    def devcontainer_build_context(self) -> str:
+        return ".devcontainer/claude-agent"
+
+    DIRECTIVE_FILENAME = ".agent_directive.txt"
+    MCP_CONFIG_FILENAME = ".mcp_config.json"
+
     def __init__(self) -> None:
         super().__init__()
         self._last_event_time: float | None = None  # for thinking duration delta
@@ -137,6 +182,124 @@ class ClaudeCodeBackend(CliAgentBackend):
     @property
     def name(self) -> str:
         return "claude"
+
+    def is_auth_fatal_error(self, text: str) -> bool:
+        """Detect Claude Code OAuth token expiration. See anthropics/claude-code#18225."""
+        return (
+            "OAuth token has expired" in text
+            or "authentication_error" in text
+            or "401" in text
+        )
+
+    def seed_agent_auth(self, agent_memory_dir: Path) -> None:
+        """Seed container agent memory with host Claude auth files."""
+        import shutil
+
+        host_claude_dir = Path.home() / ".claude"
+        host_claude_json = Path.home() / ".claude.json"
+        if not host_claude_dir.exists() and not host_claude_json.exists():
+            print("⚠️  Host ~/.claude/ not found. Run 'claude auth login' first.")
+            print("   Container will not be able to authenticate.")
+            return
+
+        auth_files = [
+            (host_claude_dir / "settings.json", "settings.json"),
+            (host_claude_dir / ".credentials.json", ".credentials.json"),
+            (host_claude_json, ".claude.json"),
+        ]
+        seeded_any = False
+        for src, dst_name in auth_files:
+            if src.exists():
+                dst = agent_memory_dir / dst_name
+                if not dst.exists():
+                    shutil.copy2(src, dst)
+                    print(f"   ✓ Seeded {src.name} -> {dst_name}")
+                    seeded_any = True
+        if not seeded_any:
+            print("⚠️  No Claude auth files found")
+            print("   Run 'claude auth login' first, then retry.")
+
+    def _build_bootstrap_content(self, directive_path: str, server_url: str) -> str:
+        """Build bootstrap prompt string from directive file and server URL."""
+        directive_content = ""
+        if directive_path and os.path.exists(directive_path):
+            with open(directive_path, "r") as f:
+                directive_content = f.read()
+        if directive_content:
+            return (
+                f"{directive_content}\n\n"
+                "Runtime context:\n"
+                f"- Pokemon server URL: {server_url}\n"
+                "- You are running in a long-lived interactive session.\n"
+                "- Act autonomously and continuously, using MCP tools directly as needed.\n"
+                "- Poll game state on your own via MCP tools; do not wait for additional operator prompts.\n"
+                "- Continue until externally terminated by the orchestrator when completion condition is met.\n"
+            )
+        return "Start the Pokemon Emerald agent session."
+
+    def _build_mcp_config_sse(self, mcp_sse_port: int) -> dict:
+        """Build MCP config dict for SSE (containerized) mode. type=sse is REQUIRED."""
+        return {
+            "mcpServers": {
+                "pokemon-emerald": {
+                    "type": "sse",
+                    "url": f"http://host.docker.internal:{mcp_sse_port}/sse",
+                }
+            }
+        }
+
+    def _build_mcp_config_stdio(
+        self, server_url: str, pythonpath: str
+    ) -> dict:
+        """Build MCP config dict for stdio (local) mode."""
+        return {
+            "mcpServers": {
+                "pokemon-emerald": {
+                    "command": sys.executable,
+                    "args": ["-m", "server.cli.pokemon_mcp_server"],
+                    "env": {
+                        "POKEMON_SERVER_URL": server_url,
+                        "PYTHONPATH": pythonpath,
+                    },
+                }
+            }
+        }
+
+    def _build_cli_base_args(
+        self,
+        *,
+        dangerously_skip_permissions: bool = True,
+        resume_session_id: str | None = None,
+        thinking_effort: str | None = None,
+    ) -> list[str]:
+        """Build base CLI args (output format, verbose, disallowed tools, permissions, resume, thinking)."""
+        args = [
+            "--output-format", "stream-json",
+            "--verbose",
+            "--disallowedTools", "AskUserQuestion,EnterPlanMode,ExitPlanMode",
+        ]
+        if dangerously_skip_permissions:
+            args.append("--dangerously-skip-permissions")
+        if resume_session_id:
+            args.extend(["--resume", resume_session_id])
+        if thinking_effort and thinking_effort in ("low", "medium", "high"):
+            args.extend(["--thinking-budget", thinking_effort])
+        return args
+
+    def _write_workspace_files(
+        self,
+        working_dir: Path,
+        bootstrap: str,
+        mcp_config: dict,
+    ) -> Path:
+        """Write .agent_directive.txt and .mcp_config.json to workspace, set MCP config read-only."""
+        bootstrap_file = working_dir / self.DIRECTIVE_FILENAME
+        bootstrap_file.write_text(bootstrap)
+
+        mcp_config_path = working_dir / self.MCP_CONFIG_FILENAME
+        mcp_config_path.write_text(json.dumps(mcp_config, indent=2))
+        mcp_config_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        return mcp_config_path
 
     def build_launch_cmd(
         self,
@@ -152,72 +315,40 @@ class ClaudeCodeBackend(CliAgentBackend):
         thinking_effort: str | None = None,
         mcp_sse_port: int | None = None,
         run_id: str | None = None,
-        claude_memory_dir: str | None = None,
+        agent_memory_dir: str | None = None,
     ) -> tuple[list[str], dict[str, str], str, str | None]:
         env = os.environ.copy()
         env["POKEMON_MCP_SERVER_URL"] = server_url
         env["POKEMON_SERVER_URL"] = server_url
 
         pythonpath = project_root if project_root else os.getcwd()
-
-        directive_content = ""
-        if directive_path and os.path.exists(directive_path):
-            with open(directive_path, "r") as f:
-                directive_content = f.read()
-        bootstrap = (
-            f"{directive_content}\n\n"
-            "Runtime context:\n"
-            f"- Pokemon server URL: {server_url}\n"
-            "- You are running in a long-lived interactive session.\n"
-            "- Act autonomously and continuously, using MCP tools directly as needed.\n"
-            "- Poll game state on your own via MCP tools; do not wait for additional operator prompts.\n"
-            "- Continue until externally terminated by the orchestrator when completion condition is met.\n"
-        ) if directive_content else "Start the Pokemon Emerald agent session."
+        bootstrap = self._build_bootstrap_content(directive_path, server_url)
+        base_args = self._build_cli_base_args(
+            dangerously_skip_permissions=dangerously_skip_permissions,
+            resume_session_id=resume_session_id,
+            thinking_effort=thinking_effort,
+        )
 
         if containerized:
-            if not run_id or not claude_memory_dir:
-                raise ValueError("containerized mode requires run_id and claude_memory_dir")
+            if not run_id or not agent_memory_dir:
+                raise ValueError("containerized mode requires run_id and agent_memory_dir")
             if not mcp_sse_port:
                 raise ValueError("containerized mode requires mcp_sse_port")
 
-            claude_memory_path = Path(claude_memory_dir).resolve()
+            agent_memory_path = Path(agent_memory_dir).resolve()
             working_dir_abs = Path(working_dir).resolve()
 
-            # Write bootstrap prompt to a file inside the workspace.
-            # @file syntax avoids shell mangling of multi-line content passed as a CLI argument.
-            bootstrap_file = working_dir_abs / ".agent_directive.txt"
-            with open(bootstrap_file, "w") as f:
-                f.write(bootstrap)
+            mcp_config = self._build_mcp_config_sse(mcp_sse_port)
+            mcp_config_path = self._write_workspace_files(
+                working_dir_abs, bootstrap, mcp_config
+            )
 
-            # Write MCP config into the workspace and lock it read-only so the agent
-            # cannot tamper with it mid-session (connection is established at startup anyway).
-            # "type": "sse" is REQUIRED — Claude Code silently exits without output if absent.
-            mcp_config = {
-                "mcpServers": {
-                    "pokemon-emerald": {
-                        "type": "sse",
-                        "url": f"http://host.docker.internal:{mcp_sse_port}/sse",
-                    }
-                }
-            }
-            mcp_config_path = working_dir_abs / ".mcp_config.json"
-            mcp_config_path.write_text(json.dumps(mcp_config, indent=2))
-            # CRITICAL: Read-only for all: prevents agent from overwriting the file via Edit/Bash tools
-            mcp_config_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-
-            claude_cmd = [
-                "claude", "--print", "@/workspace/.agent_directive.txt",
-                "--output-format", "stream-json", "--verbose",
-                # Block tools that hang waiting for user input in headless/print mode
-                "--disallowedTools", "AskUserQuestion,EnterPlanMode,ExitPlanMode",
+            # @file syntax avoids shell mangling of multi-line content
+            directive_arg = f"@{self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME}"
+            mcp_config_arg = f"{self.WORKSPACE_PATH}/{self.MCP_CONFIG_FILENAME}"
+            claude_cmd = ["claude", "--print", directive_arg] + base_args + [
+                "--mcp-config", mcp_config_arg,
             ]
-            if dangerously_skip_permissions:
-                claude_cmd.append("--dangerously-skip-permissions")
-            if resume_session_id:
-                claude_cmd.extend(["--resume", resume_session_id])
-            if thinking_effort and thinking_effort in ("low", "medium", "high"):
-                claude_cmd.extend(["--thinking-budget", thinking_effort])
-            claude_cmd.extend(["--mcp-config", "/workspace/.mcp_config.json"])
 
             game_port = server_url.rstrip("/").split(":")[-1]
             docker_cmd = [
@@ -226,53 +357,89 @@ class ClaudeCodeBackend(CliAgentBackend):
                 "--cap-add=NET_ADMIN",
                 "--security-opt=seccomp=unconfined",
                 "--network=bridge",
-                # Make host.docker.internal resolve to the host gateway on Linux
                 "--add-host=host.docker.internal:host-gateway",
-                "-v", f"{claude_memory_path}:/home/claude-agent/.claude",
-                "-v", f"{working_dir_abs}:/workspace",
+                "-v", f"{agent_memory_path}:{self.AGENT_MEMORY_PATH}",
+                "-v", f"{working_dir_abs}:{self.WORKSPACE_PATH}",
                 "-e", f"MCP_PORT={mcp_sse_port}",
                 "-e", f"GAME_SERVER_PORT={game_port}",
                 "-e", f"RUN_DATA_ID={run_id}",
-                "claude-agent-devcontainer",
+                self.container_image,
             ] + claude_cmd
 
-            return docker_cmd, env, None, str(mcp_config_path)
+            return docker_cmd, env, bootstrap, str(mcp_config_path)
 
         else:
-            # Local (non-containerized) mode: spawn MCP server as a subprocess
-            mcp_config = {
-                "mcpServers": {
-                    "pokemon-emerald": {
-                        "command": sys.executable,
-                        "args": ["-m", "server.cli.pokemon_mcp_server"],
-                        "env": {
-                            "POKEMON_SERVER_URL": server_url,
-                            "PYTHONPATH": pythonpath,
-                        },
-                    }
-                }
-            }
+            mcp_config = self._build_mcp_config_stdio(server_url, pythonpath)
             temp_file = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
             json.dump(mcp_config, temp_file, indent=2)
             temp_file.flush()
             temp_file.close()
             temp_mcp_config_path = temp_file.name
 
-            claude_cmd = [
-                "claude", "--print", bootstrap,
-                "--output-format", "stream-json", "--verbose",
-                # Block tools that hang waiting for user input in headless/print mode
-                "--disallowedTools", "AskUserQuestion,EnterPlanMode,ExitPlanMode",
+            claude_cmd = ["claude", "--print", bootstrap] + base_args + [
+                "--mcp-config", temp_mcp_config_path,
             ]
-            if dangerously_skip_permissions:
-                claude_cmd.append("--dangerously-skip-permissions")
-            if resume_session_id:
-                claude_cmd.extend(["--resume", resume_session_id])
-            if thinking_effort and thinking_effort in ("low", "medium", "high"):
-                claude_cmd.extend(["--thinking-budget", thinking_effort])
-            claude_cmd.extend(["--mcp-config", temp_mcp_config_path])
+            return claude_cmd, env, bootstrap, temp_mcp_config_path
 
-            return claude_cmd, env, None, temp_mcp_config_path
+    def _handle_assistant_text_block(self, block: dict, now: float) -> None:
+        """Handle assistant text block: OAuth check + logging. Raises SystemExit(1) on auth error."""
+        text = block.get("text", "").strip()
+        if not text:
+            return
+        duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+        self._last_event_time = now
+        preview = (text[:200] + "...") if len(text) > 200 else text
+        logger.info("[cli:text] %s", preview.replace("\n", " "))
+        if self.is_auth_fatal_error(text):
+            logger.error(
+                "❌ AUTH ERROR: OAuth token expired in container. "
+                "Run 'claude auth login' on the host to refresh credentials, then retry."
+            )
+            raise SystemExit(1)
+
+    def _handle_assistant_tool_use_block(
+        self,
+        block: dict,
+        now: float,
+        metrics: CliSessionMetrics | None,
+        server_url: str | None,
+    ) -> None:
+        """Handle assistant tool_use block: metrics, _post_thinking, logging."""
+        duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+        self._last_event_time = now
+        if metrics:
+            metrics.tool_use_count += 1
+        name = block.get("name", "?")
+        inp = block.get("input") or {}
+        if isinstance(inp, str):
+            try:
+                inp = json.loads(inp) if inp else {}
+            except json.JSONDecodeError:
+                inp = {}
+        reasoning = inp.get("reasoning") or inp.get("reason") or ""
+        short_name = name.split("__")[-1] if "__" in name else name
+        thinking_text = f"[{short_name}] {reasoning}".strip() or f"[{short_name}]"
+        if server_url:
+            self._post_thinking(server_url, thinking_text, duration_sec, interaction_type=self.name)
+        inp_preview = json.dumps(inp)
+        if len(inp_preview) > 120:
+            inp_preview = inp_preview[:120] + "..."
+        logger.info("[cli:tool_use] %s %s", name, inp_preview)
+
+    def _handle_user_tool_result_block(self, block: dict) -> None:
+        """Handle user tool_result block: logging."""
+        content = block.get("content", "")
+        if isinstance(content, str):
+            preview = (content[:80] + "...") if len(content) > 80 else content
+        elif isinstance(content, list):
+            preview = f"[{len(content)} blocks]"
+        else:
+            preview = str(content)[:80]
+        logger.info(
+            "[cli:tool_result] ...%s -> %s",
+            block.get("tool_use_id", "?")[-8:],
+            preview.replace("\n", " "),
+        )
 
     def handle_stream_event(
         self,
@@ -282,8 +449,8 @@ class ClaudeCodeBackend(CliAgentBackend):
         snapshot_path: Path | None = None,
     ) -> None:
         etype = event.get("type", "")
-
         now = time.time()
+
         if etype == "system":
             self._last_event_time = now
             if metrics:
@@ -301,56 +468,15 @@ class ClaudeCodeBackend(CliAgentBackend):
             for block in event.get("message", {}).get("content", []):
                 btype = block.get("type")
                 if btype == "text":
-                    text = block.get("text", "").strip()
-                    if text:
-                        duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
-                        self._last_event_time = now
-                        preview = (text[:200] + "...") if len(text) > 200 else text
-                        logger.info("[cli:text] %s", preview.replace("\n", " "))
-                        # Detect expired OAuth token - abort run rather than looping forever
-                        if "OAuth token has expired" in text or "authentication_error" in text:
-                            logger.error("❌ AUTH ERROR: OAuth token expired in container. Run 'claude' on the host to refresh credentials, then retry.")
-                            raise SystemExit(1)
-                        # UI uses tool_use format only; text is not posted as thinking
+                    self._handle_assistant_text_block(block, now)
                 elif btype == "tool_use":
-                    duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
-                    self._last_event_time = now
-                    if metrics:
-                        metrics.tool_use_count += 1
-                    name = block.get("name", "?")
-                    inp = block.get("input") or {}
-                    if isinstance(inp, str):
-                        try:
-                            inp = json.loads(inp) if inp else {}
-                        except json.JSONDecodeError:
-                            inp = {}
-                    reasoning = inp.get("reasoning") or inp.get("reason") or ""
-                    # Short name for UI: e.g. mcp__pokemon-emerald__navigate_to -> navigate_to
-                    short_name = name.split("__")[-1] if "__" in name else name
-                    thinking_text = f"[{short_name}] {reasoning}".strip() or f"[{short_name}]"
-                    if server_url:
-                        self._post_thinking(server_url, thinking_text, duration_sec, interaction_type="ClaudeCodeBackend")
-                    inp_preview = json.dumps(inp)
-                    if len(inp_preview) > 120:
-                        inp_preview = inp_preview[:120] + "..."
-                    logger.info("[cli:tool_use] %s %s", name, inp_preview)
+                    self._handle_assistant_tool_use_block(block, now, metrics, server_url)
 
         elif etype == "user":
             self._last_event_time = now
             for block in event.get("message", {}).get("content", []):
                 if block.get("type") == "tool_result":
-                    content = block.get("content", "")
-                    if isinstance(content, str):
-                        preview = (content[:80] + "...") if len(content) > 80 else content
-                    elif isinstance(content, list):
-                        preview = f"[{len(content)} blocks]"
-                    else:
-                        preview = str(content)[:80]
-                    logger.info(
-                        "[cli:tool_result] ...%s -> %s",
-                        block.get("tool_use_id", "?")[-8:],
-                        preview.replace("\n", " "),
-                    )
+                    self._handle_user_tool_result_block(block)
 
         elif etype == "result":
             if metrics:

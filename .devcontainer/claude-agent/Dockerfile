@@ -34,7 +34,7 @@ RUN if getent group $USER_GID > /dev/null 2>&1; then \
     echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME && \
     chmod 0440 /etc/sudoers.d/$USERNAME
 
-# Install Claude Code CLI globally via npm (same as Anthropic's reference devcontainer: 
+# Install Claude Code CLI globally via npm (same as Anthropic's reference devcontainer:
 # @see https://github.com/anthropics/claude-code/tree/main/.devcontainer)
 # Auth: Host's ~/.claude/ subscription credentials are mounted at runtime
 RUN npm install -g @anthropic-ai/claude-code

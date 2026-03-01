@@ -22,8 +22,9 @@ Acts as the working directory for the active agent run. It stores the immediate 
   - `cumulative_metrics.json`: Complete metrics history (tokens, cost, actions, all steps). **Single source of truth** for metrics; loaded separately from checkpoint.
   - `checkpoint_milestones.json`: Tracker for game milestones.
   - `checkpoint_maps.json`: Discovered map data.
-  - `knowledge_base.json`: Agent's accumulated knowledge.
+  - `knowledge_base.json`: Agent's accumulated knowledge (not used by CLI agents).
   - `frame_cache.json`: Recent frame data.
+  - **CLI containerized runs only**: `claude_memory/` (agent memory), `workspace/` (agent workspace; orchestrator writes `.agent_directive.txt` and `.mcp_config.json` here on every launch; `.mcp_config.json` is overwritten and set read-only).
 
 ### Management
 - **Access**: Managed via `utils/run_data_manager.py` (e.g. `get_cache_directory()`, `get_checkpoint_llm_path()`).
