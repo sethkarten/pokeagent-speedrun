@@ -37,6 +37,7 @@ class CliSessionMetrics:
     is_error: bool = False
     error: str = ""
     tool_use_count: int = 0
+    auth_fatal_error: bool = False
 
 
 @dataclass
@@ -128,6 +129,16 @@ class CliAgentBackend(ABC):
     ) -> None:
         """Read stdout line-by-line (JSONL), tee to log_file, parse and handle events."""
         logger.debug("stream reader started: %s", self.name)
+        # #region agent log
+        try:
+            import time as _time
+            _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
+            _log.write(json.dumps({"sessionId":"3c22ce","location":"cli_agent_backends.py:run_stream_reader","message":"stream reader started","data":{},"timestamp":int(_time.time()*1000)}) + "\n")
+            _log.close()
+        except Exception:
+            pass
+        # #endregion
+        _first_line_logged = False
         try:
             buffered = io.BufferedReader(stdout_pipe)
             for raw_line in buffered:
@@ -137,6 +148,17 @@ class CliAgentBackend(ABC):
                 if log_file:
                     log_file.write(line)
                     log_file.flush()
+                # #region agent log
+                if not _first_line_logged:
+                    _first_line_logged = True
+                    try:
+                        import time as _time
+                        _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
+                        _log.write(json.dumps({"sessionId":"3c22ce","location":"cli_agent_backends.py:run_stream_reader","message":"first line received","data":{"preview":line[:120]},"timestamp":int(_time.time()*1000)}) + "\n")
+                        _log.close()
+                    except Exception:
+                        pass
+                # #endregion
                 stripped = line.strip()
                 if not stripped:
                     continue
@@ -184,11 +206,13 @@ class ClaudeCodeBackend(CliAgentBackend):
         return "claude"
 
     def is_auth_fatal_error(self, text: str) -> bool:
-        """Detect Claude Code OAuth token expiration. See anthropics/claude-code#18225."""
+        """Detect Claude Code OAuth token expiration or not logged in. See anthropics/claude-code#18225."""
         return (
             "OAuth token has expired" in text
             or "authentication_error" in text
             or "401" in text
+            or "Not logged in" in text
+            or "Please run /login" in text
         )
 
     def seed_agent_auth(self, agent_memory_dir: Path) -> None:
@@ -238,12 +262,14 @@ class ClaudeCodeBackend(CliAgentBackend):
         return "Start the Pokemon Emerald agent session."
 
     def _build_mcp_config_sse(self, mcp_sse_port: int) -> dict:
-        """Build MCP config dict for SSE (containerized) mode. type=sse is REQUIRED."""
+        """Build MCP config dict for SSE (containerized) mode. type=sse is REQUIRED.
+        Uses host.docker.internal to reach the MCP server on the host (bridge network)."""
+        host = "host.docker.internal"
         return {
             "mcpServers": {
                 "pokemon-emerald": {
                     "type": "sse",
-                    "url": f"http://host.docker.internal:{mcp_sse_port}/sse",
+                    "url": f"http://{host}:{mcp_sse_port}/sse",
                 }
             }
         }
@@ -293,12 +319,20 @@ class ClaudeCodeBackend(CliAgentBackend):
         mcp_config: dict,
     ) -> Path:
         """Write .agent_directive.txt and .mcp_config.json to workspace, set MCP config read-only."""
+        working_dir = Path(working_dir).resolve()
+        working_dir.mkdir(parents=True, exist_ok=True)
         bootstrap_file = working_dir / self.DIRECTIVE_FILENAME
         bootstrap_file.write_text(bootstrap)
 
         mcp_config_path = working_dir / self.MCP_CONFIG_FILENAME
-        mcp_config_path.write_text(json.dumps(mcp_config, indent=2))
+        mcp_json = json.dumps(mcp_config, indent=2)
+        with open(mcp_config_path, "w") as f:
+            f.write(mcp_json)
+            f.flush()
+            os.fsync(f.fileno())
         mcp_config_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        if not mcp_config_path.exists():
+            raise RuntimeError(f"MCP config write failed: {mcp_config_path}")
         return mcp_config_path
 
     def build_launch_cmd(
@@ -339,11 +373,11 @@ class ClaudeCodeBackend(CliAgentBackend):
             working_dir_abs = Path(working_dir).resolve()
 
             mcp_config = self._build_mcp_config_sse(mcp_sse_port)
-            mcp_config_path = self._write_workspace_files(
-                working_dir_abs, bootstrap, mcp_config
-            )
+            # Write both files into the workspace directory — the container mounts this as /workspace.
+            # @file avoids shell mangling; .mcp_config.json is read-only to prevent agent tampering.
+            # "type": "sse" is REQUIRED — Claude Code silently exits without output if absent.
+            mcp_config_path = self._write_workspace_files(working_dir_abs, bootstrap, mcp_config)
 
-            # @file syntax avoids shell mangling of multi-line content
             directive_arg = f"@{self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME}"
             mcp_config_arg = f"{self.WORKSPACE_PATH}/{self.MCP_CONFIG_FILENAME}"
             claude_cmd = ["claude", "--print", directive_arg] + base_args + [
@@ -351,8 +385,12 @@ class ClaudeCodeBackend(CliAgentBackend):
             ]
 
             game_port = server_url.rstrip("/").split(":")[-1]
+            # -t allocates a pseudo-TTY in the container so Claude Code sees a TTY on stdout.
+            # Without -t, Claude Code 2.1+ silently exits in stream-json mode when stdout is a pipe.
+            # CLAUDE_CONFIG_DIR is required so OAuth credentials load from the mounted .claude dir.
+            # Bridge network with host.docker.internal to reach the MCP SSE server on the host.
             docker_cmd = [
-                "docker", "run", "--rm",
+                "docker", "run", "--rm", "-t",
                 "--name", f"claude-agent-{run_id}",
                 "--cap-add=NET_ADMIN",
                 "--security-opt=seccomp=unconfined",
@@ -363,10 +401,21 @@ class ClaudeCodeBackend(CliAgentBackend):
                 "-e", f"MCP_PORT={mcp_sse_port}",
                 "-e", f"GAME_SERVER_PORT={game_port}",
                 "-e", f"RUN_DATA_ID={run_id}",
+                "-e", f"CLAUDE_CONFIG_DIR={self.AGENT_MEMORY_PATH}",
                 self.container_image,
             ] + claude_cmd
 
-            return docker_cmd, env, bootstrap, str(mcp_config_path)
+            # #region agent log
+            try:
+                import time as _time
+                _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
+                _log.write(json.dumps({"sessionId":"3c22ce","location":"cli_agent_backends.py:build_launch_cmd","message":"docker cmd built","data":{"network":"bridge","has_t_flag":"-t" in docker_cmd,"mcp_url_host":"host.docker.internal","mcp_config_exists":mcp_config_path.exists()},"timestamp":int(_time.time()*1000)}) + "\n")
+                _log.close()
+            except Exception:
+                pass
+            # #endregion
+
+            return docker_cmd, env, bootstrap, None
 
         else:
             mcp_config = self._build_mcp_config_stdio(server_url, pythonpath)
@@ -381,7 +430,7 @@ class ClaudeCodeBackend(CliAgentBackend):
             ]
             return claude_cmd, env, bootstrap, temp_mcp_config_path
 
-    def _handle_assistant_text_block(self, block: dict, now: float) -> None:
+    def _handle_assistant_text_block(self, block: dict, now: float, metrics: CliSessionMetrics | None = None) -> None:
         """Handle assistant text block: OAuth check + logging. Raises SystemExit(1) on auth error."""
         text = block.get("text", "").strip()
         if not text:
@@ -391,6 +440,8 @@ class ClaudeCodeBackend(CliAgentBackend):
         preview = (text[:200] + "...") if len(text) > 200 else text
         logger.info("[cli:text] %s", preview.replace("\n", " "))
         if self.is_auth_fatal_error(text):
+            if metrics:
+                metrics.auth_fatal_error = True
             logger.error(
                 "❌ AUTH ERROR: OAuth token expired in container. "
                 "Run 'claude auth login' on the host to refresh credentials, then retry."
@@ -468,7 +519,7 @@ class ClaudeCodeBackend(CliAgentBackend):
             for block in event.get("message", {}).get("content", []):
                 btype = block.get("type")
                 if btype == "text":
-                    self._handle_assistant_text_block(block, now)
+                    self._handle_assistant_text_block(block, now, metrics)
                 elif btype == "tool_use":
                     self._handle_assistant_tool_use_block(block, now, metrics, server_url)
 

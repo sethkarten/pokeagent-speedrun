@@ -602,18 +602,18 @@ def _run_agent_loop(
     monitor_thread.start()
 
     backend = get_backend(args.cli_type)
-    if args.containerized:
-        from utils.run_data_manager import get_cli_workspace_dir
-        working_dir = str(get_cli_workspace_dir())
-    else:
-        agent_scratch_space = run_manager.get_scratch_space_dir()
-        agent_scratch_space.mkdir(parents=True, exist_ok=True)
-        working_dir = str(agent_scratch_space)
+    # Use agent_scratch_space for both local and containerized (matches pre-refactor 05602465)
+    agent_scratch_space = run_manager.get_scratch_space_dir()
+    agent_scratch_space.mkdir(parents=True, exist_ok=True)
+    working_dir = str(agent_scratch_space)
     project_root = str(Path(__file__).resolve().parent)
     log_dir = os.path.join(str(run_manager.get_run_directory()), "agent_logs")
     os.makedirs(log_dir, exist_ok=True)
 
     logger.info("CLI agent working_dir=%s project_root=%s", working_dir, project_root)
+
+    if args.containerized:
+        print(f"   MCP: bridge network, host.docker.internal:{args.mcp_sse_port}")
 
     cli_session: CliSession | None = None
     cli_log_file = None
@@ -704,6 +704,22 @@ def _run_agent_loop(
         if termination_triggered.is_set():
             logger.info("Termination condition met, not restarting agent.")
             termination_reason = "termination_condition_met"
+            break
+        if session_metrics.auth_fatal_error:
+            logger.error("Auth fatal error detected, stopping (do not restart).")
+            termination_reason = "auth_error"
+            break
+        if (
+            cli_session.process.returncode == 0
+            and not session_metrics.session_id
+            and session_metrics.num_turns == 0
+            and session_metrics.tool_use_count == 0
+        ):
+            logger.error(
+                "Agent exited with code 0 but produced no output (no session, turns, or tools). "
+                "Likely MCP connection failure. Check MCP SSE server is running and reachable at host.docker.internal."
+            )
+            termination_reason = "mcp_connection_failure"
             break
         logger.info(
             "Agent session #%d exited (code=%s), restarting...",
@@ -826,6 +842,15 @@ def main():
             services, args, run_manager, agent_memory_dir
         )
         if termination_reason == "server_died":
+            return 1
+        if termination_reason == "auth_error":
+            print("\n❌ Auth error: Run 'claude auth login' on the host, then retry with --login or ensure credentials are valid.")
+            return 1
+        if termination_reason == "mcp_connection_failure":
+            print("\n❌ MCP connection failure: Agent could not connect to MCP server.")
+            print("   MCP server must be reachable at host.docker.internal on the configured port.")
+            print("   Ensure --add-host=host.docker.internal:host-gateway resolves on this host.")
+
             return 1
         return 0
     except KeyboardInterrupt:
