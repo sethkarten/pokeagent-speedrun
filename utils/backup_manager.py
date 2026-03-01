@@ -91,6 +91,34 @@ def create_cache_backup(
         return None
 
 
+def create_cli_agent_termination_backup(
+    run_id: str,
+    reason: str,
+    cache_dir: str = None,
+    backup_base_dir: str = "backups",
+) -> Optional[str]:
+    """
+    Create a backup of the CLI agent cache on termination (condition met or user interrupt).
+
+    Same folder as milestone backups: backups/{run_id}/. Reuses create_cache_backup logic.
+
+    Args:
+        run_id: Run identifier for backup subfolder
+        reason: Termination reason (e.g. "termination_condition_met", "user_interrupt")
+        cache_dir: Directory to backup (default: run-specific cache)
+        backup_base_dir: Base directory for backups (default: backups)
+
+    Returns:
+        Path to the created backup zip file, or None if backup failed
+    """
+    return create_cache_backup(
+        objective_id="termination",
+        objective_description=reason,
+        cache_dir=cache_dir,
+        backup_base_dir=backup_base_dir,
+    )
+
+
 def _cleanup_old_backups(backup_base_dir: Path, max_run_dirs: int = 50) -> None:
     """
     Remove old run backup directories to prevent excessive disk usage.

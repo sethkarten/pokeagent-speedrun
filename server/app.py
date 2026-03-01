@@ -192,16 +192,18 @@ def init_video_recording(record_enabled=False):
         return
 
     try:
-        # Create video filename using run_id for consistency
+        # Save directly to run_data/end_state/videos/ to avoid copy corruption
         from utils.run_data_manager import get_run_data_manager
         run_manager = get_run_data_manager()
         if run_manager:
-            video_filename = f"{run_manager.run_id}.mp4"
+            videos_dir = run_manager.run_dir / "end_state" / "videos"
+            videos_dir.mkdir(parents=True, exist_ok=True)
+            video_filename = str(videos_dir / f"{run_manager.run_id}.mp4")
         else:
-            # Fallback to timestamp if no run manager
+            # Fallback to cwd if no run manager (e.g. early init)
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             video_filename = f"pokegent_recording_{timestamp}.mp4"
-        
+
         # Video settings (GBA resolution is 240x160)
         # Record at 30 FPS (skip every 4th frame from 120 FPS emulator)
         recording_fps = fps / video_frame_skip  # 120 / 4 = 30 FPS
@@ -461,10 +463,10 @@ def signal_handler(signum, frame):
             else:
                 logger.warning(f"🔍 [DEBUG] LLM logger is None - cannot copy LLM traces")
 
-            run_manager.copy_objectives()
-
-            # Copy knowledge_base to agent_scratch_space (agent writes to it)
-            run_manager.copy_knowledge_base()
+            if os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                run_manager.copy_objectives()
+                # Copy knowledge_base to agent_scratch_space (agent writes to it)
+                run_manager.copy_knowledge_base()
 
             # Copy frame_cache to end_state
             run_manager.copy_frame_cache()
@@ -2645,8 +2647,8 @@ async def mcp_get_game_state():
 
                 logger.info(f"   - needs_loading (final): {needs_loading}")
 
-                if needs_loading:
-                    # Use run_data agent_scratch_space for objectives
+                if needs_loading and os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                    # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
                     from utils.run_data_manager import get_run_data_manager
 
                     run_manager = get_run_data_manager()
@@ -2871,8 +2873,8 @@ async def mcp_complete_direct_objective(request: dict):
                     logger.warning(f"⚠️ Requesting categorized mode but manager is in legacy mode - forcing reload")
                     needs_loading = True
 
-            if needs_loading:
-                # Use run_data agent_scratch_space for objectives
+            if needs_loading and os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
                 from utils.run_data_manager import get_run_data_manager
 
                 run_manager = get_run_data_manager()
@@ -3038,53 +3040,55 @@ async def mcp_complete_direct_objective(request: dict):
             logger.warning("Failed to log objective completion to metrics: %s", e)
 
         # Persist completed objectives after each completion (for real time execution... get_progress_summary() relies on this run_data)
-        try:
-            from utils.run_data_manager import get_run_data_manager
+        # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
+        if os.environ.get("POKEAGENT_CLI_MODE") != "1":
+            try:
+                from utils.run_data_manager import get_run_data_manager
 
-            run_manager = get_run_data_manager()
-            if not run_manager:
-                logger.warning("Cannot save completed_objectives: run_data_manager not initialized")
-            else:
-                scratch_space_dir = str(run_manager.get_scratch_space_dir())
-                if direct_objectives_manager.mode == "categorized":
-                    completed_path = os.path.join(scratch_space_dir, "completed_objectives.json")
-                    if os.path.exists(completed_path):
-                        with open(completed_path, "r") as f:
-                            history = json.load(f)
-                    else:
-                        history = {
-                            "mode": "categorized",
-                            "sequence_name": direct_objectives_manager.sequence_name,
-                            "categories": {"story": [], "battling": [], "dynamics": []},
-                        }
-
-                    category_key = category or "dynamics"
-                    history.setdefault("categories", {})
-                    history["categories"].setdefault("story", [])
-                    history["categories"].setdefault("battling", [])
-                    history["categories"].setdefault("dynamics", [])
-                    history["categories"][category_key].append(
-                        {
-                            "id": current_obj.id,
-                            "description": current_obj.description,
-                            "target_location": current_obj.target_location,
-                            "action_type": current_obj.action_type,
-                            "completed_at": current_obj.completed_at.isoformat()
-                            if hasattr(current_obj, "completed_at") and current_obj.completed_at
-                            else None,
-                            "category": category_key,
-                        }
-                    )
-                    history["last_updated"] = datetime.datetime.now().isoformat()
-
-                    with open(completed_path, "w") as f:
-                        json.dump(history, f, indent=2)
-                    logger.info(f"💾 Saved completed objectives to {completed_path}")
+                run_manager = get_run_data_manager()
+                if not run_manager:
+                    logger.warning("Cannot save completed_objectives: run_data_manager not initialized")
                 else:
-                    saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
-                    logger.info(f"💾 Saved completed objectives to {saved_file}")
-        except Exception as e:
-            logger.warning(f"Failed to save completed objectives: {e}")
+                    scratch_space_dir = str(run_manager.get_scratch_space_dir())
+                    if direct_objectives_manager.mode == "categorized":
+                        completed_path = os.path.join(scratch_space_dir, "completed_objectives.json")
+                        if os.path.exists(completed_path):
+                            with open(completed_path, "r") as f:
+                                history = json.load(f)
+                        else:
+                            history = {
+                                "mode": "categorized",
+                                "sequence_name": direct_objectives_manager.sequence_name,
+                                "categories": {"story": [], "battling": [], "dynamics": []},
+                            }
+
+                        category_key = category or "dynamics"
+                        history.setdefault("categories", {})
+                        history["categories"].setdefault("story", [])
+                        history["categories"].setdefault("battling", [])
+                        history["categories"].setdefault("dynamics", [])
+                        history["categories"][category_key].append(
+                            {
+                                "id": current_obj.id,
+                                "description": current_obj.description,
+                                "target_location": current_obj.target_location,
+                                "action_type": current_obj.action_type,
+                                "completed_at": current_obj.completed_at.isoformat()
+                                if hasattr(current_obj, "completed_at") and current_obj.completed_at
+                                else None,
+                                "category": category_key,
+                            }
+                        )
+                        history["last_updated"] = datetime.datetime.now().isoformat()
+
+                        with open(completed_path, "w") as f:
+                            json.dump(history, f, indent=2)
+                        logger.info(f"💾 Saved completed objectives to {completed_path}")
+                    else:
+                        saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
+                        logger.info(f"💾 Saved completed objectives to {saved_file}")
+            except Exception as e:
+                logger.warning(f"Failed to save completed objectives: {e}")
 
         # Create backup of .pokeagent_cache after completing objective
         try:
@@ -3138,7 +3142,8 @@ async def mcp_complete_direct_objective(request: dict):
             })
         else:
             # Sequence complete - save to history in timestamped run directory
-            if current_run_dir:
+            # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
+            if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
                 try:
                     # Save to agent_scratch_space in run_data
                     from utils.run_data_manager import get_run_data_manager
@@ -3269,16 +3274,18 @@ async def mcp_add_knowledge(request: dict):
             importance=request.get("importance", 3),
         )
         # Keep agent_scratch_space in sync for real-time access of knowledge base
-        try:
-            from utils.run_data_manager import get_run_data_manager
+        # CLI agents do not use knowledge_base; skip when POKEAGENT_CLI_MODE
+        if os.environ.get("POKEAGENT_CLI_MODE") != "1":
+            try:
+                from utils.run_data_manager import get_run_data_manager
 
-            run_manager = get_run_data_manager()
-            if run_manager:
-                run_manager.copy_knowledge_base()
-            else:
-                logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
-        except Exception as e:
-            logger.warning(f"Failed to copy knowledge_base: {e}")
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    run_manager.copy_knowledge_base()
+                else:
+                    logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
+            except Exception as e:
+                logger.warning(f"Failed to copy knowledge_base: {e}")
 
         return result
     except Exception as e:
@@ -3760,10 +3767,15 @@ async def mcp_create_direct_objectives(request: dict):
                 }
 
             # Use run_data agent_scratch_space for dynamics backup
+            # CLI agents do not use objectives; pass None when POKEAGENT_CLI_MODE
             from utils.run_data_manager import get_run_data_manager
 
             run_manager = get_run_data_manager()
-            objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
+            objectives_run_dir = (
+                None
+                if os.environ.get("POKEAGENT_CLI_MODE") == "1"
+                else (str(run_manager.get_scratch_space_dir()) if run_manager else None)
+            )
 
             start_index = len(direct_objectives_manager._get_sequence_for_category(category))
             direct_objectives_manager.add_objectives_to_category(
@@ -3887,18 +3899,19 @@ async def mcp_get_progress_summary():
             obj_status = direct_objectives_manager.get_sequence_status()
 
             # Load completed objectives history from current run directory
+            # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
             global current_run_dir
-            if current_run_dir:
+            completed_obj_file = None
+            if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
                 # Use agent_scratch_space in run_data
                 from utils.run_data_manager import get_run_data_manager
 
                 run_manager = get_run_data_manager()
                 if not run_manager:
                     logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
-                    completed_obj_file = None
                 else:
                     completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
-                if os.path.exists(completed_obj_file):
+            if completed_obj_file and os.path.exists(completed_obj_file):
                     import json
 
                     with open(completed_obj_file, "r") as f:

@@ -43,6 +43,20 @@ class TestCliSessionMetrics:
         assert m.tool_use_count == 3
 
 
+class TestDevcontainerBuildContext:
+    """Verify devcontainer_build_context points to an existing directory."""
+
+    def test_claude_devcontainer_build_context_exists(self):
+        backend = get_backend("claude")
+        ctx = backend.devcontainer_build_context
+        assert ctx, "devcontainer_build_context must be non-empty"
+        project_root = Path(__file__).resolve().parent.parent
+        ctx_path = project_root / ctx
+        assert ctx_path.is_dir(), f"devcontainer_build_context must be a directory: {ctx_path}"
+        dockerfile = ctx_path / "Dockerfile"
+        assert dockerfile.exists(), f"Dockerfile must exist in build context: {dockerfile}"
+
+
 class TestGetBackend:
     def test_claude_returns_claude_code_backend(self):
         backend = get_backend("claude")

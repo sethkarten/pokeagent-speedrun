@@ -84,10 +84,12 @@ sequenceDiagram
 
 ## 3. Persistence & State
 
-To allow the ephemeral container to maintain long-term memory across sessions (or restarts), specific directories are bind-mounted from the Host:
+To allow the ephemeral container to maintain long-term memory across sessions (or restarts), specific directories are bind-mounted from the Host. **Both live inside `.pokeagent_cache/{run_id}/`** so a single `create_cache_backup` captures everything for restore:
 
 *   **Agent Memory**: `~/.claude` inside the container is mounted to `.pokeagent_cache/<run_id>/claude_memory` on the host. This persists the agent's project history, "brain" (memory.md), and authentication credentials.
-*   **Scratch Space**: `/workspace` inside the container is mounted to `run_data/<run_id>/agent_scratch_space` on the host. This is where the agent can write files, todos, or plans.
+*   **Workspace**: `/workspace` inside the container is mounted to `.pokeagent_cache/<run_id>/workspace` on the host. The orchestrator writes `.agent_directive.txt` and `.mcp_config.json` here on every launch (fresh or from backup). The agent can write files, todos, or plans here. **`.mcp_config.json` is overwritten and set read-only on every launch**—we never rely on the backup's copy.
+
+**CLI agents do not use objectives or `knowledge_base.json`**; they use milestones only. The server skips `copy_knowledge_base` and objectives when `POKEAGENT_CLI_MODE` is set.
 
 ## 4. Security Measures
 
