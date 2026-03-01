@@ -230,8 +230,9 @@ For security and isolation, it is recommended to run the Claude Code agent in a 
 **1. Build the Container Image**
 You only need to do this once (or when dependencies change).
 ```bash
-docker build -f .devcontainer/Dockerfile -t claude-agent-devcontainer .
+docker build -t claude-agent-devcontainer -f .devcontainer/claude-agent/Dockerfile .devcontainer/claude-agent
 ```
+Or use `--build` when running: `python run_cli.py --cli-type claude --containerized --build --directive ...`
 
 **2. Run the Agent**
 Run the orchestrator with the `--containerized` flag to isolate the cli agent instance and prevent it from reading the codebase/modifying files it should not have access to.
