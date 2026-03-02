@@ -295,21 +295,31 @@ class ClaudeCodeBackend(CliAgentBackend):
         bootstrap: str,
         mcp_config: dict,
     ) -> Path:
-        """Write .agent_directive.txt and .mcp_config.json to workspace, set MCP config read-only."""
+        """Write .agent_directive.txt and .mcp_config.json to workspace, set both read-only.
+
+        Idempotent: skips if both files already exist and are read-only (from a previous
+        session). Fixes PermissionError when restarting the agent after usage limit or
+        other exit, since we no longer try to overwrite read-only files.
+        """
         working_dir = Path(working_dir).resolve()
         working_dir.mkdir(parents=True, exist_ok=True)
         bootstrap_file = working_dir / self.DIRECTIVE_FILENAME
-        bootstrap_file.write_text(bootstrap)
-
         mcp_config_path = working_dir / self.MCP_CONFIG_FILENAME
+
+        def _is_readonly(p: Path) -> bool:
+            return p.exists() and not (p.stat().st_mode & stat.S_IWUSR)
+
+        if _is_readonly(bootstrap_file) and _is_readonly(mcp_config_path):
+            return mcp_config_path
+
+        bootstrap_file.write_text(bootstrap)
         mcp_json = json.dumps(mcp_config, indent=2)
         with open(mcp_config_path, "w") as f:
             f.write(mcp_json)
             f.flush()
             os.fsync(f.fileno())
+        bootstrap_file.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
         mcp_config_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-        if not mcp_config_path.exists():
-            raise RuntimeError(f"MCP config write failed: {mcp_config_path}")
         return mcp_config_path
 
     def build_launch_cmd(
