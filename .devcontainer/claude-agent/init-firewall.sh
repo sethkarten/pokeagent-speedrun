@@ -21,11 +21,12 @@ if [ -f /home/claude-agent/.claude/.claude.json ]; then
     chown claude-agent:claude-agent /home/claude-agent/.claude.json
 fi
 
-# Mounted volumes are owned by the host user — grant claude-agent read/write access.
-# /workspace: agent scratch space (needs write for temp files, session state)
-# /home/claude-agent/.claude: agent memory with credentials (needs read for OAuth tokens)
-chown -R claude-agent:claude-agent /workspace 2>/dev/null || chmod -R 777 /workspace 2>/dev/null || true
-chown -R claude-agent:claude-agent /home/claude-agent/.claude 2>/dev/null || chmod -R 755 /home/claude-agent/.claude 2>/dev/null || true
+# Mounted volumes are owned by the host user — fix permissions so claude-agent can access them.
+# /workspace: needs read+write (temp files, session state)
+# /home/claude-agent/.claude: needs read+write (OAuth credentials + Claude session files)
+# Use chmod (not chown) so the host user retains ownership for backup operations.
+chmod -R a+rwX /workspace 2>/dev/null || true
+chmod -R a+rwX /home/claude-agent/.claude 2>/dev/null || true
 
 # Wrapper script propagates env vars that su drops (su resets the environment).
 # Uses exec to preserve the PTY chain from Docker -t.
@@ -33,41 +34,6 @@ cat > /tmp/run_claude.sh << 'WRAPPER_EOF'
 #!/bin/sh
 export HOME=/home/claude-agent
 export CLAUDE_CONFIG_DIR=/home/claude-agent/.claude
-DIAG=/workspace/.container_diagnostics.log
-{
-  echo "=== Container Diagnostics ==="
-  echo "timestamp: $(date)"
-  echo "user: $(whoami)"
-  echo "HOME=$HOME"
-  echo "CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR"
-  echo "full_args: $*"
-  echo "arg_count: $#"
-  echo ""
-  echo "=== Credential Files ==="
-  echo "~/.claude.json exists: $(test -f "$HOME/.claude.json" && echo YES || echo NO)"
-  echo "~/.claude.json size: $(wc -c < "$HOME/.claude.json" 2>/dev/null || echo 0)"
-  echo "$CLAUDE_CONFIG_DIR/ contents:"
-  ls -la "$CLAUDE_CONFIG_DIR/" 2>&1
-  echo ".credentials.json size: $(wc -c < "$CLAUDE_CONFIG_DIR/.credentials.json" 2>/dev/null || echo 0)"
-  echo "settings.json size: $(wc -c < "$CLAUDE_CONFIG_DIR/settings.json" 2>/dev/null || echo 0)"
-  echo ""
-  echo "=== TTY Status ==="
-  test -t 0 && echo "stdin: TTY" || echo "stdin: NOT_TTY"
-  test -t 1 && echo "stdout: TTY" || echo "stdout: NOT_TTY"
-  test -t 2 && echo "stderr: TTY" || echo "stderr: NOT_TTY"
-  echo ""
-  echo "=== DNS Test ==="
-  getent hosts api.anthropic.com 2>&1 || echo "DNS_FAILED"
-  echo ""
-  echo "=== MCP Config ==="
-  cat /workspace/.mcp_config.json 2>&1 || echo "NO_MCP_CONFIG"
-  echo ""
-  echo "=== Node/Claude Version ==="
-  node --version 2>&1 || echo "NO_NODE"
-  which claude 2>&1 || echo "NO_CLAUDE_BIN"
-  echo ""
-  echo "=== About to exec claude ==="
-} > "$DIAG" 2>&1
 exec "$@"
 WRAPPER_EOF
 chmod +x /tmp/run_claude.sh
