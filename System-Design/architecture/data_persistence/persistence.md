@@ -25,6 +25,7 @@ Acts as the working directory for the active agent run. It stores the immediate 
   - `knowledge_base.json`: Agent's accumulated knowledge (not used by CLI agents).
   - `frame_cache.json`: Recent frame data.
   - **CLI containerized runs only**: `claude_memory/` (agent memory), `workspace/` (agent workspace; orchestrator writes `.agent_directive.txt` and `.mcp_config.json` here on every launch; `.mcp_config.json` is overwritten and set read-only).
+  - **CLI session resume**: `last_cli_session_id` — persisted session ID for `--resume` across runs/restores. Written after each session; included in backups.
 
 ### Management
 - **Access**: Managed via `utils/run_data_manager.py` (e.g. `get_cache_directory()`, `get_checkpoint_llm_path()`).
@@ -43,6 +44,7 @@ Provides recovery points to restore the agent's state in case of crashes, errors
 - **Creation**: `create_cache_backup()` is called automatically upon objective completion or termination.
   - **Permission Handling**: Uses a custom zipfile walker that gracefully skips files the host user cannot read (e.g., if a containerized agent created root-owned files by mistake, though UID matching should prevent this). Skipped files are logged as warnings.
 - **Restoration**: `restore_cache_from_backup()` rolls back state. Restores metrics from `cumulative_metrics.json` if present; otherwise metrics reset.
+- **Credential overwrite on restore**: After restore, `seed_agent_auth()` **always overwrites** credential files in agent memory (not just when missing). This ensures the host's current credentials are used instead of stale backup credentials.
 - **Cleanup**: `_cleanup_old_backups()` automatically maintains a window of recent backups (keeping the last 50 runs) to manage disk space.
 
 ## 3. Analysis Data (`run_data/`)

@@ -400,6 +400,41 @@ class Services:
     server_url: str
 
 
+LAST_CLI_SESSION_ID_FILENAME = "last_cli_session_id"
+
+
+def _load_last_session_id() -> str | None:
+    """Load persisted CLI session ID from cache (for --resume across runs/restores)."""
+    try:
+        from utils.run_data_manager import get_cache_path
+        path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
+        if path.exists():
+            sid = path.read_text().strip()
+            if sid:
+                return sid
+        # Fallback: derive from most recent project in claude_memory (for older backups)
+        projects_dir = get_cache_path("claude_memory/projects/-workspace")
+        if projects_dir.exists():
+            jsonl_files = [f for f in projects_dir.iterdir() if f.suffix == ".jsonl"]
+            if jsonl_files:
+                most_recent = max(jsonl_files, key=lambda p: p.stat().st_mtime)
+                return most_recent.stem
+    except Exception as e:
+        logger.debug("Could not load last_session_id: %s", e)
+    return None
+
+
+def _write_last_session_id(session_id: str) -> None:
+    """Persist CLI session ID to cache (included in backups for restore)."""
+    try:
+        from utils.run_data_manager import get_cache_path
+        path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
+        path.write_text(session_id)
+        logger.debug("Persisted last_session_id: %s", session_id)
+    except Exception as e:
+        logger.warning("Could not persist last_session_id: %s", e)
+
+
 def _restore_from_backup(backup_path: str) -> bool:
     """Restore cache from backup zip. Returns True if successful."""
     from utils.backup_manager import restore_cache_from_backup
@@ -714,7 +749,9 @@ def _run_agent_loop(
     cli_session: CliSession | None = None
     cli_log_file = None
     iteration = 0
-    last_session_id: str | None = None
+    last_session_id: str | None = _load_last_session_id()
+    if last_session_id:
+        print(f"   📌 Resuming session: {last_session_id}")
     consecutive_failures = 0
 
     # JSONL step tracking – persists across agent session restarts within one run
@@ -788,6 +825,7 @@ def _run_agent_loop(
 
         if session_metrics.session_id:
             last_session_id = session_metrics.session_id
+            _write_last_session_id(last_session_id)
 
         logger.info(
             "Session #%d metrics: cost=$%.4f tokens=%d/%d turns=%d tools=%d session_id=%s",
