@@ -21,13 +21,6 @@ if [ -f /home/claude-agent/.claude/.claude.json ]; then
     chown claude-agent:claude-agent /home/claude-agent/.claude.json
 fi
 
-# Mounted volumes are owned by the host user — fix permissions so claude-agent can access them.
-# /workspace: needs read+write (temp files, session state)
-# /home/claude-agent/.claude: needs read+write (OAuth credentials + Claude session files)
-# Use chmod (not chown) so the host user retains ownership for backup operations.
-chmod -R a+rwX /workspace 2>/dev/null || true
-chmod -R a+rwX /home/claude-agent/.claude 2>/dev/null || true
-
 # Wrapper script propagates env vars that su drops (su resets the environment).
 # Uses exec to preserve the PTY chain from Docker -t.
 cat > /tmp/run_claude.sh << 'WRAPPER_EOF'

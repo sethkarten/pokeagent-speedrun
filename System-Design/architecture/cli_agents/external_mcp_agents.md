@@ -32,23 +32,29 @@ Runs the game infrastructure and orchestration.
     *   Runs a `FastMCP` server using **SSE (Server-Sent Events)** transport.
     *   Exposes 3 core tools to the agent: `get_game_state`, `press_buttons`, `navigate_to`.
     *   Acts as a proxy: receives tool calls from the agent (over HTTP/SSE), translates them into HTTP requests to the Game Server, and returns the results.
-    *   **Crucial for Docker**: Binds to `0.0.0.0` so the container can reach it via the host gateway.
+    *   **Crucial for Docker**: Binds to `0.0.0.0` (or host gateway alias) so the container can reach it via `host.docker.internal` on the bridge network.
 
 ### Container Environment (`claude-agent-devcontainer`)
 A secure, sandboxed environment for the third-party agent.
 
-1.  **Claude Code CLI**:
+1.  **Container User & Permissions**:
+    *   The Docker image is built with `--build-arg USER_UID=$(id -u)` and `--build-arg USER_GID=$(id -g)`.
+    *   This ensures the internal `claude-agent` user matches the Host user's UID/GID.
+    *   **Result**: Bind-mounted volumes (`agent_scratch_space`, `claude_memory`) are readable/writable by both Host and Container without `chmod` or permission hacks.
+
+2.  **Claude Code CLI**:
     *   The actual agent process (e.g. `claude` command).
     *   Configured via `.mcp_config.json` to connect to the Host's MCP SSE server.
     *   Reads instructions from `.agent_directive.txt`.
-    *   Writes persistence data (memory, history) to mounted volumes.
+    *   **Auth**: `CLAUDE_CONFIG_DIR` environment variable points to the mounted `claude_memory` directory, allowing the agent to use host-seeded credentials.
 
-2.  **Firewall (`init-firewall.sh`)**:
+3.  **Firewall (`init-firewall.sh`)**:
     *   Enforces strict network isolation.
     *   **ALLOW**: DNS (53), HTTPS (443) to Anthropic APIs.
-    *   **ALLOW**: TCP connection to the Host's MCP SSE port (via gateway IP).
-    *   **DROP**: Direct access to the Game Server port (8000/8118) to enforce tool usage.
+    *   **ALLOW**: TCP connection to the Host's MCP SSE port (via `host.docker.internal`).
+    *   **DROP**: Direct access to the Game Server port (8000) to enforce tool usage.
     *   **DROP**: All other internet access.
+    *   *Note*: No longer performs `chmod` on mounted volumes; relies on UID/GID matching.
 
 ## 2. Data Flow & Communication
 
@@ -84,15 +90,15 @@ sequenceDiagram
 
 ## 3. Persistence & State
 
-To allow the ephemeral container to maintain long-term memory across sessions (or restarts), specific directories are bind-mounted from the Host. **Both live inside `.pokeagent_cache/{run_id}/`** so a single `create_cache_backup` captures everything for restore:
+To allow the ephemeral container to maintain long-term memory across sessions (or restarts), specific directories are bind-mounted from the Host:
 
 *   **Agent Memory**: `~/.claude` inside the container is mounted to `.pokeagent_cache/<run_id>/claude_memory` on the host. This persists the agent's project history, "brain" (memory.md), and authentication credentials.
-*   **Workspace**: `/workspace` inside the container is mounted to `.pokeagent_cache/<run_id>/workspace` on the host. The orchestrator writes `.agent_directive.txt` and `.mcp_config.json` here on every launch (fresh or from backup). The agent can write files, todos, or plans here. **`.mcp_config.json` is overwritten and set read-only on every launch**—we never rely on the backup's copy.
-
-**CLI agents do not use objectives or `knowledge_base.json`**; they use milestones only. The server skips `copy_knowledge_base` and objectives when `POKEAGENT_CLI_MODE` is set.
+    *   **Seeding**: The host's `~/.claude` credentials are copied here before the run so the container is pre-authenticated.
+*   **Scratch Space**: `/workspace` inside the container is mounted to `run_data/<run_id>/agent_scratch_space` on the host. This is where the agent can write files, todos, or plans.
 
 ## 4. Security Measures
 
 1.  **Network Isolation**: The agent cannot access the local network or the internet (except Anthropic API). It cannot "cheat" by calling the game server API directly; it *must* use the MCP tools.
 2.  **Filesystem Isolation**: The agent is confined to the container. It can only modify files in the specific mounted scratch space.
-3.  **Credential Safety**: OAuth credentials for Claude are seeded from the host into the mounted memory volume, preventing the need to re-login inside the container, but are isolated to that specific run directory.
+3.  **Credential Safety**: OAuth credentials for Claude are seeded from the host into the mounted memory volume. `CLAUDE_CONFIG_DIR` ensures the agent uses these credentials.
+4.  **Permission Safety**: The container runs as a non-root user (`claude-agent`) with a UID matching the host user, preventing root-owned files from cluttering the host filesystem.

@@ -164,10 +164,14 @@ def _build_container_image(backend) -> bool:
     print(f"🐳 Building container image: {backend.container_image}")
     print(f"   Context: {ctx_path}")
     try:
+        # Match container user UID/GID to host so bind-mounted files are readable both ways
+        uid, gid = os.getuid(), os.getgid()
         result = subprocess.run(
             [
                 "docker", "build",
                 "-t", backend.container_image,
+                "--build-arg", f"USER_UID={uid}",
+                "--build-arg", f"USER_GID={gid}",
                 "-f", str(dockerfile),
                 str(ctx_path),
             ],
