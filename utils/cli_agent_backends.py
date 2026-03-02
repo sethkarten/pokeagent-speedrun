@@ -556,33 +556,3 @@ def get_backend(cli_type: str) -> CliAgentBackend:
     raise ValueError(f"Unknown CLI type: {cli_type}. Supported: claude, codex")
 
 
-def log_session_to_llm_logger(
-    metrics: CliSessionMetrics,
-    session_number: int,
-    backend_name: str,
-) -> None:
-    """Record one CLI session into the shared LLMLogger / cumulative_metrics.json."""
-    from utils.llm_logger import log_llm_interaction
-
-    duration_sec = metrics.duration_ms / 1000.0 if metrics.duration_ms else None
-    token_usage = {
-        "prompt_tokens": metrics.input_tokens,
-        "completion_tokens": metrics.output_tokens,
-        "total_tokens": metrics.input_tokens + metrics.output_tokens,
-        "cached_tokens": 0,
-        "cache_write_tokens": 0,
-    }
-    model_info = {"model": metrics.model or "claude-code", "backend": backend_name}
-    response_summary = f"[{metrics.num_turns} turns, {metrics.tool_use_count} tool calls]"
-    if metrics.is_error and metrics.error:
-        response_summary += f" error={metrics.error[:100]}"
-
-    log_llm_interaction(
-        interaction_type=f"cli_{backend_name}",
-        prompt="[CLI session]",
-        response=response_summary,
-        metadata={"token_usage": token_usage},
-        duration=duration_sec,
-        model_info=model_info,
-        step_number=session_number,
-    )

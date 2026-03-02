@@ -34,7 +34,6 @@ from utils.cli_agent_backends import (
     CliSession,
     CliSessionMetrics,
     get_backend,
-    log_session_to_llm_logger,
 )
 
 # Configure logging
@@ -567,6 +566,63 @@ def launch_cli_agent(
     )
 
 
+def _poll_claude_jsonl_and_append_steps(
+    agent_memory_dir: Path,
+    processed_hashes: set,
+    last_cli_step: int,
+) -> tuple[set, int]:
+    """Poll Claude Code JSONL files and append new entries as steps to cumulative_metrics.
+
+    Returns updated (processed_hashes, last_cli_step).  Never raises – all
+    errors are logged as warnings so the agent loop is never interrupted.
+    """
+    from utils.claude_jsonl_reader import load_new_usage_entries
+    from utils.llm_logger import get_llm_logger
+
+    try:
+        new_entries, processed_hashes = load_new_usage_entries(agent_memory_dir, processed_hashes)
+    except Exception as exc:
+        logger.warning("JSONL poll failed: %s", exc)
+        return processed_hashes, last_cli_step
+
+    if not new_entries:
+        return processed_hashes, last_cli_step
+
+    # Sort by timestamp so steps are appended in chronological order
+    new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
+
+    llm_logger = get_llm_logger()
+    prev_ts: float | None = None
+    for entry in new_entries:
+        tokens = entry["_tokens"]
+        tool_calls = entry["_tool_calls"]
+        parsed_ts = entry.get("_parsed_timestamp")
+        ts_float = parsed_ts.timestamp() if parsed_ts is not None else time.time()
+        duration = max(0.0, ts_float - prev_ts) if prev_ts is not None else 0.0
+        prev_ts = ts_float
+
+        msg = entry.get("message")
+        model_name = msg.get("model") if isinstance(msg, dict) else None
+        model_info = {"model": model_name or "claude-code"}
+
+        last_cli_step += 1
+        try:
+            llm_logger.append_cli_step(
+                step_number=last_cli_step,
+                token_usage=tokens,
+                duration=duration,
+                timestamp=ts_float,
+                model_info=model_info,
+                tool_calls=tool_calls if tool_calls else None,
+            )
+        except Exception as exc:
+            logger.warning("Failed to append CLI step %d: %s", last_cli_step, exc)
+            last_cli_step -= 1
+
+    logger.debug("JSONL poll: appended %d new step(s), last_step=%d", len(new_entries), last_cli_step)
+    return processed_hashes, last_cli_step
+
+
 def _run_agent_loop(
     services: Services,
     args,
@@ -623,6 +679,13 @@ def _run_agent_loop(
     cli_log_file = None
     iteration = 0
     last_session_id: str | None = None
+
+    # JSONL step tracking – persists across agent session restarts within one run
+    processed_hashes: set[str] = set()
+    from utils.llm_logger import get_llm_logger as _get_llm_logger
+    _existing_steps = _get_llm_logger().cumulative_metrics.get("steps", [])
+    last_cli_step: int = max((s["step"] for s in _existing_steps), default=-1)
+    del _existing_steps, _get_llm_logger
 
     while not termination_triggered.is_set():
         iteration += 1
@@ -684,6 +747,10 @@ def _run_agent_loop(
                         json.dump(asdict(session_metrics), f, indent=2)
                 except Exception as e:
                     logger.warning(f"Failed to save metrics snapshot: {e}")
+                # Poll Claude Code JSONL files and append new steps to cumulative_metrics
+                processed_hashes, last_cli_step = _poll_claude_jsonl_and_append_steps(
+                    agent_memory_dir, processed_hashes, last_cli_step
+                )
 
             time.sleep(1)
 
@@ -703,7 +770,10 @@ def _run_agent_loop(
             session_metrics.tool_use_count,
             last_session_id or "none",
         )
-        log_session_to_llm_logger(session_metrics, iteration, backend.name)
+        # Final JSONL poll after session exits to capture any buffered entries
+        processed_hashes, last_cli_step = _poll_claude_jsonl_and_append_steps(
+            agent_memory_dir, processed_hashes, last_cli_step
+        )
 
         if termination_triggered.is_set():
             logger.info("Termination condition met, not restarting agent.")

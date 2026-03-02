@@ -116,6 +116,8 @@ class LLMLogger:
             "o1-pro": {"prompt": 0.15, "completion": 0.60},         # $150/$600 per 1M (no cached)
 
             # Anthropic Claude (Base input / 5m cache write / Cache hits per MTok from official pricing)
+            "claude-sonnet-4-6": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},   # Claude Code CLI model string uses dashes
+            "claude-sonnet-4.6": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
             "claude-sonnet-4.5": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},   # $3/$3.75/$0.30/$15 per 1M
             "claude-sonnet-4": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
             "claude-sonnet-3.7": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
@@ -331,7 +333,111 @@ class LLMLogger:
             logger.debug(f"Prompt length: {len(prompt)} chars, Response length: {len(response)} chars")
         else:
             logger.info(f"LLM {interaction_type.upper()}")
-    
+
+    def append_cli_step(
+        self,
+        step_number: int,
+        token_usage: Dict[str, int],
+        duration: float,
+        timestamp: float,
+        model_info: Optional[Dict[str, Any]] = None,
+        tool_calls: Optional[list] = None,
+    ) -> None:
+        """Append one step derived from a Claude Code JSONL entry into cumulative_metrics.
+
+        Unlike log_interaction this method does NOT write to llm_log.jsonl – the
+        JSONL files produced by Claude Code already serve as the raw interaction
+        log.  Only cumulative_metrics.json is updated.
+
+        Args:
+            step_number:  Monotonically increasing step index for this run.
+            token_usage:  Dict with keys prompt, completion, cached, cache_write, total.
+            duration:     Seconds elapsed since the previous JSONL entry (best estimate).
+            timestamp:    UNIX timestamp of the JSONL entry.
+            model_info:   Optional dict with at least a "model" key for pricing lookup.
+            tool_calls:   Optional list of {name, args} dicts from the assistant message.
+        """
+        if not self._metrics_write_enabled():
+            return
+
+        step_tokens = {
+            "prompt": int(token_usage.get("prompt", 0) or 0),
+            "completion": int(token_usage.get("completion", 0) or 0),
+            "cached": int(token_usage.get("cached", 0) or 0),
+            "cache_write": int(token_usage.get("cache_write", 0) or 0),
+            "total": int(token_usage.get("total", 0) or 0),
+        }
+
+        # Update cumulative token counters
+        self.cumulative_metrics["total_tokens"] += step_tokens["total"]
+        self.cumulative_metrics["prompt_tokens"] += step_tokens["prompt"]
+        self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
+        self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
+        self.cumulative_metrics["cache_write_tokens"] += step_tokens["cache_write"]
+        self.cumulative_metrics["total_llm_calls"] += 1
+
+        # Cost calculation – reuse the same pricing logic as log_interaction
+        model_name = ((model_info or {}).get("model", "") or "").lower()
+        pricing = self.pricing.get("default")
+        if model_name:
+            if model_name in self.pricing:
+                pricing = self.pricing[model_name]
+            else:
+                candidates = [
+                    (k, self.pricing[k])
+                    for k in self.pricing
+                    if k != "default" and k in model_name
+                ]
+                if candidates:
+                    candidates.sort(key=lambda x: len(x[0]), reverse=True)
+                    pricing = candidates[0][1]
+
+        prompt_t = max(0, step_tokens["prompt"])
+        cached_t = max(0, step_tokens["cached"])
+        cache_write_t = max(0, step_tokens["cache_write"])
+
+        if (cached_t + cache_write_t) <= prompt_t:
+            uncached_prompt = prompt_t - cached_t - cache_write_t
+        else:
+            uncached_prompt = prompt_t
+
+        step_cost = (
+            (uncached_prompt / 1000) * pricing["prompt"]
+            + (cached_t / 1000) * pricing.get("cached_prompt", pricing["prompt"])
+            + (cache_write_t / 1000) * pricing.get("cache_write_prompt", pricing["prompt"])
+            + (step_tokens["completion"] / 1000) * pricing["completion"]
+        )
+        self.cumulative_metrics["total_cost"] += step_cost
+
+        step_entry: Dict[str, Any] = {
+            "step": step_number,
+            "prompt_tokens": step_tokens["prompt"],
+            "completion_tokens": step_tokens["completion"],
+            "cached_tokens": step_tokens["cached"],
+            "cache_write_tokens": step_tokens["cache_write"],
+            "total_tokens": step_tokens["total"],
+            "time_taken": round(duration, 3),
+            "timestamp": timestamp,
+        }
+        if tool_calls:
+            cleaned = [
+                {"name": c["name"], "args": c.get("args", {})}
+                for c in tool_calls
+                if c.get("name")
+            ]
+            if cleaned:
+                step_entry["tool_calls"] = cleaned
+
+        self.cumulative_metrics["steps"].append(step_entry)
+        self.save_cumulative_metrics()
+        logger.debug(
+            "CLI step %d appended: tokens=%d cost=$%.5f tools=%d",
+            step_number,
+            step_tokens["total"],
+            step_cost,
+            len(step_entry.get("tool_calls", [])),
+        )
+
     def log_error(self, 
                   interaction_type: str,
                   prompt: str,
