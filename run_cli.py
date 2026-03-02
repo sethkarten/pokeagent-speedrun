@@ -715,6 +715,7 @@ def _run_agent_loop(
     cli_log_file = None
     iteration = 0
     last_session_id: str | None = None
+    consecutive_failures = 0
 
     # JSONL step tracking – persists across agent session restarts within one run
     processed_hashes: set[str] = set()
@@ -803,6 +804,19 @@ def _run_agent_loop(
             agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
         )
 
+        returncode = cli_session.process.returncode
+        if returncode == 0:
+            consecutive_failures = 0
+        else:
+            consecutive_failures += 1
+            if consecutive_failures >= 5:
+                logger.error(
+                    "Agent exited with failure code %d five times in a row (likely session/usage limit), stopping.",
+                    returncode,
+                )
+                termination_reason = "consecutive_failures"
+                break
+
         if termination_triggered.is_set():
             logger.info("Termination condition met, not restarting agent.")
             termination_reason = "termination_condition_met"
@@ -832,6 +846,8 @@ def _run_agent_loop(
 
     if termination_triggered.is_set():
         print("\n✅ Task complete (termination condition met).")
+    elif termination_reason == "consecutive_failures":
+        print("\n⏹️ Agent failed 5 times in a row (likely usage limit). Stopping.")
     return (termination_reason, cli_session, cli_log_file)
 
 
