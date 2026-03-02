@@ -701,6 +701,22 @@ def _run_agent_loop(
         )
         log_session_to_llm_logger(session_metrics, iteration, backend.name)
 
+        # #region agent log
+        try:
+            _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
+            for _diag_name in [".container_diagnostics.log", ".claude_debug.log"]:
+                _diag_path = os.path.join(working_dir, _diag_name)
+                if os.path.exists(_diag_path):
+                    with open(_diag_path, "r") as f:
+                        _diag_content = f.read()
+                    _log.write(json.dumps({"sessionId":"3c22ce","location":"run_cli.py:post_session","message":f"{_diag_name} contents","data":{"content":_diag_content[:3000],"size":len(_diag_content)},"timestamp":int(time.time()*1000)}) + "\n")
+                else:
+                    _log.write(json.dumps({"sessionId":"3c22ce","location":"run_cli.py:post_session","message":f"{_diag_name} NOT FOUND","data":{"path":_diag_path},"timestamp":int(time.time()*1000)}) + "\n")
+            _log.close()
+        except Exception:
+            pass
+        # #endregion
+
         if termination_triggered.is_set():
             logger.info("Termination condition met, not restarting agent.")
             termination_reason = "termination_condition_met"
