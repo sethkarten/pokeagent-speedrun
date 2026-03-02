@@ -4377,6 +4377,9 @@ async def sync_llm_metrics(request: Request):
             server_last_objective_step = llm_logger.cumulative_metrics.get("_last_objective_step")
             server_last_objective_tokens = llm_logger.cumulative_metrics.get("_last_objective_tokens")
             server_last_objective_time = llm_logger.cumulative_metrics.get("_last_objective_time")
+            # total_run_time and last_update_time are updated by server on take_action; run_cli never has them
+            server_total_run_time = llm_logger.cumulative_metrics.get("total_run_time")
+            server_last_update_time = llm_logger.cumulative_metrics.get("last_update_time")
 
             llm_logger.cumulative_metrics.update(cumulative_metrics)
 
@@ -4403,12 +4406,17 @@ async def sync_llm_metrics(request: Request):
                 llm_logger.cumulative_metrics["_last_objective_tokens"] = server_last_objective_tokens
             if server_last_objective_time is not None:
                 llm_logger.cumulative_metrics["_last_objective_time"] = server_last_objective_time
+            # Preserve gameplay time (server updates on take_action; run_cli sync would overwrite with 0)
+            if server_total_run_time is not None:
+                llm_logger.cumulative_metrics["total_run_time"] = server_total_run_time
+            if server_last_update_time is not None:
+                llm_logger.cumulative_metrics["last_update_time"] = server_last_update_time
 
             # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
             global latest_metrics
             with step_lock:
                 for key, value in cumulative_metrics.items():
-                    if key in latest_metrics and key not in ["total_actions", "start_time"]:
+                    if key in latest_metrics and key not in ["total_actions", "start_time", "total_run_time"]:
                         latest_metrics[key] = value
 
             # Persist to cache so steps/milestones are saved promptly

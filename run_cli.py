@@ -976,14 +976,13 @@ def main():
         print("\n\n🛑 Shutdown requested by user")
         return 0
     finally:
-        if termination_reason:
-            try:
-                from utils.backup_manager import create_cli_agent_termination_backup
-                backup_path = create_cli_agent_termination_backup(run_id, termination_reason)
-                if backup_path:
-                    print(f"📦 Termination backup: {backup_path}")
-            except Exception as e:
-                logger.warning("Failed to create termination backup: %s", e)
+        try: # Always backup on termination
+            from utils.backup_manager import create_cli_agent_termination_backup
+            backup_path = create_cli_agent_termination_backup(run_id, termination_reason)
+            if backup_path:
+                print(f"📦 Termination backup: {backup_path}")
+        except Exception as e:
+            logger.warning("Failed to create termination backup: %s", e)
         _cleanup_services(
             services,
             cli_session,
