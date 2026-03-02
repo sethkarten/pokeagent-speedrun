@@ -14,7 +14,6 @@ from utils.cli_agent_backends import (
     CliSessionMetrics,
     ClaudeCodeBackend,
     get_backend,
-    log_session_to_llm_logger,
 )
 
 
@@ -115,31 +114,26 @@ class TestClaudeCodeBackendBuildLaunchCmd:
         assert metrics.output_tokens == 50
 
 
-class TestLogSessionToLLMLogger:
-    """Verify CLI session metrics are passed to LLMLogger correctly."""
+class TestClaudeCodeBackendStreamEvent:
+    """Verify handle_stream_event correctly updates CliSessionMetrics."""
 
-    @patch("utils.llm_logger.log_llm_interaction")
-    def test_log_session_to_llm_logger_calls_log_llm_interaction_with_expected_shape(
-        self, mock_log
-    ):
-        metrics = CliSessionMetrics(
-            model="claude-sonnet-4-6",
-            total_cost_usd=0.02,
-            input_tokens=200,
-            output_tokens=80,
-            num_turns=3,
-            tool_use_count=5,
-            duration_ms=10_000,
-        )
-        log_session_to_llm_logger(metrics, session_number=1, backend_name="claude")
-        mock_log.assert_called_once()
-        call_kw = mock_log.call_args
-        assert call_kw.kwargs["interaction_type"] == "cli_claude"
-        assert call_kw.kwargs["step_number"] == 1
-        assert call_kw.kwargs["model_info"]["model"] == "claude-sonnet-4-6"
-        assert call_kw.kwargs["model_info"]["backend"] == "claude"
-        meta = call_kw.kwargs["metadata"]
-        assert "token_usage" in meta
-        assert meta["token_usage"]["prompt_tokens"] == 200
-        assert meta["token_usage"]["completion_tokens"] == 80
-        assert call_kw.kwargs["duration"] == 10.0
+    def test_handle_stream_event_tool_use_increments_count(self):
+        backend = ClaudeCodeBackend()
+        metrics = CliSessionMetrics()
+        event = {"type": "assistant", "message": {"content": [{"type": "tool_use", "name": "Read"}]}}
+        backend.handle_stream_event(event, metrics)
+        assert metrics.tool_use_count == 1
+
+    def test_handle_stream_event_result_stores_model(self):
+        backend = ClaudeCodeBackend()
+        metrics = CliSessionMetrics()
+        event = {
+            "type": "result",
+            "total_cost_usd": 0.05,
+            "num_turns": 5,
+            "duration_ms": 8000,
+            "usage": {"input_tokens": 300, "output_tokens": 100},
+        }
+        backend.handle_stream_event(event, metrics)
+        assert metrics.total_cost_usd == 0.05
+        assert metrics.num_turns == 5
