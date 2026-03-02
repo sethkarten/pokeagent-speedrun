@@ -212,10 +212,9 @@ class ClaudeCodeBackend(CliAgentBackend):
         for src, dst_name in auth_files:
             if src.exists():
                 dst = agent_memory_dir / dst_name
-                if not dst.exists():
-                    shutil.copy2(src, dst)
-                    print(f"   ✓ Seeded {src.name} -> {dst_name}")
-                    seeded_any = True
+                shutil.copy2(src, dst)
+                print(f"   ✓ Seeded {src.name} -> {dst_name}")
+                seeded_any = True
         if not seeded_any:
             print("⚠️  No Claude auth files found")
             print("   Run 'claude auth login' first, then retry.")
