@@ -23,7 +23,7 @@ import shutil
 import json
 import secrets
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
 import requests
 
@@ -208,7 +208,8 @@ def start_server(args, run_id=None):
     server_env = os.environ.copy()
     if run_id:
         server_env["RUN_DATA_ID"] = run_id
-    
+    server_env.pop("POKEAGENT_CLI_MODE", None)  # server owns total_actions; merge preserves steps from run_cli
+
     # Pass LLM session_id if available
     llm_session_id = os.environ.get("LLM_SESSION_ID")
     if llm_session_id:
@@ -504,7 +505,6 @@ def launch_cli_agent(
     dangerously_skip_permissions: bool = True,
     log_file=None,
     metrics: CliSessionMetrics | None = None,
-    snapshot_path=None,
     containerized: bool = False,
     session_number: int = 1,
     resume_session_id: str | None = None,
@@ -550,10 +550,9 @@ def launch_cli_agent(
     process.stdin.close()
 
     stream_stop_event = threading.Event()
-    snapshot_path_arg = Path(snapshot_path) if snapshot_path else None
     stream_thread = threading.Thread(
         target=backend.run_stream_reader,
-        args=(process.stdout, stream_stop_event, log_file, metrics, server_url, snapshot_path_arg),
+        args=(process.stdout, stream_stop_event, log_file, metrics, server_url),
         daemon=True,
     )
     stream_thread.start()
@@ -566,27 +565,62 @@ def launch_cli_agent(
     )
 
 
+def _sync_metrics_to_server(server_url: str) -> None:
+    """Push run_cli's in-memory cumulative metrics to the server (single-writer pattern)."""
+    try:
+        from utils.llm_logger import get_llm_logger
+
+        llm_logger = get_llm_logger()
+        metrics = llm_logger.get_cumulative_metrics()
+        step_count = len(metrics.get("steps", []))
+        if step_count == 0:
+            return  # nothing useful to sync
+        resp = requests.post(
+            f"{server_url}/sync_llm_metrics",
+            json={"cumulative_metrics": metrics},
+            timeout=5,
+        )
+        if resp.status_code != 200:
+            logger.warning("Sync metrics failed: %s %s", resp.status_code, resp.text[:200])
+        else:
+            logger.info("Synced %d step(s) to server", step_count)
+    except Exception as e:
+        logger.warning("Could not sync metrics to server: %s", e)
+
+
 def _poll_claude_jsonl_and_append_steps(
     agent_memory_dir: Path,
     processed_hashes: set,
     last_cli_step: int,
+    server_url: str | None = None,
 ) -> tuple[set, int]:
     """Poll Claude Code JSONL files and append new entries as steps to cumulative_metrics.
 
     Returns updated (processed_hashes, last_cli_step).  Never raises – all
     errors are logged as warnings so the agent loop is never interrupted.
     """
-    from utils.claude_jsonl_reader import load_new_usage_entries
+    from utils.claude_jsonl_reader import find_jsonl_files, load_new_usage_entries
     from utils.llm_logger import get_llm_logger
 
+    # Use absolute path so polling works regardless of cwd
+    search_path = Path(agent_memory_dir).resolve()
+    if not search_path.is_dir():
+        logger.warning("JSONL poll: agent_memory_dir not a directory: %s", search_path)
+        return processed_hashes, last_cli_step
+
     try:
-        new_entries, processed_hashes = load_new_usage_entries(agent_memory_dir, processed_hashes)
+        new_entries, processed_hashes = load_new_usage_entries(search_path, processed_hashes)
     except Exception as exc:
         logger.warning("JSONL poll failed: %s", exc)
         return processed_hashes, last_cli_step
 
+    jsonl_count = len(find_jsonl_files(search_path))
     if not new_entries:
+        if jsonl_count > 0:
+            logger.debug("JSONL poll: %d file(s) under %s, 0 new entries (already processed or no usage)", jsonl_count, search_path)
         return processed_hashes, last_cli_step
+
+    logger.info("JSONL poll: appending %d step(s) from %s", len(new_entries), search_path)
 
     # Sort by timestamp so steps are appended in chronological order
     new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
@@ -620,6 +654,8 @@ def _poll_claude_jsonl_and_append_steps(
             last_cli_step -= 1
 
     logger.debug("JSONL poll: appended %d new step(s), last_step=%d", len(new_entries), last_cli_step)
+    if server_url and new_entries:
+        _sync_metrics_to_server(server_url)
     return processed_hashes, last_cli_step
 
 
@@ -696,8 +732,6 @@ def _run_agent_loop(
         cli_log_file = open(log_path, "w")
         logger.info("Agent JSONL log: %s", log_path)
 
-        snapshot_path = get_cache_path("cli_metrics_snapshot.json")
-
         cli_session = launch_cli_agent(
             backend,
             server_url=server_url,
@@ -707,7 +741,6 @@ def _run_agent_loop(
             dangerously_skip_permissions=args.dangerously_skip_permissions,
             log_file=cli_log_file,
             metrics=session_metrics,
-            snapshot_path=snapshot_path,
             containerized=args.containerized,
             session_number=iteration,
             resume_session_id=last_session_id,
@@ -742,14 +775,9 @@ def _run_agent_loop(
                 elapsed = int(now - wait_start)
                 logger.info("Agent running (pid=%s, elapsed=%ds)", cli_session.process.pid, elapsed)
                 last_heartbeat = now
-                try:
-                    with open(snapshot_path, "w") as f:
-                        json.dump(asdict(session_metrics), f, indent=2)
-                except Exception as e:
-                    logger.warning(f"Failed to save metrics snapshot: {e}")
-                # Poll Claude Code JSONL files and append new steps to cumulative_metrics
+                # Poll Claude Code JSONL files and sync new steps to server
                 processed_hashes, last_cli_step = _poll_claude_jsonl_and_append_steps(
-                    agent_memory_dir, processed_hashes, last_cli_step
+                    agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
                 )
 
             time.sleep(1)
@@ -772,7 +800,7 @@ def _run_agent_loop(
         )
         # Final JSONL poll after session exits to capture any buffered entries
         processed_hashes, last_cli_step = _poll_claude_jsonl_and_append_steps(
-            agent_memory_dir, processed_hashes, last_cli_step
+            agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
         )
 
         if termination_triggered.is_set():
@@ -863,7 +891,7 @@ def main():
     llm_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.environ["LLM_SESSION_ID"] = llm_session_id
     os.environ["RUN_DATA_ID"] = run_id
-    os.environ["POKEAGENT_CLI_MODE"] = "1"
+    os.environ["LLM_METRICS_WRITE_ENABLED"] = "false"  # server is the single writer; run_cli syncs via /sync_llm_metrics
     print(f"📝 Session ID: {llm_session_id}")
 
     run_manager.save_metadata(

@@ -2,6 +2,7 @@
 """Tests for utils/claude_jsonl_reader.py (Issues 9, 10, 11)."""
 
 import json
+import os
 import sys
 import tempfile
 import time
@@ -274,42 +275,42 @@ class TestAppendCliStepIntegration:
         with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
             llm_logger = LLMLogger(log_dir=str(tmp_path), session_id="test_cli")
 
-        # Write a JSONL file
-        jsonl = tmp_path / "session.jsonl"
-        with open(jsonl, "w") as f:
-            f.write(json.dumps(ASSISTANT_ENTRY_FULL) + "\n")
-            f.write(json.dumps(ASSISTANT_ENTRY_NO_CACHE) + "\n")
+            # Write a JSONL file
+            jsonl = tmp_path / "session.jsonl"
+            with open(jsonl, "w") as f:
+                f.write(json.dumps(ASSISTANT_ENTRY_FULL) + "\n")
+                f.write(json.dumps(ASSISTANT_ENTRY_NO_CACHE) + "\n")
 
-        from utils.claude_jsonl_reader import load_new_usage_entries
+            from utils.claude_jsonl_reader import load_new_usage_entries
 
-        new_entries, processed = load_new_usage_entries(tmp_path, set())
-        assert len(new_entries) == 2
+            new_entries, processed = load_new_usage_entries(tmp_path, set())
+            assert len(new_entries) == 2
 
-        new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
-        step = -1
-        for entry in new_entries:
-            step += 1
-            llm_logger.append_cli_step(
-                step_number=step,
-                token_usage=entry["_tokens"],
-                duration=1.5,
-                timestamp=time.time(),
-                model_info={"model": "claude-sonnet-4-6"},
-                tool_calls=entry["_tool_calls"],
-            )
+            new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
+            step = -1
+            for entry in new_entries:
+                step += 1
+                llm_logger.append_cli_step(
+                    step_number=step,
+                    token_usage=entry["_tokens"],
+                    duration=1.5,
+                    timestamp=time.time(),
+                    model_info={"model": "claude-sonnet-4-6"},
+                    tool_calls=entry["_tool_calls"],
+                )
 
-        steps = llm_logger.cumulative_metrics["steps"]
-        assert len(steps) == 2
-        assert steps[0]["step"] == 0
-        assert steps[1]["step"] == 1
-        # First entry has cache tokens
-        assert steps[0]["cached_tokens"] == 1500
-        assert steps[0]["cache_write_tokens"] == 200
-        # Tool calls attached
-        assert "tool_calls" in steps[0]
-        assert steps[0]["tool_calls"][0]["name"] == "Read"
-        # Cost should be positive
-        assert llm_logger.cumulative_metrics["total_cost"] > 0
+            steps = llm_logger.cumulative_metrics["steps"]
+            assert len(steps) == 2
+            assert steps[0]["step"] == 0
+            assert steps[1]["step"] == 1
+            # First entry has cache tokens
+            assert steps[0]["cached_tokens"] == 1500
+            assert steps[0]["cache_write_tokens"] == 200
+            # Tool calls attached
+            assert "tool_calls" in steps[0]
+            assert steps[0]["tool_calls"][0]["name"] == "Read"
+            # Cost should be positive
+            assert llm_logger.cumulative_metrics["total_cost"] > 0
 
 
 # ---------------------------------------------------------------------------

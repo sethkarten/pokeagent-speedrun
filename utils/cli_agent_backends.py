@@ -103,7 +103,6 @@ class CliAgentBackend(ABC):
         event: dict,
         metrics: CliSessionMetrics | None,
         server_url: str | None = None,
-        snapshot_path: Path | None = None,
     ) -> None:
         """Process one stream event (e.g. system, assistant, user, result). Update metrics and optionally POST thinking to server."""
         pass
@@ -125,7 +124,6 @@ class CliAgentBackend(ABC):
         log_file: io.TextIOWrapper | None,
         metrics: CliSessionMetrics | None,
         server_url: str | None = None,
-        snapshot_path: Path | None = None,
     ) -> None:
         """Read stdout line-by-line (JSONL), tee to log_file, parse and handle events."""
         logger.debug("stream reader started: %s", self.name)
@@ -148,7 +146,7 @@ class CliAgentBackend(ABC):
                         sys.stdout.write(line)
                         sys.stdout.flush()
                     continue
-                self.handle_stream_event(event, metrics, server_url, snapshot_path)
+                self.handle_stream_event(event, metrics, server_url)
         except (OSError, ValueError) as e:
             logger.debug("stream reader error: %s", e)
         logger.debug("stream reader exiting: %s", self.name)
@@ -464,7 +462,6 @@ class ClaudeCodeBackend(CliAgentBackend):
         event: dict,
         metrics: CliSessionMetrics | None,
         server_url: str | None = None,
-        snapshot_path: Path | None = None,
     ) -> None:
         etype = event.get("type", "")
         now = time.time()
@@ -507,13 +504,6 @@ class ClaudeCodeBackend(CliAgentBackend):
                 usage = event.get("usage", {})
                 metrics.input_tokens = usage.get("input_tokens", 0)
                 metrics.output_tokens = usage.get("output_tokens", 0)
-                if snapshot_path:
-                    try:
-                        snapshot_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(snapshot_path, "w") as f:
-                            json.dump(asdict(metrics), f, indent=2)
-                    except Exception as e:
-                        logger.debug("Could not write CLI metrics snapshot: %s", e)
             logger.info(
                 "[cli:result] cost=$%.4f turns=%d duration=%.1fs error=%s",
                 event.get("total_cost_usd", 0),

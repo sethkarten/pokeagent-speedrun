@@ -349,6 +349,10 @@ class LLMLogger:
         JSONL files produced by Claude Code already serve as the raw interaction
         log.  Only cumulative_metrics.json is updated.
 
+        In-memory metrics are ALWAYS updated regardless of LLM_METRICS_WRITE_ENABLED so
+        that run_cli can accumulate steps in memory and forward them to the server via
+        /sync_llm_metrics even when disk writes are disabled.
+
         Args:
             step_number:  Monotonically increasing step index for this run.
             token_usage:  Dict with keys prompt, completion, cached, cache_write, total.
@@ -357,8 +361,8 @@ class LLMLogger:
             model_info:   Optional dict with at least a "model" key for pricing lookup.
             tool_calls:   Optional list of {name, args} dicts from the assistant message.
         """
-        if not self._metrics_write_enabled():
-            return
+        # NOTE: intentionally not gated by _metrics_write_enabled() here – in-memory
+        # update must happen even when disk writes are off so the sync path works.
 
         step_tokens = {
             "prompt": int(token_usage.get("prompt", 0) or 0),
@@ -429,7 +433,10 @@ class LLMLogger:
                 step_entry["tool_calls"] = cleaned
 
         self.cumulative_metrics["steps"].append(step_entry)
-        self.save_cumulative_metrics()
+        # Only write to disk when this process owns the file (server in single-writer mode).
+        # run_cli keeps steps in memory and syncs to server via /sync_llm_metrics.
+        if self._metrics_write_enabled():
+            self.save_cumulative_metrics()
         logger.debug(
             "CLI step %d appended: tokens=%d cost=$%.5f tools=%d",
             step_number,
@@ -798,31 +805,26 @@ class LLMLogger:
             return {"error": str(e)}
     
     def save_cumulative_metrics(self, metrics_file: str = None):
-        """Save just the cumulative metrics to a lightweight cache file
+        """Save just the cumulative metrics to a lightweight cache file.
 
-        Args:
-            metrics_file: Path to save metrics (defaults to cache folder)
+        Single-writer pattern: only the server writes (LLM_METRICS_WRITE_ENABLED=true).
+        run_cli accumulates steps in-memory and syncs to the server via /sync_llm_metrics.
         """
         try:
             if not self._metrics_write_enabled():
                 logger.debug("Metrics write disabled; skipping save_cumulative_metrics()")
                 return
 
-            # Determine metrics file path
             if metrics_file is None:
                 from utils.run_data_manager import get_cache_path
                 metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
-            # Create a clean copy without internal tracking fields
             metrics_to_save = self.cumulative_metrics.copy()
-            
-            # Remove internal tracking fields (these are only for runtime calculation)
             for key in list(metrics_to_save.keys()):
                 if key.startswith("_"):
                     del metrics_to_save[key]
-            
-            # Save metrics
-            with open(metrics_file, 'w', encoding='utf-8') as f:
+
+            with open(metrics_file, "w", encoding="utf-8") as f:
                 json.dump(metrics_to_save, f, indent=2)
 
             logger.debug(f"Saved cumulative metrics to {metrics_file}")
