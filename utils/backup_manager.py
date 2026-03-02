@@ -7,6 +7,7 @@ Creates timestamped zip backups whenever the agent completes objectives.
 import os
 import shutil
 import logging
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -66,16 +67,31 @@ def create_cache_backup(
         backup_name = f"{timestamp}_{safe_id}_{safe_desc}"
         backup_path = run_backup_dir / backup_name
 
-        # Create the zip archive
+        # Create the zip archive (custom walk to skip files with permission errors;
+        # containerized agent creates files owned by claude-agent that host cannot read)
         logger.info(f"📦 Creating backup: {backup_name}.zip")
-        shutil.make_archive(
-            str(backup_path),  # base_name (without .zip extension)
-            'zip',             # format
-            str(cache_path.parent),  # root_dir
-            str(cache_path.name)     # base_dir
-        )
-
         backup_zip = f"{backup_path}.zip"
+        skipped = []
+
+        def on_walk_error(err: OSError):
+            skipped.append(str(err.filename))
+
+        with zipfile.ZipFile(backup_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for root, _dirs, files in os.walk(cache_path, topdown=True, onerror=on_walk_error):
+                rel_root = Path(root).relative_to(cache_path.parent)
+                for name in files:
+                    filepath = Path(root) / name
+                    arcname = rel_root / name
+                    try:
+                        zf.write(filepath, arcname)
+                    except (PermissionError, OSError) as e:
+                        skipped.append(str(filepath))
+                        logger.debug("Skipped %s: %s", arcname, e)
+        if skipped:
+            logger.warning(
+                "Backup skipped %d path(s) due to permission errors (container-created files)",
+                len(skipped),
+            )
         backup_size_mb = os.path.getsize(backup_zip) / (1024 * 1024)
         logger.info(f"✅ Backup created: {backup_zip} ({backup_size_mb:.2f} MB)")
 
