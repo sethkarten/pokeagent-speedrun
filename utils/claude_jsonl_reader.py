@@ -125,8 +125,10 @@ def load_new_usage_entries(
       _tool_calls      – list from extract_tool_calls_from_entry
       _parsed_timestamp – datetime | None
     """
-    new_entries: list[dict] = []
-    new_hashes: set[str] = set()
+    # best_by_hash: keep the entry with the highest total token count for each uid.
+    # Claude Code emits two entries per API call: a streaming chunk (output_tokens=0)
+    # and a final entry with complete usage.  Taking the last/best avoids under-counting.
+    best_by_hash: dict[str, dict] = {}
 
     for jsonl_path in find_jsonl_files(data_path):
         try:
@@ -153,7 +155,7 @@ def load_new_usage_entries(
                         logger.debug("No dedup key for entry in %s, skipping", jsonl_path)
                         continue
 
-                    if uid in processed_hashes or uid in new_hashes:
+                    if uid in processed_hashes:
                         continue
 
                     parsed_ts = _parse_timestamp(entry.get("timestamp"))
@@ -164,10 +166,14 @@ def load_new_usage_entries(
                     entry["_tokens"] = tokens
                     entry["_tool_calls"] = extract_tool_calls_from_entry(entry)
                     entry["_parsed_timestamp"] = parsed_ts
-                    new_entries.append(entry)
-                    new_hashes.add(uid)
+
+                    existing = best_by_hash.get(uid)
+                    if existing is None or tokens["total"] > existing["_tokens"]["total"]:
+                        best_by_hash[uid] = entry
 
         except OSError as exc:
             logger.warning("Could not read %s: %s", jsonl_path, exc)
 
+    new_entries = list(best_by_hash.values())
+    new_hashes = set(best_by_hash.keys())
     return new_entries, processed_hashes | new_hashes

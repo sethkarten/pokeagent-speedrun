@@ -51,17 +51,46 @@ The metric tracking system provides comprehensive visibility into the agent's pe
 - Triggered when the agent completes a high-level objective (e.g., "Defeat Gym Leader Roxanne").
 - **Data**: Similar to milestones, providing "cost per objective" breakdowns.
 
-## 2. CLI Agent Logging
+## 2. CLI Agent Usage Monitoring (External Agents, e.g., Claude Code)
+
+External CLI agents (run via `run_cli.py`) run in a separate process or container and do not integrate directly with `LLMLogger`. Usage is derived from Claude Code's JSONL files and synced to the server.
+
+### Single-Writer Pattern
+- **Server** is the only process that writes `cumulative_metrics.json` (via `LLM_METRICS_WRITE_ENABLED=true`).
+- **run_cli** sets `LLM_METRICS_WRITE_ENABLED=false` and never writes to disk; it accumulates steps in memory and POSTs to the server.
+
+### Flow
+1. **JSONL Polling**: `run_cli` polls Claude Code's JSONL files under `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl` for assistant entries with usage data (`utils/claude_jsonl_reader.py`).
+2. **Best-Entry Dedup**: Claude Code emits multiple entries per API call (streaming chunks with `output_tokens=0` and a final entry with complete usage). We keep the entry with the highest total token count per hash to avoid under-counting output tokens.
+3. **In-Memory Accumulation**: For each new entry, `append_cli_step()` updates `LLMLogger.cumulative_metrics` in memory (always, regardless of `LLM_METRICS_WRITE_ENABLED`).
+4. **Sync to Server**: After new steps are appended, `_sync_metrics_to_server()` POSTs the full cumulative metrics to `POST /sync_llm_metrics`. The server merges them into its `LLMLogger` and calls `save_cumulative_metrics()` to persist to disk.
+5. **Poll Cadence**: Polling runs every 15 seconds (heartbeat) and once after each session exits.
+
+### Relevant Paths & Endpoints
+- **JSONL source**: `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl`
+- **Persisted metrics**: `.pokeagent_cache/{run_id}/cumulative_metrics.json`
+- **Sync endpoint**: `POST /sync_llm_metrics` (body: `{"cumulative_metrics": {...}}`)
+
+### Pricing
+- Uses `claude-sonnet-4-6` / `claude-sonnet-4.6` pricing in `LLMLogger.pricing`.
+- Cache writes: 5m TTL at $3.75/M (`cache_write_prompt`). Cache hits at $0.30/M.
 
 ### Pre-Scaffold Agents (e.g., `MyCLIAgent`)
-- **Stream-JSON**: These agents typically output raw JSON lines to stdout/stderr.
-- **Session Logs**: The `RunDataManager` captures these streams into `run_data/{run_id}/agent_logs/session_{NNN}.jsonl`.
-- **Integration**: While they log raw data, they also sync key metrics (like total actions) to the server via `/sync_llm_metrics`.
+- **Stream-JSON**: Output raw JSON lines to stdout/stderr; captured into `run_data/{run_id}/agent_logs/session_{NNN}.jsonl`.
+- **Integration**: Sync metrics to the server via `/sync_llm_metrics`.
 
 ### Autonomous Agents
 - **Direct Logging**: `AutonomousCLIAgent` integrates directly with `LLMLogger`, ensuring all internal thought processes and tool calls are structured and stored in the main `llm_log.jsonl`.
 
-## 3. Software Engineering Principles Deviation
+## 3. Areas for Improvement
+
+**CLI Agent Metrics Discrepancy**
+- The cumulative statistics reported in agent logs (e.g. `[cli:result] cost=$4.52` from the session stream) can differ from values in `cumulative_metrics.json`.
+- The session result event has authoritative `total_cost_usd` and `usage` from the API, but we derive metrics from JSONL polling.
+- **Possible causes**: Output token undercount from streaming chunks (mitigated by best-entry dedup but not eliminated), missing subagent JSONL, or pricing differences (e.g. 1h vs 5m cache write TTL).
+- **Improvement**: Using the result event's totals at session end to correct or replace the JSONL-derived cumulative values would improve accuracy.
+
+## 4. Software Engineering Principles Deviation
 
 **Manual Write Control (Concurrency Risk)**
 - **Issue**: Writing to `cumulative_metrics.json` is controlled manually via the `LLM_METRICS_WRITE_ENABLED` environment variable.

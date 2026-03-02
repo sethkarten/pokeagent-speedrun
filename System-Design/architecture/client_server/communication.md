@@ -47,7 +47,7 @@ The server exposes ~23 specific endpoints under `/mcp/*` that map directly to ag
 - `POST /save_state`: Save emulator state (Protected by API Key).
 - `POST /load_state`: Load emulator state (Protected by API Key).
 - `POST /checkpoint`: Create a checkpoint (state + milestones + maps).
-- `POST /sync_llm_metrics`: Sync client-side LLM metrics to the server.
+- `POST /sync_llm_metrics`: Sync client-side LLM metrics to the server. Used by `run_cli` to push JSONL-derived token/cost metrics (single-writer pattern; server persists to `cumulative_metrics.json`).
 
 ## 3. State Synchronization
 

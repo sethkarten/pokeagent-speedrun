@@ -96,7 +96,15 @@ To allow the ephemeral container to maintain long-term memory across sessions (o
     *   **Seeding**: The host's `~/.claude` credentials are copied here before the run so the container is pre-authenticated.
 *   **Scratch Space**: `/workspace` inside the container is mounted to `run_data/<run_id>/agent_scratch_space` on the host. This is where the agent can write files, todos, or plans.
 
-## 4. Security Measures
+## 4. Usage Monitoring
+
+Token and cost metrics are derived from Claude Code's JSONL files in the mounted `claude_memory` directory. See `System-Design/architecture/metrics/tracking.md` for full detail.
+
+*   **Single-writer**: The server is the only process that writes `cumulative_metrics.json`. `run_cli` sets `LLM_METRICS_WRITE_ENABLED=false` and syncs via `POST /sync_llm_metrics`.
+*   **JSONL polling**: `run_cli` polls `.pokeagent_cache/<run_id>/claude_memory/projects/-workspace/*.jsonl` for assistant entries with usage data, deduplicates by keeping the best (highest total tokens) entry per API call, then calls `append_cli_step()` and POSTs to the server.
+*   **Known discrepancy**: Session result events (`[cli:result] cost=$X`) carry authoritative API totals but are not used to correct `cumulative_metrics.json`. JSONL-derived values can differ; see "Areas for Improvement" in `tracking.md`.
+
+## 5. Security Measures
 
 1.  **Network Isolation**: The agent cannot access the local network or the internet (except Anthropic API). It cannot "cheat" by calling the game server API directly; it *must* use the MCP tools.
 2.  **Filesystem Isolation**: The agent is confined to the container. It can only modify files in the specific mounted scratch space.
