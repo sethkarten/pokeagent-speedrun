@@ -8,6 +8,21 @@ Unlike the internal Python agents (e.g. `MyCLIAgent`, `AutonomousCLIAgent`) whic
 
 This architecture allows us to use powerful, proprietary agentic tools like Anthropic's `claude` CLI (Claude Code) which require their own runtime environment, while keeping the game infrastructure secure and stable.
 
+---
+
+**IMPORTANT — Claude Code Coupling Regression**
+
+`run_cli.py` has regressed to using many Claude Code-specific conventions when it should be generalized for future CLI agent implementations (Codex, Gemini, etc.). This will need refactoring for multi-backend support. Specific areas:
+
+*   **Session persistence fallback**: `_load_last_session_id()` fallback uses `claude_memory/projects/-workspace` — Claude Code-specific path.
+*   **`agent_memory_subdir`**: Backend property returns `claude_memory`; JSONL polling and other paths assume this structure.
+*   **Stream event handling**: `handle_stream_event` expects Claude Code `stream-json` event types (`system`, `assistant`, `user`, `result`) and session ID format.
+*   **JSONL polling**: `_poll_claude_jsonl_and_append_steps` hardcodes Claude Code JSONL structure under `claude_memory/projects/-workspace/*.jsonl`.
+
+These should be abstracted via backend-specific interfaces or config paths.
+
+---
+
 ## 1. System Components
 
 The architecture consists of two main environments: the **Host** (where the game runs) and the **Container** (where the agent runs).
@@ -93,8 +108,16 @@ sequenceDiagram
 To allow the ephemeral container to maintain long-term memory across sessions (or restarts), specific directories are bind-mounted from the Host:
 
 *   **Agent Memory**: `~/.claude` inside the container is mounted to `.pokeagent_cache/<run_id>/claude_memory` on the host. This persists the agent's project history, "brain" (memory.md), and authentication credentials.
-    *   **Seeding**: The host's `~/.claude` credentials are copied here before the run so the container is pre-authenticated.
+    *   **Seeding**: The host's `~/.claude` credentials are copied here before the run. `seed_agent_auth()` **always overwrites** credential files (not just when missing), so restoring from backup uses the host's current credentials instead of stale backup credentials.
 *   **Scratch Space**: `/workspace` inside the container is mounted to `run_data/<run_id>/agent_scratch_space` on the host. This is where the agent can write files, todos, or plans.
+
+### Session Persistence for Backup Restore
+
+The CLI agent session ID is persisted so that when restoring from backup, the agent can resume with `--resume` and maintain context:
+
+*   **Location**: `.pokeagent_cache/{run_id}/last_cli_session_id` — written after each session, included in backups.
+*   **Fallback (older backups)**: If `last_cli_session_id` is missing, derive from the most recent project in `claude_memory/projects/-workspace/` (Claude Code-specific; see coupling note above).
+*   **Flow**: On restore, backup extracts to cache. Next run loads session ID, passes `--resume <session_id>` to the agent, then `seed_agent_auth()` overwrites credentials with host's current ones.
 
 ## 4. Usage Monitoring
 

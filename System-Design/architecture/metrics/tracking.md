@@ -67,7 +67,7 @@ External CLI agents (run via `run_cli.py`) run in a separate process or containe
 5. **Poll Cadence**: Polling runs every 15 seconds (heartbeat) and once after each session exits.
 
 ### Relevant Paths & Endpoints
-- **JSONL source**: `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl`
+- **JSONL source**: `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl` (Claude Code-specific; see coupling note in `external_mcp_agents.md`)
 - **Persisted metrics**: `.pokeagent_cache/{run_id}/cumulative_metrics.json`
 - **Sync endpoint**: `POST /sync_llm_metrics` (body: `{"cumulative_metrics": {...}}`)
 
