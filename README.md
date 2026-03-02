@@ -228,17 +228,33 @@ For security and isolation, it is recommended to run the Claude Code agent in a 
    ```
 
 **1. Build the Container Image**
-You only need to do this once (or when dependencies change).
+Use the `--build` flag with `run_cli.py` to automatically build the image with your user's UID/GID. This ensures files created by the agent are owned by you (not root).
+
 ```bash
-docker build -t claude-agent-devcontainer -f .devcontainer/claude-agent/Dockerfile .devcontainer/claude-agent
+python run_cli.py --cli-type claude --containerized --build --directive agent/prompts/cli_directives/pokemon_directive.md
 ```
-Or use `--build` when running: `python run_cli.py --cli-type claude --containerized --build --directive ...`
+
+*Manual Build (Alternative):*
+If you prefer to build manually, you must pass your UID/GID:
+```bash
+docker build \
+  -t claude-agent-devcontainer \
+  --build-arg USER_UID=$(id -u) \
+  --build-arg USER_GID=$(id -g) \
+  -f .devcontainer/claude-agent/Dockerfile .devcontainer/claude-agent
+```
 
 **2. Run the Agent**
-Run the orchestrator with the `--containerized` flag to isolate the cli agent instance and prevent it from reading the codebase/modifying files it should not have access to.
+After building once, you can run without `--build`:
 ```bash
 python run_cli.py --cli-type claude --containerized --directive agent/prompts/cli_directives/pokemon_directive.md
 ```
+
+**How it works:**
+- **Permissions**: The container runs as a user matching your host UID, so bind-mounted files in `run_data/` and `.pokeagent_cache/` are readable/writable by both you and the agent.
+- **Networking**: The agent connects to the host's MCP server via `host.docker.internal` on a bridge network.
+- **Isolation**: A firewall script inside the container blocks all outbound connections except to Anthropic APIs and the MCP server.
+
 
 **Debug controls (with display):** M = state overlay, Shift+M = map, S = screenshot, Tab = cycle mode, Space = one agent step, 1/2 = save/load state, arrows/WASD = move, Z/X = A/B.
 
