@@ -90,6 +90,13 @@ External CLI agents (run via `run_cli.py`) run in a separate process or containe
 - **Possible causes**: Output token undercount from streaming chunks (mitigated by best-entry dedup but not eliminated), missing subagent JSONL, or pricing differences (e.g. 1h vs 5m cache write TTL).
 - **Improvement**: Using the result event's totals at session end to correct or replace the JSONL-derived cumulative values would improve accuracy.
 
+**Incremental Polling Token Undercount (Potential Improvement)**
+- **Issue**: Best-entry dedup only works within a single poll. Claude Code emits a streaming chunk (low/zero `output_tokens`) first, then a final entry with full usage. If poll 1 sees the streaming chunk, we add it and add its hash to `processed_hashes`. When poll 2 sees the final entry (same hash), we skip it. Result: ~5–15% undercount of completion tokens.
+- **Proposed fix**: Support *updates* when a later poll sees a higher-total entry for an already-processed hash. Changes required:
+  1. **Reader** (`claude_jsonl_reader.py`): Replace `processed_hashes: set` with `processed_best: dict[hash, total]`; return `(new_entries, update_entries, new_processed_best)`.
+  2. **Caller** (`run_cli.py`): Maintain `hash_to_step_info: dict[hash, (step_number, token_usage)]`; for update entries, call `update_cli_step()` to correct the step and cumulative totals.
+  3. **LLM logger** (`llm_logger.py`): Add `update_cli_step(step_number, old_usage, new_usage)` that subtracts old values, adds new values, and updates the step in `steps`.
+
 ## 4. Software Engineering Principles Deviation
 
 **Manual Write Control (Concurrency Risk)**
