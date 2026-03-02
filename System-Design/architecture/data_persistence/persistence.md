@@ -40,8 +40,9 @@ Provides recovery points to restore the agent's state in case of crashes, errors
 - **Content**: A zipped archive of the entire `.pokeagent_cache/{run_id}/` directory at a specific point in time (usually after completing an objective).
 
 ### Management (`utils/backup_manager.py`)
-- **Creation**: `create_cache_backup()` is called automatically upon objective completion.
-- **Restoration**: `restore_cache_from_backup()` rolls back state. Restores metrics from `cumulative_metrics.json` if present; otherwise metrics reset (logs and step count are restored from `checkpoint_llm.txt`). It creates a safety backup before overwriting.
+- **Creation**: `create_cache_backup()` is called automatically upon objective completion or termination.
+  - **Permission Handling**: Uses a custom zipfile walker that gracefully skips files the host user cannot read (e.g., if a containerized agent created root-owned files by mistake, though UID matching should prevent this). Skipped files are logged as warnings.
+- **Restoration**: `restore_cache_from_backup()` rolls back state. Restores metrics from `cumulative_metrics.json` if present; otherwise metrics reset.
 - **Cleanup**: `_cleanup_old_backups()` automatically maintains a window of recent backups (keeping the last 50 runs) to manage disk space.
 
 ## 3. Analysis Data (`run_data/`)
