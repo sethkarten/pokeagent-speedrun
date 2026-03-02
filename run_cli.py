@@ -208,7 +208,7 @@ def start_server(args, run_id=None):
     server_env = os.environ.copy()
     if run_id:
         server_env["RUN_DATA_ID"] = run_id
-    server_env.pop("POKEAGENT_CLI_MODE", None)  # server owns total_actions; merge preserves steps from run_cli
+    server_env["POKEAGENT_CLI_MODE"] = "1"  # Enable CLI-specific behavior (milestone backups, skip objectives)
 
     # Pass LLM session_id if available
     llm_session_id = os.environ.get("LLM_SESSION_ID")
