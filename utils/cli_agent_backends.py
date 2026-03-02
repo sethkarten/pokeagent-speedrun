@@ -129,16 +129,6 @@ class CliAgentBackend(ABC):
     ) -> None:
         """Read stdout line-by-line (JSONL), tee to log_file, parse and handle events."""
         logger.debug("stream reader started: %s", self.name)
-        # #region agent log
-        try:
-            import time as _time
-            _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
-            _log.write(json.dumps({"sessionId":"3c22ce","location":"cli_agent_backends.py:run_stream_reader","message":"stream reader started","data":{},"timestamp":int(_time.time()*1000)}) + "\n")
-            _log.close()
-        except Exception:
-            pass
-        # #endregion
-        _line_count = 0
         try:
             buffered = io.BufferedReader(stdout_pipe)
             for raw_line in buffered:
@@ -148,17 +138,6 @@ class CliAgentBackend(ABC):
                 if log_file:
                     log_file.write(line)
                     log_file.flush()
-                _line_count += 1
-                # #region agent log
-                if _line_count <= 30:
-                    try:
-                        import time as _time
-                        _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
-                        _log.write(json.dumps({"sessionId":"3c22ce","location":"cli_agent_backends.py:run_stream_reader","message":f"line #{_line_count}","data":{"preview":line.strip()[:200]},"timestamp":int(_time.time()*1000)}) + "\n")
-                        _log.close()
-                    except Exception:
-                        pass
-                # #endregion
                 stripped = line.strip()
                 if not stripped:
                     continue
@@ -173,15 +152,6 @@ class CliAgentBackend(ABC):
         except (OSError, ValueError) as e:
             logger.debug("stream reader error: %s", e)
         logger.debug("stream reader exiting: %s", self.name)
-        # #region agent log
-        try:
-            import time as _time
-            _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
-            _log.write(json.dumps({"sessionId":"3c22ce","location":"cli_agent_backends.py:run_stream_reader","message":"stream reader exiting","data":{"total_lines":_line_count},"timestamp":int(_time.time()*1000)}) + "\n")
-            _log.close()
-        except Exception:
-            pass
-        # #endregion
 
 
 class ClaudeCodeBackend(CliAgentBackend):
@@ -396,7 +366,6 @@ class ClaudeCodeBackend(CliAgentBackend):
             game_port = server_url.rstrip("/").split(":")[-1]
             # CLAUDE_CONFIG_DIR is required so OAuth credentials load from the mounted .claude dir.
             # Bridge network with host.docker.internal to reach the MCP SSE server on the host.
-            # NOTE: -t (PTY) removed — testing hypothesis that PTY causes output deadlock.
             docker_cmd = [
                 "docker", "run", "--rm",
                 "--name", f"claude-agent-{run_id}",
@@ -412,16 +381,6 @@ class ClaudeCodeBackend(CliAgentBackend):
                 "-e", f"CLAUDE_CONFIG_DIR={self.AGENT_MEMORY_PATH}",
                 self.container_image,
             ] + claude_cmd
-
-            # #region agent log
-            try:
-                import time as _time
-                _log = open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-3c22ce.log", "a")
-                _log.write(json.dumps({"sessionId":"3c22ce","location":"cli_agent_backends.py:build_launch_cmd","message":"docker cmd built","data":{"network":"bridge","has_t_flag":"-t" in docker_cmd,"mcp_url_host":"host.docker.internal","mcp_config_exists":mcp_config_path.exists(),"full_cmd":" ".join(docker_cmd)},"timestamp":int(_time.time()*1000)}) + "\n")
-                _log.close()
-            except Exception:
-                pass
-            # #endregion
 
             return docker_cmd, env, bootstrap, None
 
