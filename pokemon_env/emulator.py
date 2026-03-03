@@ -1347,6 +1347,9 @@ class EmeraldEmulator:
                 return False
             elif milestone_id == "BIRCH_LAB_VISITED":
                 if game_state:
+                    # Only count when returning to lab to receive Pokedex (after Route 103 rival battle)
+                    if not self.milestone_tracker.is_completed("ROUTE_103"):
+                        return False
                     location = game_state.get("player", {}).get("location", "")
                     return "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" in str(location).upper()
                 return False
