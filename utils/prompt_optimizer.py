@@ -141,7 +141,14 @@ class PromptOptimizer:
         
         # Format trajectories for LLM analysis
         trajectory_summary = self._format_trajectories_for_analysis(recent_trajectories)
-        
+        logger.info(
+            "📋 Trajectory summary for optimization (steps %d–%d, %d chars):\n%s",
+            current_step - num_trajectory_steps + 1,
+            current_step,
+            len(trajectory_summary),
+            trajectory_summary,
+        )
+
         # Build optimization prompt with system prompt context
         system_prompt_section = ""
         if self.system_prompt_content:
