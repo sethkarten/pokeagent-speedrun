@@ -108,7 +108,7 @@ STORY_OBJECTIVES = [
         action_type="interact",
         category="story",
         target_location="Viridian City",
-        navigation_hint="Enter the Poké Mart (blue-roofed building). Talk to the shopkeeper — he gives you Oak's Parcel to deliver to Professor Oak in Pallet Town. Stock up on Poké Balls and Potions while you're here.",
+        navigation_hint="Enter the Poké Mart (blue-roofed building). Talk to the shopkeeper — he gives you Oak's Parcel to deliver to Professor Oak in Pallet Town. Item inventory is limited until you deliver the parcel.",
         completion_condition="oaks_parcel_received",
         priority=1
     ),
@@ -193,7 +193,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Pewter Gym",
-        navigation_hint="Brock: Geodude Lv 12 (Tackle, Defense Curl), Onix Lv 14 (Tackle, Screech, Bide). Water/Grass 4× on Geodude, 2× on Onix. Charmander is at a disadvantage — spam Growl and Ember. Mankey (Route 22) is great here. Reward: $1386, Boulder Badge, TM34 Bide.",
+        navigation_hint="Brock: Geodude Lv 12 (Tackle, Defense Curl), Onix Lv 14 (Tackle, Screech, Bide). Water/Grass 4× on Geodude, 2× on Onix. Charmander is at a disadvantage — spam Growl and Ember. Reward: $1386, Boulder Badge, TM34 Bide.",
         completion_condition="boulder_badge_obtained",
         priority=1,
         recommended_battling_objectives=["battle_003", "battle_004"]
@@ -228,7 +228,7 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Mt. Moon 1F",
-        navigation_hint="Mt. Moon has 3 floors: 1F, B1F, B2F. Wild: Zubat (55%), Geodude (35%), Paras (10%). Bring Antidotes for Zubat's Poison. Items include TM12 Water Gun, HP Up, TM01 Mega Punch, Moon Stones. Multiple Team Rocket grunts on B1F and B2F.",
+        navigation_hint="Mt. Moon has 3 floors: 1F, B1F, B2F. Wild: Zubat (55%), Geodude (35%), Paras (10%), Clefairy (rare ~1%). Bring Antidotes for Zubat's Poison. Items include TM12 Water Gun, HP Up, TM01 Mega Punch, Moon Stones. Multiple Team Rocket grunts on B1F and B2F.",
         completion_condition="entered_mt_moon",
         priority=1
     ),
@@ -507,7 +507,7 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Team Rocket Hideout B1F",
-        navigation_hint="Hideout B1F: pick up Escape Rope. B2F: spinner maze, grab Nugget/Moon Stone/TM07 Zap Cannon. B3F: Rare Candy. B4F northwest: a Grunt guards the Lift Key — defeat him and take it. Then go to B4F southeast elevator and use the Lift Key to call it.",
+        navigation_hint="Hideout B1F: pick up Escape Rope. B2F: spinner maze, grab Nugget/Moon Stone/TM07 Horn Drill. B3F: Rare Candy. B4F northwest: a Grunt guards the Lift Key — defeat him and take it. Then go to B4F southeast elevator and use the Lift Key to call it.",
         completion_condition="lift_key_obtained",
         priority=1
     ),
@@ -581,11 +581,11 @@ STORY_OBJECTIVES = [
     # ============================================================
     DirectObjective(
         id="saffron_052",
-        description="Enter Saffron City (now accessible via underground paths)",
+        description="Enter Saffron City after giving a drink to the gate guards",
         action_type="navigate",
         category="story",
         target_location="Saffron City",
-        navigation_hint="Saffron City is in the center of Kanto. The gate guards previously blocked entry; now they allow passage. Enter from Routes 5/6/7/8 via underground paths. Saffron has the Silph Co. skyscraper, Saffron Gym, and Fighting Dojo.",
+        navigation_hint="Saffron City is in the center of Kanto. Give any drink from Celadon Dept. Store vending machines (Fresh Water/Soda Pop/Lemonade) to a thirsty guard, then all guards allow passage. Enter from Routes 5/6/7/8. Saffron has the Silph Co. skyscraper, Saffron Gym, and Fighting Dojo.",
         completion_condition="reached_saffron_city",
         priority=1
     ),
@@ -605,7 +605,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Silph Co. 7F",
-        navigation_hint="Blue is on 7F northwest near a warp pad. Team: Pidgeot Lv 37, Alakazam Lv 35, Rhyhorn Lv 38, starter's final evolution (~Lv 40). Use your strongest Pokémon. Reward: $2450.",
+        navigation_hint="Blue is on 7F northwest near a warp pad. Team: Pidgeot Lv 37, Alakazam Lv 35, Growlithe/Gyarados/Exeggcute Lv 38, and his starter's final evolution (~Lv 40). Use your strongest Pokémon. Reward: $2450.",
         completion_condition="rival_battle_6_won",
         priority=1
     ),
@@ -677,11 +677,11 @@ STORY_OBJECTIVES = [
     ),
     DirectObjective(
         id="fuchsia_061",
-        description="Enter the Safari Zone and collect HM03 Surf and the Gold Teeth",
+        description="Enter the Safari Zone and collect the Gold Teeth and HM03 Surf",
         action_type="navigate",
         category="story",
         target_location="Safari Zone",
-        navigation_hint="Safari Zone entrance is in the north of Fuchsia. Pay $500 for 30 Safari Balls and 500 steps. Find HM03 Surf in an item ball in the center area (Area 1/2). Find the Gold Teeth in the northwest area. You need both. Cannot weaken wild Pokémon — use bait/rocks.",
+        navigation_hint="Safari Zone entrance is in the north of Fuchsia. Pay $500. Navigate to Area 3 (the deepest zone). Find the Gold Teeth in an item ball here. Then, enter the Secret House right next to it and talk to the man inside to receive HM03 Surf.",
         completion_condition="hm03_surf_and_gold_teeth_obtained",
         priority=1
     ),
@@ -756,7 +756,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Cinnabar Gym",
-        navigation_hint="Blaine: Growlithe Lv 42 (Ember, Flame Wheel), Ponyta Lv 40 (Stomp, Ember), Rapidash Lv 42 (Fire Spin, Stomp), Arcanine Lv 47 (Ember, Fire Spin, Take Down). Water is super effective against all. Rock also resists Fire. Keep Pokémon healthy — Fire Spin traps and burns. Reward: Volcano Badge, TM38 Fire Blast.",
+        navigation_hint="Blaine's Red team: Growlithe Lv 42, Ponyta Lv 40, Rapidash Lv 42, Arcanine Lv 47. Water is super effective against all. Rock also resists Fire. Keep Pokémon healthy — Fire Spin can trap targets. Reward: Volcano Badge, TM38 Fire Blast.",
         completion_condition="volcano_badge_obtained",
         priority=1,
         recommended_battling_objectives=["battle_016", "battle_017"]
@@ -900,21 +900,21 @@ BATTLING_OBJECTIVES = [
         action_type="battle",
         category="battling",
         target_location="Route 1",
-        navigation_hint="Battle wild Pidgey and Rattata on Route 1. Reach Lv 7 minimum before going back to Pallet Town. More levels = better stats and possibly a new move.",
+        navigation_hint="Battle wild Pokémons on Route 1. Reach Lv 7 minimum before going back to Pallet Town. More levels = better stats and possibly a new move.",
         completion_condition="starter_level_7",
         priority=1,
         prerequisite_story_objective="pallet_004"
     ),
     DirectObjective(
         id="battle_001",
-        description="Buy Poké Balls and Potions at Viridian City Poké Mart",
+        description="Buy Poké Balls and Antidotes at Viridian City Poké Mart",
         action_type="shop",
         category="battling",
         target_location="Viridian City",
-        navigation_hint="Buy: 10 Poké Balls ($2000), 5 Potions ($1500), 3 Antidotes ($450). Total ~$3950. Essential for Viridian Forest. The Poké Mart is unlocked after delivering Oak's Parcel.",
+        navigation_hint="Buy: 3 Poké Balls ($600), 6 Antidotes ($600). Total: $1200. Essential for Viridian Forest. The Poké Mart is unlocked after delivering Oak's Parcel.",
         completion_condition="viridian_shopping_done",
         priority=1,
-        prerequisite_story_objective="viridian_008"
+        prerequisite_story_objective="viridian_009"
     ),
 
     # Pre-Brock
@@ -924,7 +924,7 @@ BATTLING_OBJECTIVES = [
         action_type="catch",
         category="battling",
         target_location="Viridian Forest",
-        navigation_hint="Pikachu has ~5% encounter rate in Viridian Forest (Lv 3-5). Electric is super effective against Misty's Water types. Weaken to red HP then throw a Poké Ball.",
+        navigation_hint="Pikachu has ~5% encounter rate in Viridian Forest (Lv 3-5). Electric is super effective against Misty's Water types. Weaken to red HP then throw a Poké Ball (available in items).",
         completion_condition="pikachu_caught",
         priority=2,
         optional=True,
@@ -935,23 +935,23 @@ BATTLING_OBJECTIVES = [
         description="Train your team to Lv 12-14 before battling Brock",
         action_type="battle",
         category="battling",
-        target_location="Route 3",
-        navigation_hint="Brock's Onix is Lv 14. Train on Route 3 trainers for good EXP. If you chose Charmander (type disadvantage), get to Lv 15+ and use Growl to lower Onix's attack. Mankey (Route 22, Fighting-type) trivializes Brock.",
+        target_location="Pewter City / Viridian Forest",
+        navigation_hint="Brock's Onix is Lv 14. Train in Viridian Forest, Route 2 grass, and Route 22 wild encounters before entering Pewter Gym. If you chose Charmander (type disadvantage), get to Lv 15+ and use Growl to lower Onix's attack. Mankey from Route 22 (Red) is a strong anti-Brock option.",
         completion_condition="team_level_13_brock",
         priority=1,
         prerequisite_story_objective="pewter_014"
     ),
     DirectObjective(
         id="battle_004",
-        description="Catch a Mankey on Route 22 — Fighting-type destroys Brock",
+        description="Catch a Caterpie in Viridian Forest and evolve it to Butterfree for Brock",
         action_type="catch",
         category="battling",
-        target_location="Route 22",
-        navigation_hint="Mankey appears on Route 22 (west of Viridian City). Fighting-type is super effective against Brock's Rock/Normal Pokémon. Mankey learns Low Kick early. Catch one at Lv 3-5.",
-        completion_condition="mankey_caught",
+        target_location="Viridian Forest",
+        navigation_hint="If you chose Charmander, catch a Caterpie in Viridian Forest and train it to Lv 10 to evolve it into Butterfree. It learns Confusion, which deals heavy special damage to Brock's Rock/Ground types.",
+        completion_condition="butterfree_obtained",
         priority=2,
         optional=True,
-        prerequisite_story_objective="viridian_011"
+        prerequisite_story_objective="viridian_012"
     ),
 
     # Pre-Misty
@@ -968,11 +968,11 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_006",
-        description="Buy Great Balls and Super Potions at Cerulean Poké Mart",
+        description="Buy Potions and Repels at Cerulean Poké Mart",
         action_type="shop",
         category="battling",
         target_location="Cerulean City",
-        navigation_hint="Buy: 10 Great Balls ($6000), 5 Super Potions ($3000). Great Balls have better catch rate for Mt. Moon and early routes. Stock up before Nugget Bridge.",
+        navigation_hint="Buy: 10 Potions ($3000), 5 Repels ($1750). Stock up on basic healing before Nugget Bridge.",
         completion_condition="cerulean_shopping_done",
         priority=1,
         prerequisite_story_objective="cerulean_023"
@@ -981,11 +981,11 @@ BATTLING_OBJECTIVES = [
     # Pre-Surge
     DirectObjective(
         id="battle_007",
-        description="Catch a Diglett in Diglett's Cave — Ground immunity to Electric completely counters Surge",
+        description="Catch a Diglett or Dugtrio in Diglett's Cave — Ground immunity to Electric completely counters Surge",
         action_type="catch",
         category="battling",
         target_location="Diglett's Cave",
-        navigation_hint="Diglett's Cave is on Route 11 east of Vermilion City. Diglett (95%, Lv 15-21) or rare Dugtrio (5%). Ground-type is IMMUNE to all Electric moves — Diglett/Dugtrio destroys Lt. Surge's entire team. Highly recommended.",
+        navigation_hint="Diglett's Cave is on Route 11 east of Vermilion City. Diglett (95%, Lv 15-22) or rare Dugtrio (5%, Lv 29-31). Ground-type is IMMUNE to all Electric moves — this destroys Lt. Surge's entire team.",
         completion_condition="ground_type_for_surge",
         priority=1,
         prerequisite_story_objective="vermilion_030"
@@ -1016,11 +1016,11 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_010",
-        description="Buy items at Celadon Department Store (TMs, Hyper Potions)",
+        description="Buy key items at Celadon Department Store (TMs, healing, drinks)",
         action_type="shop",
         category="battling",
         target_location="Celadon City",
-        navigation_hint="Celadon Dept Store (6 floors). Key purchases: 10 Hyper Potions (1F), TM17 Submission (2F), X items (4F), Revives (4F). Rooftop vending machine: Fresh Water → give to rooftop girl for TM13 Ice Beam. Ice Beam is crucial for the Elite Four.",
+        navigation_hint="Celadon Dept Store (6 floors). Key purchases: Super Potions/Great Balls (1F), useful battle TMs (2F), and X items/Revives (4F). Rooftop vending machine: Fresh Water to the rooftop girl for TM13 Ice Beam. Also keep one extra drink for Saffron gate guards.",
         completion_condition="celadon_shopping_done",
         priority=1,
         prerequisite_story_objective="celadon_041"
@@ -1077,11 +1077,11 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_015",
-        description="Catch a Pokémon in the Safari Zone (Chansey, Scyther/Pinsir, or Exeggcute)",
+        description="Catch a Pokémon in the Safari Zone (Chansey, Scyther, or Exeggcute)",
         action_type="catch",
         category="battling",
         target_location="Safari Zone",
-        navigation_hint="Safari Zone rare catches: Chansey (1-4%, very bulky support), Scyther/Pinsir (version-exclusive, strong), Exeggcute (Grass/Psychic, evolves to Exeggutor). Use Bait to reduce flee rate, then throw balls. Limited to 30 balls and 500 steps.",
+        navigation_hint="Safari Zone rare catches: Chansey (1-4%, very bulky support), Scyther (version-exclusive, strong), Exeggcute (Grass/Psychic, evolves to Exeggutor). Use Bait to reduce flee rate, then throw balls. Limited to 30 balls and 500 steps.",
         completion_condition="safari_zone_catch",
         priority=2,
         optional=True,
@@ -1102,11 +1102,11 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_017",
-        description="Buy Full Restores and Revives before the Cinnabar Gym",
+        description="Buy Hyper Potions and Revives before the Cinnabar Gym",
         action_type="shop",
         category="battling",
         target_location="Cinnabar Island",
-        navigation_hint="Cinnabar Island Poké Mart stocks Full Restore ($3000) and Revive ($1500). Buy 10 Full Restores and 5 Revives before the Pokémon Mansion and Cinnabar Gym — the trainers inside are tough (Lv 29-42).",
+        navigation_hint="Cinnabar Island Poké Mart stocks Hyper Potions ($1500) and Revives ($1500). Buy 10 Hyper Potions and 5 Revives before the Pokémon Mansion and Cinnabar Gym. Full Restores are not available until the Elite Four.",
         completion_condition="cinnabar_supplies_bought",
         priority=1,
         prerequisite_story_objective="cinnabar_064"
