@@ -162,6 +162,16 @@ class TestCreateUniqueHash:
         uid = _create_unique_hash(ASSISTANT_ENTRY_FULL)
         assert uid == "msg_01ABC:req_XXYY"
 
+    def test_message_id_only_when_no_request_id(self):
+        """OpenRouter entries have message.id but no requestId."""
+        entry = {
+            "type": "assistant",
+            "message": {"id": "gen-123-abc", "role": "assistant", "content": []},
+            "uuid": "uuid-unique-per-block",
+        }
+        uid = _create_unique_hash(entry)
+        assert uid == "gen-123-abc"
+
     def test_falls_back_to_uuid(self):
         entry = {"type": "assistant", "uuid": "uuid-fallback"}
         uid = _create_unique_hash(entry)
@@ -259,6 +269,113 @@ class TestLoadNewUsageEntries:
         self._write_jsonl(subdir / "b.jsonl", [ASSISTANT_ENTRY_NO_CACHE])
         entries, _ = load_new_usage_entries(tmp_path, set())
         assert len(entries) == 2
+
+    def test_openrouter_dedup_groups_by_message_id(self, tmp_path):
+        """OpenRouter emits multiple content blocks per API call sharing the
+        same message.id but different uuids and no requestId.  Only the block
+        with the highest total token count should survive."""
+        shared_msg_id = "gen-1772573271-B6LpG1HlDLjgrmDrccR2"
+        entries = [
+            {
+                "type": "assistant",
+                "message": {
+                    "id": shared_msg_id, "role": "assistant",
+                    "content": [{"type": "thinking", "thinking": "..."}],
+                    "usage": {"input_tokens": 0, "output_tokens": 0,
+                              "cache_creation_input_tokens": None,
+                              "cache_read_input_tokens": None},
+                },
+                "uuid": "uuid-block-1",
+                "timestamp": "2026-03-03T21:27:55.867Z",
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "id": shared_msg_id, "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "t1",
+                                 "name": "Read", "input": {"file_path": "/f"}}],
+                    "usage": {"input_tokens": 0, "output_tokens": 0,
+                              "cache_creation_input_tokens": None,
+                              "cache_read_input_tokens": None},
+                },
+                "uuid": "uuid-block-2",
+                "timestamp": "2026-03-03T21:27:55.869Z",
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "id": shared_msg_id, "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "t2",
+                                 "name": "mcp__pokemon-emerald__get_game_state",
+                                 "input": {}}],
+                    "usage": {"input_tokens": 0, "output_tokens": 0,
+                              "cache_creation_input_tokens": None,
+                              "cache_read_input_tokens": None},
+                },
+                "uuid": "uuid-block-3",
+                "timestamp": "2026-03-03T21:27:55.876Z",
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "id": shared_msg_id, "role": "assistant",
+                    "content": [{"type": "redacted_thinking", "data": "b64..."}],
+                    "stop_reason": "tool_use",
+                    "usage": {"input_tokens": 3, "output_tokens": 155,
+                              "cache_creation_input_tokens": 20179,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "uuid-block-4",
+                "timestamp": "2026-03-03T21:27:55.877Z",
+            },
+        ]
+        jsonl = tmp_path / "session.jsonl"
+        self._write_jsonl(jsonl, entries)
+
+        results, hashes = load_new_usage_entries(tmp_path, set())
+        assert len(results) == 1, f"Expected 1 deduped entry, got {len(results)}"
+        assert results[0]["_tokens"]["total"] == 3 + 155 + 20179 + 0
+        tool_names = [tc["name"] for tc in results[0]["_tool_calls"]]
+        assert "Read" in tool_names
+        assert "mcp__pokemon-emerald__get_game_state" in tool_names
+
+    def test_openrouter_dedup_separate_api_calls(self, tmp_path):
+        """Two separate OpenRouter API calls (different message.id) should
+        produce two distinct entries."""
+        entries = [
+            {
+                "type": "assistant",
+                "message": {
+                    "id": "gen-AAA", "role": "assistant",
+                    "content": [{"type": "text", "text": "hi"}],
+                    "stop_reason": "tool_use",
+                    "usage": {"input_tokens": 3, "output_tokens": 100,
+                              "cache_creation_input_tokens": 5000,
+                              "cache_read_input_tokens": 0},
+                },
+                "uuid": "uuid-call1",
+                "timestamp": "2026-03-03T21:27:55.000Z",
+            },
+            {
+                "type": "assistant",
+                "message": {
+                    "id": "gen-BBB", "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "t1",
+                                 "name": "get_game_state", "input": {}}],
+                    "stop_reason": "tool_use",
+                    "usage": {"input_tokens": 1, "output_tokens": 50,
+                              "cache_creation_input_tokens": 0,
+                              "cache_read_input_tokens": 5000},
+                },
+                "uuid": "uuid-call2",
+                "timestamp": "2026-03-03T21:27:57.000Z",
+            },
+        ]
+        jsonl = tmp_path / "session.jsonl"
+        self._write_jsonl(jsonl, entries)
+
+        results, _ = load_new_usage_entries(tmp_path, set())
+        assert len(results) == 2
 
 
 # ---------------------------------------------------------------------------

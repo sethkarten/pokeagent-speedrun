@@ -337,7 +337,7 @@ class LLMLogger:
     def append_cli_step(
         self,
         step_number: int,
-        token_usage: Dict[str, int],
+        token_usage: Dict[str, Any],
         duration: float,
         timestamp: float,
         model_info: Optional[Dict[str, Any]] = None,
@@ -355,7 +355,7 @@ class LLMLogger:
 
         Args:
             step_number:  Monotonically increasing step index for this run.
-            token_usage:  Dict with keys prompt, completion, cached, cache_write, total.
+            token_usage:  Dict with keys prompt, completion, cached, cache_write, total, cost.
             duration:     Seconds elapsed since the previous JSONL entry (best estimate).
             timestamp:    UNIX timestamp of the JSONL entry.
             model_info:   Optional dict with at least a "model" key for pricing lookup.
@@ -380,37 +380,45 @@ class LLMLogger:
         self.cumulative_metrics["cache_write_tokens"] += step_tokens["cache_write"]
         self.cumulative_metrics["total_llm_calls"] += 1
 
-        # Cost calculation – reuse the same pricing logic as log_interaction
-        model_name = ((model_info or {}).get("model", "") or "").lower()
-        pricing = self.pricing.get("default")
-        if model_name:
-            if model_name in self.pricing:
-                pricing = self.pricing[model_name]
-            else:
-                candidates = [
-                    (k, self.pricing[k])
-                    for k in self.pricing
-                    if k != "default" and k in model_name
-                ]
-                if candidates:
-                    candidates.sort(key=lambda x: len(x[0]), reverse=True)
-                    pricing = candidates[0][1]
-
-        prompt_t = max(0, step_tokens["prompt"])
-        cached_t = max(0, step_tokens["cached"])
-        cache_write_t = max(0, step_tokens["cache_write"])
-
-        if (cached_t + cache_write_t) <= prompt_t:
-            uncached_prompt = prompt_t - cached_t - cache_write_t
+        # Cost calculation
+        # If token_usage provides explicit cost (e.g. from OpenRouter), use that.
+        explicit_cost = float(token_usage.get("cost") or 0.0)
+        
+        if explicit_cost > 0:
+            step_cost = explicit_cost
         else:
-            uncached_prompt = prompt_t
+            # Fallback to local pricing logic
+            model_name = ((model_info or {}).get("model", "") or "").lower()
+            pricing = self.pricing.get("default")
+            if model_name:
+                if model_name in self.pricing:
+                    pricing = self.pricing[model_name]
+                else:
+                    candidates = [
+                        (k, self.pricing[k])
+                        for k in self.pricing
+                        if k != "default" and k in model_name
+                    ]
+                    if candidates:
+                        candidates.sort(key=lambda x: len(x[0]), reverse=True)
+                        pricing = candidates[0][1]
 
-        step_cost = (
-            (uncached_prompt / 1000) * pricing["prompt"]
-            + (cached_t / 1000) * pricing.get("cached_prompt", pricing["prompt"])
-            + (cache_write_t / 1000) * pricing.get("cache_write_prompt", pricing["prompt"])
-            + (step_tokens["completion"] / 1000) * pricing["completion"]
-        )
+            prompt_t = max(0, step_tokens["prompt"])
+            cached_t = max(0, step_tokens["cached"])
+            cache_write_t = max(0, step_tokens["cache_write"])
+
+            if (cached_t + cache_write_t) <= prompt_t:
+                uncached_prompt = prompt_t - cached_t - cache_write_t
+            else:
+                uncached_prompt = prompt_t
+
+            step_cost = (
+                (uncached_prompt / 1000) * pricing["prompt"]
+                + (cached_t / 1000) * pricing.get("cached_prompt", pricing["prompt"])
+                + (cache_write_t / 1000) * pricing.get("cache_write_prompt", pricing["prompt"])
+                + (step_tokens["completion"] / 1000) * pricing["completion"]
+            )
+        
         self.cumulative_metrics["total_cost"] += step_cost
 
         step_entry: Dict[str, Any] = {

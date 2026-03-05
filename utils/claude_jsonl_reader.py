@@ -42,26 +42,30 @@ def _parse_timestamp(ts: Any) -> datetime | None:
 
 
 def _create_unique_hash(entry: dict) -> str | None:
-    """Derive a dedup key from message id + requestId (or uuid as fallback).
+    """Derive a dedup key that groups all content blocks from a single API call.
 
-    Mirrors the logic used by Claude-Code-Usage-Monitor._create_unique_hash so
-    that the same entries are not double-counted if we re-read files.
+    Direct Anthropic provides both message.id and requestId; OpenRouter only
+    provides message.id.  In either case, all streamed content blocks belonging
+    to the same API response share the same message.id, so we use that as the
+    primary grouping key.  requestId is appended when available for extra
+    specificity. Falls back to uuid only when message.id is absent.
     """
     msg = entry.get("message")
     message_id = msg.get("id") if isinstance(msg, dict) else None
-    request_id = entry.get("requestId")
-    if message_id and request_id:
-        return f"{message_id}:{request_id}"
+    if message_id:
+        request_id = entry.get("requestId")
+        return f"{message_id}:{request_id}" if request_id else message_id
     uid = entry.get("uuid")
     return uid if uid else None
 
 
-def extract_tokens_from_entry(entry: dict) -> dict[str, int] | None:
-    """Extract token counts from a Claude Code JSONL assistant entry.
+def extract_tokens_from_entry(entry: dict) -> dict[str, Any] | None:
+    """Extract token counts and cost from a Claude Code JSONL assistant entry.
 
-    Returns a dict with keys (prompt, completion, cached, cache_write, total)
-    or None when no usage data is present.  Handles both the primary location
-    (entry.message.usage) and the top-level fallback (entry.usage).
+    Returns a dict with keys (prompt, completion, cached, cache_write, total, cost)
+    or None when no usage data is present. Handles:
+      1. Native Anthropic format (input_tokens, cache_creation_input_tokens)
+      2. OpenRouter format (prompt_tokens, prompt_tokens_details.cached_tokens, cost)
     """
     usage: dict | None = None
     msg = entry.get("message")
@@ -72,12 +76,32 @@ def extract_tokens_from_entry(entry: dict) -> dict[str, int] | None:
     if not isinstance(usage, dict):
         return None
 
-    input_tokens = int(usage.get("input_tokens", 0) or 0)
-    output_tokens = int(usage.get("output_tokens", 0) or 0)
-    # Anthropic reports cache buckets separately from input_tokens
-    cache_write = int(usage.get("cache_creation_input_tokens", 0) or 0)
-    cache_read = int(usage.get("cache_read_input_tokens", 0) or 0)
+    # 1. Extract basic tokens (Anthropic vs OpenAI/OpenRouter naming)
+    input_tokens = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+    output_tokens = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+
+    # 2. Extract cache stats
+    # Anthropic native: top-level cache_creation_input_tokens / cache_read_input_tokens
+    cache_write = int(usage.get("cache_creation_input_tokens") or 0)
+    cache_read = int(usage.get("cache_read_input_tokens") or 0)
+
+    # OpenRouter / OpenAI: inside prompt_tokens_details (or sometimes top-level cache_write_tokens)
+    if cache_write == 0 and cache_read == 0:
+        details = usage.get("prompt_tokens_details")
+        if isinstance(details, dict):
+            cache_write = int(details.get("cache_write_tokens") or 0)
+            cache_read = int(details.get("cached_tokens") or 0)
+        
+        # Fallback for flat keys if details didn't have them
+        if cache_write == 0:
+            cache_write = int(usage.get("cache_write_tokens") or 0)
+        if cache_read == 0:
+            cache_read = int(usage.get("cached_tokens") or 0)
+
     total = input_tokens + output_tokens + cache_write + cache_read
+    
+    # OpenRouter provides explicit cost
+    cost = float(usage.get("cost") or 0.0)
 
     return {
         "prompt": input_tokens,
@@ -85,6 +109,7 @@ def extract_tokens_from_entry(entry: dict) -> dict[str, int] | None:
         "cached": cache_read,
         "cache_write": cache_write,
         "total": total,
+        "cost": cost,
     }
 
 
@@ -169,11 +194,15 @@ def load_new_usage_entries(
 
                     existing = best_by_hash.get(uid)
                     if existing is None or tokens["total"] > existing["_tokens"]["total"]:
+                        if existing is not None and existing.get("_tool_calls"):
+                            entry["_tool_calls"] = existing["_tool_calls"] + entry.get("_tool_calls", [])
                         best_by_hash[uid] = entry
+                    elif existing is not None and entry.get("_tool_calls"):
+                        existing["_tool_calls"] = existing.get("_tool_calls", []) + entry["_tool_calls"]
 
         except OSError as exc:
             logger.warning("Could not read %s: %s", jsonl_path, exc)
 
-    new_entries = list(best_by_hash.values())
+    new_entries = [e for e in best_by_hash.values() if e["_tokens"]["total"] > 0]
     new_hashes = set(best_by_hash.keys())
     return new_entries, processed_hashes | new_hashes
