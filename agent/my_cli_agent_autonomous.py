@@ -160,8 +160,14 @@ class AutonomousCLIAgent:
 
         # Determine which system instructions file to use
         if system_instructions_file is None:
+            game_type = os.environ.get("GAME_TYPE", "emerald").lower()
             if self.optimization_enabled:
-                system_instructions_file = "agent/prompts/system_prompt.md"  # Lean: just tools + core objective
+                if game_type == "red":
+                    system_instructions_file = "agent/prompts/system_prompt_red.md"
+                else:
+                    system_instructions_file = "agent/prompts/system_prompt.md"  # Lean: just tools + core objective
+            elif game_type == "red":
+                system_instructions_file = "agent/prompts/POKEAGENT_RED.md"
             else:
                 system_instructions_file = "agent/prompts/POKEAGENT.md"  # Full: everything included
 
@@ -237,11 +243,13 @@ class AutonomousCLIAgent:
                 logger.info(f"📋 No prompt_optimizer attribute found")
         
         # Otherwise load from file
-        filepath = Path(__file__).resolve().parent.parent / "agent" / "prompts" / "base_prompt.md"
+        game_type = os.environ.get("GAME_TYPE", "emerald").lower()
+        prompt_file = "base_prompt_red.md" if game_type == "red" else "base_prompt.md"
+        filepath = Path(__file__).resolve().parent.parent / "agent" / "prompts" / prompt_file
         if not filepath.exists():
             logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
             return """# Strategic Guidance
-## Make intelligent decisions to progress through Pokemon Emerald.
+## Make intelligent decisions to progress through the game.
 - Think step-by-step
 - Use tools effectively
 - Store knowledge
