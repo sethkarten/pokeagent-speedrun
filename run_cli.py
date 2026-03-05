@@ -130,27 +130,6 @@ def preflight_cli(args) -> bool:
     return True
 
 
-def _run_claude_login() -> bool:
-    """Run 'claude auth login' interactively. Returns True on success."""
-    print("\n🔐 Running 'claude auth login' (interactive)...")
-    try:
-        result = subprocess.run(
-            ["claude", "auth", "login"],
-            check=False,
-        )
-        if result.returncode != 0:
-            print(f"❌ Claude auth login failed (exit code {result.returncode})")
-            return False
-        print("✅ Claude auth login succeeded")
-        return True
-    except FileNotFoundError:
-        print("❌ Claude CLI not found. Install it first, then retry with --login.")
-        return False
-    except Exception as e:
-        print(f"❌ Claude auth login error: {e}")
-        return False
-
-
 def _build_container_image(backend) -> bool:
     """Build the container image for the given backend. Returns True on success."""
     project_root = Path(__file__).resolve().parent
@@ -600,100 +579,6 @@ def launch_cli_agent(
     )
 
 
-def _sync_metrics_to_server(server_url: str) -> None:
-    """Push run_cli's in-memory cumulative metrics to the server (single-writer pattern)."""
-    try:
-        from utils.llm_logger import get_llm_logger
-
-        llm_logger = get_llm_logger()
-        metrics = llm_logger.get_cumulative_metrics()
-        step_count = len(metrics.get("steps", []))
-        if step_count == 0:
-            return  # nothing useful to sync
-        resp = requests.post(
-            f"{server_url}/sync_llm_metrics",
-            json={"cumulative_metrics": metrics},
-            timeout=5,
-        )
-        if resp.status_code != 200:
-            logger.warning("Sync metrics failed: %s %s", resp.status_code, resp.text[:200])
-        else:
-            logger.info("Synced %d step(s) to server", step_count)
-    except Exception as e:
-        logger.warning("Could not sync metrics to server: %s", e)
-
-
-def _poll_claude_jsonl_and_append_steps(
-    agent_memory_dir: Path,
-    processed_hashes: set,
-    last_cli_step: int,
-    server_url: str | None = None,
-) -> tuple[set, int]:
-    """Poll Claude Code JSONL files and append new entries as steps to cumulative_metrics.
-
-    Returns updated (processed_hashes, last_cli_step).  Never raises – all
-    errors are logged as warnings so the agent loop is never interrupted.
-    """
-    from utils.claude_jsonl_reader import find_jsonl_files, load_new_usage_entries
-    from utils.llm_logger import get_llm_logger
-
-    # Use absolute path so polling works regardless of cwd
-    search_path = Path(agent_memory_dir).resolve()
-    if not search_path.is_dir():
-        logger.warning("JSONL poll: agent_memory_dir not a directory: %s", search_path)
-        return processed_hashes, last_cli_step
-
-    try:
-        new_entries, processed_hashes = load_new_usage_entries(search_path, processed_hashes)
-    except Exception as exc:
-        logger.warning("JSONL poll failed: %s", exc)
-        return processed_hashes, last_cli_step
-
-    jsonl_count = len(find_jsonl_files(search_path))
-    if not new_entries:
-        if jsonl_count > 0:
-            logger.debug("JSONL poll: %d file(s) under %s, 0 new entries (already processed or no usage)", jsonl_count, search_path)
-        return processed_hashes, last_cli_step
-
-    logger.info("JSONL poll: appending %d step(s) from %s", len(new_entries), search_path)
-
-    # Sort by timestamp so steps are appended in chronological order
-    new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
-
-    llm_logger = get_llm_logger()
-    prev_ts: float | None = None
-    for entry in new_entries:
-        tokens = entry["_tokens"]
-        tool_calls = entry["_tool_calls"]
-        parsed_ts = entry.get("_parsed_timestamp")
-        ts_float = parsed_ts.timestamp() if parsed_ts is not None else time.time()
-        duration = max(0.0, ts_float - prev_ts) if prev_ts is not None else 0.0
-        prev_ts = ts_float
-
-        msg = entry.get("message")
-        model_name = msg.get("model") if isinstance(msg, dict) else None
-        model_info = {"model": model_name or "claude-code"}
-
-        last_cli_step += 1
-        try:
-            llm_logger.append_cli_step(
-                step_number=last_cli_step,
-                token_usage=tokens,
-                duration=duration,
-                timestamp=ts_float,
-                model_info=model_info,
-                tool_calls=tool_calls if tool_calls else None,
-            )
-        except Exception as exc:
-            logger.warning("Failed to append CLI step %d: %s", last_cli_step, exc)
-            last_cli_step -= 1
-
-    logger.debug("JSONL poll: appended %d new step(s), last_step=%d", len(new_entries), last_cli_step)
-    if server_url and new_entries:
-        _sync_metrics_to_server(server_url)
-    return processed_hashes, last_cli_step
-
-
 def _run_agent_loop(
     services: Services,
     args,
@@ -813,8 +698,7 @@ def _run_agent_loop(
                 elapsed = int(now - wait_start)
                 logger.info("Agent running (pid=%s, elapsed=%ds)", cli_session.process.pid, elapsed)
                 last_heartbeat = now
-                # Poll Claude Code JSONL files and sync new steps to server
-                processed_hashes, last_cli_step = _poll_claude_jsonl_and_append_steps(
+                processed_hashes, last_cli_step = backend.poll_jsonl_and_append_steps(
                     agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
                 )
 
@@ -837,8 +721,7 @@ def _run_agent_loop(
             session_metrics.tool_use_count,
             last_session_id or "none",
         )
-        # Final JSONL poll after session exits to capture any buffered entries
-        processed_hashes, last_cli_step = _poll_claude_jsonl_and_append_steps(
+        processed_hashes, last_cli_step = backend.poll_jsonl_and_append_steps(
             agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
         )
 
@@ -962,8 +845,10 @@ def main():
     if not preflight_cli(args):
         return 1
 
+    backend = get_backend(args.cli_type)
+
     if args.cli_type == "claude" and args.login:
-        if not _run_claude_login():
+        if not backend.run_login():
             return 1
 
     if args.backup_state:
@@ -976,8 +861,6 @@ def main():
         return 1
 
     from utils.run_data_manager import get_cache_path
-
-    backend = get_backend(args.cli_type)
     agent_memory_dir = get_cache_path(backend.agent_memory_subdir)
     agent_memory_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n💾 Agent memory directory: {agent_memory_dir}")
@@ -992,6 +875,12 @@ def main():
     termination_reason: str | None = None
     cli_session: CliSession | None = None
     cli_log_file = None
+
+    def _sigterm_handler(signum, frame):
+        """So timeout(1) or kill sends SIGTERM → same cleanup as Ctrl+C (stop container)."""
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
 
     try:
         termination_reason, cli_session, cli_log_file = _run_agent_loop(
