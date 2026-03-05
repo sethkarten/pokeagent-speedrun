@@ -10,6 +10,7 @@ import io
 import json
 import logging
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -18,6 +19,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -554,6 +556,150 @@ class ClaudeCodeBackend(CliAgentBackend):
             )
         except Exception as e:
             logger.debug("Could not POST thinking to server: %s", e)
+
+
+    # ------------------------------------------------------------------
+    # Model name normalization
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def normalize_model_name(raw: str) -> str:
+        """Normalize provider-prefixed model names to canonical pricing-table form.
+
+        OpenRouter: 'anthropic/claude-4.6-sonnet-20260217' -> 'claude-sonnet-4.6'
+        Direct:     'claude-sonnet-4-6' -> 'claude-sonnet-4-6' (unchanged)
+        """
+        if "/" in raw:
+            raw = raw.split("/", 1)[1]
+        raw = re.sub(r"-\d{8}$", "", raw)
+        m = re.match(r"^claude-(\d+(?:\.\d+)?)-(\w+)$", raw)
+        if m:
+            version, family = m.groups()
+            return f"claude-{family}-{version}"
+        return raw
+
+    # ------------------------------------------------------------------
+    # JSONL polling (metric tracking for CLI agent runs)
+    # ------------------------------------------------------------------
+
+    def poll_jsonl_and_append_steps(
+        self,
+        agent_memory_dir: Path,
+        processed_hashes: set,
+        last_cli_step: int,
+        server_url: str | None = None,
+    ) -> tuple[set, int]:
+        """Poll Claude Code JSONL files and append new entries as steps to cumulative_metrics.
+
+        Returns updated (processed_hashes, last_cli_step).  Never raises -- all
+        errors are logged as warnings so the agent loop is never interrupted.
+        """
+        from utils.claude_jsonl_reader import find_jsonl_files, load_new_usage_entries
+        from utils.llm_logger import get_llm_logger
+
+        search_path = Path(agent_memory_dir).resolve()
+        if not search_path.is_dir():
+            logger.warning("JSONL poll: agent_memory_dir not a directory: %s", search_path)
+            return processed_hashes, last_cli_step
+
+        try:
+            new_entries, processed_hashes = load_new_usage_entries(search_path, processed_hashes)
+        except Exception as exc:
+            logger.warning("JSONL poll failed: %s", exc)
+            return processed_hashes, last_cli_step
+
+        jsonl_count = len(find_jsonl_files(search_path))
+        if not new_entries:
+            if jsonl_count > 0:
+                logger.debug(
+                    "JSONL poll: %d file(s) under %s, 0 new entries (already processed or no usage)",
+                    jsonl_count, search_path,
+                )
+            return processed_hashes, last_cli_step
+
+        logger.info("JSONL poll: appending %d step(s) from %s", len(new_entries), search_path)
+
+        new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
+
+        llm_logger = get_llm_logger()
+        prev_ts: float | None = None
+        for entry in new_entries:
+            tokens = entry["_tokens"]
+            tool_calls = entry["_tool_calls"]
+            parsed_ts = entry.get("_parsed_timestamp")
+            ts_float = parsed_ts.timestamp() if parsed_ts is not None else time.time()
+            duration = max(0.0, ts_float - prev_ts) if prev_ts is not None else 0.0
+            prev_ts = ts_float
+
+            msg = entry.get("message")
+            raw_model = msg.get("model") if isinstance(msg, dict) else None
+            model_name = self.normalize_model_name(raw_model) if raw_model else "claude-code"
+            model_info = {"model": model_name}
+
+            last_cli_step += 1
+            try:
+                llm_logger.append_cli_step(
+                    step_number=last_cli_step,
+                    token_usage=tokens,
+                    duration=duration,
+                    timestamp=ts_float,
+                    model_info=model_info,
+                    tool_calls=tool_calls if tool_calls else None,
+                )
+            except Exception as exc:
+                logger.warning("Failed to append CLI step %d: %s", last_cli_step, exc)
+                last_cli_step -= 1
+
+        logger.debug("JSONL poll: appended %d new step(s), last_step=%d", len(new_entries), last_cli_step)
+        if server_url and new_entries:
+            self._sync_metrics_to_server(server_url)
+        return processed_hashes, last_cli_step
+
+    @staticmethod
+    def _sync_metrics_to_server(server_url: str) -> None:
+        """Push run_cli's in-memory cumulative metrics to the server (single-writer pattern)."""
+        try:
+            import requests
+            from utils.llm_logger import get_llm_logger
+
+            llm_logger = get_llm_logger()
+            metrics = llm_logger.get_cumulative_metrics()
+            step_count = len(metrics.get("steps", []))
+            if step_count == 0:
+                return
+            resp = requests.post(
+                f"{server_url}/sync_llm_metrics",
+                json={"cumulative_metrics": metrics},
+                timeout=5,
+            )
+            if resp.status_code != 200:
+                logger.warning("Sync metrics failed: %s %s", resp.status_code, resp.text[:200])
+            else:
+                logger.info("Synced %d step(s) to server", step_count)
+        except Exception as e:
+            logger.warning("Could not sync metrics to server: %s", e)
+
+    # ------------------------------------------------------------------
+    # Auth helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def run_login() -> bool:
+        """Run 'claude auth login' interactively. Returns True on success."""
+        print("\n🔐 Running 'claude auth login' (interactive)...")
+        try:
+            result = subprocess.run(["claude", "auth", "login"], check=False)
+            if result.returncode != 0:
+                print(f"❌ Claude auth login failed (exit code {result.returncode})")
+                return False
+            print("✅ Claude auth login succeeded")
+            return True
+        except FileNotFoundError:
+            print("❌ Claude CLI not found. Install it first, then retry with --login.")
+            return False
+        except Exception as e:
+            print(f"❌ Claude auth login error: {e}")
+            return False
 
 
 def get_backend(cli_type: str) -> CliAgentBackend:
