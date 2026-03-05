@@ -386,8 +386,20 @@ class ClaudeCodeBackend(CliAgentBackend):
                 "-e", f"GAME_SERVER_PORT={game_port}",
                 "-e", f"RUN_DATA_ID={run_id}",
                 "-e", f"CLAUDE_CONFIG_DIR={self.AGENT_MEMORY_PATH}",
-                self.container_image,
-            ] + claude_cmd
+            ]
+
+            # Pass through OpenRouter/Anthropic env vars if present to support custom auth
+            for env_var in [
+                "ANTHROPIC_API_KEY",
+                "ANTHROPIC_BASE_URL",
+                "ANTHROPIC_AUTH_TOKEN",
+                "OPENROUTER_API_KEY",
+            ]:
+                if os.environ.get(env_var):
+                    docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
+
+            docker_cmd.append(self.container_image)
+            docker_cmd.extend(claude_cmd)
 
             return docker_cmd, env, bootstrap, None
 
