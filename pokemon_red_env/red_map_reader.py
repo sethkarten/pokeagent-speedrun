@@ -38,7 +38,8 @@ COLL_CHAR_MAP = {
     'C':   ('COUNTER', 1),   # shop/PC counter
     'Cut': ('CUT', 1),       # HM Cut tree (blocked without Cut)
     '?':   ('UNKNOWN', 0),   # unknown → assume walkable
-}
+} # TODO: change ascii symbol mapping to match the Emerald settings
+
 # String prefixes handled separately in _classify_cell:
 #   'WarpPoint' → ('WARP',    0)
 #   'SIGN_'     → ('SIGN',    1)

@@ -47,9 +47,8 @@ _ITEM_NAMES: Dict[str, str] = _load_json_mapping("item_names.json")
 # Map ID → map name (248 entries, full coverage)
 _MAP_NAMES: Dict[str, str] = _load_json_mapping("map_names.json")
 
-# ---------------------------------------------------------------------------
 # RAM address table (from pokered decompilation)
-# ---------------------------------------------------------------------------
+# TODO: verify with https://datacrystal.tcrf.net/wiki/Pok%C3%A9mon_Red_and_Blue/RAM_map#Rival
 RED_ADDR: Dict[str, int] = {
     # Player
     "player_name":      0xD158,  # 11 bytes, Gen1 charset, 0x50 = terminator
@@ -79,11 +78,24 @@ RED_ADDR: Dict[str, int] = {
     # Battle
     "in_battle":        0xD057,  # 0=none, 1=wild, 2=trainer
     "link_state":       0xD72E,  # 0x05 = link battle
+    # wEnemyMon struct @ 0xCFE5 (pokered wram.asm layout):
+    #   species(1), hp(2), blank(1), status(1), type1(1), type2(1), catch_rate(1),
+    #   moves(4), OTID(2), level(1), max_hp(2), attack(2), defense(2), speed(2), special(2), pp(4)
     "enemy_species":    0xCFE5,  # 1 byte
     "enemy_hp":         0xCFE6,  # 2 bytes big-endian
     "enemy_status":     0xCFE9,  # 1 byte status condition
+    "enemy_type1":      0xCFEA,  # 1 byte
+    "enemy_type2":      0xCFEB,  # 1 byte
+    "enemy_moves":      0xCFED,  # 4 bytes (move IDs)
     "enemy_level":      0xCFF3,  # 1 byte
     "enemy_max_hp":     0xCFF4,  # 2 bytes big-endian
+    "enemy_attack":     0xCFF6,  # 2 bytes big-endian
+    "enemy_defense":    0xCFF8,  # 2 bytes big-endian
+    "enemy_speed":      0xCFFA,  # 2 bytes big-endian
+    "enemy_special":    0xCFFC,  # 2 bytes big-endian (Gen 1: unified special stat)
+    "enemy_pp":         0xCFFE,  # 4 bytes (PP for moves 1-4)
+    # Active player battle mon name (confirmed: pyboy_runner.py::get_active_pokemon_name)
+    "active_pokemon_name": 0xD009,  # 11 bytes, Gen1 charset
     # Title screen detection (wTitleCheckDigit / wCurMap at title)
     "title_check":      0xC0EF,  # 0x1F on title screen
     "title_map_id":     0xD35C,  # 0x00 on title screen
@@ -431,19 +443,59 @@ class RedMemoryReader:
             return ""
 
     def read_battle_details(self) -> Optional[Dict[str, Any]]:
-        """Return enemy Pokemon battle info, or None if not in battle."""
+        """Return battle info dict aligned with Emerald's structure, or None if not in battle."""
         battle_type = self._read_u8(RED_ADDR["in_battle"])
         if battle_type == 0:
             return None
+
+        is_wild = (battle_type == 1)
+
+        # Opponent (enemy) Pokemon from RAM (wEnemyMon struct @ 0xCFE5)
         enemy_species = self._read_u8(RED_ADDR["enemy_species"])
         enemy_hp      = self._read_u16_be(RED_ADDR["enemy_hp"])
         enemy_status  = self._read_u8(RED_ADDR["enemy_status"])
         enemy_level   = self._read_u8(RED_ADDR["enemy_level"])
         enemy_max_hp  = self._read_u16_be(RED_ADDR["enemy_max_hp"])
+        enemy_type1   = self._read_u8(RED_ADDR["enemy_type1"])
+        enemy_type2   = self._read_u8(RED_ADDR["enemy_type2"])
+        enemy_attack  = self._read_u16_be(RED_ADDR["enemy_attack"])
+        enemy_defense = self._read_u16_be(RED_ADDR["enemy_defense"])
+        enemy_speed   = self._read_u16_be(RED_ADDR["enemy_speed"])
+        enemy_special = self._read_u16_be(RED_ADDR["enemy_special"])
+        enemy_move_ids = self._read_bytes(RED_ADDR["enemy_moves"], 4)
+        enemy_pp_raw   = self._read_bytes(RED_ADDR["enemy_pp"], 4)
+
+        etype1_name = _TYPE_NAMES.get(str(enemy_type1), f"Type_{enemy_type1}")
+        etype2_name = _TYPE_NAMES.get(str(enemy_type2), f"Type_{enemy_type2}")
+        enemy_types = [etype1_name] if etype1_name == etype2_name else [etype1_name, etype2_name]
+        enemy_moves = [
+            _MOVE_NAMES.get(str(mid), "NONE") if mid != 0 else "NONE"
+            for mid in enemy_move_ids
+        ]
+        enemy_move_pp = list(enemy_pp_raw)
+
+        # Player's active Pokemon: match name at 0xD009 against party nicknames/species names.
+        # (same approach as pyboy_runner.py::get_active_pokemon_name)
+        active_name_raw = self._read_bytes(RED_ADDR["active_pokemon_name"], 11)
+        active_name = self._decode_gen1_text(active_name_raw)
+        party = self.read_party_pokemon()
+        player_mon = None
+        if party:
+            for slot in party:
+                if slot["nickname"] == active_name or slot["species_name"] == active_name:
+                    player_mon = slot
+                    break
+        # removed fallback for player_mon for test
+        # if player_mon == None: player_mon = party[0]
+
         return {
-            "in_battle":    True,
-            "battle_type":  "wild" if battle_type == 1 else "trainer",
-            "opponent": {
+            "in_battle":         True,
+            "battle_type":       "wild" if is_wild else "trainer",
+            "is_trainer_battle": not is_wild,
+            "is_capturable":     is_wild,
+            "can_escape":        is_wild,
+            "player_pokemon":    player_mon,
+            "opponent_pokemon": {
                 "species_id":    enemy_species,
                 "species":       _SPECIES_NAMES.get(str(enemy_species), f"Species_{enemy_species}"),
                 "level":         enemy_level,
@@ -451,6 +503,19 @@ class RedMemoryReader:
                 "max_hp":        enemy_max_hp,
                 "hp_percentage": round(enemy_hp / max(enemy_max_hp, 1) * 100, 1),
                 "status":        self._status_name(enemy_status),
+                "types":         enemy_types,
+                "moves":         enemy_moves,
+                "move_pp":       enemy_move_pp,
+                "is_fainted":    enemy_hp == 0,
+                "stats": {
+                    "attack":    enemy_attack,
+                    "defense":   enemy_defense,
+                    "speed":     enemy_speed,
+                    "special":   enemy_special,  # Gen 1: unified special (sp_atk = sp_def)
+                },
+            },
+            "battle_interface": {
+                "available_actions": ["FIGHT", "ITEM", "PKMN", "RUN"],
             },
         }
 
