@@ -114,11 +114,11 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "X", "X", "D", "D", "D", "D", "D", "D", "X", "O", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "X", "X", "D", "D", "D", "D", "D", "D", "X", "O", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "X", "~", "~", "~", "~", "~"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "~", "~", "~", "~", "~"],
+    ["X", "X", "X", "X", "X", "X", "D", "D", "D", "D", "D", "D", "X", "O", "X", "~", "~", "~", "~", "~"],
     ["~", "~", "~", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~"],
     ["~", "~", "~", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~"],
     ["~", "~", "~", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~"],
@@ -167,4 +167,17 @@ coll_map = [
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 8, "y": 7, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE19_COOLTRAINER_M1"},
+    {"x": 13, "y": 7, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE19_COOLTRAINER_M2"},
+    {"x": 13, "y": 25, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE19_SWIMMER1"},
+    {"x": 4, "y": 27, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE19_SWIMMER2"},
+    {"x": 16, "y": 31, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE19_SWIMMER3"},
+    {"x": 9, "y": 11, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE19_SWIMMER4"},
+    {"x": 8, "y": 43, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE19_SWIMMER5"},
+    {"x": 11, "y": 43, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE19_SWIMMER6"},
+    {"x": 9, "y": 42, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE19_SWIMMER7"},
+    {"x": 10, "y": 44, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE19_SWIMMER8"},
 ]

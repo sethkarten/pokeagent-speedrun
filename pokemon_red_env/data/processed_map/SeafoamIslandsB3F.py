@@ -57,6 +57,15 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "X", "O", "O", "WarpPoint", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "~", "~", "X", "O", "O", "O", "O", "O", "O", "O"],
+    ["O", "O", "O", "O", "X", "O", "O", "O", "O", "TalkToHiddenItems", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "~", "~", "X", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "WarpPoint", "WarpPoint", "X", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 5, "y": 14, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDSB3F_BOULDER1"},
+    {"x": 3, "y": 15, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDSB3F_BOULDER2"},
+    {"x": 8, "y": 14, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDSB3F_BOULDER3"},
+    {"x": 9, "y": 14, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDSB3F_BOULDER4"},
+    {"x": 18, "y": 6, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SEAFOAMISLANDSB3F_BOULDER5"},
+    {"x": 19, "y": 6, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SEAFOAMISLANDSB3F_BOULDER6"},
 ]

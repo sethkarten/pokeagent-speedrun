@@ -38,7 +38,7 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
+    ["X", "X", "O", "TalkToHiddenItems", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
     ["O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
@@ -53,4 +53,18 @@ coll_map = [
     ["O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "O", "O", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 0, "y": 13, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNEB1FROOMS_SAILOR1"},
+    {"x": 2, "y": 11, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNEB1FROOMS_SAILOR2"},
+    {"x": 12, "y": 3, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SSANNEB1FROOMS_SAILOR3"},
+    {"x": 22, "y": 2, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNEB1FROOMS_SAILOR4"},
+    {"x": 0, "y": 2, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SSANNEB1FROOMS_SAILOR5"},
+    {"x": 0, "y": 4, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SSANNEB1FROOMS_FISHER"},
+    {"x": 10, "y": 13, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SSANNEB1FROOMS_SUPER_NERD"},
+    {"x": 11, "y": 12, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEB1FROOMS_MACHOKE"},
+    {"x": 20, "y": 2, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEB1FROOMS_ETHER"},
+    {"x": 10, "y": 2, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEB1FROOMS_TM_REST"},
+    {"x": 12, "y": 11, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEB1FROOMS_MAX_POTION"},
 ]

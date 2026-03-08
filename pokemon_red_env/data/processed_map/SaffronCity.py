@@ -114,3 +114,21 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 7, "y": 6, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFFRONCITY_ROCKET1"},
+    {"x": 20, "y": 8, "sprite": "SPRITE_ROCKET", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_SAFFRONCITY_ROCKET2"},
+    {"x": 34, "y": 4, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFFRONCITY_ROCKET3"},
+    {"x": 13, "y": 12, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFFRONCITY_ROCKET4"},
+    {"x": 11, "y": 25, "sprite": "SPRITE_ROCKET", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_SAFFRONCITY_ROCKET5"},
+    {"x": 32, "y": 13, "sprite": "SPRITE_ROCKET", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_SAFFRONCITY_ROCKET6"},
+    {"x": 18, "y": 30, "sprite": "SPRITE_ROCKET", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_SAFFRONCITY_ROCKET7"},
+    {"x": 8, "y": 14, "sprite": "SPRITE_SCIENTIST", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_SAFFRONCITY_SCIENTIST"},
+    {"x": 23, "y": 23, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFFRONCITY_SILPH_WORKER_M"},
+    {"x": 17, "y": 30, "sprite": "SPRITE_SILPH_WORKER_F", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_SAFFRONCITY_SILPH_WORKER_F"},
+    {"x": 30, "y": 12, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONCITY_GENTLEMAN"},
+    {"x": 31, "y": 12, "sprite": "SPRITE_BIRD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONCITY_PIDGEOT"},
+    {"x": 18, "y": 8, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SAFFRONCITY_ROCKER"},
+    {"x": 18, "y": 22, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONCITY_ROCKET8"},
+    {"x": 19, "y": 22, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONCITY_ROCKET9"},
+]

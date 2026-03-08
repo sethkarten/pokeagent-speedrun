@@ -44,7 +44,7 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "X", "X", "X", "WarpPoint", "X", "WarpPoint", "X", "X", "X"],
     ["X", "O", "X", "X", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
-    ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "WarpPoint", "O", "X"],
+    ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "TalkToHiddenItems", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "WarpPoint", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "WarpPoint", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "X", "O", "X"],
@@ -59,4 +59,18 @@ coll_map = [
     ["X", "O", "O", "WarpPoint", "X", "X", "O", "X", "O", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 13, "y": 9, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO5F_SILPH_WORKER_M"},
+    {"x": 8, "y": 16, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SILPHCO5F_ROCKET1"},
+    {"x": 8, "y": 3, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SILPHCO5F_SCIENTIST"},
+    {"x": 18, "y": 10, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO5F_ROCKER"},
+    {"x": 28, "y": 4, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO5F_ROCKET2"},
+    {"x": 2, "y": 13, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO5F_TM_TAKE_DOWN"},
+    {"x": 4, "y": 6, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO5F_PROTEIN"},
+    {"x": 21, "y": 16, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO5F_CARD_KEY"},
+    {"x": 22, "y": 12, "sprite": "SPRITE_CLIPBOARD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO5F_POKEMON_REPORT1"},
+    {"x": 25, "y": 10, "sprite": "SPRITE_CLIPBOARD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO5F_POKEMON_REPORT2"},
+    {"x": 24, "y": 6, "sprite": "SPRITE_CLIPBOARD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO5F_POKEMON_REPORT3"},
 ]

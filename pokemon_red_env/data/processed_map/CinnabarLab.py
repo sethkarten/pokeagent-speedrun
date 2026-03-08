@@ -30,3 +30,7 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
 ]
+
+npc_data = [
+    {"x": 1, "y": 3, "sprite": "SPRITE_FISHING_GURU", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CINNABARLAB_FISHING_GURU"},
+]

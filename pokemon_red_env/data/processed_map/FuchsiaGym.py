@@ -56,7 +56,18 @@ coll_map = [
     ["O", "O", "X", "X", "X", "X", "X", "X", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
-    ["O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
+    ["O", "O", "O", "TalkToGymStatues", "O", "O", "TalkToGymStatues", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 4, "y": 10, "sprite": "SPRITE_KOGA", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_FUCHSIAGYM_KOGA"},
+    {"x": 8, "y": 13, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_FUCHSIAGYM_ROCKER1"},
+    {"x": 7, "y": 8, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_FUCHSIAGYM_ROCKER2"},
+    {"x": 1, "y": 12, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_FUCHSIAGYM_ROCKER3"},
+    {"x": 3, "y": 5, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_FUCHSIAGYM_ROCKER4"},
+    {"x": 8, "y": 2, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_FUCHSIAGYM_ROCKER5"},
+    {"x": 2, "y": 7, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_FUCHSIAGYM_ROCKER6"},
+    {"x": 7, "y": 15, "sprite": "SPRITE_GYM_GUIDE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_FUCHSIAGYM_GYM_GUIDE"},
 ]

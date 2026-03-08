@@ -60,3 +60,10 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 4, "y": 2, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO8F_SILPH_WORKER_M"},
+    {"x": 19, "y": 2, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SILPHCO8F_ROCKET1"},
+    {"x": 10, "y": 2, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO8F_SCIENTIST"},
+    {"x": 12, "y": 15, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SILPHCO8F_ROCKET2"},
+]

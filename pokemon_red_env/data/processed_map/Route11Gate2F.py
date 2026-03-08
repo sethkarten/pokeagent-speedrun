@@ -30,3 +30,8 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "WarpPoint"],
 ]
+
+npc_data = [
+    {"x": 4, "y": 2, "sprite": "SPRITE_YOUNGSTER", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_ROUTE11GATE2F_YOUNGSTER"},
+    {"x": 2, "y": 6, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROUTE11GATE2F_OAKS_AIDE"},
+]

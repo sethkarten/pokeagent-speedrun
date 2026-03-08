@@ -56,7 +56,14 @@ coll_map = [
     ["X", "O", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "X", "X", "X", "X", "O", "O", "O", "X", "O", "X"],
     ["X", "X", "X", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "X", "X", "X", "X", "O", "O", "O", "X", "O", "X"],
     ["X", "O", "X", "O", "X", "O", "X", "O", "X", "O", "O", "X", "O", "O", "X", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "X"],
-    ["X", "O", "X", "O", "X", "O", "X", "O", "X", "O", "O", "X", "O", "O", "X", "O", "O", "WarpPoint", "X", "X", "O", "O", "O", "O", "O", "X"],
+    ["X", "O", "TalkToHiddenItems", "O", "X", "O", "X", "O", "X", "O", "O", "X", "O", "O", "X", "O", "O", "WarpPoint", "X", "X", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 3, "y": 14, "sprite": "SPRITE_NURSE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO9F_NURSE"},
+    {"x": 2, "y": 4, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO9F_ROCKET1"},
+    {"x": 21, "y": 13, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO9F_SCIENTIST"},
+    {"x": 13, "y": 16, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO9F_ROCKET2"},
 ]

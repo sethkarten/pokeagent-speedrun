@@ -30,3 +30,11 @@ coll_map = [
     ["O", "O", "SIGN_CELADONMART3F_SNES3", "SIGN_CELADONMART3F_PUZZLE_GAME", "X", "SIGN_CELADONMART3F_SNES4", "SIGN_CELADONMART3F_FIGHTING_GAME", "O", "O", "O", "O", "O", "C", "O", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "C", "O", "O", "O", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 16, "y": 5, "sprite": "SPRITE_CLERK", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CELADONMART3F_CLERK"},
+    {"x": 11, "y": 6, "sprite": "SPRITE_GAMEBOY_KID", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_CELADONMART3F_GAMEBOY_KID1"},
+    {"x": 7, "y": 2, "sprite": "SPRITE_GAMEBOY_KID", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONMART3F_GAMEBOY_KID2"},
+    {"x": 8, "y": 2, "sprite": "SPRITE_GAMEBOY_KID", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONMART3F_GAMEBOY_KID3"},
+    {"x": 2, "y": 5, "sprite": "SPRITE_LITTLE_BOY", "movement": "STAY", "direction": "UP", "text_id": "TEXT_CELADONMART3F_LITTLE_BOY"},
+]

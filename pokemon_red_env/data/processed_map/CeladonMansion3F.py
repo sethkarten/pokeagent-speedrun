@@ -42,3 +42,10 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
 ]
+
+npc_data = [
+    {"x": 0, "y": 4, "sprite": "SPRITE_BIKE_SHOP_CLERK", "movement": "STAY", "direction": "UP", "text_id": "TEXT_CELADONMANSION3F_PROGRAMMER"},
+    {"x": 3, "y": 4, "sprite": "SPRITE_CLERK", "movement": "STAY", "direction": "UP", "text_id": "TEXT_CELADONMANSION3F_GRAPHIC_ARTIST"},
+    {"x": 0, "y": 7, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "UP", "text_id": "TEXT_CELADONMANSION3F_WRITER"},
+    {"x": 2, "y": 3, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CELADONMANSION3F_GAME_DESIGNER"},
+]

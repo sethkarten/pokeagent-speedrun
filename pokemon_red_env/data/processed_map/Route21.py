@@ -276,3 +276,15 @@ coll_map = [
     ["X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "X", "~", "~", "~", "~"],
     ["X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "X", "~", "~", "~", "~"],
 ]
+
+npc_data = [
+    {"x": 4, "y": 24, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE21_FISHER1"},
+    {"x": 6, "y": 25, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE21_FISHER2"},
+    {"x": 10, "y": 31, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE21_SWIMMER1"},
+    {"x": 12, "y": 30, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE21_SWIMMER2"},
+    {"x": 16, "y": 63, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE21_SWIMMER3"},
+    {"x": 5, "y": 71, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE21_SWIMMER4"},
+    {"x": 15, "y": 71, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE21_SWIMMER5"},
+    {"x": 14, "y": 56, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE21_FISHER3"},
+    {"x": 17, "y": 57, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE21_FISHER4"},
+]

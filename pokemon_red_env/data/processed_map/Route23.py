@@ -337,7 +337,7 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "O", "O", "O", "O", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "O", "O", "O", "O", "X", "O", "O", "TalkToIndigoPlateauStatues", "X", "X", "X", "X", "TalkToIndigoPlateauStatues", "X", "X", "X", "X", "X", "TalkToIndigoPlateauStatues"],
-    ["X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O"],
+    ["X", "X", "X", "X", "X", "X", "O", "O", "X", "TalkToHiddenItems", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["TalkToIndigoPlateauStatues", "X", "X", "X", "X", "TalkToIndigoPlateauStatues", "O", "O", "O", "X", "X", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
@@ -363,7 +363,7 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "O", "G", "G", "O", "X", "O", "O", "TalkToIndigoPlateauStatues", "X", "X", "X", "X", "TalkToIndigoPlateauStatues"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "TalkToHiddenItems"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
@@ -383,7 +383,7 @@ coll_map = [
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "~", "~", "~", "~", "O", "O", "X", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "~", "~", "~", "~", "TalkToHiddenItems", "O", "X", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
     ["TalkToIndigoPlateauStatues", "X", "X", "TalkToIndigoPlateauStatues", "~", "~", "~", "~", "O", "O", "X", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X"],
@@ -437,4 +437,14 @@ coll_map = [
     ["O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 4, "y": 35, "sprite": "SPRITE_GUARD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE23_GUARD1"},
+    {"x": 10, "y": 56, "sprite": "SPRITE_GUARD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE23_GUARD2"},
+    {"x": 8, "y": 85, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE23_SWIMMER1"},
+    {"x": 11, "y": 96, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE23_SWIMMER2"},
+    {"x": 12, "y": 105, "sprite": "SPRITE_GUARD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE23_GUARD3"},
+    {"x": 8, "y": 119, "sprite": "SPRITE_GUARD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE23_GUARD4"},
+    {"x": 8, "y": 136, "sprite": "SPRITE_GUARD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE23_GUARD5"},
 ]

@@ -22,11 +22,14 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "O", "O", "O", "O", "WarpPoint"],
+    ["TalkToOpenRedsPC", "X", "X", "O", "O", "O", "O", "WarpPoint"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "O", "O", "O", "O"],
-    ["O", "O", "O", "X", "O", "O", "O", "O"],
+    ["O", "O", "O", "TalkToPrintRedSNESText", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O"],
+]
+
+npc_data = [
 ]

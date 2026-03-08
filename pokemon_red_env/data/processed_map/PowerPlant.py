@@ -78,7 +78,7 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "TalkToHiddenItems", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "O", "X", "X", "X", "X", "O", "O", "X", "O", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X"],
@@ -93,7 +93,7 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X"],
-    ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X"],
+    ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "TalkToHiddenItems", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "O", "O", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "O", "X", "X", "O", "O", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "X"],
@@ -113,4 +113,21 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "X", "O", "X", "X", "O", "O", "X", "X", "X", "X", "O", "X", "X", "X", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 9, "y": 20, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_VOLTORB1"},
+    {"x": 32, "y": 18, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_VOLTORB2"},
+    {"x": 21, "y": 25, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_VOLTORB3"},
+    {"x": 25, "y": 18, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_ELECTRODE1"},
+    {"x": 23, "y": 34, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_VOLTORB4"},
+    {"x": 26, "y": 28, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_VOLTORB5"},
+    {"x": 21, "y": 14, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_ELECTRODE2"},
+    {"x": 37, "y": 32, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_VOLTORB6"},
+    {"x": 4, "y": 9, "sprite": "SPRITE_BIRD", "movement": "STAY", "direction": "UP", "text_id": "TEXT_POWERPLANT_ZAPDOS"},
+    {"x": 7, "y": 25, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_CARBOS"},
+    {"x": 28, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_HP_UP"},
+    {"x": 34, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_RARE_CANDY"},
+    {"x": 26, "y": 32, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_TM_THUNDER"},
+    {"x": 20, "y": 32, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POWERPLANT_TM_REFLECT"},
 ]

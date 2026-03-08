@@ -60,3 +60,16 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "O"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 28, "y": 5, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VICTORYROAD3F_COOLTRAINER_M1"},
+    {"x": 7, "y": 13, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_VICTORYROAD3F_COOLTRAINER_F1"},
+    {"x": 6, "y": 14, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VICTORYROAD3F_COOLTRAINER_M2"},
+    {"x": 13, "y": 3, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_VICTORYROAD3F_COOLTRAINER_F2"},
+    {"x": 26, "y": 5, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VICTORYROAD3F_MAX_REVIVE"},
+    {"x": 7, "y": 7, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VICTORYROAD3F_TM_EXPLOSION"},
+    {"x": 22, "y": 3, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_VICTORYROAD3F_BOULDER1"},
+    {"x": 13, "y": 12, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_VICTORYROAD3F_BOULDER2"},
+    {"x": 24, "y": 10, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_VICTORYROAD3F_BOULDER3"},
+    {"x": 22, "y": 15, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_VICTORYROAD3F_BOULDER4"},
+]

@@ -81,10 +81,10 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
-    ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
-    ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
-    ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "R", "O", "O", "L", "O", "O", "O"],
+    ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "R", "O", "O", "L", "O", "O", "O"],
+    ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "R", "O", "O", "L", "O", "O", "O"],
+    ["X", "X", "X", "X", "D", "D", "O", "D", "D", "D", "D", "D", "D", "X", "O", "O", "X", "D", "D", "D"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X"],
@@ -113,4 +113,15 @@ coll_map = [
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "X", "O", "O", "X", "O", "O", "X", "~", "~", "~", "~"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "X", "O", "O", "X", "O", "O", "X", "~", "~", "~", "~"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "X", "O", "O", "X", "O", "O", "X", "~", "~", "~", "~"],
+]
+
+npc_data = [
+    {"x": 11, "y": 15, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE24_COOLTRAINER_M1"},
+    {"x": 5, "y": 20, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE24_COOLTRAINER_M2"},
+    {"x": 11, "y": 19, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE24_COOLTRAINER_M3"},
+    {"x": 10, "y": 22, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE24_COOLTRAINER_F1"},
+    {"x": 11, "y": 25, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE24_YOUNGSTER1"},
+    {"x": 10, "y": 28, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE24_COOLTRAINER_F2"},
+    {"x": 11, "y": 31, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE24_YOUNGSTER2"},
+    {"x": 10, "y": 5, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROUTE24_TM_THUNDER_WAVE"},
 ]

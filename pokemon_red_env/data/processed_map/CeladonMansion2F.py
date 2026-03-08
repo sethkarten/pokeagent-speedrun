@@ -34,11 +34,14 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "O", "O"],
     ["O", "O", "O", "O", "O", "X", "O", "O"],
-    ["X", "X", "O", "O", "O", "X", "O", "O"],
+    ["TalkToOpenPokemonCenterPC", "X", "O", "O", "O", "X", "O", "O"],
     ["O", "O", "O", "X", "X", "X", "O", "O"],
     ["X", "O", "O", "X", "X", "X", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "SIGN_CELADONMANSION2F_MEETING_ROOM_SIGN", "X", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
 ]

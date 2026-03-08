@@ -25,8 +25,12 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-    ["O", "O", "O", "O", "X", "X", "O", "O", "O", "O"],
+    ["O", "O", "O", "O", "TalkToCableClubLeftGameboy", "TalkToCableClubRightGameboy", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 2, "y": 2, "sprite": "SPRITE_RED", "movement": "STAY", "direction": "ANY_DIR", "text_id": "TEXT_COLOSSEUM_OPPONENT"},
 ]

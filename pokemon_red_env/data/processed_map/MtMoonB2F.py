@@ -86,10 +86,10 @@ coll_map = [
     ["X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "O", "O", "O", "WarpPoint", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "X", "X", "X", "O", "O", "O", "X", "O", "WarpPoint", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "X", "X", "X", "O", "O", "O", "X", "O", "WarpPoint", "O", "O", "O", "O", "O", "O", "O", "TalkToHiddenItems", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
-    ["O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
+    ["O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "TalkToHiddenItems", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "X", "X", "X", "X", "O", "O", "X", "X", "O", "O", "O", "X"],
@@ -113,4 +113,16 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 12, "y": 8, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_MTMOONB2F_SUPER_NERD"},
+    {"x": 11, "y": 16, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOONB2F_ROCKET1"},
+    {"x": 15, "y": 22, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOONB2F_ROCKET2"},
+    {"x": 29, "y": 11, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_MTMOONB2F_ROCKET3"},
+    {"x": 29, "y": 17, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_MTMOONB2F_ROCKET4"},
+    {"x": 12, "y": 6, "sprite": "SPRITE_FOSSIL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOONB2F_DOME_FOSSIL"},
+    {"x": 13, "y": 6, "sprite": "SPRITE_FOSSIL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOONB2F_HELIX_FOSSIL"},
+    {"x": 25, "y": 21, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOONB2F_HP_UP"},
+    {"x": 29, "y": 5, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOONB2F_TM_MEGA_PUNCH"},
 ]

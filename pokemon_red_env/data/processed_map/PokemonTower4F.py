@@ -60,3 +60,12 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 5, "y": 10, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONTOWER4F_CHANNELER1"},
+    {"x": 15, "y": 7, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_POKEMONTOWER4F_CHANNELER2"},
+    {"x": 14, "y": 12, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONTOWER4F_CHANNELER3"},
+    {"x": 12, "y": 10, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER4F_ELIXER"},
+    {"x": 9, "y": 10, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER4F_AWAKENING"},
+    {"x": 12, "y": 16, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER4F_HP_UP"},
+]

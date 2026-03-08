@@ -54,7 +54,7 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "TalkToHiddenItems", "X", "X", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X", "X", "X", "O", "X"],
@@ -77,4 +77,16 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 25, "y": 3, "sprite": "SPRITE_GIOVANNI", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKETHIDEOUTB4F_GIOVANNI"},
+    {"x": 23, "y": 12, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKETHIDEOUTB4F_ROCKET1"},
+    {"x": 26, "y": 12, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKETHIDEOUTB4F_ROCKET2"},
+    {"x": 11, "y": 2, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKETHIDEOUTB4F_ROCKET3"},
+    {"x": 10, "y": 12, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB4F_HP_UP"},
+    {"x": 9, "y": 4, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB4F_TM_RAZOR_WIND"},
+    {"x": 12, "y": 20, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB4F_IRON"},
+    {"x": 25, "y": 2, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB4F_SILPH_SCOPE"},
+    {"x": 10, "y": 2, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB4F_LIFT_KEY"},
 ]

@@ -60,3 +60,10 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 12, "y": 3, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONTOWER3F_CHANNELER1"},
+    {"x": 9, "y": 8, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_POKEMONTOWER3F_CHANNELER2"},
+    {"x": 10, "y": 13, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_POKEMONTOWER3F_CHANNELER3"},
+    {"x": 12, "y": 1, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER3F_ESCAPE_ROPE"},
+]

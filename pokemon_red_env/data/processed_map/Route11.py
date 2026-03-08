@@ -46,7 +46,7 @@ coll_map = [
     ["O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
-    ["X", "SIGN_ROUTE11_DIGLETTSCAVE_SIGN", "X", "X", "WarpPoint", "X", "X", "X", "X", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
+    ["X", "SIGN_ROUTE11_DIGLETTSCAVE_SIGN", "X", "X", "WarpPoint", "X", "X", "X", "X", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "TalkToHiddenItems", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["~", "~", "~", "~", "~", "~", "~", "~", "X", "O", "O", "O", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "O"],
@@ -59,4 +59,17 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 10, "y": 14, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE11_GAMBLER1"},
+    {"x": 26, "y": 9, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE11_GAMBLER2"},
+    {"x": 13, "y": 5, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE11_YOUNGSTER1"},
+    {"x": 36, "y": 11, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE11_SUPER_NERD1"},
+    {"x": 22, "y": 4, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE11_YOUNGSTER2"},
+    {"x": 45, "y": 7, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE11_GAMBLER3"},
+    {"x": 33, "y": 3, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE11_GAMBLER4"},
+    {"x": 43, "y": 5, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE11_YOUNGSTER3"},
+    {"x": 45, "y": 16, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE11_SUPER_NERD2"},
+    {"x": 22, "y": 12, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE11_YOUNGSTER4"},
 ]

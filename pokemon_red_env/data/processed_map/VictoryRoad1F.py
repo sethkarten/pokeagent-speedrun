@@ -60,3 +60,13 @@ coll_map = [
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "O", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 7, "y": 5, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_VICTORYROAD1F_COOLTRAINER_F"},
+    {"x": 3, "y": 2, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VICTORYROAD1F_COOLTRAINER_M"},
+    {"x": 11, "y": 0, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VICTORYROAD1F_TM_SKY_ATTACK"},
+    {"x": 9, "y": 2, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VICTORYROAD1F_RARE_CANDY"},
+    {"x": 5, "y": 15, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_VICTORYROAD1F_BOULDER1"},
+    {"x": 14, "y": 2, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_VICTORYROAD1F_BOULDER2"},
+    {"x": 2, "y": 10, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_VICTORYROAD1F_BOULDER3"},
+]

@@ -84,11 +84,11 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
-    ["X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "WarpPoint", "X", "X", "X", "X", "X", "X", "O", "X", "X"],
+    ["D", "D", "D", "O", "D", "D", "D", "D", "X", "X", "WarpPoint", "X", "X", "X", "D", "D", "D", "O", "D", "D"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["D", "D", "D", "D", "D", "D", "D", "O", "D", "D", "D", "D", "D", "D", "D", "D", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "WarpPoint", "X", "X"],
     ["G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O"],
@@ -113,4 +113,13 @@ coll_map = [
     ["~", "~", "~", "~", "~", "~", "~", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["~", "~", "~", "~", "~", "~", "~", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["~", "~", "~", "~", "~", "~", "~", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 10, "y": 21, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE6_COOLTRAINER_M1"},
+    {"x": 11, "y": 21, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE6_COOLTRAINER_F1"},
+    {"x": 0, "y": 15, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE6_YOUNGSTER1"},
+    {"x": 11, "y": 31, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE6_COOLTRAINER_M2"},
+    {"x": 11, "y": 30, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE6_COOLTRAINER_F2"},
+    {"x": 19, "y": 26, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE6_YOUNGSTER2"},
 ]

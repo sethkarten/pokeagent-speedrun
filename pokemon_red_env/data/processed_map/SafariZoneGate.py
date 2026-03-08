@@ -24,3 +24,8 @@ coll_map = [
     ["C", "O", "C", "O", "O", "C", "O", "C"],
     ["C", "C", "O", "WarpPoint", "WarpPoint", "O", "C", "C"],
 ]
+
+npc_data = [
+    {"x": 6, "y": 2, "sprite": "SPRITE_SAFARI_ZONE_WORKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SAFARIZONEGATE_SAFARI_ZONE_WORKER1"},
+    {"x": 1, "y": 4, "sprite": "SPRITE_SAFARI_ZONE_WORKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SAFARIZONEGATE_SAFARI_ZONE_WORKER2"},
+]

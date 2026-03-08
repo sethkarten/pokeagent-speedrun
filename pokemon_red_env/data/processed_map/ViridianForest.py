@@ -119,7 +119,7 @@ coll_map = [
     ["X", "G", "G", "X", "X", "X", "G", "G", "G", "X", "X", "G", "G", "G", "X", "X", "G", "G", "G", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "G", "G", "G", "X"],
     ["X", "G", "G", "X", "X", "X", "G", "G", "G", "X", "X", "G", "G", "G", "O", "O", "G", "G", "G", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "G", "G", "G", "X"],
     ["X", "G", "G", "X", "X", "X", "G", "G", "G", "X", "X", "G", "G", "G", "O", "O", "G", "G", "G", "X", "X", "X", "X", "X", "X", "O", "SIGN_VIRIDIANFOREST_TRAINER_TIPS2", "X", "X", "X", "G", "G", "G", "X"],
-    ["X", "G", "G", "X", "X", "X", "G", "G", "G", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
+    ["X", "TalkToHiddenItems", "G", "X", "X", "X", "G", "G", "G", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "G", "G", "X", "X", "X", "G", "G", "G", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "G", "G", "X", "X", "X", "G", "G", "G", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "G", "G", "G", "X", "X", "X", "O", "O", "X"],
     ["X", "G", "G", "X", "X", "X", "G", "G", "G", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "G", "G", "G", "X", "X", "X", "O", "O", "X"],
@@ -143,10 +143,21 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "O", "O", "G", "X", "X", "X", "X", "X", "X", "G", "O", "O", "G", "X", "X", "X", "X", "X", "X", "G", "O", "O", "X", "X", "X", "X", "X", "X"],
     ["X", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "SIGN_VIRIDIANFOREST_TRAINER_TIPS1", "G", "O", "O", "G", "G", "G", "G", "G", "X"],
     ["X", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "X", "X", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "X"],
-    ["X", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "X"],
+    ["X", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "TalkToHiddenItems", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "X"],
     ["X", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "SIGN_VIRIDIANFOREST_TRAINER_TIPS4", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "WarpPoint", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 16, "y": 43, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANFOREST_YOUNGSTER1"},
+    {"x": 30, "y": 33, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VIRIDIANFOREST_YOUNGSTER2"},
+    {"x": 30, "y": 19, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VIRIDIANFOREST_YOUNGSTER3"},
+    {"x": 2, "y": 18, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VIRIDIANFOREST_YOUNGSTER4"},
+    {"x": 25, "y": 11, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANFOREST_ANTIDOTE"},
+    {"x": 12, "y": 29, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANFOREST_POTION"},
+    {"x": 1, "y": 31, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANFOREST_POKE_BALL"},
+    {"x": 27, "y": 40, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANFOREST_YOUNGSTER5"},
 ]

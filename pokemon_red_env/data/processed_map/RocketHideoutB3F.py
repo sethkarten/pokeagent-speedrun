@@ -78,7 +78,7 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "O", "X", "O", "X", "O", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "X", "X", "X", "O", "O", "O", "O", "O", "TalkToHiddenItems", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "WarpPoint", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "O", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
@@ -89,4 +89,11 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 10, "y": 22, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROCKETHIDEOUTB3F_ROCKET1"},
+    {"x": 26, "y": 12, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROCKETHIDEOUTB3F_ROCKET2"},
+    {"x": 26, "y": 17, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB3F_TM_DOUBLE_EDGE"},
+    {"x": 20, "y": 14, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB3F_RARE_CANDY"},
 ]

@@ -5,7 +5,8 @@ import re
 import glob
 from collections import defaultdict
 
-game_code_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+env_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+game_code_dir = os.path.join(env_dir, "data")
 
 def parse_collision_tile_ids_asm(collision_asm_path):
     """
@@ -67,38 +68,33 @@ def parse_collision_tile_ids_asm(collision_asm_path):
 
 
 def parse_hidden_objects(asm_text):
-    maps_section = re.search(r'HiddenObjectMaps:(.*?)db -1 ; end', asm_text, re.DOTALL)
-    map_names = re.findall(r'db (\w+)', maps_section.group(1)) if maps_section else []
+    """Parse hidden_events.asm into {MAP_LABEL: {(x,y): description, ...}, ...}."""
+    result = {}
 
-    pointers_section = re.search(r'HiddenObjectPointers:(.*?)(?=MACRO|RedsHouse2FHiddenObjects:)', asm_text, re.DOTALL)
-    pointer_names = re.findall(r'dw (\w+)', pointers_section.group(1)) if pointers_section else []
+    # Find each hidden_events_for block (macro expands to a label)
+    block_pattern = re.compile(
+        r'hidden_events_for\s+(\w+)\s*\n(.*?)db\s+-1',
+        re.DOTALL
+    )
 
-    map_pointer_dict = dict(zip(map_names, pointer_names))
+    # Match both hidden_event and hidden_text_predef lines
+    # Captures: x, y, function_name (the 3rd argument)
+    event_pattern = re.compile(
+        r'hidden_(?:event|text_predef)\s+(\d+)\s*,\s*(\d+)\s*,\s*(\w+)'
+    )
 
-    object_data_dict = defaultdict(dict)
+    for block_match in block_pattern.finditer(asm_text):
+        map_label = block_match.group(1)  # e.g. "REDS_HOUSE_2F"
+        block_text = block_match.group(2)
 
-    hidden_object_blocks = re.findall(r'(\w+):\n(.*?)(?=(^\w+:)|\Z)', asm_text, re.DOTALL | re.MULTILINE)
+        hidden_dict = {}
+        for event_match in event_pattern.finditer(block_text):
+            x = int(event_match.group(1))
+            y = int(event_match.group(2))
+            func_name = event_match.group(3)  # e.g. "OpenRedsPC", "PrintRedSNESText"
+            hidden_dict[(x, y)] = "TalkTo" + func_name
 
-    for label, block, _ in hidden_object_blocks:
-        if label not in pointer_names:
-            continue
-        lines = block.strip().splitlines()
-        for line in lines:
-            line = line.strip()
-            if line.startswith("hidden_"):
-                match = re.match(r'hidden_\w+\s+(\d+),\s+(\d+),\s+(\w+),\s+(\w+)', line)
-
-                if match:
-                    x, y = int(match.group(1)), int(match.group(2))
-                    hidden_description = match.group(4)
-                    if hidden_description.startswith("Hidden"):
-                        continue
-                    object_data_dict[label][(x, y)] = "TalkTo" + hidden_description
-
-    result = {
-        map_name: object_data_dict.get(ptr_name, [])
-        for map_name, ptr_name in map_pointer_dict.items()
-    }
+        result[map_label] = hidden_dict
 
     return result
 
@@ -122,13 +118,13 @@ def parse_ledge_tiles_asm(ledge_tiles_asm_path):
     rules = []
     
     pattern = re.compile(
-        r"db\s+SPRITE_FACING_(DOWN|LEFT|RIGHT)\s*,\s*\$([0-9A-Fa-f]+)\s*,\s*\$([0-9A-Fa-f]+)\s*,\s*(D_DOWN|D_LEFT|D_RIGHT)"
+        r"db\s+SPRITE_FACING_(DOWN|LEFT|RIGHT)\s*,\s*\$([0-9A-Fa-f]+)\s*,\s*\$([0-9A-Fa-f]+)\s*,\s*(PAD_DOWN|PAD_LEFT|PAD_RIGHT)"
     )
 
     dir_map = {
-        "D_DOWN": "D",
-        "D_LEFT": "L",
-        "D_RIGHT": "R",
+        "PAD_DOWN": "D",
+        "PAD_LEFT": "L",
+        "PAD_RIGHT": "R",
     }
 
     with open(ledge_tiles_asm_path, "r", encoding="utf-8") as f:
@@ -254,13 +250,17 @@ def build_tile_id_map(blk, blocks, map_width_blocks, map_height_blocks):
 def parse_map_objects_asm(root_dir, map_name):
     objects_asm_path = os.path.join(root_dir, "data", "maps", "objects", f"{map_name}.asm")
     if not os.path.exists(objects_asm_path):
-        return set(), set()
+        return set(), set(), []
 
     warp_coords = set()
     sign_coords = {}
+    npc_data = []
 
     warp_pattern = re.compile(r"warp_event\s+(\d+)\s*,\s*(\d+)\s*,")
     bg_pattern = re.compile(r"bg_event\s+(\d+)\s*,\s*(\d+)\s*,\s*TEXT_(\w+)")
+    obj_pattern = re.compile(
+        r'object_event\s+(\d+)\s*,\s*(\d+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)'
+    )
 
     with open(objects_asm_path, "r", encoding="utf-8") as f:
         for line in f:
@@ -278,8 +278,19 @@ def parse_map_objects_asm(root_dir, map_name):
                 bg_description = str(smatch.group(3))
                 sign_coords[(x, y)]  = "SIGN_" + bg_description
                 continue
+            omatch = obj_pattern.search(line)
+            if omatch:
+                npc_data.append({
+                    "x": int(omatch.group(1)),
+                    "y": int(omatch.group(2)),
+                    "sprite": omatch.group(3),
+                    "movement": omatch.group(4),
+                    "direction": omatch.group(5),
+                    "text_id": omatch.group(6),
+                })
+                continue
 
-    return warp_coords, sign_coords
+    return warp_coords, sign_coords, npc_data
 
 def main():
     root_dir = os.path.join(game_code_dir, "pokered")
@@ -405,7 +416,7 @@ def main():
 
         tile_id_map = build_tile_id_map(blk, blocks, mw, mh)
 
-        warp_coords, sign_coords = parse_map_objects_asm(root_dir, map_name)
+        warp_coords, sign_coords, npc_data = parse_map_objects_asm(root_dir, map_name)
 
         coll_set = collision_dict.get(tile_type, set())
         cut_set = cut_dict.get(tile_type, set())
@@ -552,6 +563,14 @@ def main():
             for row in coll_map:
                 row_str = ", ".join(f'"{c}"' for c in row)
                 f.write(f"    [{row_str}],\n")
+            f.write("]\n\n")
+
+            # npc_data
+            f.write("npc_data = [\n")
+            for npc in npc_data:
+                f.write(f'    {{"x": {npc["x"]}, "y": {npc["y"]}, "sprite": "{npc["sprite"]}", '
+                        f'"movement": "{npc["movement"]}", "direction": "{npc["direction"]}", '
+                        f'"text_id": "{npc["text_id"]}"}},\n')
             f.write("]\n")
 
         print(f"[{map_name}] -> Successfully Saved: {py_path}")

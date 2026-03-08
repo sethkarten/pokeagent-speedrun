@@ -22,11 +22,20 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "TalkToTownMapText", "X", "X", "X", "X"],
-    ["X", "X", "O", "O", "O", "O", "O", "X"],
+    ["TalkToPrintMagazinesText", "TalkToPrintMagazinesText", "O", "O", "O", "O", "O", "TalkToPrintMagazinesText"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "X", "O", "O", "O"],
     ["O", "O", "O", "X", "X", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "X"],
+]
+
+npc_data = [
+    {"x": 3, "y": 5, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MRFUJISHOUSE_SUPER_NERD"},
+    {"x": 6, "y": 3, "sprite": "SPRITE_LITTLE_GIRL", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MRFUJISHOUSE_LITTLE_GIRL"},
+    {"x": 6, "y": 4, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_MRFUJISHOUSE_PSYDUCK"},
+    {"x": 1, "y": 3, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MRFUJISHOUSE_NIDORINO"},
+    {"x": 3, "y": 1, "sprite": "SPRITE_MR_FUJI", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MRFUJISHOUSE_MR_FUJI"},
+    {"x": 3, "y": 3, "sprite": "SPRITE_POKEDEX", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MRFUJISHOUSE_POKEDEX"},
 ]

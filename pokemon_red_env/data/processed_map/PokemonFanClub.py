@@ -30,3 +30,12 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
 ]
+
+npc_data = [
+    {"x": 6, "y": 3, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONFANCLUB_PIKACHU_FAN"},
+    {"x": 1, "y": 3, "sprite": "SPRITE_GIRL", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONFANCLUB_SEEL_FAN"},
+    {"x": 6, "y": 4, "sprite": "SPRITE_FAIRY", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONFANCLUB_PIKACHU"},
+    {"x": 1, "y": 4, "sprite": "SPRITE_SEEL", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONFANCLUB_SEEL"},
+    {"x": 3, "y": 1, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_POKEMONFANCLUB_CHAIRMAN"},
+    {"x": 5, "y": 1, "sprite": "SPRITE_LINK_RECEPTIONIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_POKEMONFANCLUB_RECEPTIONIST"},
+]

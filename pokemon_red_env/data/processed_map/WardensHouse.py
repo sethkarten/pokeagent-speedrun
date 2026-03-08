@@ -30,3 +30,9 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "X"],
 ]
+
+npc_data = [
+    {"x": 2, "y": 3, "sprite": "SPRITE_WARDEN", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_WARDENSHOUSE_WARDEN"},
+    {"x": 8, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_WARDENSHOUSE_RARE_CANDY"},
+    {"x": 8, "y": 4, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_WARDENSHOUSE_BOULDER"},
+]

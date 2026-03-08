@@ -22,11 +22,17 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "TalkToTownMapText", "X", "X", "X", "X"],
-    ["X", "X", "O", "O", "O", "O", "O", "X"],
+    ["TalkToPrintBookcaseText", "TalkToPrintBookcaseText", "O", "O", "O", "O", "O", "TalkToPrintBookcaseText"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "X", "O", "O", "O"],
     ["O", "O", "O", "X", "X", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "X"],
+]
+
+npc_data = [
+    {"x": 2, "y": 3, "sprite": "SPRITE_DAISY", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_BLUESHOUSE_DAISY_SITTING"},
+    {"x": 6, "y": 4, "sprite": "SPRITE_DAISY", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_BLUESHOUSE_DAISY_WALKING"},
+    {"x": 3, "y": 3, "sprite": "SPRITE_POKEDEX", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_BLUESHOUSE_TOWN_MAP"},
 ]

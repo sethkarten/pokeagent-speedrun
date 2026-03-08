@@ -21,12 +21,17 @@ tile_map = [
 ]
 
 coll_map = [
-    ["X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "TalkToPrintBlackboardLinkCableText", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "X", "O", "O", "O"],
-    ["O", "O", "O", "X", "X", "O", "O", "O"],
+    ["O", "O", "O", "TalkToPrintNotebookText", "X", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "X"],
+]
+
+npc_data = [
+    {"x": 3, "y": 5, "sprite": "SPRITE_BRUNETTE_GIRL", "movement": "STAY", "direction": "UP", "text_id": "TEXT_VIRIDIANSCHOOLHOUSE_BRUNETTE_GIRL"},
+    {"x": 4, "y": 1, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANSCHOOLHOUSE_COOLTRAINER_F"},
 ]

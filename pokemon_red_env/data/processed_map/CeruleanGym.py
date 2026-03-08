@@ -44,7 +44,14 @@ coll_map = [
     ["O", "~", "O", "O", "O", "O", "~", "~", "~", "O"],
     ["O", "~", "~", "~", "O", "O", "~", "~", "~", "O"],
     ["O", "~", "~", "X", "O", "O", "X", "O", "~", "O"],
-    ["O", "~", "~", "X", "O", "O", "X", "O", "~", "O"],
+    ["O", "~", "~", "TalkToGymStatues", "O", "O", "TalkToGymStatues", "O", "~", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 4, "y": 2, "sprite": "SPRITE_BRUNETTE_GIRL", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CERULEANGYM_MISTY"},
+    {"x": 2, "y": 3, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_CERULEANGYM_COOLTRAINER_F"},
+    {"x": 8, "y": 7, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_CERULEANGYM_SWIMMER"},
+    {"x": 7, "y": 10, "sprite": "SPRITE_GYM_GUIDE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CERULEANGYM_GYM_GUIDE"},
 ]

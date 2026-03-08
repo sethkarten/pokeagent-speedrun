@@ -92,7 +92,7 @@ coll_map = [
     ["X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "O", "O", "O", "O", "X", "X", "WarpPoint", "X", "WarpPoint", "X", "SIGN_CELADONCITY_DEPTSTORE_SIGN", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
-    ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_CELADONCITY_SIGN", "X", "X", "X", "X", "X", "X", "X", "SIGN_CELADONCITY_TRAINER_TIPS1", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_CELADONCITY_SIGN", "X", "X", "X", "X", "X", "X", "X", "SIGN_CELADONCITY_TRAINER_TIPS1", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "TalkToHiddenItems", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
@@ -108,9 +108,21 @@ coll_map = [
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_CELADONCITY_GYM_SIGN", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
-    ["X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
+    ["X", "X", "D", "D", "D", "O", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "Cut", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 8, "y": 17, "sprite": "SPRITE_LITTLE_GIRL", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_CELADONCITY_LITTLE_GIRL"},
+    {"x": 11, "y": 28, "sprite": "SPRITE_GRAMPS", "movement": "STAY", "direction": "UP", "text_id": "TEXT_CELADONCITY_GRAMPS1"},
+    {"x": 14, "y": 19, "sprite": "SPRITE_GIRL", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_CELADONCITY_GIRL"},
+    {"x": 25, "y": 22, "sprite": "SPRITE_GRAMPS", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONCITY_GRAMPS2"},
+    {"x": 22, "y": 16, "sprite": "SPRITE_GRAMPS", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONCITY_GRAMPS3"},
+    {"x": 32, "y": 12, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_CELADONCITY_FISHER"},
+    {"x": 30, "y": 12, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_CELADONCITY_POLIWRATH"},
+    {"x": 32, "y": 29, "sprite": "SPRITE_ROCKET", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_CELADONCITY_ROCKET1"},
+    {"x": 42, "y": 14, "sprite": "SPRITE_ROCKET", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_CELADONCITY_ROCKET2"},
 ]

@@ -72,7 +72,7 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "O", "X", "O", "O", "WarpPoint", "O", "WarpPoint", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
-    ["X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
+    ["X", "O", "TalkToMansion2Script_Switches", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "O", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "O", "WarpPoint", "O", "O", "O", "X"],
@@ -89,4 +89,11 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 3, "y": 17, "sprite": "SPRITE_SUPER_NERD", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_POKEMONMANSION2F_SUPER_NERD"},
+    {"x": 28, "y": 7, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION2F_CALCIUM"},
+    {"x": 18, "y": 2, "sprite": "SPRITE_POKEDEX", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION2F_DIARY1"},
+    {"x": 3, "y": 22, "sprite": "SPRITE_POKEDEX", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION2F_DIARY2"},
 ]

@@ -56,7 +56,12 @@ coll_map = [
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "X"],
     ["X", "X", "O", "O", "O", "WarpPoint", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "WarpPoint", "O", "X", "X", "X"],
-    ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "WarpPoint", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "TalkToHiddenItems", "O", "O", "O", "WarpPoint", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 18, "y": 6, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDSB2F_BOULDER1"},
+    {"x": 23, "y": 6, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDSB2F_BOULDER2"},
 ]

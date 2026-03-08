@@ -58,5 +58,11 @@ coll_map = [
     ["X", "X", "~", "~", "~", "~", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X"],
     ["X", "X", "~", "~", "~", "~", "X", "O", "O", "SIGN_SEAFOAMISLANDSB4F_BOULDERS_SIGN", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X"],
     ["X", "X", "X", "O", "~", "~", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "X", "O", "X", "O", "X", "O", "X", "X"],
-    ["X", "X", "X", "X", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "TalkToHiddenItems", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 4, "y": 15, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SEAFOAMISLANDSB4F_BOULDER1"},
+    {"x": 5, "y": 15, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SEAFOAMISLANDSB4F_BOULDER2"},
+    {"x": 6, "y": 1, "sprite": "SPRITE_BIRD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SEAFOAMISLANDSB4F_ARTICUNO"},
 ]

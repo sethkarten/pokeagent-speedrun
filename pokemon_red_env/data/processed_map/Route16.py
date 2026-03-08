@@ -60,3 +60,13 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "O", "O", "O", "O", "SIGN_ROUTE16_SIGN", "O", "O", "O", "O", "O", "O", "X", "O", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 17, "y": 12, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE16_BIKER1"},
+    {"x": 14, "y": 13, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE16_BIKER2"},
+    {"x": 11, "y": 12, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE16_BIKER3"},
+    {"x": 9, "y": 11, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE16_BIKER4"},
+    {"x": 6, "y": 10, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE16_BIKER5"},
+    {"x": 3, "y": 12, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE16_BIKER6"},
+    {"x": 26, "y": 10, "sprite": "SPRITE_SNORLAX", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE16_SNORLAX"},
+]

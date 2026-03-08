@@ -60,3 +60,11 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 10, "y": 1, "sprite": "SPRITE_SILPH_WORKER_F", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO2F_SILPH_WORKER_F"},
+    {"x": 5, "y": 12, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO2F_SCIENTIST1"},
+    {"x": 24, "y": 13, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SILPHCO2F_SCIENTIST2"},
+    {"x": 16, "y": 11, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO2F_ROCKET1"},
+    {"x": 24, "y": 7, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO2F_ROCKET2"},
+]

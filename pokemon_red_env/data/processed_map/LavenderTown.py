@@ -60,3 +60,9 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 15, "y": 9, "sprite": "SPRITE_LITTLE_GIRL", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_LAVENDERTOWN_LITTLE_GIRL"},
+    {"x": 9, "y": 10, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_LAVENDERTOWN_COOLTRAINER_M"},
+    {"x": 8, "y": 7, "sprite": "SPRITE_SUPER_NERD", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_LAVENDERTOWN_SUPER_NERD"},
+]

@@ -90,3 +90,11 @@ coll_map = [
     ["X", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 20, "y": 12, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKETHIDEOUTB2F_ROCKET"},
+    {"x": 1, "y": 11, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB2F_MOON_STONE"},
+    {"x": 16, "y": 8, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB2F_NUGGET"},
+    {"x": 6, "y": 12, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB2F_TM_HORN_DRILL"},
+    {"x": 3, "y": 21, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB2F_SUPER_POTION"},
+]

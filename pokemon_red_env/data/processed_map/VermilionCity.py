@@ -88,7 +88,7 @@ coll_map = [
     ["~", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["~", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["~", "X", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "~", "~", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
-    ["~", "X", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "~", "~", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
+    ["~", "X", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "~", "~", "TalkToHiddenItems", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["~", "X", "~", "~", "~", "~", "O", "O", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O"],
     ["~", "X", "~", "~", "~", "~", "O", "SIGN_VERMILIONCITY_POKEMON_FAN_CLUB_SIGN", "X", "WarpPoint", "X", "X", "O", "O", "X", "WarpPoint", "X", "X", "O", "O", "O", "O", "X", "WarpPoint", "SIGN_VERMILIONCITY_MART_SIGN", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "SIGN_VERMILIONCITY_NOTICE_SIGN", "X", "X"],
     ["~", "X", "~", "~", "~", "~", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
@@ -113,4 +113,13 @@ coll_map = [
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"],
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"],
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"],
+]
+
+npc_data = [
+    {"x": 19, "y": 7, "sprite": "SPRITE_BEAUTY", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_VERMILIONCITY_BEAUTY"},
+    {"x": 14, "y": 6, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VERMILIONCITY_GAMBLER1"},
+    {"x": 19, "y": 30, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "UP", "text_id": "TEXT_VERMILIONCITY_SAILOR1"},
+    {"x": 30, "y": 7, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VERMILIONCITY_GAMBLER2"},
+    {"x": 29, "y": 9, "sprite": "SPRITE_MONSTER", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_VERMILIONCITY_MACHOP"},
+    {"x": 25, "y": 27, "sprite": "SPRITE_SAILOR", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_VERMILIONCITY_SAILOR2"},
 ]

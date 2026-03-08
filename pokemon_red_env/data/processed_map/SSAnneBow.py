@@ -48,3 +48,11 @@ coll_map = [
     ["~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["~", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 5, "y": 2, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SSANNEBOW_SUPER_NERD"},
+    {"x": 4, "y": 9, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEBOW_SAILOR1"},
+    {"x": 7, "y": 11, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEBOW_COOLTRAINER_M"},
+    {"x": 4, "y": 4, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNEBOW_SAILOR2"},
+    {"x": 10, "y": 8, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SSANNEBOW_SAILOR3"},
+]

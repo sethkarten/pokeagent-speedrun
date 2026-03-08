@@ -60,3 +60,8 @@ coll_map = [
     ["X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X"],
     ["X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 18, "y": 10, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDS1F_BOULDER1"},
+    {"x": 26, "y": 7, "sprite": "SPRITE_BOULDER", "movement": "STAY", "direction": "BOULDER_MOVEMENT_BYTE_2", "text_id": "TEXT_SEAFOAMISLANDS1F_BOULDER2"},
+]

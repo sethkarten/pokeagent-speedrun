@@ -60,3 +60,8 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 14, "y": 5, "sprite": "SPRITE_BLUE", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER2F_RIVAL"},
+    {"x": 3, "y": 7, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONTOWER2F_CHANNELER"},
+]

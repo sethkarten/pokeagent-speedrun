@@ -25,8 +25,13 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
-    ["X", "X", "X", "X", "O", "O", "X", "X"],
+    ["TalkToOpenPokemonCenterPC", "X", "TalkToOpenPokemonCenterPC", "X", "O", "O", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 5, "y": 2, "sprite": "SPRITE_SCIENTIST", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_CINNABARLABFOSSILROOM_SCIENTIST1"},
+    {"x": 7, "y": 6, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "UP", "text_id": "TEXT_CINNABARLABFOSSILROOM_SCIENTIST2"},
 ]

@@ -42,13 +42,13 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "TalkToHiddenItems", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~", "~", "~"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "Cut", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "SIGN_ROUTE25_BILL_SIGN", "X", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "Cut", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "TalkToHiddenItems", "X", "X", "X", "X", "SIGN_ROUTE25_BILL_SIGN", "X", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~"],
     ["O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "X", "O", "X", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
+    ["D", "D", "D", "D", "D", "D", "D", "D", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "X", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "O", "X", "~", "~", "~", "~"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "O", "X", "~", "~", "~", "~"],
@@ -59,4 +59,17 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"],
+]
+
+npc_data = [
+    {"x": 14, "y": 2, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE25_YOUNGSTER1"},
+    {"x": 18, "y": 5, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE25_YOUNGSTER2"},
+    {"x": 24, "y": 4, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE25_COOLTRAINER_M"},
+    {"x": 18, "y": 8, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE25_COOLTRAINER_F1"},
+    {"x": 32, "y": 3, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE25_YOUNGSTER3"},
+    {"x": 37, "y": 4, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE25_COOLTRAINER_F2"},
+    {"x": 8, "y": 4, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE25_HIKER1"},
+    {"x": 23, "y": 9, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE25_HIKER2"},
+    {"x": 13, "y": 7, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE25_HIKER3"},
+    {"x": 22, "y": 2, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROUTE25_TM_SEISMIC_TOSS"},
 ]

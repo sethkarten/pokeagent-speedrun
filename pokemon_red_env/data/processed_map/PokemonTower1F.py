@@ -60,3 +60,11 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 15, "y": 13, "sprite": "SPRITE_LINK_RECEPTIONIST", "movement": "STAY", "direction": "UP", "text_id": "TEXT_POKEMONTOWER1F_RECEPTIONIST"},
+    {"x": 6, "y": 8, "sprite": "SPRITE_MIDDLE_AGED_WOMAN", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER1F_MIDDLE_AGED_WOMAN"},
+    {"x": 8, "y": 12, "sprite": "SPRITE_BALDING_GUY", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER1F_BALDING_GUY"},
+    {"x": 13, "y": 7, "sprite": "SPRITE_GIRL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER1F_GIRL"},
+    {"x": 17, "y": 7, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONTOWER1F_CHANNELER"},
+]

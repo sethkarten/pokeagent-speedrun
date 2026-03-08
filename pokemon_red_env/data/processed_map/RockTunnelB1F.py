@@ -114,3 +114,14 @@ coll_map = [
     ["X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "X", "O", "X", "O"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 11, "y": 13, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKTUNNELB1F_COOLTRAINER_F1"},
+    {"x": 6, "y": 10, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKTUNNELB1F_HIKER1"},
+    {"x": 3, "y": 5, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKTUNNELB1F_SUPER_NERD1"},
+    {"x": 20, "y": 21, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROCKTUNNELB1F_SUPER_NERD2"},
+    {"x": 30, "y": 10, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKTUNNELB1F_HIKER2"},
+    {"x": 14, "y": 28, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROCKTUNNELB1F_COOLTRAINER_F2"},
+    {"x": 33, "y": 5, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROCKTUNNELB1F_HIKER3"},
+    {"x": 26, "y": 30, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKTUNNELB1F_SUPER_NERD3"},
+]

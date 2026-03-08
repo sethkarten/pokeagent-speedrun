@@ -60,3 +60,10 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 9, "y": 11, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONTOWER7F_ROCKET1"},
+    {"x": 12, "y": 9, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONTOWER7F_ROCKET2"},
+    {"x": 9, "y": 7, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONTOWER7F_ROCKET3"},
+    {"x": 10, "y": 3, "sprite": "SPRITE_MR_FUJI", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_POKEMONTOWER7F_MR_FUJI"},
+]

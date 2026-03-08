@@ -48,7 +48,7 @@ coll_map = [
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D"],
     ["O", "O", "O", "O", "O", "O", "O", "WarpPoint", "X", "X", "X", "X", "X", "X", "WarpPoint", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "WarpPoint", "X", "X", "X", "X", "X", "X", "WarpPoint", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "O", "SIGN_ROUTE15_SIGN", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
@@ -59,4 +59,18 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 41, "y": 11, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE15_COOLTRAINER_F1"},
+    {"x": 53, "y": 10, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE15_COOLTRAINER_F2"},
+    {"x": 31, "y": 13, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE15_COOLTRAINER_M1"},
+    {"x": 35, "y": 13, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE15_COOLTRAINER_M2"},
+    {"x": 53, "y": 11, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE15_BEAUTY1"},
+    {"x": 41, "y": 10, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE15_BEAUTY2"},
+    {"x": 48, "y": 10, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE15_BIKER1"},
+    {"x": 46, "y": 10, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE15_BIKER2"},
+    {"x": 37, "y": 5, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE15_COOLTRAINER_F3"},
+    {"x": 18, "y": 13, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE15_COOLTRAINER_F4"},
+    {"x": 18, "y": 5, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROUTE15_TM_RAGE"},
 ]

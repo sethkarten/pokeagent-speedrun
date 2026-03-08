@@ -56,7 +56,18 @@ coll_map = [
     ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O"],
     ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O"],
     ["O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
-    ["O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
+    ["O", "O", "O", "TalkToGymStatues", "O", "O", "TalkToGymStatues", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 4, "y": 3, "sprite": "SPRITE_SILPH_WORKER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONGYM_ERIKA"},
+    {"x": 2, "y": 11, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_CELADONGYM_COOLTRAINER_F1"},
+    {"x": 7, "y": 10, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_CELADONGYM_BEAUTY1"},
+    {"x": 9, "y": 5, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONGYM_COOLTRAINER_F2"},
+    {"x": 1, "y": 5, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONGYM_BEAUTY2"},
+    {"x": 6, "y": 3, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONGYM_COOLTRAINER_F3"},
+    {"x": 3, "y": 3, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONGYM_BEAUTY3"},
+    {"x": 5, "y": 3, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONGYM_COOLTRAINER_F4"},
 ]

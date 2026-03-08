@@ -348,7 +348,7 @@ class RedMapReader:
         return rows
 
     def format_map_for_llm(self, radius: int = 4) -> str:
-        """Return compact ASCII map of the area around the player (for test only)
+        """Return compact ASCII map of the area around the player (for visual map rendering on /stream)
 
         Symbols:
           P  player      .  walkable    #  wall / blocked

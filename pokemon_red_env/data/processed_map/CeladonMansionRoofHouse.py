@@ -21,12 +21,17 @@ tile_map = [
 ]
 
 coll_map = [
-    ["X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "TalkToPrintBlackboardLinkCableText", "TalkToPrintBlackboardLinkCableText", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "X", "O", "O", "O"],
-    ["O", "O", "O", "X", "X", "O", "O", "O"],
+    ["O", "O", "O", "TalkToPrintNotebookText", "X", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "X"],
+]
+
+npc_data = [
+    {"x": 2, "y": 2, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONMANSION_ROOF_HOUSE_HIKER"},
+    {"x": 4, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CELADONMANSION_ROOF_HOUSE_EEVEE_POKEBALL"},
 ]

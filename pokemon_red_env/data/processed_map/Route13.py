@@ -54,9 +54,22 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "O", "X", "X", "X", "X", "X", "SIGN_ROUTE13_SIGN", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
-    ["X", "O", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "SIGN_ROUTE13_TRAINER_TIPS1", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
+    ["X", "O", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "SIGN_ROUTE13_TRAINER_TIPS1", "TalkToHiddenItems", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
+    ["X", "TalkToHiddenItems", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 49, "y": 10, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE13_COOLTRAINER_M1"},
+    {"x": 48, "y": 10, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE13_COOLTRAINER_F1"},
+    {"x": 27, "y": 9, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE13_COOLTRAINER_F2"},
+    {"x": 23, "y": 10, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE13_COOLTRAINER_F3"},
+    {"x": 50, "y": 5, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE13_COOLTRAINER_F4"},
+    {"x": 12, "y": 4, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE13_COOLTRAINER_M2"},
+    {"x": 33, "y": 6, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE13_BEAUTY1"},
+    {"x": 32, "y": 6, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE13_BEAUTY2"},
+    {"x": 10, "y": 7, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE13_BIKER"},
+    {"x": 7, "y": 13, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE13_COOLTRAINER_M3"},
 ]

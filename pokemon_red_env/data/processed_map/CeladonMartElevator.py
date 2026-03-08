@@ -18,3 +18,6 @@ coll_map = [
     ["O", "O", "O", "O"],
     ["O", "WarpPoint", "WarpPoint", "O"],
 ]
+
+npc_data = [
+]

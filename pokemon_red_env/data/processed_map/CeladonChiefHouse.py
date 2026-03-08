@@ -30,3 +30,9 @@ coll_map = [
     ["X", "X", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "WarpPoint", "WarpPoint", "O", "O", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 4, "y": 2, "sprite": "SPRITE_GRAMPS", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONCHIEFHOUSE_CHIEF"},
+    {"x": 1, "y": 4, "sprite": "SPRITE_ROCKET", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_CELADONCHIEFHOUSE_ROCKET"},
+    {"x": 5, "y": 6, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_CELADONCHIEFHOUSE_SAILOR"},
+]

@@ -24,9 +24,18 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "O", "X"],
     ["X", "X", "X", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
     ["X", "C", "C", "C", "C", "X", "C", "C", "C", "C", "C", "O", "C", "C"],
-    ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
-    ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+    ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "TalkToOpenPokemonCenterPC"],
+    ["TalkToPrintBenchGuyText", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "O", "WarpPoint", "WarpPoint", "O", "X", "X", "O", "O", "O", "O", "X", "X"],
+]
+
+npc_data = [
+    {"x": 3, "y": 1, "sprite": "SPRITE_NURSE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOONPOKECENTER_NURSE"},
+    {"x": 4, "y": 3, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_MTMOONPOKECENTER_YOUNGSTER"},
+    {"x": 7, "y": 3, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "UP", "text_id": "TEXT_MTMOONPOKECENTER_GENTLEMAN"},
+    {"x": 10, "y": 6, "sprite": "SPRITE_MIDDLE_AGED_MAN", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_MTMOONPOKECENTER_MAGIKARP_SALESMAN"},
+    {"x": 7, "y": 2, "sprite": "SPRITE_CLIPBOARD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOONPOKECENTER_CLIPBOARD"},
+    {"x": 11, "y": 2, "sprite": "SPRITE_LINK_RECEPTIONIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOONPOKECENTER_LINK_RECEPTIONIST"},
 ]

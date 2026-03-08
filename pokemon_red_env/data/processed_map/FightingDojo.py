@@ -29,7 +29,7 @@ tile_map = [
 ]
 
 coll_map = [
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "TalkToPrintFightingDojoText2", "TalkToPrintFightingDojoText3", "X", "X", "X", "X"],
     ["X", "O", "O", "X", "O", "O", "X", "O", "O", "X"],
     ["X", "O", "O", "X", "O", "O", "X", "O", "O", "X"],
     ["X", "O", "O", "X", "O", "O", "X", "O", "O", "X"],
@@ -38,7 +38,17 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "X", "O", "O", "X", "O", "O", "X"],
-    ["X", "O", "O", "X", "O", "O", "X", "O", "O", "X"],
+    ["X", "O", "O", "TalkToPrintFightingDojoText", "O", "O", "TalkToPrintFightingDojoText", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 5, "y": 3, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_FIGHTINGDOJO_KARATE_MASTER"},
+    {"x": 3, "y": 4, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_FIGHTINGDOJO_BLACKBELT1"},
+    {"x": 3, "y": 6, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_FIGHTINGDOJO_BLACKBELT2"},
+    {"x": 5, "y": 5, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_FIGHTINGDOJO_BLACKBELT3"},
+    {"x": 5, "y": 7, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_FIGHTINGDOJO_BLACKBELT4"},
+    {"x": 4, "y": 1, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_FIGHTINGDOJO_HITMONLEE_POKE_BALL"},
+    {"x": 5, "y": 1, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_FIGHTINGDOJO_HITMONCHAN_POKE_BALL"},
 ]
