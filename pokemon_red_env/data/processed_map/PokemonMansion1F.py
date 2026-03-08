@@ -66,7 +66,7 @@ coll_map = [
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "X", "O", "X", "O", "X", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "X", "O", "O", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "X", "X"],
-    ["X", "X", "X", "O", "O", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X"],
+    ["X", "X", "TalkToMansion1Script_Switches", "O", "O", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "X", "X", "O", "O", "X", "X"],
@@ -77,7 +77,7 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X"],
-    ["X", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
+    ["X", "O", "O", "X", "O", "O", "O", "O", "TalkToHiddenItems", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "O", "O", "O", "X", "X"],
@@ -89,4 +89,10 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "X", "X"],
     ["X", "X", "X", "X", "WarpPoint", "WarpPoint", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X"],
+]
+
+npc_data = [
+    {"x": 17, "y": 17, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONMANSION1F_SCIENTIST"},
+    {"x": 14, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION1F_ESCAPE_ROPE"},
+    {"x": 18, "y": 21, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION1F_CARBOS"},
 ]

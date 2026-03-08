@@ -22,11 +22,19 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X"],
-    ["SIGN_COPYCATSHOUSE2F_PC", "X", "X", "O", "O", "O", "O", "WarpPoint"],
+    ["SIGN_COPYCATSHOUSE2F_PC", "TalkToHiddenItems", "X", "O", "O", "O", "O", "WarpPoint"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "O", "O", "O", "O"],
     ["O", "O", "O", "SIGN_COPYCATSHOUSE2F_SNES", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O"],
+]
+
+npc_data = [
+    {"x": 4, "y": 3, "sprite": "SPRITE_BRUNETTE_GIRL", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_COPYCATSHOUSE2F_COPYCAT"},
+    {"x": 4, "y": 6, "sprite": "SPRITE_BIRD", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_COPYCATSHOUSE2F_DODUO"},
+    {"x": 5, "y": 1, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_COPYCATSHOUSE2F_MONSTER"},
+    {"x": 2, "y": 0, "sprite": "SPRITE_BIRD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_COPYCATSHOUSE2F_BIRD"},
+    {"x": 1, "y": 6, "sprite": "SPRITE_FAIRY", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_COPYCATSHOUSE2F_FAIRY"},
 ]

@@ -60,3 +60,9 @@ coll_map = [
     ["X", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "O", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 29, "y": 9, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CERULEANCAVE2F_PP_UP"},
+    {"x": 4, "y": 15, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CERULEANCAVE2F_ULTRA_BALL"},
+    {"x": 13, "y": 6, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CERULEANCAVE2F_FULL_RESTORE"},
+]

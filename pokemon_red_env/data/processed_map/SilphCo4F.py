@@ -60,3 +60,13 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 6, "y": 2, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO4F_SILPH_WORKER_M"},
+    {"x": 9, "y": 14, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SILPHCO4F_ROCKET1"},
+    {"x": 14, "y": 6, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SILPHCO4F_SCIENTIST"},
+    {"x": 26, "y": 10, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO4F_ROCKET2"},
+    {"x": 3, "y": 9, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO4F_FULL_HEAL"},
+    {"x": 4, "y": 7, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO4F_MAX_REVIVE"},
+    {"x": 5, "y": 8, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO4F_ESCAPE_ROPE"},
+]

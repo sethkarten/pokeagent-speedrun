@@ -21,12 +21,18 @@ tile_map = [
 ]
 
 coll_map = [
-    ["X", "X", "X", "X", "X", "C", "X", "X"],
-    ["X", "X", "X", "X", "O", "C", "O", "O"],
-    ["X", "X", "X", "X", "O", "C", "O", "O"],
+    ["X", "TalkToPrintNewBikeText", "X", "X", "X", "C", "X", "X"],
+    ["X", "X", "TalkToPrintNewBikeText", "X", "O", "C", "O", "O"],
+    ["X", "TalkToPrintNewBikeText", "X", "TalkToPrintNewBikeText", "O", "C", "O", "O"],
     ["O", "O", "O", "O", "O", "C", "C", "C"],
-    ["X", "X", "O", "O", "O", "O", "O", "O"],
-    ["X", "X", "O", "O", "O", "O", "O", "O"],
+    ["TalkToPrintNewBikeText", "X", "O", "O", "O", "O", "O", "O"],
+    ["X", "TalkToPrintNewBikeText", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "X", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "X"],
+]
+
+npc_data = [
+    {"x": 6, "y": 2, "sprite": "SPRITE_BIKE_SHOP_CLERK", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_BIKESHOP_CLERK"},
+    {"x": 5, "y": 6, "sprite": "SPRITE_MIDDLE_AGED_WOMAN", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_BIKESHOP_MIDDLE_AGED_WOMAN"},
+    {"x": 1, "y": 3, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_BIKESHOP_YOUNGSTER"},
 ]

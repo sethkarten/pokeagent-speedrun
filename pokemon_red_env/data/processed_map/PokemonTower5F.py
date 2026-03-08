@@ -53,10 +53,19 @@ coll_map = [
     ["X", "X", "X", "WarpPoint", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "WarpPoint", "X"],
     ["X", "X", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "O", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "TalkToHiddenItems", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "O", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 12, "y": 8, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER5F_CHANNELER1"},
+    {"x": 17, "y": 7, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONTOWER5F_CHANNELER2"},
+    {"x": 14, "y": 3, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONTOWER5F_CHANNELER3"},
+    {"x": 6, "y": 10, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONTOWER5F_CHANNELER4"},
+    {"x": 9, "y": 16, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONTOWER5F_CHANNELER5"},
+    {"x": 6, "y": 14, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER5F_NUGGET"},
 ]

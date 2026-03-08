@@ -42,21 +42,29 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "O", "O", "O", "O", "X", "X", "X", "X"],
+    ["X", "X", "O", "O", "O", "O", "TalkToPrintTrashText", "X", "X", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-    ["O", "X", "O", "X", "O", "X", "O", "X", "O", "X"],
+    ["O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-    ["O", "X", "O", "X", "O", "X", "O", "X", "O", "X"],
+    ["O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-    ["O", "X", "O", "X", "O", "X", "O", "X", "O", "X"],
+    ["O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript", "O", "TalkToGymTrashScript"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
-    ["O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
+    ["O", "O", "O", "TalkToGymStatues", "O", "O", "TalkToGymStatues", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 5, "y": 1, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VERMILIONGYM_LT_SURGE"},
+    {"x": 9, "y": 6, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VERMILIONGYM_GENTLEMAN"},
+    {"x": 3, "y": 8, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VERMILIONGYM_SUPER_NERD"},
+    {"x": 0, "y": 10, "sprite": "SPRITE_SAILOR", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_VERMILIONGYM_SAILOR"},
+    {"x": 4, "y": 14, "sprite": "SPRITE_GYM_GUIDE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VERMILIONGYM_GYM_GUIDE"},
 ]

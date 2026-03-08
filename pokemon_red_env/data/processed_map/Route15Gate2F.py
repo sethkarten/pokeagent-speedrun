@@ -23,10 +23,14 @@ tile_map = [
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X"],
-    ["O", "X", "O", "O", "O", "O", "SIGN_ROUTE15GATE2F_BINOCULARS", "O"],
+    ["O", "TalkToRoute15GateLeftBinoculars", "O", "O", "O", "O", "SIGN_ROUTE15GATE2F_BINOCULARS", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "WarpPoint"],
+]
+
+npc_data = [
+    {"x": 4, "y": 2, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE15GATE2F_OAKS_AIDE"},
 ]

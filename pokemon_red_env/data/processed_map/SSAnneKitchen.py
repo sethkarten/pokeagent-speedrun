@@ -42,15 +42,25 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-    ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "X"],
+    ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "TalkToPrintTrashText"],
     ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "O"],
-    ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "X"],
+    ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "TalkToPrintTrashText"],
     ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "O"],
-    ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "X"],
+    ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "TalkToHiddenItems"],
     ["O", "O", "X", "X", "O", "O", "X", "X", "O", "O", "X", "X", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 1, "y": 8, "sprite": "SPRITE_COOK", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_SSANNEKITCHEN_COOK1"},
+    {"x": 5, "y": 8, "sprite": "SPRITE_COOK", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_SSANNEKITCHEN_COOK2"},
+    {"x": 9, "y": 7, "sprite": "SPRITE_COOK", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_SSANNEKITCHEN_COOK3"},
+    {"x": 13, "y": 6, "sprite": "SPRITE_COOK", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEKITCHEN_COOK4"},
+    {"x": 13, "y": 8, "sprite": "SPRITE_COOK", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEKITCHEN_COOK5"},
+    {"x": 13, "y": 10, "sprite": "SPRITE_COOK", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNEKITCHEN_COOK6"},
+    {"x": 11, "y": 13, "sprite": "SPRITE_COOK", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SSANNEKITCHEN_COOK7"},
 ]

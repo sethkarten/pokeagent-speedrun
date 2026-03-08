@@ -30,3 +30,8 @@ coll_map = [
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 10, "y": 4, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_CELADONMARTROOF_SUPER_NERD"},
+    {"x": 5, "y": 5, "sprite": "SPRITE_LITTLE_GIRL", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_CELADONMARTROOF_LITTLE_GIRL"},
+]

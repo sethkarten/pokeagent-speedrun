@@ -30,3 +30,11 @@ coll_map = [
     ["O", "C", "C", "C", "C", "O", "O", "O", "C", "O", "O", "O", "O", "X", "C", "O", "O", "O", "O", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "WarpPoint", "C", "O", "WarpPoint", "WarpPoint", "O", "X", "C", "O", "WarpPoint", "WarpPoint", "O", "X"],
 ]
+
+npc_data = [
+    {"x": 12, "y": 4, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_MUSEUM1F_SCIENTIST1"},
+    {"x": 1, "y": 4, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MUSEUM1F_GAMBLER"},
+    {"x": 15, "y": 2, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MUSEUM1F_SCIENTIST2"},
+    {"x": 17, "y": 4, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MUSEUM1F_SCIENTIST3"},
+    {"x": 16, "y": 2, "sprite": "SPRITE_OLD_AMBER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MUSEUM1F_OLD_AMBER"},
+]

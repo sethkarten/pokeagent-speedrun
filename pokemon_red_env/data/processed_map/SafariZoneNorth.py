@@ -114,3 +114,8 @@ coll_map = [
     ["X", "X", "O", "O", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["O", "X", "WarpPoint", "WarpPoint", "X", "O", "O", "X", "WarpPoint", "WarpPoint", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "WarpPoint", "WarpPoint", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
 ]
+
+npc_data = [
+    {"x": 25, "y": 1, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONENORTH_PROTEIN"},
+    {"x": 19, "y": 7, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONENORTH_TM_SKULL_BASH"},
+]

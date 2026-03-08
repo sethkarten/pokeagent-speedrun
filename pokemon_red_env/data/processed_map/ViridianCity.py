@@ -86,7 +86,7 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "SIGN_VIRIDIANCITY_GYM_SIGN", "X", "X", "X", "X", "WarpPoint", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "WarpPoint", "X", "X", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
@@ -104,7 +104,7 @@ coll_map = [
     ["X", "X", "X", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~", "O", "O", "O", "O", "O", "O", "O", "O", "X", "WarpPoint", "SIGN_VIRIDIANCITY_POKECENTER_SIGN", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~", "~", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "X", "O", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "D", "D", "D", "D", "X", "~", "~", "~", "~", "~", "D", "O", "D", "D", "D", "O", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "D", "X", "X", "X", "X"],
     ["O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_VIRIDIANCITY_TRAINER_TIPS2", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X"],
@@ -113,4 +113,14 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 13, "y": 20, "sprite": "SPRITE_YOUNGSTER", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_VIRIDIANCITY_YOUNGSTER1"},
+    {"x": 30, "y": 8, "sprite": "SPRITE_GAMBLER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANCITY_GAMBLER1"},
+    {"x": 30, "y": 25, "sprite": "SPRITE_YOUNGSTER", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_VIRIDIANCITY_YOUNGSTER2"},
+    {"x": 17, "y": 9, "sprite": "SPRITE_GIRL", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_VIRIDIANCITY_GIRL"},
+    {"x": 18, "y": 9, "sprite": "SPRITE_GAMBLER_ASLEEP", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANCITY_OLD_MAN_SLEEPY"},
+    {"x": 6, "y": 23, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANCITY_FISHER"},
+    {"x": 17, "y": 5, "sprite": "SPRITE_GAMBLER", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_VIRIDIANCITY_OLD_MAN"},
 ]

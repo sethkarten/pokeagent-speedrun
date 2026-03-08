@@ -42,21 +42,33 @@ tile_map = [
 
 coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "O", "X", "X", "X", "X", "X", "O", "X", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O"],
+    ["X", "O", "X", "X", "X", "X", "X", "O", "X", "O", "TalkToPrintCinnabarQuiz", "X", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "X", "O", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "O", "O"],
-    ["X", "X", "O", "O", "O", "O", "X", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O"],
+    ["X", "TalkToPrintCinnabarQuiz", "O", "O", "O", "O", "X", "O", "X", "TalkToPrintCinnabarQuiz", "O", "O", "O", "O", "X", "TalkToPrintCinnabarQuiz", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "X", "O", "X", "X", "X", "X", "O", "O", "X", "O", "O", "X", "O", "O"],
-    ["X", "X", "O", "O", "O", "O", "X", "O", "X", "X", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O"],
+    ["X", "TalkToPrintCinnabarQuiz", "O", "O", "O", "O", "X", "O", "X", "TalkToPrintCinnabarQuiz", "O", "O", "O", "O", "X", "O", "O", "TalkToGymStatues", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "WarpPoint", "WarpPoint", "O", "O"],
+]
+
+npc_data = [
+    {"x": 3, "y": 3, "sprite": "SPRITE_MIDDLE_AGED_MAN", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_BLAINE"},
+    {"x": 17, "y": 2, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_SUPER_NERD1"},
+    {"x": 17, "y": 8, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_SUPER_NERD2"},
+    {"x": 11, "y": 4, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_SUPER_NERD3"},
+    {"x": 11, "y": 8, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_SUPER_NERD4"},
+    {"x": 11, "y": 14, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_SUPER_NERD5"},
+    {"x": 3, "y": 14, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_SUPER_NERD6"},
+    {"x": 3, "y": 8, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_SUPER_NERD7"},
+    {"x": 16, "y": 13, "sprite": "SPRITE_GYM_GUIDE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CINNABARGYM_GYM_GUIDE"},
 ]

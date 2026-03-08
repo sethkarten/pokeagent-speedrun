@@ -60,3 +60,16 @@ coll_map = [
     ["~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "X", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~", "~"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 87, "y": 8, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE20_SWIMMER1"},
+    {"x": 68, "y": 11, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE20_SWIMMER2"},
+    {"x": 45, "y": 10, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE20_SWIMMER3"},
+    {"x": 55, "y": 14, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE20_SWIMMER4"},
+    {"x": 38, "y": 13, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE20_SWIMMER5"},
+    {"x": 87, "y": 13, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE20_SWIMMER6"},
+    {"x": 34, "y": 9, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE20_COOLTRAINER_M"},
+    {"x": 25, "y": 7, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE20_SWIMMER7"},
+    {"x": 24, "y": 12, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE20_SWIMMER8"},
+    {"x": 15, "y": 8, "sprite": "SPRITE_SWIMMER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE20_SWIMMER9"},
+]

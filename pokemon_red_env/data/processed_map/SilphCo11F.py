@@ -53,10 +53,18 @@ coll_map = [
     ["X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "X"],
-    ["X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X", "O", "X", "O", "O", "X", "X"],
+    ["X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "TalkToOpenPokemonCenterPC", "X", "O", "X", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "X", "X", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 7, "y": 5, "sprite": "SPRITE_SILPH_PRESIDENT", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO11F_SILPH_PRESIDENT"},
+    {"x": 10, "y": 5, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO11F_BEAUTY"},
+    {"x": 6, "y": 9, "sprite": "SPRITE_GIOVANNI", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO11F_GIOVANNI"},
+    {"x": 3, "y": 16, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO11F_ROCKET1"},
+    {"x": 15, "y": 9, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO11F_ROCKET2"},
 ]

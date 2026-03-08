@@ -24,3 +24,7 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 9, "y": 3, "sprite": "SPRITE_SAILOR", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_SSANNE3F_SAILOR"},
+]

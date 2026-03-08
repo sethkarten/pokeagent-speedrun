@@ -84,3 +84,7 @@ coll_map = [
     ["X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 6, "y": 1, "sprite": "SPRITE_LANCE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_LANCESROOM_LANCE"},
+]

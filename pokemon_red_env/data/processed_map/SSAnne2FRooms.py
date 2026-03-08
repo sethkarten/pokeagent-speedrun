@@ -54,3 +54,19 @@ coll_map = [
     ["O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "O", "O", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "O", "O", "WarpPoint", "WarpPoint"],
 ]
+
+npc_data = [
+    {"x": 10, "y": 2, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SSANNE2FROOMS_GENTLEMAN1"},
+    {"x": 13, "y": 4, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SSANNE2FROOMS_FISHER"},
+    {"x": 0, "y": 14, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SSANNE2FROOMS_GENTLEMAN2"},
+    {"x": 2, "y": 11, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE2FROOMS_COOLTRAINER_F"},
+    {"x": 1, "y": 2, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE2FROOMS_GENTLEMAN3"},
+    {"x": 12, "y": 1, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNE2FROOMS_MAX_ETHER"},
+    {"x": 21, "y": 2, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE2FROOMS_GENTLEMAN4"},
+    {"x": 22, "y": 1, "sprite": "SPRITE_GRAMPS", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE2FROOMS_GRAMPS"},
+    {"x": 0, "y": 12, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNE2FROOMS_RARE_CANDY"},
+    {"x": 12, "y": 12, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE2FROOMS_GENTLEMAN5"},
+    {"x": 11, "y": 14, "sprite": "SPRITE_LITTLE_BOY", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNE2FROOMS_LITTLE_BOY"},
+    {"x": 22, "y": 12, "sprite": "SPRITE_BRUNETTE_GIRL", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SSANNE2FROOMS_BRUNETTE_GIRL"},
+    {"x": 20, "y": 12, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SSANNE2FROOMS_BEAUTY"},
+]

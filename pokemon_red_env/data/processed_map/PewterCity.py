@@ -84,7 +84,7 @@ coll_map = [
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "Cut", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "X", "X", "X", "X", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "D", "D", "D", "O", "D", "D", "X", "X", "X", "X", "WarpPoint", "X", "X", "X", "D", "D", "D", "D", "D", "D", "D", "D", "D", "X", "D", "D", "D", "O", "D", "D", "D", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_PEWTERCITY_MUSEUM_SIGN", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X"],
@@ -106,11 +106,19 @@ coll_map = [
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O"],
-    ["X", "X", "X", "X", "O", "O", "X", "WarpPoint", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_PEWTERCITY_TRAINER_TIPS", "O", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O"],
+    ["X", "X", "X", "X", "O", "O", "X", "WarpPoint", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_PEWTERCITY_TRAINER_TIPS", "O", "X", "D", "D", "D", "O", "D", "D", "D", "D", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 8, "y": 15, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_PEWTERCITY_COOLTRAINER_F"},
+    {"x": 17, "y": 25, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_PEWTERCITY_COOLTRAINER_M"},
+    {"x": 27, "y": 17, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_PEWTERCITY_SUPER_NERD1"},
+    {"x": 26, "y": 25, "sprite": "SPRITE_SUPER_NERD", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_PEWTERCITY_SUPER_NERD2"},
+    {"x": 35, "y": 16, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_PEWTERCITY_YOUNGSTER"},
 ]

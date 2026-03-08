@@ -114,3 +114,19 @@ coll_map = [
     ["X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "X", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 5, "y": 6, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOON1F_HIKER"},
+    {"x": 12, "y": 16, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_MTMOON1F_YOUNGSTER1"},
+    {"x": 30, "y": 4, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOON1F_COOLTRAINER_F1"},
+    {"x": 24, "y": 31, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "UP", "text_id": "TEXT_MTMOON1F_SUPER_NERD"},
+    {"x": 16, "y": 23, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOON1F_COOLTRAINER_F2"},
+    {"x": 7, "y": 22, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_MTMOON1F_YOUNGSTER2"},
+    {"x": 30, "y": 27, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_MTMOON1F_YOUNGSTER3"},
+    {"x": 2, "y": 20, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOON1F_POTION1"},
+    {"x": 2, "y": 2, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOON1F_MOON_STONE"},
+    {"x": 35, "y": 31, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOON1F_RARE_CANDY"},
+    {"x": 36, "y": 23, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOON1F_ESCAPE_ROPE"},
+    {"x": 20, "y": 33, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOON1F_POTION2"},
+    {"x": 5, "y": 32, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_MTMOON1F_TM_WATER_GUN"},
+]

@@ -30,3 +30,7 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O"],
 ]
+
+npc_data = [
+    {"x": 8, "y": 3, "sprite": "SPRITE_LINK_RECEPTIONIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONMART1F_RECEPTIONIST"},
+]

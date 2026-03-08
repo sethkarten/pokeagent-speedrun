@@ -60,3 +60,6 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["TalkToIndigoPlateauStatues", "X", "TalkToIndigoPlateauStatues", "X", "TalkToIndigoPlateauStatues", "X", "X", "X", "TalkToIndigoPlateauStatues", "O", "O", "TalkToIndigoPlateauStatues", "X", "X", "X", "TalkToIndigoPlateauStatues", "X", "TalkToIndigoPlateauStatues", "X", "TalkToIndigoPlateauStatues"],
 ]
+
+npc_data = [
+]

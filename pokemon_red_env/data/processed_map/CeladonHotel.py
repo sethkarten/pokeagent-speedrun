@@ -24,9 +24,15 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X"],
     ["C", "C", "C", "C", "C", "C", "C", "C", "C", "C", "C", "C", "C", "C"],
-    ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
-    ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+    ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "TalkToOpenPokemonCenterPC"],
+    ["TalkToPrintBenchGuyText", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "O", "WarpPoint", "WarpPoint", "O", "X", "X", "O", "O", "O", "O", "X", "X"],
+]
+
+npc_data = [
+    {"x": 3, "y": 1, "sprite": "SPRITE_GRANNY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONHOTEL_GRANNY"},
+    {"x": 2, "y": 4, "sprite": "SPRITE_BEAUTY", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CELADONHOTEL_BEAUTY"},
+    {"x": 8, "y": 4, "sprite": "SPRITE_SUPER_NERD", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_CELADONHOTEL_SUPER_NERD"},
 ]

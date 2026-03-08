@@ -44,7 +44,7 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "X", "X", "O", "X"],
-    ["X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "O", "X", "X", "X", "O", "O", "O", "X", "X", "O", "X"],
+    ["X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "O", "X", "X", "X", "O", "O", "O", "X", "TalkToHiddenItems", "O", "X"],
     ["X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "X", "O", "O", "X", "X", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "O", "O", "X", "X", "O", "O", "X"],
     ["X", "O", "O", "WarpPoint", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "X", "X", "O", "X", "X", "O", "O", "X"],
@@ -59,4 +59,10 @@ coll_map = [
     ["X", "O", "O", "O", "X", "O", "O", "O", "X", "X", "X", "X", "~", "~", "~", "~", "X", "X", "~", "~", "X", "X", "~", "~", "X", "X", "O", "O", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "X", "O", "X", "O", "O", "O", "~", "~", "~", "~", "~", "~", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~"],
     ["X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "X", "X", "~", "~", "~", "~", "~", "~", "~", "~"],
+]
+
+npc_data = [
+    {"x": 27, "y": 13, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CERULEANCAVEB1F_MEWTWO"},
+    {"x": 16, "y": 9, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CERULEANCAVEB1F_ULTRA_BALL"},
+    {"x": 18, "y": 1, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_CERULEANCAVEB1F_MAX_REVIVE"},
 ]

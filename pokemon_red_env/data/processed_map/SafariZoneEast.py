@@ -84,3 +84,10 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "G", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 21, "y": 10, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEEAST_FULL_RESTORE"},
+    {"x": 3, "y": 7, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEEAST_MAX_RESTORE"},
+    {"x": 20, "y": 13, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEEAST_CARBOS"},
+    {"x": 15, "y": 12, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEEAST_TM_EGG_BOMB"},
+]

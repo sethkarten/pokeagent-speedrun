@@ -43,8 +43,14 @@ coll_map = [
     ["X", "O", "X", "O", "O", "X", "X", "X", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
-    ["O", "O", "O", "X", "O", "O", "X", "O", "O", "O"],
+    ["O", "O", "O", "TalkToGymStatues", "O", "O", "TalkToGymStatues", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 4, "y": 1, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_PEWTERGYM_BROCK"},
+    {"x": 3, "y": 6, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_PEWTERGYM_COOLTRAINER_M"},
+    {"x": 7, "y": 10, "sprite": "SPRITE_GYM_GUIDE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_PEWTERGYM_GYM_GUIDE"},
 ]

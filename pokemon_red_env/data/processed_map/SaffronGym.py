@@ -56,7 +56,19 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O"],
-    ["O", "WarpPoint", "O", "O", "O", "WarpPoint", "X", "O", "O", "X", "O", "WarpPoint", "O", "X", "O", "WarpPoint", "O", "O", "O", "WarpPoint"],
+    ["O", "WarpPoint", "O", "O", "O", "WarpPoint", "X", "O", "O", "TalkToGymStatues", "O", "WarpPoint", "O", "X", "O", "WarpPoint", "O", "O", "O", "WarpPoint"],
     ["O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O"],
     ["O", "WarpPoint", "O", "O", "O", "WarpPoint", "X", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "X", "O", "WarpPoint", "O", "O", "O", "WarpPoint"],
+]
+
+npc_data = [
+    {"x": 9, "y": 8, "sprite": "SPRITE_GIRL", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_SABRINA"},
+    {"x": 10, "y": 1, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_CHANNELER1"},
+    {"x": 17, "y": 1, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_YOUNGSTER1"},
+    {"x": 3, "y": 7, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_CHANNELER2"},
+    {"x": 17, "y": 7, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_YOUNGSTER2"},
+    {"x": 3, "y": 13, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_CHANNELER3"},
+    {"x": 17, "y": 13, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_YOUNGSTER3"},
+    {"x": 3, "y": 1, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_YOUNGSTER4"},
+    {"x": 10, "y": 15, "sprite": "SPRITE_GYM_GUIDE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFFRONGYM_GYM_GUIDE"},
 ]

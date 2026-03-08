@@ -42,3 +42,10 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O"],
 ]
+
+npc_data = [
+    {"x": 0, "y": 5, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_CELADONMANSION1F_MEOWTH"},
+    {"x": 1, "y": 5, "sprite": "SPRITE_GRANNY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_CELADONMANSION1F_GRANNY"},
+    {"x": 1, "y": 8, "sprite": "SPRITE_FAIRY", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_CELADONMANSION1F_CLEFAIRY"},
+    {"x": 4, "y": 4, "sprite": "SPRITE_MONSTER", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_CELADONMANSION1F_NIDORANF"},
+]

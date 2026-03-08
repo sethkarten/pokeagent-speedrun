@@ -138,7 +138,7 @@ coll_map = [
     ["O", "O", "O", "X", "G", "G", "G", "G", "G", "G", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "X", "G", "G", "G", "G", "G", "G", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "X", "O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
-    ["O", "O", "O", "X", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
+    ["O", "O", "O", "X", "O", "X", "D", "D", "D", "D", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "X", "O", "Cut", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X", "~", "~", "~", "~"],
     ["O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X", "~", "~"],
@@ -156,7 +156,7 @@ coll_map = [
     ["O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
     ["O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
     ["O", "O", "O", "Cut", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
-    ["X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
+    ["D", "D", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "~", "~"],
@@ -167,4 +167,17 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~"],
+]
+
+npc_data = [
+    {"x": 4, "y": 4, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE14_COOLTRAINER_M1"},
+    {"x": 15, "y": 6, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE14_COOLTRAINER_M2"},
+    {"x": 12, "y": 11, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE14_COOLTRAINER_M3"},
+    {"x": 14, "y": 15, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE14_COOLTRAINER_M4"},
+    {"x": 15, "y": 31, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE14_COOLTRAINER_M5"},
+    {"x": 6, "y": 49, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE14_COOLTRAINER_M6"},
+    {"x": 5, "y": 39, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE14_BIKER1"},
+    {"x": 4, "y": 30, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE14_BIKER2"},
+    {"x": 15, "y": 30, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE14_BIKER3"},
+    {"x": 4, "y": 31, "sprite": "SPRITE_BIKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE14_BIKER4"},
 ]

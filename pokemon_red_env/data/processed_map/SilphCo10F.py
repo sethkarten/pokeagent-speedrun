@@ -60,3 +60,12 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 1, "y": 9, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SILPHCO10F_ROCKET"},
+    {"x": 10, "y": 2, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SILPHCO10F_SCIENTIST"},
+    {"x": 9, "y": 15, "sprite": "SPRITE_SILPH_WORKER_F", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_SILPHCO10F_SILPH_WORKER_F"},
+    {"x": 2, "y": 12, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO10F_TM_EARTHQUAKE"},
+    {"x": 4, "y": 14, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO10F_RARE_CANDY"},
+    {"x": 5, "y": 11, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO10F_CARBOS"},
+]

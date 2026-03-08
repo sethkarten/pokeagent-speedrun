@@ -60,3 +60,11 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "WarpPoint", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 12, "y": 10, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_POKEMONTOWER6F_CHANNELER1"},
+    {"x": 9, "y": 5, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_POKEMONTOWER6F_CHANNELER2"},
+    {"x": 16, "y": 5, "sprite": "SPRITE_CHANNELER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONTOWER6F_CHANNELER3"},
+    {"x": 6, "y": 8, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER6F_RARE_CANDY"},
+    {"x": 14, "y": 14, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONTOWER6F_X_ACCURACY"},
+]

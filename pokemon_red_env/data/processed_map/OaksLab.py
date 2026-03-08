@@ -29,8 +29,8 @@ tile_map = [
 ]
 
 coll_map = [
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
-    ["X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
+    ["X", "X", "X", "X", "TalkToDisplayOakLabLeftPoster", "TalkToDisplayOakLabRightPoster", "X", "X", "X", "X"],
+    ["TalkToDisplayOakLabEmailText", "TalkToDisplayOakLabEmailText", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "X", "X", "X", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
@@ -41,4 +41,18 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 4, "y": 3, "sprite": "SPRITE_BLUE", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_RIVAL"},
+    {"x": 6, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_CHARMANDER_POKE_BALL"},
+    {"x": 7, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_SQUIRTLE_POKE_BALL"},
+    {"x": 8, "y": 3, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_BULBASAUR_POKE_BALL"},
+    {"x": 5, "y": 2, "sprite": "SPRITE_OAK", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_OAKSLAB_OAK1"},
+    {"x": 2, "y": 1, "sprite": "SPRITE_POKEDEX", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_POKEDEX1"},
+    {"x": 3, "y": 1, "sprite": "SPRITE_POKEDEX", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_POKEDEX2"},
+    {"x": 5, "y": 10, "sprite": "SPRITE_OAK", "movement": "STAY", "direction": "UP", "text_id": "TEXT_OAKSLAB_OAK2"},
+    {"x": 1, "y": 9, "sprite": "SPRITE_GIRL", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_OAKSLAB_GIRL"},
+    {"x": 2, "y": 10, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_SCIENTIST1"},
+    {"x": 8, "y": 10, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_OAKSLAB_SCIENTIST2"},
 ]

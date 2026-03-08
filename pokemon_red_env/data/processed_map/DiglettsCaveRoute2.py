@@ -30,3 +30,7 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "WarpPoint", "WarpPoint", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 3, "y": 3, "sprite": "SPRITE_FISHING_GURU", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_DIGLETTSCAVEROUTE2_FISHING_GURU"},
+]

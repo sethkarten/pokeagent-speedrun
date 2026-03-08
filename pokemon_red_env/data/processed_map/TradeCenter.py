@@ -30,3 +30,7 @@ coll_map = [
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
 ]
+
+npc_data = [
+    {"x": 2, "y": 2, "sprite": "SPRITE_RED", "movement": "STAY", "direction": "ANY_DIR", "text_id": "TEXT_TRADECENTER_OPPONENT"},
+]

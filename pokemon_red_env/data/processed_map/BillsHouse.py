@@ -25,8 +25,14 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X"],
     ["O", "X", "O", "O", "O", "O", "X", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
-    ["O", "X", "X", "O", "O", "O", "O", "O"],
+    ["O", "TalkToBillsHousePC", "X", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "WarpPoint", "WarpPoint", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 6, "y": 5, "sprite": "SPRITE_MONSTER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_BILLSHOUSE_BILL_POKEMON"},
+    {"x": 4, "y": 4, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_BILLSHOUSE_BILL_SS_TICKET"},
+    {"x": 6, "y": 5, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_BILLSHOUSE_BILL_CHECK_OUT_MY_RARE_POKEMON"},
 ]

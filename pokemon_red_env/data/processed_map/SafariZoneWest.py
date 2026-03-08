@@ -62,7 +62,7 @@ coll_map = [
     ["O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
     ["O", "X", "X", "WarpPoint", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "SIGN_SAFARIZONEWEST_FIND_WARDENS_TEETH_SIGN", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
     ["O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "SIGN_SAFARIZONEWEST_TRAINER_TIPS", "O", "O", "X"],
-    ["O", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
+    ["O", "X", "O", "O", "O", "O", "TalkToHiddenItems", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
     ["O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
     ["O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
     ["O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "X"],
@@ -83,4 +83,11 @@ coll_map = [
     ["X", "O", "O", "O", "O", "G", "G", "G", "G", "G", "G", "O", "O", "G", "G", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "WarpPoint"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O"],
+]
+
+npc_data = [
+    {"x": 8, "y": 20, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEWEST_MAX_POTION"},
+    {"x": 9, "y": 7, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEWEST_TM_DOUBLE_TEAM"},
+    {"x": 18, "y": 18, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEWEST_MAX_REVIVE"},
+    {"x": 19, "y": 7, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SAFARIZONEWEST_GOLD_TEETH"},
 ]

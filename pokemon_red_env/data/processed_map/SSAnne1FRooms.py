@@ -54,3 +54,17 @@ coll_map = [
     ["O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "X"],
     ["X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X"],
 ]
+
+npc_data = [
+    {"x": 2, "y": 3, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SSANNE1FROOMS_GENTLEMAN1"},
+    {"x": 11, "y": 4, "sprite": "SPRITE_GENTLEMAN", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SSANNE1FROOMS_GENTLEMAN2"},
+    {"x": 11, "y": 14, "sprite": "SPRITE_YOUNGSTER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SSANNE1FROOMS_YOUNGSTER"},
+    {"x": 13, "y": 11, "sprite": "SPRITE_COOLTRAINER_F", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SSANNE1FROOMS_COOLTRAINER_F"},
+    {"x": 22, "y": 3, "sprite": "SPRITE_GIRL", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_SSANNE1FROOMS_GIRL1"},
+    {"x": 0, "y": 14, "sprite": "SPRITE_MIDDLE_AGED_MAN", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNE1FROOMS_MIDDLE_AGED_MAN"},
+    {"x": 2, "y": 11, "sprite": "SPRITE_LITTLE_GIRL", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE1FROOMS_LITTLE_GIRL"},
+    {"x": 3, "y": 11, "sprite": "SPRITE_FAIRY", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE1FROOMS_WIGGLYTUFF"},
+    {"x": 10, "y": 13, "sprite": "SPRITE_GIRL", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SSANNE1FROOMS_GIRL2"},
+    {"x": 12, "y": 15, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SSANNE1FROOMS_TM_BODY_SLAM"},
+    {"x": 21, "y": 13, "sprite": "SPRITE_GENTLEMAN", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_SSANNE1FROOMS_GENTLEMAN3"},
+]

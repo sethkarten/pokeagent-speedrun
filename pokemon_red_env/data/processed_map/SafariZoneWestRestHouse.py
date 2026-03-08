@@ -25,8 +25,14 @@ coll_map = [
     ["O", "O", "O", "X", "X", "X", "X", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O"],
-    ["O", "O", "O", "O", "O", "C", "C", "C"],
+    ["TalkToPrintBenchGuyText", "O", "O", "O", "O", "C", "C", "C"],
     ["O", "O", "O", "O", "O", "C", "O", "O"],
     ["O", "O", "O", "O", "O", "C", "O", "C"],
     ["O", "O", "WarpPoint", "WarpPoint", "O", "C", "O", "C"],
+]
+
+npc_data = [
+    {"x": 4, "y": 4, "sprite": "SPRITE_SCIENTIST", "movement": "WALK", "direction": "ANY_DIR", "text_id": "TEXT_SAFARIZONEWESTRESTHOUSE_SCIENTIST"},
+    {"x": 0, "y": 2, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SAFARIZONEWESTRESTHOUSE_COOLTRAINER_M"},
+    {"x": 6, "y": 2, "sprite": "SPRITE_SILPH_WORKER_F", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SAFARIZONEWESTRESTHOUSE_SILPH_WORKER_F"},
 ]

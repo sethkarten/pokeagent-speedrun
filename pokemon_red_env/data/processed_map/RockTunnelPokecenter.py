@@ -24,9 +24,16 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "O", "X"],
     ["X", "X", "X", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
     ["X", "C", "C", "C", "C", "X", "C", "C", "C", "C", "C", "O", "C", "C"],
-    ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
-    ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
+    ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "TalkToOpenPokemonCenterPC"],
+    ["TalkToPrintBenchGuyText", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["X", "X", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X"],
     ["X", "X", "O", "WarpPoint", "WarpPoint", "O", "X", "X", "O", "O", "O", "O", "X", "X"],
+]
+
+npc_data = [
+    {"x": 3, "y": 1, "sprite": "SPRITE_NURSE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKTUNNELPOKECENTER_NURSE"},
+    {"x": 7, "y": 3, "sprite": "SPRITE_GENTLEMAN", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_ROCKTUNNELPOKECENTER_GENTLEMAN"},
+    {"x": 2, "y": 5, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKTUNNELPOKECENTER_FISHER"},
+    {"x": 11, "y": 2, "sprite": "SPRITE_LINK_RECEPTIONIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKTUNNELPOKECENTER_LINK_RECEPTIONIST"},
 ]

@@ -60,3 +60,8 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 3, "y": 7, "sprite": "SPRITE_WAITER", "movement": "WALK", "direction": "UP_DOWN", "text_id": "TEXT_SSANNE2F_WAITER"},
+    {"x": 36, "y": 4, "sprite": "SPRITE_BLUE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SSANNE2F_RIVAL"},
+]

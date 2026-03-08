@@ -56,7 +56,21 @@ coll_map = [
     ["O", "O", "X", "X", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "X", "O"],
-    ["O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "O", "O", "X", "O"],
+    ["O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "TalkToGymStatues", "O", "O", "TalkToGymStatues", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "WarpPoint", "WarpPoint", "O", "O"],
+]
+
+npc_data = [
+    {"x": 2, "y": 1, "sprite": "SPRITE_GIOVANNI", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANGYM_GIOVANNI"},
+    {"x": 12, "y": 7, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANGYM_COOLTRAINER_M1"},
+    {"x": 11, "y": 11, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_VIRIDIANGYM_HIKER1"},
+    {"x": 10, "y": 7, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANGYM_ROCKER1"},
+    {"x": 3, "y": 7, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_VIRIDIANGYM_HIKER2"},
+    {"x": 13, "y": 5, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_VIRIDIANGYM_COOLTRAINER_M2"},
+    {"x": 10, "y": 1, "sprite": "SPRITE_HIKER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANGYM_HIKER3"},
+    {"x": 2, "y": 16, "sprite": "SPRITE_ROCKER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_VIRIDIANGYM_ROCKER2"},
+    {"x": 6, "y": 5, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANGYM_COOLTRAINER_M3"},
+    {"x": 16, "y": 15, "sprite": "SPRITE_GYM_GUIDE", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_VIRIDIANGYM_GYM_GUIDE"},
+    {"x": 16, "y": 9, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_VIRIDIANGYM_REVIVE"},
 ]

@@ -60,3 +60,17 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
 ]
+
+npc_data = [
+    {"x": 1, "y": 5, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO7F_SILPH_WORKER_M1"},
+    {"x": 13, "y": 13, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO7F_SILPH_WORKER_M2"},
+    {"x": 7, "y": 10, "sprite": "SPRITE_SILPH_WORKER_M", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO7F_SILPH_WORKER_M3"},
+    {"x": 10, "y": 8, "sprite": "SPRITE_SILPH_WORKER_F", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO7F_SILPH_WORKER_M4"},
+    {"x": 13, "y": 1, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO7F_ROCKET1"},
+    {"x": 2, "y": 13, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_SILPHCO7F_SCIENTIST"},
+    {"x": 20, "y": 2, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_SILPHCO7F_ROCKET2"},
+    {"x": 19, "y": 14, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_SILPHCO7F_ROCKET3"},
+    {"x": 3, "y": 7, "sprite": "SPRITE_BLUE", "movement": "STAY", "direction": "UP", "text_id": "TEXT_SILPHCO7F_RIVAL"},
+    {"x": 1, "y": 9, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO7F_CALCIUM"},
+    {"x": 24, "y": 11, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_SILPHCO7F_TM_SWORDS_DANCE"},
+]

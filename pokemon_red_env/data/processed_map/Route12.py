@@ -284,7 +284,7 @@ coll_map = [
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["O", "X", "O", "X", "X", "X", "X", "X", "X", "X", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
-    ["X", "O", "X", "O", "X", "X", "X", "X", "X", "X", "O", "SIGN_ROUTE12_SPORT_FISHING_SIGN", "~", "~", "~", "~", "~", "~", "~", "X"],
+    ["X", "O", "TalkToHiddenItems", "O", "X", "X", "X", "X", "X", "X", "O", "SIGN_ROUTE12_SPORT_FISHING_SIGN", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["X", "X", "X", "X", "~", "~", "~", "~", "~", "~", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
@@ -329,4 +329,17 @@ coll_map = [
     ["O", "O", "O", "X", "G", "G", "G", "G", "O", "X", "O", "O", "O", "O", "~", "~", "~", "~", "~", "X"],
     ["O", "O", "O", "X", "G", "G", "G", "G", "O", "X", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
     ["O", "O", "O", "X", "G", "G", "G", "G", "O", "X", "O", "O", "~", "~", "~", "~", "~", "~", "~", "X"],
+]
+
+npc_data = [
+    {"x": 10, "y": 62, "sprite": "SPRITE_SNORLAX", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE12_SNORLAX"},
+    {"x": 14, "y": 31, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE12_FISHER1"},
+    {"x": 5, "y": 39, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE12_FISHER2"},
+    {"x": 11, "y": 92, "sprite": "SPRITE_COOLTRAINER_M", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE12_COOLTRAINER_M"},
+    {"x": 14, "y": 76, "sprite": "SPRITE_SUPER_NERD", "movement": "STAY", "direction": "UP", "text_id": "TEXT_ROUTE12_SUPER_NERD"},
+    {"x": 12, "y": 40, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROUTE12_FISHER3"},
+    {"x": 9, "y": 52, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROUTE12_FISHER4"},
+    {"x": 6, "y": 87, "sprite": "SPRITE_FISHER", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROUTE12_FISHER5"},
+    {"x": 14, "y": 35, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROUTE12_TM_PAY_DAY"},
+    {"x": 5, "y": 89, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROUTE12_IRON"},
 ]

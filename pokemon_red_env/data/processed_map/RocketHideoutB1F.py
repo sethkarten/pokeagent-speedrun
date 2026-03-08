@@ -76,7 +76,7 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "X", "X", "X", "X", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "X", "X", "X", "X", "O", "X", "X", "O", "O", "O", "O", "X", "X", "O", "X", "X", "X", "X", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "X"],
-    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "X"],
+    ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "TalkToHiddenItems", "X", "X", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X"],
@@ -89,4 +89,14 @@ coll_map = [
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 26, "y": 8, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROCKETHIDEOUTB1F_ROCKET1"},
+    {"x": 12, "y": 6, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROCKETHIDEOUTB1F_ROCKET2"},
+    {"x": 18, "y": 17, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "DOWN", "text_id": "TEXT_ROCKETHIDEOUTB1F_ROCKET3"},
+    {"x": 15, "y": 25, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "RIGHT", "text_id": "TEXT_ROCKETHIDEOUTB1F_ROCKET4"},
+    {"x": 28, "y": 18, "sprite": "SPRITE_ROCKET", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_ROCKETHIDEOUTB1F_ROCKET5"},
+    {"x": 11, "y": 14, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB1F_ESCAPE_ROPE"},
+    {"x": 9, "y": 17, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_ROCKETHIDEOUTB1F_HYPER_POTION"},
 ]

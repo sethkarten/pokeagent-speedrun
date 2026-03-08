@@ -46,11 +46,11 @@ coll_map = [
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "X", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "X", "X", "X", "X"],
     ["X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X"],
-    ["X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X"],
+    ["X", "X", "X", "O", "O", "O", "O", "O", "O", "X", "TalkToMansion3Script_Switches", "O", "O", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "X", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "O", "O", "O", "X", "X", "X", "X", "X", "O", "O", "X", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "X"],
-    ["X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
+    ["X", "TalkToHiddenItems", "X", "X", "X", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X"],
     ["X", "O", "X", "X", "O", "O", "O", "WarpPoint", "O", "O", "X", "X", "X", "O", "O", "O", "X", "X", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "X", "X", "O", "O", "O", "O", "O", "O", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "X", "X", "O", "O", "X", "X", "O", "X", "X", "X", "O", "O", "X", "X", "O", "O", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X"],
@@ -59,4 +59,12 @@ coll_map = [
     ["X", "X", "X", "X", "O", "O", "O", "O", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "O", "O", "O", "O", "O", "O", "X"],
     ["X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "X", "O", "O", "O", "O", "O", "O", "O", "O", "O", "O", "X", "X", "X", "X", "X", "X", "X", "X"],
+]
+
+npc_data = [
+    {"x": 5, "y": 11, "sprite": "SPRITE_SUPER_NERD", "movement": "WALK", "direction": "LEFT_RIGHT", "text_id": "TEXT_POKEMONMANSION3F_SUPER_NERD"},
+    {"x": 20, "y": 11, "sprite": "SPRITE_SCIENTIST", "movement": "STAY", "direction": "LEFT", "text_id": "TEXT_POKEMONMANSION3F_SCIENTIST"},
+    {"x": 1, "y": 16, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION3F_MAX_POTION"},
+    {"x": 25, "y": 5, "sprite": "SPRITE_POKE_BALL", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION3F_IRON"},
+    {"x": 6, "y": 12, "sprite": "SPRITE_POKEDEX", "movement": "STAY", "direction": "NONE", "text_id": "TEXT_POKEMONMANSION3F_DIARY"},
 ]
