@@ -6,6 +6,7 @@
 *.gba
 llm_log_*
 .cursor/*
+.claude/*
 CLAUDE.md
 agents.md
 .pokeagent_cache*
