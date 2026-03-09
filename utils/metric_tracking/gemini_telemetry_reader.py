@@ -59,11 +59,18 @@ def _extract_api_response(record: dict) -> dict[str, Any] | None:
         _model, _duration_ms, _timestamp, _prompt_id }
     or None if the record is not an api_response event.
     """
+    if not isinstance(record, dict):
+        return None
+
     body = record.get("body") or record.get("name") or record.get("event") or ""
     if body != API_RESPONSE_EVENT:
         return None
 
-    attrs = record.get("attributes") or record.get("resource", {}).get("attributes") or {}
+    attrs = record.get("attributes") or {}
+    if not attrs:
+        resource = record.get("resource")
+        if isinstance(resource, dict):
+            attrs = resource.get("attributes") or {}
     if not attrs:
         return None
 

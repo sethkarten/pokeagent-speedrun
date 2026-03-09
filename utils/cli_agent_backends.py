@@ -922,14 +922,13 @@ class GeminiCliBackend(CliAgentBackend):
                     docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
 
             docker_cmd.append(self.container_image)
-            # Pass prompt via file to avoid shell mangling of multi-line content.
+            # Pass prompt via stdin to avoid shell mangling of multi-line content.
             # The directive is already written to /workspace/.agent_directive.txt by _write_workspace_files.
-            shell_cmd = (
-                "gemini --yolo --output-format stream-json "
-                '-p "$(cat /workspace/.agent_directive.txt)"'
-            )
+            # Single-quote the entire command so init-firewall's "su -c ... $*" does not interpret the pipe.
+            _inner = "cat /workspace/.agent_directive.txt | gemini --yolo --output-format stream-json"
             if resume_session_id:
-                shell_cmd += " --resume " + shlex.quote(resume_session_id)
+                _inner += " --resume " + shlex.quote(resume_session_id)
+            shell_cmd = "'" + _inner.replace("'", "'\"'\"'") + "'"
             docker_cmd.extend(["sh", "-c", shell_cmd])
 
             return docker_cmd, env, bootstrap_content, None
