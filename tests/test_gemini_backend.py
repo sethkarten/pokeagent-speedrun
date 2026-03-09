@@ -316,6 +316,16 @@ class TestExtractApiResponse:
         record = {"body": API_RESPONSE_EVENT}
         assert _extract_api_response(record) is None
 
+    def test_handles_resource_as_non_dict(self):
+        """Regression: resource can be int/other; must not call .get() on it."""
+        record = {"body": API_RESPONSE_EVENT, "resource": 123}
+        assert _extract_api_response(record) is None
+
+    def test_handles_non_dict_record(self):
+        """Regression: JSON line can be non-dict (number, array)."""
+        assert _extract_api_response(42) is None
+        assert _extract_api_response([1, 2]) is None
+
 
 class TestMakeDedupHash:
     def test_same_input_same_hash(self):
