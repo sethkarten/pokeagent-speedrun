@@ -45,6 +45,15 @@ def extract_tokens_from_message(msg: dict) -> dict[str, Any] | None:
 
     Returns dict with prompt, completion, cached, cache_write, total, cost.
     Maps: input->prompt, output+thoughts+tool->completion, cached->cached.
+
+    Token accounting (Gemini vs Claude):
+    - Claude: prompt, cached, cache_write are ADDITIVE; total = prompt + completion + cached + cache_write.
+    - Gemini: cached is a SUBSET of prompt (input); total = prompt + completion. We store cached
+      separately for analytics/billing but do NOT add it to total to avoid double-counting.
+    - cache_write: Gemini uses IMPLICIT CACHING (automatic, no explicit cache creation API).
+      The session format does not expose cache_write; we return None. Cost of cache creation
+      is already included in the first request's input tokens. For plotting/analytics,
+      cache_write_tokens will be null in step entries—this is expected for Gemini runs.
     """
     tokens = msg.get("tokens")
     if not isinstance(tokens, dict):
@@ -54,14 +63,18 @@ def extract_tokens_from_message(msg: dict) -> dict[str, Any] | None:
     cached = int(tokens.get("cached", 0) or 0)
     thoughts = int(tokens.get("thoughts", 0) or 0)
     tool = int(tokens.get("tool", 0) or 0)
+    # Session format may add cache_write/cacheWrite in future; until then, None for Gemini
+    cache_write_raw = tokens.get("cache_write") or tokens.get("cacheWrite")
+    cache_write = int(cache_write_raw) if cache_write_raw is not None else None
     total = int(tokens.get("total", 0) or 0)
     if total == 0:
-        total = inp + out + thoughts + tool + cached
+        # Cached is subset of input; total = prompt + completion (do not add cached again)
+        total = inp + out + thoughts + tool
     return {
         "prompt": inp,
         "completion": out + thoughts + tool,
         "cached": cached,
-        "cache_write": 0,
+        "cache_write": cache_write,
         "total": total,
         "cost": 0.0,
     }
@@ -87,6 +100,14 @@ def load_new_usage_entries(
 
     Returns (new_entries, updated_processed_hashes). Each entry has _tokens, _tool_calls,
     _parsed_timestamp, and uses message id as dedup key.
+
+    Multi-session / subagent robustness:
+    - Processes ALL session-*.json files under tmp/workspace/chats/ (sorted by mtime).
+    - Deduplication by message id ensures no double-counting across files.
+    - Multiple session files (e.g. main agent + subagent /ask) are all included;
+      message ids are globally unique, so interleaving is safe.
+    - To exclude subagent sessions, callers would need to filter by sessionId or
+      pass a primary session file path; not implemented by default.
     """
     new_entries: list[dict] = []
     updated_hashes = set(processed_hashes)

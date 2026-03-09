@@ -192,6 +192,28 @@ class TestGeminiStreamEvents:
         )
         assert metrics.tool_use_count == 1
 
+    def test_tool_use_posts_reasoning_to_server(self):
+        """Tool use with reasoning in parameters is posted for UI streaming (like Claude)."""
+        backend = GeminiCliBackend()
+        metrics = CliSessionMetrics()
+        with patch.object(backend, "_post_thinking") as mock_post:
+            backend.handle_stream_event(
+                {
+                    "type": "tool_use",
+                    "tool_name": "press_buttons",
+                    "parameters": {
+                        "buttons": ["A", "B"],
+                        "reasoning": "Moving right to exit the moving van",
+                        "speed": "normal",
+                    },
+                },
+                metrics,
+                server_url="http://localhost:8118",
+            )
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args
+        assert call_args[0][1] == "[press_buttons] Moving right to exit the moving van"
+
     def test_result_event_updates_metrics(self):
         backend = GeminiCliBackend()
         metrics = CliSessionMetrics()

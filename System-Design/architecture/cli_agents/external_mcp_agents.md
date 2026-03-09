@@ -83,7 +83,7 @@ Directories are bind-mounted from the Host for persistence:
 | Backend | Container Path | Host Path | Contents |
 |---------|---------------|-----------|----------|
 | Claude  | `~/.claude` | `.pokeagent_cache/{run_id}/claude_memory` | Project history, JSONL logs, credentials |
-| Gemini  | `~/.gemini` | `.pokeagent_cache/{run_id}/gemini_memory` | Session history, telemetry.jsonl, settings.json |
+| Gemini  | `~/.gemini` | `.pokeagent_cache/{run_id}/gemini_memory` | Session history (tmp/workspace/chats/), settings.json |
 | Both    | `/workspace` | `run_data/{run_id}/agent_scratch_space` | Agent working files, directives |
 
 ### Session Persistence for Backup Restore
@@ -99,11 +99,11 @@ Metric tracking is backend-specific, accessed via the abstract `log_cli_interact
 | Backend | Source | Reader | Granularity |
 |---------|--------|--------|-------------|
 | Claude  | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_jsonl_reader.py` | Per API call (dedup by message ID) |
-| Gemini  | Telemetry outfile (`telemetry.jsonl`) | `utils/metric_tracking/gemini_telemetry_reader.py` | Per API call (`gemini_cli.api_response` events) |
+| Gemini  | Session JSON in `gemini_memory/tmp/workspace/chats/session-*.json` | `utils/metric_tracking/gemini_session_reader.py` | Per message (dedup by message ID) |
 
 *   **Single-writer**: The server is the only writer of `cumulative_metrics.json`. `run_cli` accumulates in memory and syncs via `POST /sync_llm_metrics`.
 *   **Polling cadence**: Every 15 seconds (heartbeat) and once after each session exits.
-*   **Gemini telemetry**: Uses byte-offset tracking for efficient incremental reads.
+*   **Gemini implicit caching**: Gemini CLI uses implicit caching (automatic; no explicit cache creation API). Step entries have `cache_write_tokens: null`—this is expected. Cost of cache creation is included in the first request's input tokens.
 
 ## 5. Security Measures
 
