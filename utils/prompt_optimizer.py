@@ -176,9 +176,7 @@ Analyze the agent's recent performance and create an IMPROVED base prompt that:
 
 1. **Addresses observed failures** - If the agent made mistakes, add specific guidance to prevent them
 2. **Reinforces successful patterns** - If certain strategies worked well, emphasize them
-3. **Maintains structure** - Keep the overall organization (Decision-Making, Strategy, Pitfalls, etc.)
-4. **Stays concise** - Focus on actionable, high-level strategic guidance
-5. **Adds learned lessons** - Include insights derived from trajectory analysis
+3. **Adds learned lessons** - Include insights derived from trajectory analysis
 
 ## Analysis Guidelines:
 
@@ -186,16 +184,9 @@ Analyze the agent's recent performance and create an IMPROVED base prompt that:
 - Repeated failures (stuck in loops, wrong tool usage, blocked navigation)
 - Successful strategies (good knowledge base usage, efficient pathfinding, smart battle decisions)
 - Progress toward objectives (completing tasks, leveling up, advancing story)
-- Tool usage patterns (are they using navigate_to vs press_buttons effectively?)
+- Tool usage patterns (are they using the tools at their disposal effectively?)
 - Knowledge management (are they storing and retrieving knowledge appropriately?)
 - Not adapting when stuck → emphasize flexibility and trying new approaches
-
-**Successful patterns to reinforce:**
-- Effective use of navigate_to with variance adjustments
-- Proactive knowledge storage with appropriate importance levels
-- Good use of progress_summary and walkthrough for planning
-- Efficient battle decisions with type advantages
-- Completing objectives promptly with good reasoning
 
 ## Output Format:
 Provide the complete improved base prompt as markdown. Make targeted improvements, keeping the elements that are working while adding additional guidance if necessary.
