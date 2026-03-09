@@ -64,7 +64,7 @@ External CLI agents (run via `run_cli.py`) run in a separate process or containe
 | Backend | Source | Reader Module | Dedup Strategy |
 |---------|--------|--------------|----------------|
 | Claude Code | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_jsonl_reader.py` | Best-entry by message ID (highest total tokens) |
-| Gemini CLI | Telemetry outfile (`gemini_memory/telemetry.jsonl`) | `utils/metric_tracking/gemini_telemetry_reader.py` | SHA-256 hash of (prompt_id, timestamp, model, tokens) with byte-offset incremental reads |
+| Gemini CLI | Session JSON in `gemini_memory/tmp/workspace/chats/session-*.json` | `utils/metric_tracking/gemini_session_reader.py` | Message ID (globally unique) |
 
 ### Flow (Common)
 1. **Polling**: `run_cli` calls `backend.log_cli_interaction()` every 15 seconds and once after each session exits.
@@ -76,10 +76,10 @@ External CLI agents (run via `run_cli.py`) run in a separate process or containe
 - **JSONL source**: `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl`
 
 ### Gemini-Specific Details
-- **Telemetry source**: `gemini_cli.api_response` events in the OTEL outfile, each representing one API request.
-- **Token mapping**: `input_token_count` → prompt, `output_token_count + thoughts_token_count + tool_token_count` → completion, `cached_content_token_count` → cached.
-- **Efficient polling**: Uses file byte offsets to read only new data appended since last poll.
-- **Configuration**: Telemetry is enabled automatically by writing `settings.json` with `telemetry.enabled: true` and `telemetry.outfile`.
+- **Session source**: `tmp/workspace/chats/session-*.json` files (analogous to Claude JSONL). Reader: `utils/metric_tracking/gemini_session_reader.py`.
+- **Token mapping**: `input` → prompt, `output + thoughts + tool` → completion, `cached` → cached.
+- **Implicit caching**: Gemini CLI uses *implicit caching* (automatic, no explicit cache creation API). Cache creation cost is included in the first request's input tokens. The session format does not expose `cache_write`; we store `cache_write_tokens: null` in step entries for Gemini runs. **This is expected**—plotting/analytics should treat null as "not applicable" rather than zero.
+- **Cost calculation (subset vs distinct)**: Certain APIS reports prompt and cached as *additive* (distinct). Gemini, in particular, reports prompt = total input with cached as a *subset*. `LLMLogger` detects subset when `cached + cache_write <= prompt` and computes `uncached = prompt - cached - cache_write` for correct billing. Both schemes produce correct costs. cumulatove totals are still consistent for the purposes of graphing!
 
 ### Pricing
 - Claude: `claude-sonnet-4-6` / `claude-sonnet-4.6` pricing. Cache writes: $3.75/M, cache hits: $0.30/M.

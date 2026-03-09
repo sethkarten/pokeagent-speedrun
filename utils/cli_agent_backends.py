@@ -955,80 +955,114 @@ class GeminiCliBackend(CliAgentBackend):
     # handle_stream_event (real-time stream-json parsing)
     # ------------------------------------------------------------------
 
+    def _handle_gemini_init(
+        self,
+        event: dict,
+        now: float,
+        metrics: CliSessionMetrics | None,
+    ) -> None:
+        """Handle init event: session metadata."""
+        self._last_event_time = now
+        if metrics:
+            metrics.session_id = event.get("session_id", "")
+            metrics.model = event.get("model", "")
+        logger.info(
+            "[gemini] session=%s model=%s",
+            event.get("session_id", "?"),
+            event.get("model", "?"),
+        )
+
+    def _handle_gemini_tool_use(
+        self,
+        event: dict,
+        now: float,
+        metrics: CliSessionMetrics | None,
+        server_url: str | None,
+    ) -> None:
+        """Handle tool_use event: metrics, _post_thinking, logging."""
+        duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+        self._last_event_time = now
+        if metrics:
+            metrics.tool_use_count += 1
+        tool_name = event.get("tool_name") or event.get("name", "?")
+        args = event.get("parameters") or event.get("arguments") or {}
+        args_preview = json.dumps(args)
+        if len(args_preview) > 120:
+            args_preview = args_preview[:120] + "..."
+        logger.info("[gemini:tool_use] %s %s", tool_name, args_preview)
+        reasoning = args.get("reasoning") or args.get("reason") or ""
+        thinking_text = f"[{tool_name}] {reasoning}".strip() or f"[{tool_name}]"
+        if server_url:
+            self._post_thinking(
+                server_url, thinking_text, duration_sec, interaction_type="gemini"
+            )
+
+    def _handle_gemini_tool_result(self, event: dict, now: float) -> None:
+        """Handle tool_result event: logging."""
+        self._last_event_time = now
+        content = event.get("output") or event.get("content", "")
+        preview = (str(content)[:80] + "...") if len(str(content)) > 80 else str(content)
+        logger.info("[gemini:tool_result] %s", preview.replace("\n", " "))
+
+    def _handle_gemini_message(self, event: dict, now: float) -> None:
+        """Handle message event: logging (delta chunks at DEBUG)."""
+        self._last_event_time = now
+        role = event.get("role", "")
+        text = event.get("content", "")
+        if isinstance(text, str) and text:
+            preview = (text[:240] + "…") if len(text) > 240 else text
+            if event.get("delta") and role == "assistant":
+                logger.debug("[gemini:%s] %s", role, preview.replace("\n", " "))
+            else:
+                logger.info("[gemini:%s] %s", role, preview.replace("\n", " "))
+
+    def _handle_gemini_error(self, event: dict) -> None:
+        """Handle error event: logging."""
+        error_msg = event.get("message") or event.get("error") or str(event)
+        logger.warning("[gemini:error] %s", error_msg)
+
+    def _handle_gemini_result(
+        self,
+        event: dict,
+        metrics: CliSessionMetrics | None,
+    ) -> None:
+        """Handle result event: final metrics."""
+        if metrics:
+            stats = event.get("stats") or {}
+            metrics.input_tokens = stats.get("input_tokens", 0)
+            metrics.output_tokens = stats.get("output_tokens", 0)
+            metrics.duration_ms = stats.get("duration_ms", 0)
+            metrics.is_error = event.get("is_error", False)
+            metrics.error = event.get("error", "")
+        logger.info(
+            "[gemini:result] error=%s tokens_in=%d tokens_out=%d",
+            event.get("is_error", False),
+            (event.get("stats") or {}).get("input_tokens", 0),
+            (event.get("stats") or {}).get("output_tokens", 0),
+        )
+
     def handle_stream_event(
         self,
         event: dict,
         metrics: CliSessionMetrics | None,
         server_url: str | None = None,
     ) -> None:
+        """Dispatch stream events to typed handlers (consistent with Claude backend)."""
         etype = event.get("type", "")
         now = time.time()
 
         if etype == "init":
-            self._last_event_time = now
-            if metrics:
-                metrics.session_id = event.get("session_id", "")
-                metrics.model = event.get("model", "")
-            logger.info(
-                "[gemini] session=%s model=%s",
-                event.get("session_id", "?"),
-                event.get("model", "?"),
-            )
-
+            self._handle_gemini_init(event, now, metrics)
         elif etype == "tool_use":
-            duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
-            self._last_event_time = now
-            if metrics:
-                metrics.tool_use_count += 1
-            # Gemini stream-json uses tool_name + parameters (not name + arguments)
-            tool_name = event.get("tool_name") or event.get("name", "?")
-            args = event.get("parameters") or event.get("arguments") or {}
-            args_preview = json.dumps(args)
-            if len(args_preview) > 120:
-                args_preview = args_preview[:120] + "..."
-            logger.info("[gemini:tool_use] %s %s", tool_name, args_preview)
-            if server_url:
-                self._post_thinking(
-                    server_url, f"[{tool_name}]", duration_sec, interaction_type="gemini"
-                )
-
+            self._handle_gemini_tool_use(event, now, metrics, server_url)
         elif etype == "tool_result":
-            self._last_event_time = now
-            # Gemini stream-json uses output (not content)
-            content = event.get("output") or event.get("content", "")
-            preview = (str(content)[:80] + "...") if len(str(content)) > 80 else str(content)
-            logger.info("[gemini:tool_result] %s", preview.replace("\n", " "))
-
+            self._handle_gemini_tool_result(event, now)
         elif etype == "message":
-            self._last_event_time = now
-            role = event.get("role", "")
-            text = event.get("content", "")
-            if isinstance(text, str) and text:
-                # Streamed assistant messages are delta chunks; log briefly to avoid many lines
-                preview = (text[:120] + "…") if len(text) > 120 else text
-                if event.get("delta") and role == "assistant":
-                    logger.debug("[gemini:%s] %s", role, preview.replace("\n", " "))
-                else:
-                    logger.info("[gemini:%s] %s", role, preview.replace("\n", " "))
-
+            self._handle_gemini_message(event, now)
         elif etype == "error":
-            error_msg = event.get("message") or event.get("error") or str(event)
-            logger.warning("[gemini:error] %s", error_msg)
-
+            self._handle_gemini_error(event)
         elif etype == "result":
-            if metrics:
-                stats = event.get("stats") or {}
-                metrics.input_tokens = stats.get("input_tokens", 0)
-                metrics.output_tokens = stats.get("output_tokens", 0)
-                metrics.duration_ms = stats.get("duration_ms", 0)
-                metrics.is_error = event.get("is_error", False)
-                metrics.error = event.get("error", "")
-            logger.info(
-                "[gemini:result] error=%s tokens_in=%d tokens_out=%d",
-                event.get("is_error", False),
-                (event.get("stats") or {}).get("input_tokens", 0),
-                (event.get("stats") or {}).get("output_tokens", 0),
-            )
+            self._handle_gemini_result(event, metrics)
 
     # ------------------------------------------------------------------
     # log_cli_interaction (session-based step tracking, like Claude)

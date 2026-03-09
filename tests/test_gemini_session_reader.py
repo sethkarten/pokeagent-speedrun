@@ -75,6 +75,26 @@ class TestExtractTokensFromMessage:
         assert tokens["completion"] == 50 + 10 + 5  # output + thoughts + tool
         assert tokens["cached"] == 200
         assert tokens["total"] == 365
+        # Gemini uses implicit caching; cache_write not in session format → None
+        assert tokens["cache_write"] is None
+
+    def test_cache_write_none_when_absent(self):
+        """Gemini session format does not expose cache_write; expect None."""
+        msg = {"id": "x", "type": "gemini", "tokens": {"input": 10, "output": 5, "total": 15}}
+        tokens = extract_tokens_from_message(msg)
+        assert tokens is not None
+        assert tokens["cache_write"] is None
+
+    def test_cache_write_from_session_when_present(self):
+        """If session adds cache_write/cacheWrite in future, we read it."""
+        msg = {
+            "id": "x",
+            "type": "gemini",
+            "tokens": {"input": 10, "output": 5, "cache_write": 100, "total": 115},
+        }
+        tokens = extract_tokens_from_message(msg)
+        assert tokens is not None
+        assert tokens["cache_write"] == 100
 
     def test_minimal_entry(self):
         tokens = extract_tokens_from_message(GEMINI_MSG_MINIMAL)
@@ -260,3 +280,41 @@ class TestLoadNewUsageEntries:
         entries, hashes = load_new_usage_entries(tmp_path / "nonexistent", set())
         assert entries == []
         assert hashes == set()
+
+
+# ---------------------------------------------------------------------------
+# Cost calculation: Gemini subset style (cached within prompt)
+# ---------------------------------------------------------------------------
+
+class TestGeminiCostCalculationSubsetStyle:
+    """Verify append_cli_step correctly computes cost when cached is a subset of prompt."""
+
+    def test_gemini_subset_cost_uses_uncached_plus_cached_rates(self, tmp_path):
+        """Gemini: prompt=total input, cached=subset. Cost = uncached*prompt_rate + cached*cached_rate."""
+        from unittest.mock import patch
+        from utils.llm_logger import LLMLogger
+
+        metrics_file = tmp_path / "cumulative_metrics.json"
+        with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+            ll = LLMLogger(log_dir=str(tmp_path), session_id="cost_test")
+
+        # Real Gemini step shape: prompt=12630 (total input), cached=7703 (subset), completion=10
+        token_usage = {
+            "prompt": 12630,
+            "completion": 10,
+            "cached": 7703,
+            "cache_write": None,
+            "total": 12640,
+        }
+        ll.append_cli_step(
+            step_number=0,
+            token_usage=token_usage,
+            duration=0.0,
+            timestamp=0.0,
+            model_info={"model": "gemini-3-flash"},
+        )
+
+        # uncached = 12630 - 7703 = 4927; cost = 4927*0.0005 + 7703*0.00005 + 10*0.003
+        cost = ll.cumulative_metrics["total_cost"]
+        expected = (4927 / 1000) * 0.0005 + (7703 / 1000) * 0.00005 + (10 / 1000) * 0.003
+        assert abs(cost - expected) < 1e-9, f"Cost {cost} != expected {expected}"
