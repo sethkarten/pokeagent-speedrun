@@ -51,29 +51,39 @@ The metric tracking system provides comprehensive visibility into the agent's pe
 - Triggered when the agent completes a high-level objective (e.g., "Defeat Gym Leader Roxanne").
 - **Data**: Similar to milestones, providing "cost per objective" breakdowns.
 
-## 2. CLI Agent Usage Monitoring (External Agents, e.g., Claude Code)
+## 2. CLI Agent Usage Monitoring (External Agents)
 
-External CLI agents (run via `run_cli.py`) run in a separate process or container and do not integrate directly with `LLMLogger`. Usage is derived from Claude Code's JSONL files and synced to the server.
+External CLI agents (run via `run_cli.py`) run in a separate process or container and do not integrate directly with `LLMLogger`. Usage is derived from backend-specific sources and synced to the server via the abstract `log_cli_interaction()` method.
 
 ### Single-Writer Pattern
 - **Server** is the only process that writes `cumulative_metrics.json` (via `LLM_METRICS_WRITE_ENABLED=true`).
-- **run_cli** sets `LLM_METRICS_WRITE_ENABLED=false` and never writes to disk; it accumulates steps in memory and POSTs to the server.
+- **run_cli** sets `LLM_METRICS_WRITE_ENABLED=false` and accumulates steps in memory, then POSTs to the server.
 
-### Flow
-1. **JSONL Polling**: `run_cli` polls Claude Code's JSONL files under `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl` for assistant entries with usage data (`utils/claude_jsonl_reader.py`).
-2. **Best-Entry Dedup**: Claude Code emits multiple entries per API call (streaming chunks with `output_tokens=0` and a final entry with complete usage). We keep the entry with the highest total token count per hash to avoid under-counting output tokens.
-3. **In-Memory Accumulation**: For each new entry, `append_cli_step()` updates `LLMLogger.cumulative_metrics` in memory (always, regardless of `LLM_METRICS_WRITE_ENABLED`).
-4. **Sync to Server**: After new steps are appended, `_sync_metrics_to_server()` POSTs the full cumulative metrics to `POST /sync_llm_metrics`. The server merges them into its `LLMLogger` and calls `save_cumulative_metrics()` to persist to disk.
-5. **Poll Cadence**: Polling runs every 15 seconds (heartbeat) and once after each session exits.
+### Backend-Specific Metric Sources
 
-### Relevant Paths & Endpoints
-- **JSONL source**: `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl` (Claude Code-specific; see coupling note in `external_mcp_agents.md`)
-- **Persisted metrics**: `.pokeagent_cache/{run_id}/cumulative_metrics.json`
-- **Sync endpoint**: `POST /sync_llm_metrics` (body: `{"cumulative_metrics": {...}}`)
+| Backend | Source | Reader Module | Dedup Strategy |
+|---------|--------|--------------|----------------|
+| Claude Code | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_jsonl_reader.py` | Best-entry by message ID (highest total tokens) |
+| Gemini CLI | Telemetry outfile (`gemini_memory/telemetry.jsonl`) | `utils/metric_tracking/gemini_telemetry_reader.py` | SHA-256 hash of (prompt_id, timestamp, model, tokens) with byte-offset incremental reads |
+
+### Flow (Common)
+1. **Polling**: `run_cli` calls `backend.log_cli_interaction()` every 15 seconds and once after each session exits.
+2. **In-Memory Accumulation**: For each new entry, `append_cli_step()` updates `LLMLogger.cumulative_metrics` in memory.
+3. **Sync to Server**: `_sync_metrics_to_server()` POSTs the full cumulative metrics to `POST /sync_llm_metrics`.
+
+### Claude-Specific Details
+- **Best-Entry Dedup**: Claude Code emits multiple entries per API call (streaming chunks with `output_tokens=0` and a final entry with complete usage). We keep the highest total per hash.
+- **JSONL source**: `.pokeagent_cache/{run_id}/claude_memory/projects/-workspace/*.jsonl`
+
+### Gemini-Specific Details
+- **Telemetry source**: `gemini_cli.api_response` events in the OTEL outfile, each representing one API request.
+- **Token mapping**: `input_token_count` → prompt, `output_token_count + thoughts_token_count + tool_token_count` → completion, `cached_content_token_count` → cached.
+- **Efficient polling**: Uses file byte offsets to read only new data appended since last poll.
+- **Configuration**: Telemetry is enabled automatically by writing `settings.json` with `telemetry.enabled: true` and `telemetry.outfile`.
 
 ### Pricing
-- Uses `claude-sonnet-4-6` / `claude-sonnet-4.6` pricing in `LLMLogger.pricing`.
-- Cache writes: 5m TTL at $3.75/M (`cache_write_prompt`). Cache hits at $0.30/M.
+- Claude: `claude-sonnet-4-6` / `claude-sonnet-4.6` pricing. Cache writes: $3.75/M, cache hits: $0.30/M.
+- Gemini: `gemini-2.5-pro` / `gemini-2.5-flash` pricing already present in `LLMLogger.pricing`.
 
 ### Pre-Scaffold Agents (e.g., `MyCLIAgent`)
 - **Stream-JSON**: Output raw JSON lines to stdout/stderr; captured into `run_data/{run_id}/agent_logs/session_{NNN}.jsonl`.
