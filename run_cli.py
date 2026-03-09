@@ -31,6 +31,7 @@ import requests
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from utils.cli_agent_backends import (
+    CliAgentBackend,
     CliSession,
     CliSessionMetrics,
     get_backend,
@@ -95,9 +96,15 @@ def _cleanup_cli_session(session: CliSession | None, log_file=None):
 
 def preflight_cli(args) -> bool:
     """Validate CLI availability and show actionable setup errors."""
-    if args.cli_type != "claude":
-        return True
+    if args.cli_type == "claude":
+        return _preflight_claude()
+    if args.cli_type == "gemini":
+        return _preflight_gemini()
+    return True
 
+
+def _preflight_claude() -> bool:
+    """Preflight checks for Claude Code CLI."""
     claude_path = shutil.which("claude")
     if not claude_path:
         print("❌ Claude Code CLI not found on PATH.")
@@ -126,6 +133,39 @@ def preflight_cli(args) -> bool:
 
     if os.environ.get("ANTHROPIC_API_KEY"):
         print("ℹ️  ANTHROPIC_API_KEY is set. Claude may use API-key auth instead of CLI login.")
+
+    return True
+
+
+def _preflight_gemini() -> bool:
+    """Preflight checks for Gemini CLI."""
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("❌ GEMINI_API_KEY not set in environment.")
+        print("   Export your API key: export GEMINI_API_KEY=<your-key>")
+        return False
+
+    gemini_path = shutil.which("gemini")
+    if not gemini_path:
+        print("❌ Gemini CLI not found on PATH.")
+        print("   Install: npm install -g @google/gemini-cli  (or check Google's docs)")
+        return False
+
+    try:
+        result = subprocess.run(
+            ["gemini", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            print("❌ Gemini CLI is installed but --version failed.")
+            print(f"   stdout: {result.stdout.strip()}")
+            print(f"   stderr: {result.stderr.strip()}")
+            return False
+    except Exception as e:
+        print(f"❌ Failed to run 'gemini --version': {e}")
+        return False
 
     return True
 
@@ -382,7 +422,7 @@ class Services:
 LAST_CLI_SESSION_ID_FILENAME = "last_cli_session_id"
 
 
-def _load_last_session_id() -> str | None:
+def _load_last_session_id(backend: CliAgentBackend, agent_memory_dir: Path) -> str | None:
     """Load persisted CLI session ID from cache (for --resume across runs/restores)."""
     try:
         from utils.run_data_manager import get_cache_path
@@ -391,13 +431,8 @@ def _load_last_session_id() -> str | None:
             sid = path.read_text().strip()
             if sid:
                 return sid
-        # Fallback: derive from most recent project in claude_memory (for older backups)
-        projects_dir = get_cache_path("claude_memory/projects/-workspace")
-        if projects_dir.exists():
-            jsonl_files = [f for f in projects_dir.iterdir() if f.suffix == ".jsonl"]
-            if jsonl_files:
-                most_recent = max(jsonl_files, key=lambda p: p.stat().st_mtime)
-                return most_recent.stem
+        # Backend-specific fallback
+        return backend.get_resume_session_id(agent_memory_dir)
     except Exception as e:
         logger.debug("Could not load last_session_id: %s", e)
     return None
@@ -584,6 +619,7 @@ def _run_agent_loop(
     args,
     run_manager,
     agent_memory_dir: Path,
+    backend: CliAgentBackend,
 ) -> tuple[str | None, CliSession | None, object]:
     """Run the agent loop until termination. Returns (termination_reason, last_cli_session, cli_log_file)."""
     from utils.run_data_manager import get_cache_path
@@ -617,7 +653,6 @@ def _run_agent_loop(
     )
     monitor_thread.start()
 
-    backend = get_backend(args.cli_type)
     # Use agent_scratch_space for both local and containerized (matches pre-refactor 05602465)
     agent_scratch_space = run_manager.get_scratch_space_dir()
     agent_scratch_space.mkdir(parents=True, exist_ok=True)
@@ -634,7 +669,7 @@ def _run_agent_loop(
     cli_session: CliSession | None = None
     cli_log_file = None
     iteration = 0
-    last_session_id: str | None = _load_last_session_id()
+    last_session_id: str | None = _load_last_session_id(backend, agent_memory_dir)
     if last_session_id:
         print(f"   📌 Resuming session: {last_session_id}")
     consecutive_failures = 0
@@ -698,7 +733,7 @@ def _run_agent_loop(
                 elapsed = int(now - wait_start)
                 logger.info("Agent running (pid=%s, elapsed=%ds)", cli_session.process.pid, elapsed)
                 last_heartbeat = now
-                processed_hashes, last_cli_step = backend.poll_jsonl_and_append_steps(
+                processed_hashes, last_cli_step = backend.log_cli_interaction(
                     agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
                 )
 
@@ -721,7 +756,7 @@ def _run_agent_loop(
             session_metrics.tool_use_count,
             last_session_id or "none",
         )
-        processed_hashes, last_cli_step = backend.poll_jsonl_and_append_steps(
+        processed_hashes, last_cli_step = backend.log_cli_interaction(
             agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
         )
 
@@ -777,10 +812,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run external CLI agents (Claude Code, Codex) for Pokemon Emerald experiments"
     )
-    parser.add_argument("--cli-type", type=str, default="claude", choices=["claude", "codex"],
+    parser.add_argument("--cli-type", type=str, default="claude", choices=["claude", "gemini", "codex"],
                        help="Type of CLI agent to launch (default: claude)")
     parser.add_argument("--login", action="store_true",
-                       help="Run 'claude auth login' before starting (when --cli-type claude)")
+                       help="Run backend-specific auth login before starting (e.g. 'claude auth login')")
     parser.add_argument("--directive", type=str,
                        default="agent/prompts/cli_directives/pokemon_directive.md",
                        help="Path to system prompt/directive file for CLI agent")
@@ -847,7 +882,7 @@ def main():
 
     backend = get_backend(args.cli_type)
 
-    if args.cli_type == "claude" and args.login:
+    if args.login:
         if not backend.run_login():
             return 1
 
@@ -884,12 +919,12 @@ def main():
 
     try:
         termination_reason, cli_session, cli_log_file = _run_agent_loop(
-            services, args, run_manager, agent_memory_dir
+            services, args, run_manager, agent_memory_dir, backend
         )
         if termination_reason == "server_died":
             return 1
         if termination_reason == "auth_error":
-            print("\n❌ Auth error: Run 'claude auth login' on the host, then retry with --login or ensure credentials are valid.")
+            print("\n❌ Auth error: Ensure credentials are valid (run --login or check API key env vars).")
             return 1
         if termination_reason == "mcp_connection_failure":
             print("\n❌ MCP connection failure: Agent could not connect to MCP server.")
