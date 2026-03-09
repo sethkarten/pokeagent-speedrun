@@ -62,11 +62,17 @@ def _extract_api_response(record: dict) -> dict[str, Any] | None:
     if not isinstance(record, dict):
         return None
 
-    body = record.get("body") or record.get("name") or record.get("event") or ""
+    attrs = record.get("attributes") or {}
+    body = (
+        record.get("body")
+        or record.get("name")
+        or record.get("event")
+        or attrs.get("event.name")
+        or ""
+    )
     if body != API_RESPONSE_EVENT:
         return None
 
-    attrs = record.get("attributes") or {}
     if not attrs:
         resource = record.get("resource")
         if isinstance(resource, dict):
@@ -98,7 +104,7 @@ def _extract_api_response(record: dict) -> dict[str, Any] | None:
         "cost": 0.0,  # Gemini telemetry doesn't include explicit cost; llm_logger pricing handles it
         "_model": str(attrs.get("model", "")),
         "_duration_ms": int(attrs.get("duration_ms", 0) or 0),
-        "_timestamp": record.get("timestamp") or record.get("timeUnixNano"),
+        "_timestamp": attrs.get("event.timestamp") or record.get("timestamp") or record.get("timeUnixNano"),
         "_prompt_id": str(attrs.get("prompt_id", "")),
         "_status_code": attrs.get("status_code"),
     }

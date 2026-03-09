@@ -781,7 +781,6 @@ class GeminiCliBackend(CliAgentBackend):
     def __init__(self) -> None:
         super().__init__()
         self._last_event_time: float | None = None
-        self._telemetry_offsets: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # MCP config overrides (Gemini format: no "type" key, adds "trust")
@@ -826,7 +825,7 @@ class GeminiCliBackend(CliAgentBackend):
         settings = {
             **mcp_config,
             "telemetry": {
-                "enabled": True,
+                "enabled": False, # session-based step tracking, akin to claude code implementation for metrics
                 "target": "local",
                 "otlpEndpoint": "",
                 "outfile": telemetry_outfile,
@@ -981,8 +980,9 @@ class GeminiCliBackend(CliAgentBackend):
             self._last_event_time = now
             if metrics:
                 metrics.tool_use_count += 1
-            tool_name = event.get("name", "?")
-            args = event.get("arguments") or {}
+            # Gemini stream-json uses tool_name + parameters (not name + arguments)
+            tool_name = event.get("tool_name") or event.get("name", "?")
+            args = event.get("parameters") or event.get("arguments") or {}
             args_preview = json.dumps(args)
             if len(args_preview) > 120:
                 args_preview = args_preview[:120] + "..."
@@ -994,7 +994,8 @@ class GeminiCliBackend(CliAgentBackend):
 
         elif etype == "tool_result":
             self._last_event_time = now
-            content = event.get("content", "")
+            # Gemini stream-json uses output (not content)
+            content = event.get("output") or event.get("content", "")
             preview = (str(content)[:80] + "...") if len(str(content)) > 80 else str(content)
             logger.info("[gemini:tool_result] %s", preview.replace("\n", " "))
 
@@ -1002,9 +1003,13 @@ class GeminiCliBackend(CliAgentBackend):
             self._last_event_time = now
             role = event.get("role", "")
             text = event.get("content", "")
-            if isinstance(text, str):
-                preview = (text[:200] + "...") if len(text) > 200 else text
-                logger.info("[gemini:%s] %s", role, preview.replace("\n", " "))
+            if isinstance(text, str) and text:
+                # Streamed assistant messages are delta chunks; log briefly to avoid many lines
+                preview = (text[:120] + "…") if len(text) > 120 else text
+                if event.get("delta") and role == "assistant":
+                    logger.debug("[gemini:%s] %s", role, preview.replace("\n", " "))
+                else:
+                    logger.info("[gemini:%s] %s", role, preview.replace("\n", " "))
 
         elif etype == "error":
             error_msg = event.get("message") or event.get("error") or str(event)
@@ -1026,7 +1031,7 @@ class GeminiCliBackend(CliAgentBackend):
             )
 
     # ------------------------------------------------------------------
-    # log_cli_interaction (telemetry-based step tracking)
+    # log_cli_interaction (session-based step tracking, like Claude)
     # ------------------------------------------------------------------
 
     def log_cli_interaction(
@@ -1036,8 +1041,8 @@ class GeminiCliBackend(CliAgentBackend):
         last_cli_step: int,
         server_url: str | None = None,
     ) -> tuple[set, int]:
-        """Poll Gemini telemetry outfile for new api_response events and append steps."""
-        from utils.metric_tracking.gemini_telemetry_reader import load_new_gemini_usage
+        """Poll Gemini session JSON files for new gemini messages and append steps."""
+        from utils.metric_tracking.gemini_session_reader import load_new_usage_entries
         from utils.llm_logger import get_llm_logger
 
         search_path = Path(agent_memory_dir).resolve()
@@ -1045,22 +1050,22 @@ class GeminiCliBackend(CliAgentBackend):
             return processed_hashes, last_cli_step
 
         try:
-            new_entries, updated_hashes, self._telemetry_offsets = load_new_gemini_usage(
-                search_path, processed_hashes, self._telemetry_offsets
-            )
+            new_entries, updated_hashes = load_new_usage_entries(search_path, processed_hashes)
         except Exception as exc:
-            logger.warning("Gemini telemetry poll failed: %s", exc)
+            logger.warning("Gemini session poll failed: %s", exc)
             return processed_hashes, last_cli_step
 
         if not new_entries:
-            return processed_hashes, last_cli_step
+            return updated_hashes, last_cli_step
 
-        logger.info("Gemini telemetry: appending %d step(s)", len(new_entries))
+        logger.info("Gemini session: appending %d step(s)", len(new_entries))
         new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
 
         llm_logger = get_llm_logger()
         prev_ts: float | None = None
         for entry in new_entries:
+            tokens = entry.get("_tokens", {})
+            tool_calls = entry.get("_tool_calls", [])
             parsed_ts = entry.get("_parsed_timestamp")
             ts_float = parsed_ts.timestamp() if parsed_ts is not None else time.time()
             duration = max(0.0, ts_float - prev_ts) if prev_ts is not None else 0.0
@@ -1069,23 +1074,15 @@ class GeminiCliBackend(CliAgentBackend):
             model_name = entry.get("_model", "gemini-pro")
             model_info = {"model": model_name}
 
-            token_usage = {
-                "prompt": entry.get("prompt", 0),
-                "completion": entry.get("completion", 0),
-                "cached": entry.get("cached", 0),
-                "cache_write": entry.get("cache_write", 0),
-                "total": entry.get("total", 0),
-                "cost": entry.get("cost", 0.0),
-            }
-
             last_cli_step += 1
             try:
                 llm_logger.append_cli_step(
                     step_number=last_cli_step,
-                    token_usage=token_usage,
+                    token_usage=tokens,
                     duration=duration,
                     timestamp=ts_float,
                     model_info=model_info,
+                    tool_calls=tool_calls if tool_calls else None,
                 )
             except Exception as exc:
                 logger.warning("Failed to append Gemini CLI step %d: %s", last_cli_step, exc)
