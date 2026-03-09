@@ -111,3 +111,14 @@ Metric tracking is backend-specific, accessed via the abstract `log_cli_interact
 2.  **Filesystem Isolation**: Agents are confined to mounted volumes.
 3.  **Credential Safety**: Claude uses seeded OAuth; Gemini uses API key env var.
 4.  **Permission Safety**: Container users have matching UID/GID to the host user.
+
+## 6. Known Warnings (Gemini CLI)
+
+When running the Gemini agent in containerized mode, the following messages may appear in logs. They are expected and do not indicate a failure:
+
+| Message | Explanation | Action |
+|--------|-------------|--------|
+| `Timeout of 30000 exceeds the interval of 10000. Clamping...` | Gemini CLI internal MCP/SSE client adjusts a timeout to the polling interval. | None; harmless. |
+| `The 'metricReader' option is deprecated. Please use 'metricReaders' instead.` | Gemini CLI uses a deprecated OpenTelemetry config key. | None until we control the CLI config; or upgrade `@google/gemini-cli` when a fix is released. |
+| `YOLO mode is enabled. All tool calls will be automatically approved.` | Printed by the CLI when `--yolo` is used; may appear twice (startup). | None. |
+| `MCP server 'pokemon-emerald': HTTP connection failed, attempting SSE fallback...` / `Successfully connected using SSE transport.` | In the container, the agent is configured to use SSE for MCP; the client tries HTTP first, then falls back to SSE. | None; SSE is the intended transport for containerized runs. |
