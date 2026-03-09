@@ -1,14 +1,13 @@
 """Pokemon Red map reader — hybrid RAM + processed_map approach.
 
 Reads NPC positions from live RAM (wSpriteStateData1 at 0xC100) and uses
-pre-computed processed_map/{map_name}.py files for tile classification.
+pre-computed processed_map/{map_name}.json files for tile classification.
 Viewport is clamped to map bounds (Emerald-style) — never padded with walls.
 
 Returns (tile_id, type_str, collision_int, elevation) tuples compatible with
 map_formatter.is_tile_walkable() and format_map_grid().
 """
 
-import importlib.util
 import json
 import logging
 import os
@@ -17,52 +16,25 @@ import re
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# coll_map character → (type_str, collision_int)
-#
-# In Gen 1, the "collision tile IDs" list contains PASSABLE tiles.
-# map_preprocess.py: is_collision = (tid in coll_set) → 'O' means passable,
-# 'X' means obstacle.  (The naming is counterintuitive but verified against
-# pokered decomp: overworld.asm:1263 "wTilesetCollisionPtr ; pointer to list
-# of passable tiles".)
+# Grid symbol walkability (matching map_formatter.py conventions)
 # ---------------------------------------------------------------------------
-COLL_CHAR_MAP = {
-    'O':   ('WALKABLE', 0),  # passable ground (in collision/passable set)
-    'X':   ('WALL', 1),      # blocked / obstacle (NOT in passable set)
-    'G':   ('GRASS', 0),     # tall grass (walkable, triggers encounters)
-    '~':   ('WATER', 1),     # water (blocked without Surf)
-    'D':   ('LEDGE_D', 0),   # jump-down ledge
-    'L':   ('LEDGE_L', 0),   # jump-left ledge
-    'R':   ('LEDGE_R', 0),   # jump-right ledge
-    '|':   ('WALL', 1),      # pair-collision directional wall
-    '-':   ('WALL', 1),      # pair-collision directional wall
-    'C':   ('COUNTER', 1),   # shop/PC counter
-    'Cut': ('CUT', 1),       # HM Cut tree (blocked without Cut)
-    '?':   ('UNKNOWN', 0),   # unknown → assume walkable
-} # TODO: change ascii symbol mapping to match the Emerald settings
+_WALKABLE_SYMBOLS = {".", "~", "D", "S", "↓", "←", "→", "↑", "&"}
 
-# String prefixes handled separately in _classify_cell:
-#   'WarpPoint' → ('WARP',    0)
-#   'SIGN_'     → ('SIGN',    1)
-#   'TalkTo'    → ('SIGN',    1)
+# Compact single-char aliases for multi-char grid symbols (for format_map_for_llm)
+_COMPACT_SYMBOL = {
+    "PC": "P",  # Computer (note: player 'P' overrides at player position)
+    "T":  "T",  # Television (already 1 char)
+    "B":  "B",  # Bookshelf
+    "^":  "^",  # Picture/Painting
+    "U":  "U",  # Trash can
+    "=":  "=",  # Bed/bench
+}
 
 # Sprite facing direction byte → string
 _FACING_MAP = {0: "down", 4: "up", 8: "left", 12: "right"}
 
-# Regex for parsing object_event sprite names from .asm files
+# Regex for parsing object_event sprite names from .asm files (fallback)
 _OBJECT_EVENT_RE = re.compile(r"object_event\s+\d+,\s*\d+,\s*([A-Z0-9_]+)")
-
-
-def _type_str_to_symbol(type_str: str, symbols: dict) -> str:
-    """Map a (possibly rich) type_str to an ASCII symbol for visual display."""
-    if type_str in symbols:
-        return symbols[type_str]
-    if type_str.startswith('WarpPoint'):
-        return 'W'
-    if type_str.startswith('SIGN_') or type_str.startswith('TalkTo'):
-        return 's'
-    if type_str.startswith('SPRITE_'):
-        return 'N'
-    return '?'
 
 
 class RedMapReader:
@@ -73,7 +45,7 @@ class RedMapReader:
     def __init__(self, pyboy):
         self.pyboy = pyboy
         self._map_names: dict = {}   # str(map_id) → map_name
-        self._map_cache: dict = {}   # map_name → coll_map (list[list[str]])
+        self._map_cache: dict = {}   # map_name → loaded JSON dict
         self._sprite_name_cache: dict = {}  # map_name → list[str]
         self._load_map_names()
 
@@ -108,43 +80,51 @@ class RedMapReader:
             pass
         return exact  # not found; return original so caller gets a clear miss
 
-    def _load_coll_map(self, map_name: str) -> list:
-        """Load and cache coll_map from processed_map/{map_name}.py.
+    def _load_map_data(self, map_name: str) -> dict:
+        """Load and cache processed_map/{map_name}.json.
 
-        Returns [] if the file does not exist.
+        Returns {} if the file does not exist.
         """
         if map_name in self._map_cache:
             return self._map_cache[map_name]
 
         pm_dir = os.path.join(self.DATA_DIR, "processed_map")
-        path = self._resolve_path_ci(pm_dir, f"{map_name}.py")
+        path = self._resolve_path_ci(pm_dir, f"{map_name}.json")
         if not os.path.exists(path):
             logger.debug(f"No processed_map file for '{map_name}'")
-            self._map_cache[map_name] = []
-            return []
+            self._map_cache[map_name] = {}
+            return {}
 
         try:
-            spec = importlib.util.spec_from_file_location(map_name, path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            coll_map = getattr(mod, "coll_map", [])
-            self._map_cache[map_name] = coll_map
-            logger.debug(f"Loaded coll_map for '{map_name}': {len(coll_map)} rows")
-            return coll_map
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            self._map_cache[map_name] = data
+            grid = data.get("grid", [])
+            logger.debug(f"Loaded map data for '{map_name}': {len(grid)} rows")
+            return data
         except Exception as e:
-            logger.warning(f"Error loading processed_map/{map_name}.py: {e}")
-            self._map_cache[map_name] = []
-            return []
+            logger.warning(f"Error loading processed_map/{map_name}.json: {e}")
+            self._map_cache[map_name] = {}
+            return {}
 
     def _load_sprite_names(self, map_name: str) -> list:
-        """Parse object_event entries from the map's .asm file.
+        """Get sprite names for this map.
 
-        Returns ordered list of sprite constant names (e.g. SPRITE_OAK).
-        Slot i (1-based) corresponds to sprite_names[i-1].
+        Prefers npc_data from the preprocessed JSON. Falls back to parsing
+        the .asm file if npc_data is unavailable.
         """
         if map_name in self._sprite_name_cache:
             return self._sprite_name_cache[map_name]
 
+        # Try npc_data from JSON first
+        data = self._load_map_data(map_name)
+        npc_data = data.get("npc_data", [])
+        if npc_data:
+            names = [npc["sprite"] for npc in npc_data]
+            self._sprite_name_cache[map_name] = names
+            return names
+
+        # Fallback: parse .asm file
         asm_dir = os.path.join(self.DATA_DIR, "pokered", "data", "maps", "objects")
         asm_path = self._resolve_path_ci(asm_dir, f"{map_name}.asm")
         names = []
@@ -160,6 +140,20 @@ class RedMapReader:
 
         self._sprite_name_cache[map_name] = names
         return names
+
+    # ------------------------------------------------------------------
+    # Grid symbol classification
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _classify_grid_symbol(symbol: str) -> tuple:
+        """Grid symbol → (type_str, collision_int).
+
+        The type_str IS the grid symbol itself (e.g. '.', '#', 'PC', '~').
+        collision_int: 0 = walkable, 1 = blocked.
+        """
+        collision_int = 0 if symbol in _WALKABLE_SYMBOLS else 1
+        return (symbol, collision_int)
 
     # ------------------------------------------------------------------
     # RAM helpers
@@ -257,29 +251,6 @@ class RedMapReader:
         return sprites
 
     # ------------------------------------------------------------------
-    # Cell classification
-    # ------------------------------------------------------------------
-
-    def _classify_cell(self, cell: str) -> tuple:
-        """Convert a coll_map string to (type_str, collision_int).
-
-        collision_int: 0 = walkable, 1 = blocked.
-        type_str preserves the original cell string for rich types
-        (e.g. 'WarpPoint', 'SIGN_ROUTE_1', 'TalkToOAK') so downstream
-        consumers get full context.  Only simple chars like 'O'/'X' are
-        mapped to generic labels ('WALKABLE'/'WALL').
-        """
-        if cell in COLL_CHAR_MAP:
-            return COLL_CHAR_MAP[cell]
-        if cell.startswith('WarpPoint'):
-            return (cell, 0)
-        if cell.startswith('SIGN_') or cell.startswith('TalkTo'):
-            return (cell, 1)
-        if cell.startswith('SPRITE_'):
-            return (cell, 1)
-        return (cell, 0)
-
-    # ------------------------------------------------------------------
     # Viewport clamping helper
     # ------------------------------------------------------------------
 
@@ -311,14 +282,15 @@ class RedMapReader:
         checks tile[2] == 0.
         """
         map_name = self.read_map_name()
-        coll_map = self._load_coll_map(map_name)
+        data = self._load_map_data(map_name)
+        grid = data.get("grid", [])
 
-        if not coll_map:
+        if not grid:
             return []
 
         player_x, player_y = self.read_player_coords()
-        map_h = len(coll_map)
-        map_w = len(coll_map[0]) if map_h > 0 else 0
+        map_h = len(grid)
+        map_w = len(grid[0]) if map_h > 0 else 0
 
         vx_start, vx_end = self._clamp_viewport(player_x, radius, map_w)
         vy_start, vy_end = self._clamp_viewport(player_y, radius, map_h)
@@ -335,8 +307,8 @@ class RedMapReader:
         for sy in range(vy_start, vy_end):
             row = []
             for sx in range(vx_start, vx_end):
-                cell = coll_map[sy][sx]
-                type_str, collision_int = self._classify_cell(cell)
+                symbol = grid[sy][sx]
+                type_str, collision_int = self._classify_grid_symbol(symbol)
 
                 # Overlay NPC from RAM
                 if (sx, sy) in npc_positions:
@@ -348,30 +320,24 @@ class RedMapReader:
         return rows
 
     def format_map_for_llm(self, radius: int = 4) -> str:
-        """Return compact ASCII map of the area around the player (for visual map rendering on /stream)
+        """Return compact ASCII map of the area around the player (for /stream).
 
-        Symbols:
+        Symbols match map_formatter.py conventions:
           P  player      .  walkable    #  wall / blocked
-          G  tall grass  ~  water       W  warp / door
-          N  NPC         s  sign        T  Cut tree
-          c  counter     v  ledge down  <  ledge left   >  ledge right
-          ?  unknown
+          ~  tall grass  W  water       D  door / warp
+          N  NPC         ?  sign        C  counter
+          ↓  ledge down  ←  ledge left  →  ledge right
         """
-        CELL_SYMBOLS = {
-            'WALKABLE': '.', 'WALL': '#', 'GRASS': 'G', 'WATER': '~',
-            'WARP':     'W', 'NPC':  'N', 'SIGN':  's', 'CUT':   'T',
-            'COUNTER':  'c', 'LEDGE_D': 'v', 'LEDGE_L': '<', 'LEDGE_R': '>',
-            'UNKNOWN':  '?',
-        }
         map_name = self.read_map_name()
-        coll_map = self._load_coll_map(map_name)
+        data = self._load_map_data(map_name)
+        grid = data.get("grid", [])
 
-        if not coll_map:
+        if not grid:
             return ""
 
         player_x, player_y = self.read_player_coords()
-        map_h = len(coll_map)
-        map_w = len(coll_map[0]) if map_h > 0 else 0
+        map_h = len(grid)
+        map_w = len(grid[0]) if map_h > 0 else 0
 
         vx_start, vx_end = self._clamp_viewport(player_x, radius, map_w)
         vy_start, vy_end = self._clamp_viewport(player_y, radius, map_h)
@@ -393,57 +359,55 @@ class RedMapReader:
                 elif (sx, sy) in npc_positions:
                     line += 'N'
                 else:
-                    cell = coll_map[sy][sx]
-                    type_str, _ = self._classify_cell(cell)
-                    line += _type_str_to_symbol(type_str, CELL_SYMBOLS)
+                    symbol = grid[sy][sx]
+                    # Use first char for multi-char symbols in compact view
+                    if len(symbol) == 1:
+                        line += symbol
+                    else:
+                        line += _COMPACT_SYMBOL.get(symbol, symbol[0])
             lines.append(line)
         return "\n".join(lines)
 
     def get_full_coll_map(self) -> dict:
-        """Return the complete coll_map for the current location (for test/debug only).
+        """Return the complete map data for the current location (for test/debug).
 
         Returns a dict with:
           map_name   : str
-          player_x   : int   (coll_map column)
-          player_y   : int   (coll_map row)
-          map_width  : int   (coll_map columns = .blk blocks × 2)
-          map_height : int   (coll_map rows    = .blk blocks × 2)
-          coll_map   : list[list[str]]  — full map, row-major
+          player_x   : int   (grid column)
+          player_y   : int   (grid row)
+          map_width  : int   (grid columns)
+          map_height : int   (grid rows)
+          grid       : list[list[str]]  — full grid, row-major
         """
         map_name = self.read_map_name()
-        coll_map = self._load_coll_map(map_name)
+        data = self._load_map_data(map_name)
+        grid = data.get("grid", [])
         player_x, player_y = self.read_player_coords()
-        h = len(coll_map)
-        w = len(coll_map[0]) if h > 0 else 0
+        h = len(grid)
+        w = len(grid[0]) if h > 0 else 0
         return {
             "map_name":   map_name,
             "player_x":   player_x,
             "player_y":   player_y,
             "map_width":  w,
             "map_height": h,
-            "coll_map":   coll_map,
+            "grid":       grid,
         }
 
     def get_whole_map_data(self) -> dict:
         """Return complete map data for /whole_map endpoint.
 
         Returns a dict matching the shape of Emerald's /whole_map response:
-          location, player_position, dimensions, grid (ASCII),
+          location, player_position, dimensions, grid (symbol arrays),
           raw_tiles (4-tuples), elevation_map, behavior_map,
           special_tiles, warps, objects
         """
-        CELL_SYMBOLS = {
-            'WALKABLE': '.', 'WALL': '#', 'GRASS': 'G', 'WATER': '~',
-            'WARP':     'W', 'NPC':  'N', 'SIGN':  's', 'CUT':   'T',
-            'COUNTER':  'c', 'LEDGE_D': 'v', 'LEDGE_L': '<', 'LEDGE_R': '>',
-            'UNKNOWN':  '?',
-        }
-
         map_name = self.read_map_name()
-        coll_map = self._load_coll_map(map_name)
+        data = self._load_map_data(map_name)
+        grid = data.get("grid", [])
         player_x, player_y = self.read_player_coords()
 
-        if not coll_map:
+        if not grid:
             return {
                 "location": map_name,
                 "player_position": {"x": player_x, "y": player_y},
@@ -453,49 +417,50 @@ class RedMapReader:
                 "warps": [], "objects": [],
             }
 
-        map_h = len(coll_map)
-        map_w = len(coll_map[0]) if map_h > 0 else 0
+        map_h = len(grid)
+        map_w = len(grid[0]) if map_h > 0 else 0
 
-        grid = []
+        # Build raw_tiles and behavior/elevation maps from grid symbols
         raw_tiles = []
         behavior_map = []
         elevation_map = []
-        special_tiles = {}
-        warps = []
-
-        for y, row in enumerate(coll_map):
-            grid_row = []
+        for y, row in enumerate(grid):
             tile_row = []
             behav_row = []
             elev_row = []
-            for x, cell in enumerate(row):
-                type_str, collision_int = self._classify_cell(cell)
-
-                # ASCII grid
-                grid_row.append(_type_str_to_symbol(type_str, CELL_SYMBOLS))
-
-                # Raw tile 4-tuple
+            for x, symbol in enumerate(row):
+                type_str, collision_int = self._classify_grid_symbol(symbol)
                 tile_row.append((0, type_str, collision_int, 0))
-
-                # Behavior and elevation
                 behav_row.append(type_str)
-                elev_row.append(0)  # Gen 1 has no elevation
-
-                # Collect special tiles
-                if cell.startswith('WarpPoint'):
-                    warps.append({"x": x, "y": y, "name": cell})
-                    special_tiles.setdefault("WARP", []).append(
-                        {"x": x, "y": y, "elevation": 0, "behavior_id": cell}
-                    )
-                elif cell.startswith('SIGN_') or cell.startswith('TalkTo'):
-                    special_tiles.setdefault("SIGN", []).append(
-                        {"x": x, "y": y, "elevation": 0, "behavior_id": cell}
-                    )
-
-            grid.append(grid_row)
+                elev_row.append(0)
             raw_tiles.append(tile_row)
             behavior_map.append(behav_row)
             elevation_map.append(elev_row)
+
+        # Structured data from JSON
+        warps_data = data.get("warps", [])
+        signs_data = data.get("signs", [])
+        hidden_data = data.get("hidden_objects", [])
+
+        # Build special_tiles from structured data
+        special_tiles = {}
+        if warps_data:
+            special_tiles["WARP"] = [
+                {"x": w["x"], "y": w["y"], "elevation": 0,
+                 "dest_map": w.get("dest_map", ""), "dest_warp_id": w.get("dest_warp_id", 0)}
+                for w in warps_data
+            ]
+        if signs_data:
+            special_tiles["SIGN"] = [
+                {"x": s["x"], "y": s["y"], "elevation": 0, "text_id": s.get("text_id", "")}
+                for s in signs_data
+            ]
+        if hidden_data:
+            special_tiles["HIDDEN"] = [
+                {"x": h["x"], "y": h["y"], "elevation": 0,
+                 "script": h.get("script", ""), "symbol": h.get("symbol", "#")}
+                for h in hidden_data
+            ]
 
         # NPC/object data from RAM
         objects = []
@@ -520,31 +485,35 @@ class RedMapReader:
             "elevation_map": elevation_map,
             "behavior_map": behavior_map,
             "special_tiles": special_tiles,
-            "warps": warps,
+            "warps": [{"x": w["x"], "y": w["y"],
+                       "dest_map": w.get("dest_map", ""),
+                       "dest_warp_id": w.get("dest_warp_id", 0)}
+                      for w in warps_data],
             "objects": objects,
         }
 
     def get_traversability_grid(self, radius: int = 4) -> list:
         """Return 2D bool grid.  True = walkable.  Clamped to map bounds."""
         map_name = self.read_map_name()
-        coll_map = self._load_coll_map(map_name)
+        data = self._load_map_data(map_name)
+        grid = data.get("grid", [])
 
-        if not coll_map:
+        if not grid:
             return []
 
         player_x, player_y = self.read_player_coords()
-        map_h = len(coll_map)
-        map_w = len(coll_map[0]) if map_h > 0 else 0
+        map_h = len(grid)
+        map_w = len(grid[0]) if map_h > 0 else 0
 
         vx_start, vx_end = self._clamp_viewport(player_x, radius, map_w)
         vy_start, vy_end = self._clamp_viewport(player_y, radius, map_h)
 
-        grid = []
+        result = []
         for sy in range(vy_start, vy_end):
             row = []
             for sx in range(vx_start, vx_end):
-                cell = coll_map[sy][sx]
-                _, collision_int = self._classify_cell(cell)
+                symbol = grid[sy][sx]
+                _, collision_int = self._classify_grid_symbol(symbol)
                 row.append(collision_int == 0)
-            grid.append(row)
-        return grid
+            result.append(row)
+        return result

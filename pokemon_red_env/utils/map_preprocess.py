@@ -1,5 +1,6 @@
 # map_preprocess.py
 
+import json
 import os
 import re
 import glob
@@ -92,11 +93,31 @@ def parse_hidden_objects(asm_text):
             x = int(event_match.group(1))
             y = int(event_match.group(2))
             func_name = event_match.group(3)  # e.g. "OpenRedsPC", "PrintRedSNESText"
-            hidden_dict[(x, y)] = "TalkTo" + func_name
+            hidden_dict[(x, y)] = func_name
 
         result[map_label] = hidden_dict
 
     return result
+
+def classify_hidden_object(func_name: str) -> str:
+    """Map hidden event function name to grid symbol (matching map_formatter.py)."""
+    upper = func_name.upper()
+    if "PC" in upper:
+        return "PC"
+    if any(k in upper for k in ("SNES", "GAMEBOY", "SLOTMACHINE")):
+        return "T"
+    if any(k in upper for k in ("BOOKCASE", "NOTEBOOK", "MAGAZINE", "BLACKBOARD", "BIKE")):
+        return "B"
+    if any(k in upper for k in ("POSTER", "EMAIL")):
+        return "^"
+    if "TRASH" in upper:
+        return "U"
+    if any(k in upper for k in ("STATUE", "QUIZ", "BINOCULARS", "DOJO")):
+        return "?"
+    if "BENCH" in upper:
+        return "="
+    return "#"
+
 
 def parse_ledge_tiles_asm(ledge_tiles_asm_path):
     """
@@ -122,9 +143,9 @@ def parse_ledge_tiles_asm(ledge_tiles_asm_path):
     )
 
     dir_map = {
-        "PAD_DOWN": "D",
-        "PAD_LEFT": "L",
-        "PAD_RIGHT": "R",
+        "PAD_DOWN": "↓",
+        "PAD_LEFT": "←",
+        "PAD_RIGHT": "→",
     }
 
     with open(ledge_tiles_asm_path, "r", encoding="utf-8") as f:
@@ -250,13 +271,15 @@ def build_tile_id_map(blk, blocks, map_width_blocks, map_height_blocks):
 def parse_map_objects_asm(root_dir, map_name):
     objects_asm_path = os.path.join(root_dir, "data", "maps", "objects", f"{map_name}.asm")
     if not os.path.exists(objects_asm_path):
-        return set(), set(), []
+        return [], [], []
 
-    warp_coords = set()
-    sign_coords = {}
+    warp_data = []
+    signs_data = []
     npc_data = []
 
-    warp_pattern = re.compile(r"warp_event\s+(\d+)\s*,\s*(\d+)\s*,")
+    warp_pattern = re.compile(
+        r"warp_event\s+(\d+)\s*,\s*(\d+)\s*,\s*(\w+)\s*,\s*(\d+)"
+    )
     bg_pattern = re.compile(r"bg_event\s+(\d+)\s*,\s*(\d+)\s*,\s*TEXT_(\w+)")
     obj_pattern = re.compile(
         r'object_event\s+(\d+)\s*,\s*(\d+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)'
@@ -267,16 +290,20 @@ def parse_map_objects_asm(root_dir, map_name):
             line = line.strip()
             wmatch = warp_pattern.search(line)
             if wmatch:
-                x = int(wmatch.group(1))
-                y = int(wmatch.group(2))
-                warp_coords.add((x, y))
+                warp_data.append({
+                    "x": int(wmatch.group(1)),
+                    "y": int(wmatch.group(2)),
+                    "dest_map": wmatch.group(3),
+                    "dest_warp_id": int(wmatch.group(4)),
+                })
                 continue
             smatch = bg_pattern.search(line)
             if smatch:
-                x = int(smatch.group(1))
-                y = int(smatch.group(2))
-                bg_description = str(smatch.group(3))
-                sign_coords[(x, y)]  = "SIGN_" + bg_description
+                signs_data.append({
+                    "x": int(smatch.group(1)),
+                    "y": int(smatch.group(2)),
+                    "text_id": smatch.group(3),
+                })
                 continue
             omatch = obj_pattern.search(line)
             if omatch:
@@ -290,7 +317,7 @@ def parse_map_objects_asm(root_dir, map_name):
                 })
                 continue
 
-    return warp_coords, sign_coords, npc_data
+    return warp_data, signs_data, npc_data
 
 def main():
     root_dir = os.path.join(game_code_dir, "pokered")
@@ -416,7 +443,11 @@ def main():
 
         tile_id_map = build_tile_id_map(blk, blocks, mw, mh)
 
-        warp_coords, sign_coords, npc_data = parse_map_objects_asm(root_dir, map_name)
+        warp_data, signs_data, npc_data = parse_map_objects_asm(root_dir, map_name)
+
+        # Build lookup sets for warps and signs
+        warp_positions = {(w["x"], w["y"]) for w in warp_data}
+        sign_positions = {(s["x"], s["y"]): s["text_id"] for s in signs_data}
 
         coll_set = collision_dict.get(tile_type, set())
         cut_set = cut_dict.get(tile_type, set())
@@ -430,7 +461,21 @@ def main():
         tile_map_h = mh * 4
         tile_map_w = mw * 4
 
-        coll_map = []
+        # Build hidden_objects list with classified symbols
+        hidden_obj_list = []
+        if hidden_dict:
+            for (hx, hy), func_name in hidden_dict.items():
+                symbol = classify_hidden_object(func_name)
+                hidden_obj_list.append({
+                    "x": hx, "y": hy,
+                    "script": func_name,
+                    "symbol": symbol,
+                })
+
+        # Build hidden position → symbol lookup
+        hidden_symbol_lookup = {(h["x"], h["y"]): h["symbol"] for h in hidden_obj_list}
+
+        grid = []
         for cy in range(coll_map_h):
             row = []
             tile_y = 2 * cy + 1
@@ -444,47 +489,51 @@ def main():
                     is_water = (tid in water_set)
                     is_cut = (tid in cut_set)
                     is_counter = (tid in counter_set)
-                    if (not hidden_dict is None) and (hidden_dict != []):
-                        is_hidden = (cx, cy) in hidden_dict.keys()
-                    else:
-                        is_hidden = False
+                    is_hidden = (cx, cy) in hidden_symbol_lookup
                 else:
                     tid = 0
                     is_collision = False
                     is_cut = False
+                    is_text = False
+                    is_grass = False
+                    is_water = False
+                    is_counter = False
+                    is_hidden = False
 
+                # Classification priority — symbols match map_formatter.py
                 if is_text:
-                    cell_char = 'TalkTo' + text_set[tid]
+                    cell_char = '#'
                 elif is_hidden:
-                    cell_char = hidden_dict[(cx, cy)]
+                    cell_char = hidden_symbol_lookup[(cx, cy)]
                 elif is_grass:
-                    cell_char = 'G'
-                elif is_water:
                     cell_char = '~'
+                elif is_water:
+                    cell_char = 'W'
                 elif is_collision:
-                    cell_char = 'O'
+                    cell_char = '.'
                 else:
-                    cell_char = 'X'
+                    cell_char = '#'
 
                 if is_cut:
-                    cell_char = 'Cut'
+                    cell_char = '#'
                 elif is_counter:
                     cell_char = 'C'
 
-                if (cx, cy) in warp_coords:
-                    cell_char = 'WarpPoint'
-                elif (cx, cy) in sign_coords.keys():
-                    cell_char = sign_coords[(cx, cy)]
+                if (cx, cy) in warp_positions:
+                    cell_char = 'D'
+                elif (cx, cy) in sign_positions:
+                    cell_char = '?'
 
                 row.append(cell_char)
-            coll_map.append(row)
+            grid.append(row)
 
         def in_bounds(cx_, cy_):
             return (0 <= cx_ < coll_map_w) and (0 <= cy_ < coll_map_h)
 
+        # Ledge detection — only on blocked tiles
         for cy in range(coll_map_h):
             for cx in range(coll_map_w):
-                if coll_map[cy][cx] not in ('X', ' '):
+                if grid[cy][cx] != '#':
                     continue
 
                 tile_x = 2 * cx
@@ -495,11 +544,11 @@ def main():
                 tile_id = tile_id_map[tile_y][tile_x]
                 for (stand_tile, ledge_tile, dir_char) in ledge_rules:
                     if tile_id == ledge_tile:
-                        if dir_char == 'D':
+                        if dir_char == '↓':
                             nx, ny = cx, cy - 1
-                        elif dir_char == 'L':
+                        elif dir_char == '←':
                             nx, ny = cx + 1, cy
-                        elif dir_char == 'R':
+                        elif dir_char == '→':
                             nx, ny = cx - 1, cy
                         else:
                             continue
@@ -510,17 +559,12 @@ def main():
                             if n_tile_x < tile_map_w and n_tile_y < tile_map_h:
                                 neighbor_tile_id = tile_id_map[n_tile_y][n_tile_x]
                                 if neighbor_tile_id == stand_tile:
-                                    coll_map[cy][cx] = dir_char
+                                    grid[cy][cx] = dir_char
                                     break
 
+        # Pair collisions — mark as blocked wall
         pair_collisions = pair_collisions_dict.get(tile_type, set())
         if pair_collisions:
-            dir_to_arrow = {
-                (0, -1): '-',
-                (0,  1): '-',
-                (-1, 0): '|',
-                ( 1, 0): '|',
-            }
             for cy in range(coll_map_h):
                 for cx in range(coll_map_w):
                     tile_x = 2 * cx
@@ -541,39 +585,26 @@ def main():
 
                         tile_id2 = tile_id_map[n_tile_y][n_tile_x]
                         if (tile_id1, tile_id2) in pair_collisions:
-                            arrow_char = dir_to_arrow.get((dcx, dcy))
-                            if arrow_char:
-                                if coll_map[ny][nx] in (' ', 'Cut'):
-                                    coll_map[ny][nx] = arrow_char
+                            if grid[ny][nx] == '#':
+                                grid[ny][nx] = '#'  # already blocked
 
-        py_path = os.path.join(output_dir, f"{map_name}.py")
-        with open(py_path, "w", encoding="utf-8") as f:
-            f.write(f'tile_type = "{tile_type}"\n')
-            f.write(f'map_connection = "{connect_direction}"\n\n')
+        # Write JSON output
+        json_path = os.path.join(output_dir, f"{map_name}.json")
+        map_data = {
+            "tile_type": tile_type,
+            "map_connection": connect_direction,
+            "dimensions": {"width": coll_map_w, "height": coll_map_h},
+            "tile_map": tile_id_map,
+            "grid": grid,
+            "warps": warp_data,
+            "signs": signs_data,
+            "hidden_objects": hidden_obj_list,
+            "npc_data": npc_data,
+        }
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(map_data, f, indent=2, ensure_ascii=False)
 
-            # tile_map
-            f.write("tile_map = [\n")
-            for row in tile_id_map:
-                row_str = ", ".join(str(x) for x in row)
-                f.write(f"    [{row_str}],\n")
-            f.write("]\n\n")
-
-            # coll_map
-            f.write("coll_map = [\n")
-            for row in coll_map:
-                row_str = ", ".join(f'"{c}"' for c in row)
-                f.write(f"    [{row_str}],\n")
-            f.write("]\n\n")
-
-            # npc_data
-            f.write("npc_data = [\n")
-            for npc in npc_data:
-                f.write(f'    {{"x": {npc["x"]}, "y": {npc["y"]}, "sprite": "{npc["sprite"]}", '
-                        f'"movement": "{npc["movement"]}", "direction": "{npc["direction"]}", '
-                        f'"text_id": "{npc["text_id"]}"}},\n')
-            f.write("]\n")
-
-        print(f"[{map_name}] -> Successfully Saved: {py_path}")
+        print(f"[{map_name}] -> Successfully Saved: {json_path}")
 
 if __name__ == "__main__":
     main()

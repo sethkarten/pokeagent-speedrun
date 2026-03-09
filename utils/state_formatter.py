@@ -1589,6 +1589,9 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
     context_parts.append(f"Dimensions: {w}x{h}")
 
     # Build ASCII map string with player marked as 'P'
+    # Use space-separated format to handle multi-char symbols (e.g. "PC")
+    # TODO: double check this
+    has_multichar = any(len(c) > 1 for row in grid for c in row)
     ascii_lines = []
     for y, row in enumerate(grid):
         line = list(row)
@@ -1596,12 +1599,15 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
             px = player_coords[0]
             if 0 <= px < len(line):
                 line[px] = 'P'
-        ascii_lines.append(''.join(line))
+        if has_multichar:
+            ascii_lines.append(' '.join(f'{c:>2}' for c in line))
+        else:
+            ascii_lines.append(''.join(line))
     ascii_map = '\n'.join(ascii_lines)
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: 'P'=Player '.'=walkable '#'=wall 'G'=grass '~'=water 'W'=warp 'N'=NPC 's'=sign 'v'/'<'/'>'=ledge)")
+    context_parts.append("(Legend: P=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter PC=computer T=TV N=NPC)")
 
     # Compact JSON summary (warps, objects)
     compact_json = {

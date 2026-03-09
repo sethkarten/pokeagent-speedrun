@@ -1,10 +1,10 @@
-"""Print all unique coll_map symbols found across all processed_map/*.py files.
+"""Print all unique grid symbols found across all processed_map/*.json files.
 
 Run:
     python pokemon_red_env/test/inspect_coll_symbols.py
 """
 
-import importlib.util
+import json
 import pathlib
 from collections import Counter
 
@@ -12,20 +12,19 @@ PROCESSED_MAP_DIR = pathlib.Path(__file__).parent.parent / "data" / "processed_m
 
 symbols: Counter = Counter()
 
-files = sorted(PROCESSED_MAP_DIR.glob("*.py"))
+files = sorted(PROCESSED_MAP_DIR.glob("*.json"))
 if not files:
-    print(f"No .py files found under {PROCESSED_MAP_DIR}")
+    print(f"No .json files found under {PROCESSED_MAP_DIR}")
     raise SystemExit(1)
 
 for path in files:
-    spec = importlib.util.spec_from_file_location(path.stem, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    for row in getattr(mod, "coll_map", []):
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    for row in data.get("grid", []):
         for cell in row:
             symbols[cell] += 1
 
-print(f"Scanned {len(files)} coll_map files\n")
+print(f"Scanned {len(files)} grid files\n")
 print(f"{'Symbol':<40}  {'Count':>8}")
 print("-" * 52)
 for sym, count in sorted(symbols.items(), key=lambda x: -x[1]):

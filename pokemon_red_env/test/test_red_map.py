@@ -1,13 +1,13 @@
-"""Map test for Pokemon Red — visual map + coll_map ground truth.
+"""Map test for Pokemon Red — visual map + grid ground truth.
 
 For each .state file in PokemonRed-GBC/test_states/:
   1. Load ROM + state, tick 1 frame
   2. Save screenshot          → output/<stem>/<stem>.png
   3. Save ASCII visual map    → output/<stem>/<stem>_visual_map.txt
-  4. Save full coll_map JSON  → output/<stem>/<stem>_coll_map.json
+  4. Save full grid JSON      → output/<stem>/<stem>_coll_map.json
 
 The visual map uses format_map_for_llm() (radius=7 for a 15×15 view).
-The coll_map JSON contains the *complete* map grid for the current location
+The grid JSON contains the *complete* map grid for the current location
 so it can be used as ground truth when checking agent navigation logic.
 
 Run:
@@ -69,33 +69,33 @@ def run_state(state_path: pathlib.Path, out_dir: pathlib.Path):
         vis_path  = out_dir / f"{stem}_visual_map.txt"
         header    = (
             f"Map    : {map_name}\n"
-            f"Player : ({player_x}, {player_y})  [coll_map col, row]\n"
+            f"Player : ({player_x}, {player_y})  [grid col, row]\n"
             f"Radius : {VISUAL_MAP_RADIUS}  ({2*VISUAL_MAP_RADIUS+1}×{2*VISUAL_MAP_RADIUS+1} view)\n"
-            f"Legend : P=player  .=walkable  #=wall  G=grass  ~=water\n"
-            f"         W=warp    N=NPC       s=sign   T=Cut    v=ledge-down\n"
-            f"         <=ledge-left  >=ledge-right  c=counter  ?=unknown\n"
+            f"Legend : P=player  .=walkable  #=wall  ~=grass  W=water\n"
+            f"         D=door    N=NPC       ?=sign   C=counter  PC=computer\n"
+            f"         T=TV  ↓=ledge-down  ←=ledge-left  →=ledge-right\n"
             f"\n"
         )
         vis_path.write_text(header + visual + "\n", encoding="utf-8")
         print(f"  [OK] visual map        → {vis_path.name}")
 
-        # ---- full coll_map (ground truth) --------------------------------
+        # ---- full grid (ground truth) ------------------------------------
         full = map_reader.get_full_coll_map()
         coll_path = out_dir / f"{stem}_coll_map.json"
         with open(coll_path, "w", encoding="utf-8") as f:
-            json.dump(full, f, indent=2)
-        print(f"  [OK] coll_map ground truth → {coll_path.name}")
+            json.dump(full, f, indent=2, ensure_ascii=False)
+        print(f"  [OK] grid ground truth → {coll_path.name}")
 
         # ---- console summary -------------------------------------------
-        coll_map  = full["coll_map"]
+        grid      = full["grid"]
         h         = full["map_height"]
         w         = full["map_width"]
-        player_cell = coll_map[player_y][player_x] if (
-            coll_map and 0 <= player_y < h and 0 <= player_x < w
+        player_cell = grid[player_y][player_x] if (
+            grid and 0 <= player_y < h and 0 <= player_x < w
         ) else "OUT_OF_BOUNDS"
 
         print(f"       map_name    : {map_name}")
-        print(f"       coll_map    : {w} cols × {h} rows")
+        print(f"       grid        : {w} cols × {h} rows")
         print(f"       player pos  : ({player_x}, {player_y})  cell='{player_cell}'")
         print()
         print("  Visual map:")
