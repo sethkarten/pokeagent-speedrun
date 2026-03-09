@@ -88,7 +88,7 @@ class TestGeminiBuildLaunchCmd:
         settings = json.loads(settings_path.read_text())
         assert "mcpServers" in settings
         assert "telemetry" in settings
-        assert settings["telemetry"]["enabled"] is True
+        assert settings["telemetry"]["enabled"] is False
         assert "pokemon-emerald" in settings["mcpServers"]
         assert settings["mcpServers"]["pokemon-emerald"]["trust"] is True
 
@@ -178,6 +178,16 @@ class TestGeminiStreamEvents:
         metrics = CliSessionMetrics()
         backend.handle_stream_event(
             {"type": "tool_use", "name": "read_file", "arguments": {"path": "/foo"}},
+            metrics,
+        )
+        assert metrics.tool_use_count == 1
+
+    def test_tool_use_gemini_format_tool_name_parameters(self):
+        """Gemini stream-json uses tool_name and parameters."""
+        backend = GeminiCliBackend()
+        metrics = CliSessionMetrics()
+        backend.handle_stream_event(
+            {"type": "tool_use", "tool_name": "get_game_state", "parameters": {}},
             metrics,
         )
         assert metrics.tool_use_count == 1
@@ -326,6 +336,27 @@ class TestExtractApiResponse:
         assert _extract_api_response(42) is None
         assert _extract_api_response([1, 2]) is None
 
+    def test_recognizes_event_name_in_attributes(self):
+        """Telemetry can have event.name in attributes instead of top-level body."""
+        record = {
+            "attributes": {
+                "event.name": API_RESPONSE_EVENT,
+                "model": "gemini-2.5-flash-lite",
+                "input_token_count": 100,
+                "output_token_count": 50,
+                "total_token_count": 150,
+                "duration_ms": 100,
+                "prompt_id": "p1",
+                "event.timestamp": "2026-03-09T06:49:30.332Z",
+            }
+        }
+        entry = _extract_api_response(record)
+        assert entry is not None
+        assert entry["prompt"] == 100
+        assert entry["completion"] == 50
+        assert entry["_model"] == "gemini-2.5-flash-lite"
+        assert entry["_timestamp"] == "2026-03-09T06:49:30.332Z"
+
 
 class TestMakeDedupHash:
     def test_same_input_same_hash(self):
@@ -450,25 +481,35 @@ class TestLoadNewGeminiUsage:
 
 
 class TestGeminiLogCliInteraction:
-    def _make_api_response(self, prompt_id, input_t=100, output_t=50):
+    def _make_session_with_messages(self, *messages):
+        return {"sessionId": "test-session", "messages": list(messages)}
+
+    def _make_gemini_message(self, msg_id, input_t=100, output_t=50):
         return {
-            "body": API_RESPONSE_EVENT,
+            "id": msg_id,
+            "type": "gemini",
             "timestamp": "2026-03-09T12:00:00Z",
-            "attributes": {
-                "model": "gemini-2.5-pro",
-                "input_token_count": input_t,
-                "output_token_count": output_t,
-                "total_token_count": input_t + output_t,
-                "duration_ms": 1000,
-                "prompt_id": prompt_id,
+            "model": "gemini-2.5-pro",
+            "tokens": {
+                "input": input_t,
+                "output": output_t,
+                "cached": 0,
+                "thoughts": 0,
+                "tool": 0,
+                "total": input_t + output_t,
             },
+            "toolCalls": [],
         }
 
     def test_appends_steps_to_llm_logger(self, tmp_path, monkeypatch):
-        tfile = tmp_path / "telemetry.jsonl"
-        with open(tfile, "w") as f:
-            f.write(json.dumps(self._make_api_response("p1")) + "\n")
-            f.write(json.dumps(self._make_api_response("p2")) + "\n")
+        chats_dir = tmp_path / "tmp" / "workspace" / "chats"
+        chats_dir.mkdir(parents=True)
+        session_file = chats_dir / "session-2026-03-09T12-00-test.json"
+        session = self._make_session_with_messages(
+            self._make_gemini_message("msg-1", 100, 50),
+            self._make_gemini_message("msg-2", 200, 80),
+        )
+        session_file.write_text(json.dumps(session))
 
         mock_logger = MagicMock()
         monkeypatch.setattr(
