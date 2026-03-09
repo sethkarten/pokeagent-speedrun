@@ -1,4 +1,8 @@
 """
+NOTE: CURRENTLY UNUSED AS WE USE THE GEMINI_SESSION_READER.PY INSTEAD 
+(MATCHES CLAUDE CODE JSONL READER PATTERN)
+TELEMETRY READING IS EXCESSIVE FOR OUR NEEDS IN CUMULATIVE_METRICS.JSON
+
 Reader for Gemini CLI telemetry logs (OpenTelemetry file-based output).
 
 Parses `gemini_cli.api_response` events from the telemetry outfile to extract

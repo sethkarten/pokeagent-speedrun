@@ -243,19 +243,21 @@ class LLMLogger:
         if metadata and "token_usage" in metadata:
             token_usage = metadata["token_usage"]
             if token_usage:
+                cw = token_usage.get("cache_write_tokens")
                 step_tokens = {
                     "prompt": token_usage.get("prompt_tokens", 0),
                     "completion": token_usage.get("completion_tokens", 0),
                     "total": token_usage.get("total_tokens", 0),
                     "cached": token_usage.get("cached_tokens", 0),
-                    "cache_write": token_usage.get("cache_write_tokens", 0),
+                    "cache_write": cw,  # None for Gemini implicit caching; store as-is for step_entry
                 }
-                
+                cw_for_math = int(cw or 0)
+
                 self.cumulative_metrics["total_tokens"] += step_tokens["total"]
                 self.cumulative_metrics["prompt_tokens"] += step_tokens["prompt"]
                 self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
                 self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
-                self.cumulative_metrics["cache_write_tokens"] += step_tokens["cache_write"]
+                self.cumulative_metrics["cache_write_tokens"] += cw_for_math
                 
                 # Calculate cost based on model (exact match first, then longest-key match)
                 model_name = (model_info.get("model", "") or "").lower()
@@ -278,12 +280,11 @@ class LLMLogger:
                 
                 prompt_tokens = max(0, step_tokens["prompt"])
                 cached_tokens = max(0, step_tokens["cached"])
-                cache_write_tokens = max(0, step_tokens["cache_write"])
+                cache_write_tokens = max(0, cw_for_math)
 
-                # Providers report cache buckets in two common shapes:
-                # 1) Subset style: cached/cache_write are included in prompt_tokens.
-                # 2) Distinct style: prompt_tokens is uncached input, while cache buckets are separate.
-                # Handle both without double-counting or dropping billed tokens.
+                # Providers report cache buckets in two shapes:
+                # 1) Subset (Gemini): prompt_tokens = total input; cached is a SUBSET. uncached = prompt - cached.
+                # 2) Distinct (Claude & others): prompt, cached, cache_write are ADDITIVE. uncached = prompt.
                 if (cached_tokens + cache_write_tokens) <= prompt_tokens:
                     # Subset style (OpenAI/OpenRouter/Gemini style in most responses)
                     uncached_prompt_tokens = prompt_tokens - cached_tokens - cache_write_tokens
@@ -317,7 +318,7 @@ class LLMLogger:
                 "prompt_tokens": step_tokens["prompt"],
                 "completion_tokens": step_tokens["completion"],
                 "cached_tokens": step_tokens["cached"],
-                "cache_write_tokens": step_tokens["cache_write"],
+                "cache_write_tokens": step_tokens["cache_write"],  # None for Gemini (implicit caching)
                 "total_tokens": step_tokens["total"],
                 "time_taken": round(duration, 3),
                 "timestamp": time.time()
@@ -368,16 +369,20 @@ class LLMLogger:
             "prompt": int(token_usage.get("prompt", 0) or 0),
             "completion": int(token_usage.get("completion", 0) or 0),
             "cached": int(token_usage.get("cached", 0) or 0),
-            "cache_write": int(token_usage.get("cache_write", 0) or 0),
+            # cache_write may be None (e.g. Gemini implicit caching); use 0 for cumulative math
+            "cache_write": token_usage.get("cache_write")
+            if token_usage.get("cache_write") is not None
+            else None,
             "total": int(token_usage.get("total", 0) or 0),
         }
+        cache_write_for_math = int(step_tokens["cache_write"] or 0)
 
         # Update cumulative token counters
         self.cumulative_metrics["total_tokens"] += step_tokens["total"]
         self.cumulative_metrics["prompt_tokens"] += step_tokens["prompt"]
         self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
         self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
-        self.cumulative_metrics["cache_write_tokens"] += step_tokens["cache_write"]
+        self.cumulative_metrics["cache_write_tokens"] += cache_write_for_math
         self.cumulative_metrics["total_llm_calls"] += 1
 
         # Cost calculation
@@ -405,7 +410,7 @@ class LLMLogger:
 
             prompt_t = max(0, step_tokens["prompt"])
             cached_t = max(0, step_tokens["cached"])
-            cache_write_t = max(0, step_tokens["cache_write"])
+            cache_write_t = max(0, cache_write_for_math)
 
             if (cached_t + cache_write_t) <= prompt_t:
                 uncached_prompt = prompt_t - cached_t - cache_write_t
@@ -426,7 +431,7 @@ class LLMLogger:
             "prompt_tokens": step_tokens["prompt"],
             "completion_tokens": step_tokens["completion"],
             "cached_tokens": step_tokens["cached"],
-            "cache_write_tokens": step_tokens["cache_write"],
+            "cache_write_tokens": step_tokens["cache_write"],  # None for Gemini (implicit caching)
             "total_tokens": step_tokens["total"],
             "time_taken": round(duration, 3),
             "timestamp": timestamp,
