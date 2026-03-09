@@ -109,6 +109,30 @@ class CliAgentBackend(ABC):
         """Process one stream event (e.g. system, assistant, user, result). Update metrics and optionally POST thinking to server."""
         pass
 
+    @abstractmethod
+    def log_cli_interaction(
+        self,
+        agent_memory_dir: Path,
+        processed_hashes: set,
+        last_cli_step: int,
+        server_url: str | None = None,
+    ) -> tuple[set, int]:
+        """Log CLI interaction (steps/metrics) from backend-specific source (file, stream, etc.).
+
+        Returns updated (processed_hashes, last_cli_step).
+        """
+        pass
+
+    @abstractmethod
+    def get_resume_session_id(self, agent_memory_dir: Path) -> str | None:
+        """Return the session ID to resume from, or None if not found/supported."""
+        pass
+
+    @abstractmethod
+    def run_login(self) -> bool:
+        """Run interactive login flow. Returns True on success."""
+        pass
+
     def is_auth_fatal_error(self, text: str) -> bool:
         """Return True if text indicates a fatal auth error (e.g. expired OAuth token).
         Override in subclasses for backend-specific detection. Default: False."""
@@ -152,6 +176,133 @@ class CliAgentBackend(ABC):
         except (OSError, ValueError) as e:
             logger.debug("stream reader error: %s", e)
         logger.debug("stream reader exiting: %s", self.name)
+
+    def _build_mcp_config_sse(self, mcp_sse_port: int) -> dict:
+        """Build MCP config dict for SSE (containerized) mode. type=sse is REQUIRED.
+        Uses host.docker.internal to reach the MCP server on the host (bridge network)."""
+        host = "host.docker.internal"
+        return {
+            "mcpServers": {
+                "pokemon-emerald": {
+                    "type": "sse",
+                    "url": f"http://{host}:{mcp_sse_port}/sse",
+                }
+            }
+        }
+
+    def _build_mcp_config_stdio(
+        self, server_url: str, pythonpath: str
+    ) -> dict:
+        """Build MCP config dict for stdio (local) mode."""
+        return {
+            "mcpServers": {
+                "pokemon-emerald": {
+                    "command": sys.executable,
+                    "args": ["-m", "server.cli.pokemon_mcp_server"],
+                    "env": {
+                        "POKEMON_SERVER_URL": server_url,
+                        "PYTHONPATH": pythonpath,
+                    },
+                }
+            }
+        }
+
+    def _build_bootstrap_content(self, directive_path: str, server_url: str) -> str:
+        """Build bootstrap prompt string from directive file and server URL."""
+        directive_content = ""
+        if directive_path and os.path.exists(directive_path):
+            with open(directive_path, "r") as f:
+                directive_content = f.read()
+        if directive_content:
+            return (
+                f"{directive_content}\n\n"
+                "Runtime context:\n"
+                f"- Pokemon server URL: {server_url}\n"
+                "- You are running in a long-lived interactive session.\n"
+                "- Act autonomously and continuously, using MCP tools directly as needed.\n"
+                "- Poll game state on your own via MCP tools; do not wait for additional operator prompts.\n"
+                "- Continue until externally terminated by the orchestrator when completion condition is met.\n"
+            )
+        return "Start the Pokemon Emerald agent session."
+
+    def _post_thinking(
+        self,
+        server_url: str,
+        thinking_text: str,
+        duration_sec: float = 0.0,
+        interaction_type: str = "cli",
+    ) -> None:
+        """POST agent thinking to game server for UI streaming (same as VLM agents)."""
+        try:
+            import requests
+            requests.post(
+                f"{server_url}/agent_step",
+                json={
+                    "thinking": thinking_text,
+                    "interaction_type": interaction_type,
+                    "duration": duration_sec,
+                },
+                timeout=2,
+            )
+        except Exception as e:
+            logger.debug("Could not POST thinking to server: %s", e)
+
+    def _write_workspace_files(
+        self,
+        working_dir: Path,
+        bootstrap: str,
+        mcp_config: dict,
+        directive_filename: str = ".agent_directive.txt",
+        mcp_config_filename: str = ".mcp_config.json",
+    ) -> Path:
+        """Write directive and MCP config to workspace, set both read-only.
+
+        Idempotent: skips if both files already exist and are read-only.
+        """
+        working_dir = Path(working_dir).resolve()
+        working_dir.mkdir(parents=True, exist_ok=True)
+        bootstrap_file = working_dir / directive_filename
+        mcp_config_path = working_dir / mcp_config_filename
+
+        def _is_readonly(p: Path) -> bool:
+            return p.exists() and not (p.stat().st_mode & stat.S_IWUSR)
+
+        if _is_readonly(bootstrap_file) and _is_readonly(mcp_config_path):
+            return mcp_config_path
+
+        bootstrap_file.write_text(bootstrap)
+        mcp_json = json.dumps(mcp_config, indent=2)
+        with open(mcp_config_path, "w") as f:
+            f.write(mcp_json)
+            f.flush()
+            os.fsync(f.fileno())
+        bootstrap_file.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        mcp_config_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        return mcp_config_path
+
+    @staticmethod
+    def _sync_metrics_to_server(server_url: str) -> None:
+        """Push run_cli's in-memory cumulative metrics to the server (single-writer pattern)."""
+        try:
+            import requests
+            from utils.llm_logger import get_llm_logger
+
+            llm_logger = get_llm_logger()
+            metrics = llm_logger.get_cumulative_metrics()
+            step_count = len(metrics.get("steps", []))
+            if step_count == 0:
+                return
+            resp = requests.post(
+                f"{server_url}/sync_llm_metrics",
+                json={"cumulative_metrics": metrics},
+                timeout=5,
+            )
+            if resp.status_code != 200:
+                logger.warning("Sync metrics failed: %s %s", resp.status_code, resp.text[:200])
+            else:
+                logger.info("Synced %d step(s) to server", step_count)
+        except Exception as e:
+            logger.warning("Could not sync metrics to server: %s", e)
 
 
 class ClaudeCodeBackend(CliAgentBackend):
@@ -221,54 +372,6 @@ class ClaudeCodeBackend(CliAgentBackend):
             print("⚠️  No Claude auth files found")
             print("   Run 'claude auth login' first, then retry.")
 
-    def _build_bootstrap_content(self, directive_path: str, server_url: str) -> str:
-        """Build bootstrap prompt string from directive file and server URL."""
-        directive_content = ""
-        if directive_path and os.path.exists(directive_path):
-            with open(directive_path, "r") as f:
-                directive_content = f.read()
-        if directive_content:
-            return (
-                f"{directive_content}\n\n"
-                "Runtime context:\n"
-                f"- Pokemon server URL: {server_url}\n"
-                "- You are running in a long-lived interactive session.\n"
-                "- Act autonomously and continuously, using MCP tools directly as needed.\n"
-                "- Poll game state on your own via MCP tools; do not wait for additional operator prompts.\n"
-                "- Continue until externally terminated by the orchestrator when completion condition is met.\n"
-            )
-        return "Start the Pokemon Emerald agent session."
-
-    def _build_mcp_config_sse(self, mcp_sse_port: int) -> dict:
-        """Build MCP config dict for SSE (containerized) mode. type=sse is REQUIRED.
-        Uses host.docker.internal to reach the MCP server on the host (bridge network)."""
-        host = "host.docker.internal"
-        return {
-            "mcpServers": {
-                "pokemon-emerald": {
-                    "type": "sse",
-                    "url": f"http://{host}:{mcp_sse_port}/sse",
-                }
-            }
-        }
-
-    def _build_mcp_config_stdio(
-        self, server_url: str, pythonpath: str
-    ) -> dict:
-        """Build MCP config dict for stdio (local) mode."""
-        return {
-            "mcpServers": {
-                "pokemon-emerald": {
-                    "command": sys.executable,
-                    "args": ["-m", "server.cli.pokemon_mcp_server"],
-                    "env": {
-                        "POKEMON_SERVER_URL": server_url,
-                        "PYTHONPATH": pythonpath,
-                    },
-                }
-            }
-        }
-
     def _build_cli_base_args(
         self,
         *,
@@ -289,39 +392,6 @@ class ClaudeCodeBackend(CliAgentBackend):
         if thinking_effort and thinking_effort in ("low", "medium", "high"):
             args.extend(["--thinking-budget", thinking_effort])
         return args
-
-    def _write_workspace_files(
-        self,
-        working_dir: Path,
-        bootstrap: str,
-        mcp_config: dict,
-    ) -> Path:
-        """Write .agent_directive.txt and .mcp_config.json to workspace, set both read-only.
-
-        Idempotent: skips if both files already exist and are read-only (from a previous
-        session). Fixes PermissionError when restarting the agent after usage limit or
-        other exit, since we no longer try to overwrite read-only files.
-        """
-        working_dir = Path(working_dir).resolve()
-        working_dir.mkdir(parents=True, exist_ok=True)
-        bootstrap_file = working_dir / self.DIRECTIVE_FILENAME
-        mcp_config_path = working_dir / self.MCP_CONFIG_FILENAME
-
-        def _is_readonly(p: Path) -> bool:
-            return p.exists() and not (p.stat().st_mode & stat.S_IWUSR)
-
-        if _is_readonly(bootstrap_file) and _is_readonly(mcp_config_path):
-            return mcp_config_path
-
-        bootstrap_file.write_text(bootstrap)
-        mcp_json = json.dumps(mcp_config, indent=2)
-        with open(mcp_config_path, "w") as f:
-            f.write(mcp_json)
-            f.flush()
-            os.fsync(f.fileno())
-        bootstrap_file.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-        mcp_config_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-        return mcp_config_path
 
     def build_launch_cmd(
         self,
@@ -535,29 +605,6 @@ class ClaudeCodeBackend(CliAgentBackend):
                 event.get("is_error", False),
             )
 
-    def _post_thinking(
-        self,
-        server_url: str,
-        thinking_text: str,
-        duration_sec: float = 0.0,
-        interaction_type: str = "ClaudeCodeBackend",
-    ) -> None:
-        """POST agent thinking to game server for UI streaming (same as VLM agents)."""
-        try:
-            import requests
-            requests.post(
-                f"{server_url}/agent_step",
-                json={
-                    "thinking": thinking_text,
-                    "interaction_type": interaction_type,
-                    "duration": duration_sec,
-                },
-                timeout=2,
-            )
-        except Exception as e:
-            logger.debug("Could not POST thinking to server: %s", e)
-
-
     # ------------------------------------------------------------------
     # Model name normalization
     # ------------------------------------------------------------------
@@ -582,7 +629,7 @@ class ClaudeCodeBackend(CliAgentBackend):
     # JSONL polling (metric tracking for CLI agent runs)
     # ------------------------------------------------------------------
 
-    def poll_jsonl_and_append_steps(
+    def log_cli_interaction(
         self,
         agent_memory_dir: Path,
         processed_hashes: set,
@@ -594,30 +641,45 @@ class ClaudeCodeBackend(CliAgentBackend):
         Returns updated (processed_hashes, last_cli_step).  Never raises -- all
         errors are logged as warnings so the agent loop is never interrupted.
         """
-        from utils.claude_jsonl_reader import find_jsonl_files, load_new_usage_entries
+        from utils.metric_tracking.claude_jsonl_reader import find_jsonl_files, load_new_usage_entries
         from utils.llm_logger import get_llm_logger
 
         search_path = Path(agent_memory_dir).resolve()
+        # Fallback to projects/-workspace/ for Claude
         if not search_path.is_dir():
-            logger.warning("JSONL poll: agent_memory_dir not a directory: %s", search_path)
-            return processed_hashes, last_cli_step
+            # If the base dir exists, look for the projects subdirectory
+            # run_cli passes agent_memory_subdir, which is claude_memory
+            # Claude Code stores logs in projects/<project_id>/*.jsonl
+            # For simplicity in this method, we expect the caller or the reader to handle recursive search
+            # But Claude Code defaults: ~/.claude/projects/-workspace/
+            # If agent_memory_dir is the root (~/.claude), we search there.
+            # Ideally we pass the exact path. run_cli passes get_cache_path(backend.agent_memory_subdir).
+            pass
+
+        if not search_path.is_dir():
+             logger.warning("JSONL poll: agent_memory_dir not a directory: %s", search_path)
+             return processed_hashes, last_cli_step
+
+        # Claude logic: look inside projects/-workspace if it exists
+        claude_workspace = search_path / "projects" / "-workspace"
+        target_path = claude_workspace if claude_workspace.is_dir() else search_path
 
         try:
-            new_entries, processed_hashes = load_new_usage_entries(search_path, processed_hashes)
+            new_entries, processed_hashes = load_new_usage_entries(target_path, processed_hashes)
         except Exception as exc:
             logger.warning("JSONL poll failed: %s", exc)
             return processed_hashes, last_cli_step
 
-        jsonl_count = len(find_jsonl_files(search_path))
+        jsonl_count = len(find_jsonl_files(target_path))
         if not new_entries:
             if jsonl_count > 0:
                 logger.debug(
                     "JSONL poll: %d file(s) under %s, 0 new entries (already processed or no usage)",
-                    jsonl_count, search_path,
+                    jsonl_count, target_path,
                 )
             return processed_hashes, last_cli_step
 
-        logger.info("JSONL poll: appending %d step(s) from %s", len(new_entries), search_path)
+        logger.info("JSONL poll: appending %d step(s) from %s", len(new_entries), target_path)
 
         new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
 
@@ -655,36 +717,19 @@ class ClaudeCodeBackend(CliAgentBackend):
             self._sync_metrics_to_server(server_url)
         return processed_hashes, last_cli_step
 
-    @staticmethod
-    def _sync_metrics_to_server(server_url: str) -> None:
-        """Push run_cli's in-memory cumulative metrics to the server (single-writer pattern)."""
-        try:
-            import requests
-            from utils.llm_logger import get_llm_logger
+    def get_resume_session_id(self, agent_memory_dir: Path) -> str | None:
+        """Find the most recent session ID from Claude memory."""
+        # Fallback: derive from most recent project in claude_memory (for older backups)
+        # Structure: agent_memory_dir / projects / -workspace / *.jsonl
+        projects_dir = agent_memory_dir / "projects" / "-workspace"
+        if projects_dir.exists():
+            jsonl_files = [f for f in projects_dir.iterdir() if f.suffix == ".jsonl"]
+            if jsonl_files:
+                most_recent = max(jsonl_files, key=lambda p: p.stat().st_mtime)
+                return most_recent.stem
+        return None
 
-            llm_logger = get_llm_logger()
-            metrics = llm_logger.get_cumulative_metrics()
-            step_count = len(metrics.get("steps", []))
-            if step_count == 0:
-                return
-            resp = requests.post(
-                f"{server_url}/sync_llm_metrics",
-                json={"cumulative_metrics": metrics},
-                timeout=5,
-            )
-            if resp.status_code != 200:
-                logger.warning("Sync metrics failed: %s %s", resp.status_code, resp.text[:200])
-            else:
-                logger.info("Synced %d step(s) to server", step_count)
-        except Exception as e:
-            logger.warning("Could not sync metrics to server: %s", e)
-
-    # ------------------------------------------------------------------
-    # Auth helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def run_login() -> bool:
+    def run_login(self) -> bool:
         """Run 'claude auth login' interactively. Returns True on success."""
         print("\n🔐 Running 'claude auth login' (interactive)...")
         try:
@@ -702,14 +747,387 @@ class ClaudeCodeBackend(CliAgentBackend):
             return False
 
 
+class GeminiCliBackend(CliAgentBackend):
+    """Backend for Google Gemini CLI (headless --output-format stream-json).
+
+    Key differences from Claude Code:
+    - Auth via GEMINI_API_KEY env var (no OAuth/login flow)
+    - MCP + telemetry + yolo configured via settings.json (not CLI flags)
+    - Telemetry outfile provides per-API-request step granularity
+    - Sessions stored in ~/.gemini/tmp/<workspace_id>/chats/
+    """
+
+    WORKSPACE_PATH = "/workspace"
+    AGENT_MEMORY_PATH = "/home/gemini-agent/.gemini"
+    TELEMETRY_FILENAME = "telemetry.jsonl"
+
+    @property
+    def name(self) -> str:
+        return "gemini"
+
+    @property
+    def agent_memory_subdir(self) -> str:
+        return "gemini_memory"
+
+    @property
+    def container_image(self) -> str:
+        return "gemini-agent-devcontainer"
+
+    @property
+    def devcontainer_build_context(self) -> str:
+        return ".devcontainer/gemini-agent"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_event_time: float | None = None
+        self._telemetry_offsets: dict[str, int] = {}
+
+    # ------------------------------------------------------------------
+    # MCP config overrides (Gemini format: no "type" key, adds "trust")
+    # ------------------------------------------------------------------
+
+    def _build_mcp_config_sse(self, mcp_sse_port: int) -> dict:
+        host = "host.docker.internal"
+        return {
+            "mcpServers": {
+                "pokemon-emerald": {
+                    "url": f"http://{host}:{mcp_sse_port}/sse",
+                    "trust": True,
+                }
+            }
+        }
+
+    def _build_mcp_config_stdio(self, server_url: str, pythonpath: str) -> dict:
+        return {
+            "mcpServers": {
+                "pokemon-emerald": {
+                    "command": sys.executable,
+                    "args": ["-m", "server.cli.pokemon_mcp_server"],
+                    "env": {
+                        "POKEMON_SERVER_URL": server_url,
+                        "PYTHONPATH": pythonpath,
+                    },
+                    "trust": True,
+                }
+            }
+        }
+
+    # ------------------------------------------------------------------
+    # Settings.json generation (MCP + telemetry + yolo)
+    # ------------------------------------------------------------------
+
+    def _build_settings(
+        self,
+        mcp_config: dict,
+        telemetry_outfile: str,
+    ) -> dict:
+        """Build a complete Gemini CLI settings.json."""
+        settings = {
+            **mcp_config,
+            "telemetry": {
+                "enabled": True,
+                "target": "local",
+                "otlpEndpoint": "",
+                "outfile": telemetry_outfile,
+            },
+        }
+        return settings
+
+    def _write_gemini_settings(
+        self,
+        settings_dir: Path,
+        mcp_config: dict,
+        telemetry_outfile: str,
+    ) -> Path:
+        """Write settings.json into the given directory. Returns the path."""
+        settings_dir.mkdir(parents=True, exist_ok=True)
+        settings = self._build_settings(mcp_config, telemetry_outfile)
+        settings_path = settings_dir / "settings.json"
+
+        if settings_path.exists():
+            try:
+                existing = json.loads(settings_path.read_text())
+                existing.update(settings)
+                settings = existing
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        settings_path.write_text(json.dumps(settings, indent=2))
+        logger.info("Wrote Gemini settings.json: %s", settings_path)
+        return settings_path
+
+    # ------------------------------------------------------------------
+    # build_launch_cmd
+    # ------------------------------------------------------------------
+
+    def build_launch_cmd(
+        self,
+        directive_path: str,
+        server_url: str,
+        working_dir: str,
+        *,
+        dangerously_skip_permissions: bool = True,
+        project_root: str | None = None,
+        containerized: bool = False,
+        session_number: int = 1,
+        resume_session_id: str | None = None,
+        thinking_effort: str | None = None,
+        mcp_sse_port: int | None = None,
+        run_id: str | None = None,
+        agent_memory_dir: str | None = None,
+    ) -> tuple[list[str], dict[str, str], str, str | None]:
+        env = os.environ.copy()
+        env["POKEMON_MCP_SERVER_URL"] = server_url
+        env["POKEMON_SERVER_URL"] = server_url
+
+        bootstrap_content = self._build_bootstrap_content(directive_path, server_url)
+
+        gemini_cmd = [
+            "gemini",
+            "--yolo",
+            "--output-format", "stream-json",
+            "-p", bootstrap_content,
+        ]
+        if resume_session_id:
+            gemini_cmd.extend(["--resume", resume_session_id])
+
+        if containerized:
+            if not run_id or not agent_memory_dir:
+                raise ValueError("containerized mode requires run_id and agent_memory_dir")
+            if not mcp_sse_port:
+                raise ValueError("containerized mode requires mcp_sse_port")
+
+            agent_memory_path = Path(agent_memory_dir).resolve()
+            working_dir_abs = Path(working_dir).resolve()
+
+            mcp_config = self._build_mcp_config_sse(mcp_sse_port)
+            telemetry_outfile = f"{self.AGENT_MEMORY_PATH}/{self.TELEMETRY_FILENAME}"
+
+            self._write_gemini_settings(agent_memory_path, mcp_config, telemetry_outfile)
+
+            # Also write the directive into the workspace for reference
+            self._write_workspace_files(working_dir_abs, bootstrap_content, mcp_config)
+
+            game_port = server_url.rstrip("/").split(":")[-1]
+
+            docker_cmd = [
+                "docker", "run", "--rm",
+                "--name", f"gemini-agent-{run_id}",
+                "--cap-add=NET_ADMIN",
+                "--security-opt=seccomp=unconfined",
+                "--network=bridge",
+                "--add-host=host.docker.internal:host-gateway",
+                "-v", f"{agent_memory_path}:{self.AGENT_MEMORY_PATH}",
+                "-v", f"{working_dir_abs}:{self.WORKSPACE_PATH}",
+                "-w", self.WORKSPACE_PATH,
+                "-e", f"MCP_PORT={mcp_sse_port}",
+                "-e", f"GAME_SERVER_PORT={game_port}",
+                "-e", f"RUN_DATA_ID={run_id}",
+            ]
+
+            for env_var in ["GEMINI_API_KEY", "GOOGLE_API_KEY"]:
+                if os.environ.get(env_var):
+                    docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
+
+            docker_cmd.append(self.container_image)
+            docker_cmd.extend(gemini_cmd)
+
+            return docker_cmd, env, bootstrap_content, None
+
+        else:
+            pythonpath = project_root if project_root else os.getcwd()
+            mcp_config = self._build_mcp_config_stdio(server_url, pythonpath)
+
+            # Write project-level .gemini/settings.json in the working dir
+            gemini_settings_dir = Path(working_dir) / ".gemini"
+            telemetry_path = str(gemini_settings_dir / self.TELEMETRY_FILENAME)
+            self._write_gemini_settings(gemini_settings_dir, mcp_config, telemetry_path)
+
+            return gemini_cmd, env, bootstrap_content, None
+
+    # ------------------------------------------------------------------
+    # handle_stream_event (real-time stream-json parsing)
+    # ------------------------------------------------------------------
+
+    def handle_stream_event(
+        self,
+        event: dict,
+        metrics: CliSessionMetrics | None,
+        server_url: str | None = None,
+    ) -> None:
+        etype = event.get("type", "")
+        now = time.time()
+
+        if etype == "init":
+            self._last_event_time = now
+            if metrics:
+                metrics.session_id = event.get("session_id", "")
+                metrics.model = event.get("model", "")
+            logger.info(
+                "[gemini] session=%s model=%s",
+                event.get("session_id", "?"),
+                event.get("model", "?"),
+            )
+
+        elif etype == "tool_use":
+            duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+            self._last_event_time = now
+            if metrics:
+                metrics.tool_use_count += 1
+            tool_name = event.get("name", "?")
+            args = event.get("arguments") or {}
+            args_preview = json.dumps(args)
+            if len(args_preview) > 120:
+                args_preview = args_preview[:120] + "..."
+            logger.info("[gemini:tool_use] %s %s", tool_name, args_preview)
+            if server_url:
+                self._post_thinking(
+                    server_url, f"[{tool_name}]", duration_sec, interaction_type="gemini"
+                )
+
+        elif etype == "tool_result":
+            self._last_event_time = now
+            content = event.get("content", "")
+            preview = (str(content)[:80] + "...") if len(str(content)) > 80 else str(content)
+            logger.info("[gemini:tool_result] %s", preview.replace("\n", " "))
+
+        elif etype == "message":
+            self._last_event_time = now
+            role = event.get("role", "")
+            text = event.get("content", "")
+            if isinstance(text, str):
+                preview = (text[:200] + "...") if len(text) > 200 else text
+                logger.info("[gemini:%s] %s", role, preview.replace("\n", " "))
+
+        elif etype == "error":
+            error_msg = event.get("message") or event.get("error") or str(event)
+            logger.warning("[gemini:error] %s", error_msg)
+
+        elif etype == "result":
+            if metrics:
+                stats = event.get("stats") or {}
+                metrics.input_tokens = stats.get("input_tokens", 0)
+                metrics.output_tokens = stats.get("output_tokens", 0)
+                metrics.duration_ms = stats.get("duration_ms", 0)
+                metrics.is_error = event.get("is_error", False)
+                metrics.error = event.get("error", "")
+            logger.info(
+                "[gemini:result] error=%s tokens_in=%d tokens_out=%d",
+                event.get("is_error", False),
+                (event.get("stats") or {}).get("input_tokens", 0),
+                (event.get("stats") or {}).get("output_tokens", 0),
+            )
+
+    # ------------------------------------------------------------------
+    # log_cli_interaction (telemetry-based step tracking)
+    # ------------------------------------------------------------------
+
+    def log_cli_interaction(
+        self,
+        agent_memory_dir: Path,
+        processed_hashes: set,
+        last_cli_step: int,
+        server_url: str | None = None,
+    ) -> tuple[set, int]:
+        """Poll Gemini telemetry outfile for new api_response events and append steps."""
+        from utils.metric_tracking.gemini_telemetry_reader import load_new_gemini_usage
+        from utils.llm_logger import get_llm_logger
+
+        search_path = Path(agent_memory_dir).resolve()
+        if not search_path.is_dir():
+            return processed_hashes, last_cli_step
+
+        try:
+            new_entries, updated_hashes, self._telemetry_offsets = load_new_gemini_usage(
+                search_path, processed_hashes, self._telemetry_offsets
+            )
+        except Exception as exc:
+            logger.warning("Gemini telemetry poll failed: %s", exc)
+            return processed_hashes, last_cli_step
+
+        if not new_entries:
+            return processed_hashes, last_cli_step
+
+        logger.info("Gemini telemetry: appending %d step(s)", len(new_entries))
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+
+        llm_logger = get_llm_logger()
+        prev_ts: float | None = None
+        for entry in new_entries:
+            parsed_ts = entry.get("_parsed_timestamp")
+            ts_float = parsed_ts.timestamp() if parsed_ts is not None else time.time()
+            duration = max(0.0, ts_float - prev_ts) if prev_ts is not None else 0.0
+            prev_ts = ts_float
+
+            model_name = entry.get("_model", "gemini-pro")
+            model_info = {"model": model_name}
+
+            token_usage = {
+                "prompt": entry.get("prompt", 0),
+                "completion": entry.get("completion", 0),
+                "cached": entry.get("cached", 0),
+                "cache_write": entry.get("cache_write", 0),
+                "total": entry.get("total", 0),
+                "cost": entry.get("cost", 0.0),
+            }
+
+            last_cli_step += 1
+            try:
+                llm_logger.append_cli_step(
+                    step_number=last_cli_step,
+                    token_usage=token_usage,
+                    duration=duration,
+                    timestamp=ts_float,
+                    model_info=model_info,
+                )
+            except Exception as exc:
+                logger.warning("Failed to append Gemini CLI step %d: %s", last_cli_step, exc)
+                last_cli_step -= 1
+
+        if server_url and new_entries:
+            self._sync_metrics_to_server(server_url)
+
+        return updated_hashes, last_cli_step
+
+    # ------------------------------------------------------------------
+    # get_resume_session_id
+    # ------------------------------------------------------------------
+
+    def get_resume_session_id(self, agent_memory_dir: Path) -> str | None:
+        """Find the most recent Gemini session ID from chat history.
+
+        Gemini stores sessions in ~/.gemini/tmp/<workspace_id>/chats/<session_id>.json.
+        We look for the most recently modified .json file in any chats/ subdirectory.
+        """
+        tmp_dir = agent_memory_dir / "tmp"
+        if not tmp_dir.is_dir():
+            return None
+        chat_files: list[Path] = []
+        for chats_dir in tmp_dir.rglob("chats"):
+            if chats_dir.is_dir():
+                chat_files.extend(f for f in chats_dir.iterdir() if f.suffix == ".json")
+        if not chat_files:
+            return None
+        most_recent = max(chat_files, key=lambda p: p.stat().st_mtime)
+        return most_recent.stem
+
+    # ------------------------------------------------------------------
+    # run_login (no-op for API key auth)
+    # ------------------------------------------------------------------
+
+    def run_login(self) -> bool:
+        print("\nℹ️  Gemini uses GEMINI_API_KEY from environment. No interactive login required.")
+        return True
+
+
 def get_backend(cli_type: str) -> CliAgentBackend:
     """Return the backend for the given CLI type."""
     if cli_type == "claude":
         return ClaudeCodeBackend()
+    if cli_type == "gemini":
+        return GeminiCliBackend()
     if cli_type == "codex":
         raise NotImplementedError(
             "Codex CLI integration is not implemented yet. Use --cli-type claude for now."
         )
-    raise ValueError(f"Unknown CLI type: {cli_type}. Supported: claude, codex")
-
-
+    raise ValueError(f"Unknown CLI type: {cli_type}. Supported: claude, gemini, codex")

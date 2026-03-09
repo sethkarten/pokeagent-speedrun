@@ -1,21 +1,22 @@
 {
-  "name": "Claude Code Agent Container",
+  "name": "Gemini CLI Agent Container",
   "build": {
-    "dockerfile": "claude-agent/Dockerfile",
-    "context": "claude-agent"
+    "dockerfile": "Dockerfile",
+    "context": "."
   },
   "runArgs": ["--cap-add=NET_ADMIN", "--security-opt=seccomp=unconfined", "--network=bridge"],
   "mounts": [
-    "source=${localWorkspaceFolder}/.pokeagent_cache/${localEnv:RUN_DATA_ID}/claude_memory,target=/home/claude-agent/.claude,type=bind",
+    "source=${localWorkspaceFolder}/.pokeagent_cache/${localEnv:RUN_DATA_ID}/gemini_memory,target=/home/gemini-agent/.gemini,type=bind",
     "source=${localWorkspaceFolder}/.pokeagent_cache/${localEnv:RUN_DATA_ID}/agent_scratch_space,target=/workspace,type=bind"
   ],
   "containerEnv": {
     "MCP_PORT": "${localEnv:MCP_PORT}",
     "GAME_SERVER_PORT": "${localEnv:GAME_SERVER_PORT}",
     "POKEMON_MCP_SERVER_URL": "http://host.docker.internal:${localEnv:MCP_PORT}",
-    "RUN_DATA_ID": "${localEnv:RUN_DATA_ID}"
+    "RUN_DATA_ID": "${localEnv:RUN_DATA_ID}",
+    "GEMINI_API_KEY": "${localEnv:GEMINI_API_KEY}"
   },
-  "remoteUser": "claude-agent",
+  "remoteUser": "gemini-agent",
   "customizations": {
     "vscode": {
       "settings": {
@@ -23,6 +24,6 @@
       }
     }
   },
-  "postCreateCommand": "echo '✅ Claude Code agent container ready'",
+  "postCreateCommand": "echo '✅ Gemini CLI agent container ready'",
   "features": {}
 }

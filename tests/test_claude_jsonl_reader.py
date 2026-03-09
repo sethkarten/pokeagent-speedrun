@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.claude_jsonl_reader import (
+from utils.metric_tracking.claude_jsonl_reader import (
     _create_unique_hash,
     _parse_timestamp,
     extract_tokens_from_entry,
@@ -398,7 +398,7 @@ class TestAppendCliStepIntegration:
                 f.write(json.dumps(ASSISTANT_ENTRY_FULL) + "\n")
                 f.write(json.dumps(ASSISTANT_ENTRY_NO_CACHE) + "\n")
 
-            from utils.claude_jsonl_reader import load_new_usage_entries
+            from utils.metric_tracking.claude_jsonl_reader import load_new_usage_entries
 
             new_entries, processed = load_new_usage_entries(tmp_path, set())
             assert len(new_entries) == 2

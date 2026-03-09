@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.cli_agent_backends import (
     CliSessionMetrics,
     ClaudeCodeBackend,
+    GeminiCliBackend,
     get_backend,
 )
 
@@ -61,6 +62,11 @@ class TestGetBackend:
         backend = get_backend("claude")
         assert isinstance(backend, ClaudeCodeBackend)
         assert backend.name == "claude"
+
+    def test_gemini_returns_gemini_cli_backend(self):
+        backend = get_backend("gemini")
+        assert isinstance(backend, GeminiCliBackend)
+        assert backend.name == "gemini"
 
     def test_codex_raises(self):
         with pytest.raises(NotImplementedError, match="Codex CLI"):
