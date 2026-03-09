@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -882,15 +883,6 @@ class GeminiCliBackend(CliAgentBackend):
 
         bootstrap_content = self._build_bootstrap_content(directive_path, server_url)
 
-        gemini_cmd = [
-            "gemini",
-            "--yolo",
-            "--output-format", "stream-json",
-            "-p", bootstrap_content,
-        ]
-        if resume_session_id:
-            gemini_cmd.extend(["--resume", resume_session_id])
-
         if containerized:
             if not run_id or not agent_memory_dir:
                 raise ValueError("containerized mode requires run_id and agent_memory_dir")
@@ -930,7 +922,15 @@ class GeminiCliBackend(CliAgentBackend):
                     docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
 
             docker_cmd.append(self.container_image)
-            docker_cmd.extend(gemini_cmd)
+            # Pass prompt via file to avoid shell mangling of multi-line content.
+            # The directive is already written to /workspace/.agent_directive.txt by _write_workspace_files.
+            shell_cmd = (
+                "gemini --yolo --output-format stream-json "
+                '-p "$(cat /workspace/.agent_directive.txt)"'
+            )
+            if resume_session_id:
+                shell_cmd += " --resume " + shlex.quote(resume_session_id)
+            docker_cmd.extend(["sh", "-c", shell_cmd])
 
             return docker_cmd, env, bootstrap_content, None
 
@@ -943,6 +943,14 @@ class GeminiCliBackend(CliAgentBackend):
             telemetry_path = str(gemini_settings_dir / self.TELEMETRY_FILENAME)
             self._write_gemini_settings(gemini_settings_dir, mcp_config, telemetry_path)
 
+            gemini_cmd = [
+                "gemini",
+                "--yolo",
+                "--output-format", "stream-json",
+                "-p", bootstrap_content,
+            ]
+            if resume_session_id:
+                gemini_cmd.extend(["--resume", resume_session_id])
             return gemini_cmd, env, bootstrap_content, None
 
     # ------------------------------------------------------------------
