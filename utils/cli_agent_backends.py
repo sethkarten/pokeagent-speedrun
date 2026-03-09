@@ -824,6 +824,10 @@ class GeminiCliBackend(CliAgentBackend):
         """Build a complete Gemini CLI settings.json."""
         settings = {
             **mcp_config,
+            "model": {
+                # Limit compression threshold to 0.25 * 1M tokens to avoid timeouts
+                "compressionThreshold": 0.25,
+            },
             "telemetry": {
                 "enabled": False, # session-based step tracking, akin to claude code implementation for metrics
                 "target": "local",
