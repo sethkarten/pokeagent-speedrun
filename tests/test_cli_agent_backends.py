@@ -195,6 +195,20 @@ class TestCodexCliBackendBuildLaunchCmd:
         assert "resume" in cmd_str
         assert "--last" in cmd_str
 
+    def test_skip_git_repo_check_included(self, tmp_path):
+        """Codex requires --skip-git-repo-check when workspace is not a git repo (issue #7522)."""
+        directive = tmp_path / "directive.md"
+        directive.write_text("Play Pokemon.")
+        backend = CodexCliBackend()
+        cmd, _, _, _ = backend.build_launch_cmd(
+            str(directive),
+            "http://localhost:8000",
+            str(tmp_path),
+            dangerously_skip_permissions=True,
+        )
+        cmd_str = " ".join(cmd)
+        assert "--skip-git-repo-check" in cmd_str
+
 
 class TestCodexCliBackendGetResumeSessionId:
     def test_empty_dir_returns_none(self, tmp_path):

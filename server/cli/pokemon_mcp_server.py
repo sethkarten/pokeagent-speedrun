@@ -372,6 +372,29 @@ def reflect(situation: str = "Agent requested reflection") -> dict:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _run_combined_transport() -> None:
+    """Run both SSE and Streamable HTTP for containerized CLI agents.
+    Claude/Gemini use SSE (/sse); Codex uses Streamable HTTP (/mcp)."""
+    import anyio
+    import uvicorn
+    from starlette.applications import Starlette
+
+    streamable_app = mcp.streamable_http_app()
+    sse_app = mcp.sse_app()
+    combined = Starlette(
+        debug=mcp.settings.debug,
+        routes=list(sse_app.routes) + list(streamable_app.routes),
+        lifespan=streamable_app.router.lifespan_context,
+    )
+    config = uvicorn.Config(
+        combined,
+        host=_MCP_HOST,
+        port=_MCP_PORT,
+        log_level=mcp.settings.log_level.lower(),
+    )
+    anyio.run(lambda: uvicorn.Server(config).serve())
+
+
 if __name__ == "__main__":
     logger.info("Pokemon MCP Server starting (thin proxy mode)...")
     logger.info(f"Proxying to game server at: {SERVER_URL}")
@@ -382,15 +405,16 @@ if __name__ == "__main__":
     logger.info("Note: Knowledge, Wiki, Objectives, and Reflection tools removed for CLI experiments.")
     logger.info("      CLI agents implement their own internal memory and planning systems.")
 
-    # Check for SSE transport mode (used when running in containerized environment)
+    # Check for transport mode (used when running in containerized environment)
     transport_mode = os.environ.get("MCP_TRANSPORT", "stdio").lower()
     
-    if transport_mode == "sse":
-        # SSE mode: run as HTTP server for remote MCP clients
-        # Port/host were configured in FastMCP() init above
-        logger.info(f"🌐 Starting SSE transport on {_MCP_HOST}:{_MCP_PORT}")
-        logger.info(f"   Remote clients can connect via: http://<host>:{_MCP_PORT}/sse")
-        mcp.run(transport="sse")
+    if transport_mode in ("sse", "streamable-http"):
+        # Combined transport: SSE + Streamable HTTP for all CLI agents
+        # Claude/Gemini use /sse; Codex uses /mcp
+        logger.info(f"🌐 Starting SSE + Streamable HTTP transport on {_MCP_HOST}:{_MCP_PORT}")
+        logger.info(f"   Claude/Gemini: http://<host>:{_MCP_PORT}/sse")
+        logger.info(f"   Codex: http://<host>:{_MCP_PORT}/mcp")
+        _run_combined_transport()
     else:
         # Stdio mode (default): for local subprocess spawning
         logger.info("📡 Starting stdio transport (local subprocess mode)")
