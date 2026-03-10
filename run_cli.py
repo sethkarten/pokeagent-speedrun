@@ -100,6 +100,8 @@ def preflight_cli(args) -> bool:
         return _preflight_claude()
     if args.cli_type == "gemini":
         return _preflight_gemini()
+    if args.cli_type == "codex":
+        return _preflight_codex()
     return True
 
 
@@ -166,6 +168,49 @@ def _preflight_gemini() -> bool:
     except Exception as e:
         print(f"❌ Failed to run 'gemini --version': {e}")
         return False
+
+    return True
+
+
+def _preflight_codex() -> bool:
+    """Preflight checks for Codex CLI."""
+    codex_path = shutil.which("codex")
+    if not codex_path:
+        print("❌ Codex CLI not found on PATH.")
+        print("   Install: npm install -g @openai/codex")
+        print("   Or: https://github.com/openai/codex/releases")
+        return False
+
+    try:
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            # codex may use different version flag
+            result = subprocess.run(
+                ["codex", "exec", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode != 0:
+                print("❌ Codex CLI is installed but --version/exec failed.")
+                print(f"   stdout: {result.stdout.strip()}")
+                print(f"   stderr: {result.stderr.strip()}")
+                return False
+    except Exception as e:
+        print(f"❌ Failed to run 'codex --version': {e}")
+        return False
+
+    if not os.environ.get("OPENROUTER_API_KEY") and not (Path.home() / ".codex").exists():
+        print("ℹ️  OPENROUTER_API_KEY not set and ~/.codex not found.")
+        print("   For OpenRouter: set OPENROUTER_API_KEY and configure ~/.codex/config.toml")
+        print("   Or run 'codex login' for ChatGPT auth.")
 
     return True
 
