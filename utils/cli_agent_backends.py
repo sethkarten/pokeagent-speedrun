@@ -1252,7 +1252,7 @@ args = ["-m", "server.cli.pokemon_mcp_server"]
 env = {{ "POKEMON_SERVER_URL" = "{server_url}", "PYTHONPATH" = "{project_root}" }}
 '''
         else:
-            mcp_url = f"http://localhost:{mcp_sse_port}/sse"
+            mcp_url = f"http://localhost:{mcp_sse_port}/mcp"
             mcp_section = f'''
 [mcp_servers.pokemon-emerald]
 url = "{mcp_url}"
@@ -1261,15 +1261,15 @@ url = "{mcp_url}"
         openrouter_block = ""
         if os.environ.get("OPENROUTER_API_KEY"):
             openrouter_block = '''
-            # OpenRouter (uses OPENROUTER_API_KEY from environment)
-            model_provider = "openrouter"
-            model = "openai/gpt-5.4-codex"
+# OpenRouter (uses OPENROUTER_API_KEY from environment)
+model_provider = "openrouter"
+model = "openai/gpt-5.3-codex"
 
-            [model_providers.openrouter]
-            name = "openrouter"
-            base_url = "https://openrouter.ai/api/v1"
-            env_key = "OPENROUTER_API_KEY"
-            '''
+[model_providers.openrouter]
+name = "openrouter"
+base_url = "https://openrouter.ai/api/v1"
+env_key = "OPENROUTER_API_KEY"
+'''
 
         if config_path.exists():
             try:
@@ -1278,6 +1278,11 @@ url = "{mcp_url}"
                     content = content.rstrip() + "\n" + mcp_section
                     config_path.write_text(content)
                     logger.info("Appended MCP config to existing config.toml")
+                elif mcp_section and "/sse" in content and "pokemon-emerald" in content:
+                    # Migrate legacy /sse URL to Streamable HTTP /mcp (Codex expects /mcp)
+                    content = content.replace("/sse\"", "/mcp\"")
+                    config_path.write_text(content)
+                    logger.info("Updated MCP URL from /sse to /mcp in config.toml")
                 if openrouter_block and "model_provider" not in content and "[model_providers.openrouter]" not in content:
                     content = openrouter_block.strip() + "\n\n" + content
                     config_path.write_text(content)
@@ -1325,7 +1330,9 @@ url = "{mcp_url}"
         directive_file.write_text(bootstrap)
 
         mcp_port = mcp_sse_port or 8001
-        mcp_url = f"http://host.docker.internal:{mcp_port}/sse"
+        # Codex expects Streamable HTTP at /mcp (not legacy SSE at /sse).
+        # See https://developers.openai.com/codex/mcp/
+        mcp_url = f"http://host.docker.internal:{mcp_port}/mcp"
 
         if containerized:
             if not run_id or not agent_memory_dir:
@@ -1360,13 +1367,16 @@ url = "{mcp_url}"
 
             docker_cmd.append(self.container_image)
 
+            # --skip-git-repo-check: required when workspace is not a git repo (e.g. agent_scratch_space)
+            # See https://github.com/openai/codex/issues/7522
+            skip_git = "--skip-git-repo-check"
             if resume_session_id:
                 if resume_session_id == "--last":
-                    inner = "codex exec resume --last --json"
+                    inner = f"codex exec resume --last --json {skip_git}"
                 else:
-                    inner = f"codex exec resume {shlex.quote(resume_session_id)} --json"
+                    inner = f"codex exec resume {shlex.quote(resume_session_id)} --json {skip_git}"
             else:
-                inner = f"cat {self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME} | codex exec --json -C {self.WORKSPACE_PATH} --dangerously-bypass-approvals-and-sandbox -"
+                inner = f"cat {self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME} | codex exec --json -C {self.WORKSPACE_PATH} --dangerously-bypass-approvals-and-sandbox {skip_git} -"
 
             shell_cmd = "'" + inner.replace("'", "'\"'\"'") + "'"
             docker_cmd.extend(["sh", "-c", shell_cmd])
@@ -1388,10 +1398,10 @@ url = "{mcp_url}"
 
             if resume_session_id:
                 if resume_session_id == "--last":
-                    return (["codex", "exec", "resume", "--last", "--json"], env, bootstrap, None)
-                return (["codex", "exec", "resume", resume_session_id, "--json"], env, bootstrap, None)
+                    return (["codex", "exec", "resume", "--last", "--json", "--skip-git-repo-check"], env, bootstrap, None)
+                return (["codex", "exec", "resume", resume_session_id, "--json", "--skip-git-repo-check"], env, bootstrap, None)
 
-            cat_cmd = f"cat {shlex.quote(str(directive_file))} | codex exec --json -C {shlex.quote(working_dir)} --dangerously-bypass-approvals-and-sandbox -"
+            cat_cmd = f"cat {shlex.quote(str(directive_file))} | codex exec --json -C {shlex.quote(working_dir)} --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -"
             return (["sh", "-c", cat_cmd], env, bootstrap, None)
 
     def _handle_thread_started(
@@ -1562,11 +1572,12 @@ url = "{mcp_url}"
         return updated_hashes, last_cli_step
 
     def get_resume_session_id(self, agent_memory_dir: Path) -> str | None:
-        """Find the most recent Codex session ID from sessions dir."""
+        """Find the most recent Codex session ID from sessions dir.
+        Codex stores sessions in nested dirs like sessions/2026/03/10/rollout-*.jsonl."""
         sessions_dir = Path(agent_memory_dir) / self.SESSIONS_SUBDIR
         if not sessions_dir.is_dir():
             return None
-        files = list(sessions_dir.glob("*.jsonl")) + list(sessions_dir.glob("*.json"))
+        files = list(sessions_dir.rglob("*.jsonl")) + list(sessions_dir.rglob("*.json"))
         if not files:
             return None
         most_recent = max(files, key=lambda p: p.stat().st_mtime)
