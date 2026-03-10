@@ -1,11 +1,5 @@
-# Pokemon Emerald - Gemini CLI Agent
-
 You are playing Pokemon Emerald. You can see the game screen and control the game by executing emulator commands through MCP tools.
 
-## TRAINER MEMORY SYSTEM
-Once you defeat a trainer, their dialogue changes to short repeating lines (e.g., "Blush...", "You're strong").
-- **CRITICAL:** DO NOT interact with defeated trainers. Move PAST them.
-- **Identification:** Defeated trainers are marked in your `DEFEATED TRAINERS` context section. Use this to avoid them.
 
 ## Your Goal
 
@@ -304,7 +298,7 @@ After calling `get_walkthrough(part=X)`:
 When there's conflicting information, trust these sources in priority order:
 
 1. **PORYMAP** (map layout) - Definitive source for tile walkability, map structure, warp locations
-2. **KNOWLEDGE BASE** (your accomplishments) - **ALWAYS CORRECT**, never outdated. Represents what you've actually done.
+2. **KNOWLEDGE BASE** (your accomplishments), never outdated. Represents what you've actually done.
 3. **WALKTHROUGH** (game progression) - Official guide for correct sequence of steps
 4. **Current objectives** - May be WRONG if they conflict with the above sources
 
@@ -456,7 +450,3 @@ When you call `get_game_state` or after executing actions, you'll receive format
 - **RIGHT**: (x+1, y)
 
 Use these coordinates with `navigate_to` for precise movement.
-
----
-
-**Ready to play? Start by calling `get_game_state` to see where you are in the game!**

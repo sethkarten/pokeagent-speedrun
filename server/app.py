@@ -41,18 +41,7 @@ from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
 
 # MCP tool imports - lazy loaded to avoid circular imports
-_pokemon_mcp_tools = None
 _baseline_mcp_tools = None
-
-
-def _get_pokemon_mcp_tools():
-    """Lazy load Pokemon MCP tools"""
-    global _pokemon_mcp_tools
-    if _pokemon_mcp_tools is None:
-        from server.cli import pokemon_mcp_server
-
-        _pokemon_mcp_tools = pokemon_mcp_server
-    return _pokemon_mcp_tools
 
 
 def _get_baseline_mcp_tools():
@@ -203,16 +192,18 @@ def init_video_recording(record_enabled=False):
         return
 
     try:
-        # Create video filename using run_id for consistency
+        # Save directly to run_data/end_state/videos/ to avoid copy corruption
         from utils.run_data_manager import get_run_data_manager
         run_manager = get_run_data_manager()
         if run_manager:
-            video_filename = f"{run_manager.run_id}.mp4"
+            videos_dir = run_manager.run_dir / "end_state" / "videos"
+            videos_dir.mkdir(parents=True, exist_ok=True)
+            video_filename = str(videos_dir / f"{run_manager.run_id}.mp4")
         else:
-            # Fallback to timestamp if no run manager
+            # Fallback to cwd if no run manager (e.g. early init)
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             video_filename = f"pokegent_recording_{timestamp}.mp4"
-        
+
         # Video settings (GBA resolution is 240x160)
         # Record at 30 FPS (skip every 4th frame from 120 FPS emulator)
         recording_fps = fps / video_frame_skip  # 120 / 4 = 30 FPS
@@ -472,10 +463,10 @@ def signal_handler(signum, frame):
             else:
                 logger.warning(f"🔍 [DEBUG] LLM logger is None - cannot copy LLM traces")
 
-            run_manager.copy_objectives()
-
-            # Copy knowledge_base to agent_scratch_space (agent writes to it)
-            run_manager.copy_knowledge_base()
+            if os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                run_manager.copy_objectives()
+                # Copy knowledge_base to agent_scratch_space (agent writes to it)
+                run_manager.copy_knowledge_base()
 
             # Copy frame_cache to end_state
             run_manager.copy_frame_cache()
@@ -487,15 +478,6 @@ def signal_handler(signum, frame):
             # Finalize with metrics
             run_manager.finalize_run(final_metrics=final_metrics)
             print(f"✅ Run data finalized: {run_manager.get_run_directory()}")
-
-            # Clean up deprecated run directories
-            from utils.run_data_manager import cleanup_old_cache_runs
-
-            try:
-                cleanup_old_cache_runs()
-                print("🧹 Cleaned up deprecated run directories")
-            except Exception as e:
-                logger.debug(f"Could not clean up old runs: {e}")
     except Exception as e:
         logger.error(f"❌ Error during run data finalization: {e}", exc_info=True)
 
@@ -1952,7 +1934,7 @@ async def stream_agent_thinking():
                             sent_timestamps.add(interaction.get("timestamp", ""))
 
                     # Send periodic heartbeat to keep connection alive (every 10 cycles = 5 seconds)
-                    elif heartbeat_counter % 10 == 0:
+                    if not new_interactions and heartbeat_counter % 10 == 0:
                         yield f"data: {json.dumps({'heartbeat': True, 'timestamp': time.time(), 'step': current_step})}\n\n"
 
                     # Wait before checking again (increased from 500ms to 2s for better performance)
@@ -2059,30 +2041,24 @@ async def get_metrics():
             metrics = latest_metrics.copy()
             metrics["agent_step_count"] = agent_step_count
 
-        # If metrics haven't been initialized by client yet, try to load from checkpoint
+        # If metrics haven't been initialized by client yet, try to load from cumulative_metrics.json
         # BUT only if checkpoint loading is enabled (not for fresh starts with --load-state)
         if metrics.get("total_llm_calls", 0) == 0 and checkpoint_loading_enabled:
-            # Check cache folder first, then fall back to old location
-            from utils.run_data_manager import get_cache_path
-            checkpoint_file = get_cache_path("checkpoint_llm.txt")
-            if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
-                checkpoint_file = Path("checkpoint_llm.txt")
+            from utils.llm_logger import get_llm_logger
+            llm_logger = get_llm_logger()
+            if llm_logger and llm_logger.load_cumulative_metrics():
+                metrics.update(llm_logger.cumulative_metrics)
+            # agent_step_count comes from checkpoint_llm.txt (not cumulative_metrics.json)
+            from utils.run_data_manager import get_checkpoint_llm_path
+            checkpoint_file = get_checkpoint_llm_path()
             if checkpoint_file.exists():
                 try:
                     with open(checkpoint_file, "r", encoding="utf-8") as f:
                         checkpoint_data = json.load(f)
-                        if "cumulative_metrics" in checkpoint_data:
-                            checkpoint_metrics = checkpoint_data["cumulative_metrics"]
-                            metrics.update(checkpoint_metrics)
-
-                            # Don't recalculate total_run_time - use the saved value which tracks actual gameplay time
-                            # The saved total_run_time only counts time between interactions (not idle time)
-
-                            # Update agent step count from checkpoint
-                            if "agent_step_count" in checkpoint_data:
-                                metrics["agent_step_count"] = checkpoint_data["agent_step_count"]
-                except:
-                    pass
+                        if "agent_step_count" in checkpoint_data:
+                            metrics["agent_step_count"] = checkpoint_data["agent_step_count"]
+                except (json.JSONDecodeError, OSError) as e:
+                    logger.debug(f"Could not read agent_step_count from checkpoint: {e}")
 
         return metrics
 
@@ -2111,6 +2087,66 @@ latest_metrics = {
     "total_llm_calls": 0,
     "start_time": time.time(),  # Will be overwritten if checkpoint is loaded
 }
+
+
+@app.get("/termination_condition")
+async def get_termination_condition(condition_type: str = "gym_badge_count", threshold: int = 1):
+    """Check if a termination condition is met based on ground-truth memory data.
+    
+    This endpoint reads game state directly from ROM memory to provide reliable
+    termination conditions for external CLI agents (Claude Code, Codex, etc.).
+    
+    Args:
+        condition_type: Type of condition to check. Supported types:
+            - "gym_badge_count": Check number of gym badges obtained
+        threshold: Threshold value for the condition (e.g., 1 for first badge)
+    
+    Returns:
+        JSON with condition status:
+        {
+            "condition_type": str,
+            "threshold": int,
+            "current_value": int,
+            "condition_met": bool,
+            "badge_names": list (for gym_badge_count)
+        }
+    """
+    global env
+    
+    if env is None:
+        raise HTTPException(status_code=400, detail="Emulator not initialized")
+    
+    if not env.memory_reader:
+        raise HTTPException(status_code=500, detail="Memory reader not initialized")
+    
+    try:
+        if condition_type == "gym_badge_count":
+            # Read badges directly from ROM memory (ground truth)
+            badges = env.memory_reader.read_badges()
+            badge_count = len(badges) if badges else 0
+            
+            return {
+                "condition_type": condition_type,
+                "threshold": threshold,
+                "current_value": badge_count,
+                "badge_names": badges,
+                "condition_met": badge_count >= threshold
+            }
+        
+        # Future condition types can be added here:
+        # elif condition_type == "pokemon_count":
+        #     party_size = env.memory_reader.read_party_size()
+        #     return {...}
+        
+        else:
+            return {
+                "error": f"Unknown condition type: {condition_type}",
+                "supported_types": ["gym_badge_count"]
+            }
+    
+    except Exception as e:
+        logger.error(f"Error checking termination condition: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Flag to track whether checkpoint loading should be enabled
 checkpoint_loading_enabled = True  # Will be set based on startup args
@@ -2144,7 +2180,7 @@ async def reset_metrics():
 
 @app.post("/agent_step")
 async def update_agent_step(request: Request = None):
-    """Update the agent step count and metrics (called by agent.py)"""
+    """Update the agent step count and metrics"""
     global agent_step_count, latest_metrics
 
     try:
@@ -2153,16 +2189,16 @@ async def update_agent_step(request: Request = None):
             try:
                 request_data = await request.json()
 
-                # Store agent thinking if provided
+                # Store agent thinking if provided (same path as VLM: log to LLM logger so SSE has one source)
                 if "thinking" in request_data:
                     thinking_text = request_data["thinking"]
-                    step_num = request_data.get("step", agent_step_count)
-                    # Write to a simple text file for the stream to read
+                    interaction_type = request_data.get("interaction_type", "thinking")
+                    duration = float(request_data.get("duration", 0))
                     try:
-                        with open("agent_thinking.txt", "w") as f:
-                            f.write(f"Step {step_num}:\n{thinking_text}\n")
+                        from utils.llm_logger import get_llm_logger
+                        get_llm_logger().log_thinking(thinking_text, interaction_type, duration)
                     except Exception as e:
-                        logger.debug(f"Could not write thinking: {e}")
+                        logger.debug(f"Could not log thinking: {e}")
 
                 # Update metrics if provided (with thread safety)
                 if "metrics" in request_data and isinstance(request_data["metrics"], dict):
@@ -2557,8 +2593,8 @@ async def mcp_get_game_state():
 
     try:
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
-        from agent.direct_objectives import DirectObjectiveManager
+        from server import game_tools
+        from agent.objectives import DirectObjectiveManager
 
         # Get recent button presses with position history
         global recent_button_presses, current_obs
@@ -2567,8 +2603,8 @@ async def mcp_get_game_state():
         with obs_lock:
             obs_copy = current_obs.copy() if current_obs is not None else None
 
-        # Use helper function from pokemon_mcp_server with action history and current frame
-        result = pokemon_mcp_server.get_game_state_direct(
+        # Use helper function from game_tools with action history and current frame
+        result = game_tools.get_game_state_direct(
             env,
             format_state_for_llm,
             action_history=recent_button_presses,
@@ -2611,8 +2647,8 @@ async def mcp_get_game_state():
 
                 logger.info(f"   - needs_loading (final): {needs_loading}")
 
-                if needs_loading:
-                    # Use run_data agent_scratch_space for objectives
+                if needs_loading and os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                    # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
                     from utils.run_data_manager import get_run_data_manager
 
                     run_manager = get_run_data_manager()
@@ -2644,6 +2680,8 @@ async def mcp_get_game_state():
                             start_battling_index=direct_objectives_battling_start_index,
                             run_dir=objectives_run_dir,
                         )
+                    elif direct_objectives_sequence == "dummy_categorized":
+                        direct_objectives_manager.load_dummy_categorized_sequence()
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
 
@@ -2701,7 +2739,7 @@ async def mcp_get_game_state():
                         result["direct_objective_context"] = objective_context
 
         # Ensure all data is JSON-serializable (objectives data may contain enums/numpy types)
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         return serialize_for_json(result)
     except Exception as e:
         logger.error(f"Error in get_game_state: {e}")
@@ -2797,13 +2835,13 @@ async def mcp_complete_direct_objective(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.direct_objectives import DirectObjectiveManager
+        from agent.objectives import DirectObjectiveManager
 
         # Get current game state to check objective completion
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         if not game_state_result.get("success", False):
             return {"success": False, "error": "Failed to get game state"}
 
@@ -2835,8 +2873,8 @@ async def mcp_complete_direct_objective(request: dict):
                     logger.warning(f"⚠️ Requesting categorized mode but manager is in legacy mode - forcing reload")
                     needs_loading = True
 
-            if needs_loading:
-                # Use run_data agent_scratch_space for objectives
+            if needs_loading and os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
                 from utils.run_data_manager import get_run_data_manager
 
                 run_manager = get_run_data_manager()
@@ -2868,6 +2906,8 @@ async def mcp_complete_direct_objective(request: dict):
                         start_battling_index=direct_objectives_battling_start_index,
                         run_dir=objectives_run_dir,
                     )
+                elif direct_objectives_sequence == "dummy_categorized":
+                    direct_objectives_manager.load_dummy_categorized_sequence()
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
 
@@ -2911,7 +2951,7 @@ async def mcp_complete_direct_objective(request: dict):
             # Advance the appropriate index, and inject guidance when a category ends
             if category == "story":
                 if direct_objectives_manager.story_index >= len(direct_objectives_manager.story_sequence) - 1:
-                    from agent.objective_types import DirectObjective
+                    from agent.objectives import DirectObjective
 
                     next_obj = DirectObjective(
                         id="autonomous_01_create_next_story_objectives",
@@ -3000,53 +3040,55 @@ async def mcp_complete_direct_objective(request: dict):
             logger.warning("Failed to log objective completion to metrics: %s", e)
 
         # Persist completed objectives after each completion (for real time execution... get_progress_summary() relies on this run_data)
-        try:
-            from utils.run_data_manager import get_run_data_manager
+        # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
+        if os.environ.get("POKEAGENT_CLI_MODE") != "1":
+            try:
+                from utils.run_data_manager import get_run_data_manager
 
-            run_manager = get_run_data_manager()
-            if not run_manager:
-                logger.warning("Cannot save completed_objectives: run_data_manager not initialized")
-            else:
-                scratch_space_dir = str(run_manager.get_scratch_space_dir())
-                if direct_objectives_manager.mode == "categorized":
-                    completed_path = os.path.join(scratch_space_dir, "completed_objectives.json")
-                    if os.path.exists(completed_path):
-                        with open(completed_path, "r") as f:
-                            history = json.load(f)
-                    else:
-                        history = {
-                            "mode": "categorized",
-                            "sequence_name": direct_objectives_manager.sequence_name,
-                            "categories": {"story": [], "battling": [], "dynamics": []},
-                        }
-
-                    category_key = category or "dynamics"
-                    history.setdefault("categories", {})
-                    history["categories"].setdefault("story", [])
-                    history["categories"].setdefault("battling", [])
-                    history["categories"].setdefault("dynamics", [])
-                    history["categories"][category_key].append(
-                        {
-                            "id": current_obj.id,
-                            "description": current_obj.description,
-                            "target_location": current_obj.target_location,
-                            "action_type": current_obj.action_type,
-                            "completed_at": current_obj.completed_at.isoformat()
-                            if hasattr(current_obj, "completed_at") and current_obj.completed_at
-                            else None,
-                            "category": category_key,
-                        }
-                    )
-                    history["last_updated"] = datetime.datetime.now().isoformat()
-
-                    with open(completed_path, "w") as f:
-                        json.dump(history, f, indent=2)
-                    logger.info(f"💾 Saved completed objectives to {completed_path}")
+                run_manager = get_run_data_manager()
+                if not run_manager:
+                    logger.warning("Cannot save completed_objectives: run_data_manager not initialized")
                 else:
-                    saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
-                    logger.info(f"💾 Saved completed objectives to {saved_file}")
-        except Exception as e:
-            logger.warning(f"Failed to save completed objectives: {e}")
+                    scratch_space_dir = str(run_manager.get_scratch_space_dir())
+                    if direct_objectives_manager.mode == "categorized":
+                        completed_path = os.path.join(scratch_space_dir, "completed_objectives.json")
+                        if os.path.exists(completed_path):
+                            with open(completed_path, "r") as f:
+                                history = json.load(f)
+                        else:
+                            history = {
+                                "mode": "categorized",
+                                "sequence_name": direct_objectives_manager.sequence_name,
+                                "categories": {"story": [], "battling": [], "dynamics": []},
+                            }
+
+                        category_key = category or "dynamics"
+                        history.setdefault("categories", {})
+                        history["categories"].setdefault("story", [])
+                        history["categories"].setdefault("battling", [])
+                        history["categories"].setdefault("dynamics", [])
+                        history["categories"][category_key].append(
+                            {
+                                "id": current_obj.id,
+                                "description": current_obj.description,
+                                "target_location": current_obj.target_location,
+                                "action_type": current_obj.action_type,
+                                "completed_at": current_obj.completed_at.isoformat()
+                                if hasattr(current_obj, "completed_at") and current_obj.completed_at
+                                else None,
+                                "category": category_key,
+                            }
+                        )
+                        history["last_updated"] = datetime.datetime.now().isoformat()
+
+                        with open(completed_path, "w") as f:
+                            json.dump(history, f, indent=2)
+                        logger.info(f"💾 Saved completed objectives to {completed_path}")
+                    else:
+                        saved_file = direct_objectives_manager.save_completed_objectives(run_dir=scratch_space_dir)
+                        logger.info(f"💾 Saved completed objectives to {saved_file}")
+            except Exception as e:
+                logger.warning(f"Failed to save completed objectives: {e}")
 
         # Create backup of .pokeagent_cache after completing objective
         try:
@@ -3080,7 +3122,7 @@ async def mcp_complete_direct_objective(request: dict):
                     "completed": sum(1 for obj in direct_objectives_manager.dynamics_sequence if obj.completed),
                 },
             }
-            from server.cli.pokemon_mcp_server import serialize_for_json
+            from utils.json_utils import serialize_for_json
             return serialize_for_json({
                 "success": True,
                 "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3091,7 +3133,7 @@ async def mcp_complete_direct_objective(request: dict):
             next_obj = direct_objectives_manager.get_current_objective()
         if next_obj:
             next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
-            from server.cli.pokemon_mcp_server import serialize_for_json
+            from utils.json_utils import serialize_for_json
             return serialize_for_json({
                 "success": True,
                 "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3100,7 +3142,8 @@ async def mcp_complete_direct_objective(request: dict):
             })
         else:
             # Sequence complete - save to history in timestamped run directory
-            if current_run_dir:
+            # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
+            if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
                 try:
                     # Save to agent_scratch_space in run_data
                     from utils.run_data_manager import get_run_data_manager
@@ -3117,7 +3160,7 @@ async def mcp_complete_direct_objective(request: dict):
 
             # Automatically create a new objective to guide the agent through next steps
             try:
-                from agent.direct_objectives import DirectObjective
+                from agent.objectives import DirectObjective
 
                 # Get current game state for context
                 next_step_obj = DirectObjective(
@@ -3136,7 +3179,7 @@ async def mcp_complete_direct_objective(request: dict):
                 # Get guidance for the new objective
                 next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
 
-                from server.cli.pokemon_mcp_server import serialize_for_json
+                from utils.json_utils import serialize_for_json
                 return serialize_for_json({
                     "success": True,
                     "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3149,7 +3192,7 @@ async def mcp_complete_direct_objective(request: dict):
             except Exception as e:
                 logger.error(f"Failed to create auto objective: {e}")
                 # Fallback to original behavior if auto-objective creation fails
-                from server.cli.pokemon_mcp_server import serialize_for_json
+                from utils.json_utils import serialize_for_json
                 return serialize_for_json({
                     "success": True,
                     "completed_objective": {"id": current_obj.id, "description": current_obj.description},
@@ -3171,7 +3214,7 @@ async def mcp_navigate_to(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
         x = request.get("x")
         y = request.get("y")
@@ -3189,7 +3232,7 @@ async def mcp_navigate_to(request: dict):
             return {"success": False, "error": f"Invalid coordinates: x={x}, y={y}"}
 
         # Calculate path and get buttons
-        result = pokemon_mcp_server.navigate_to_direct(env, x, y, reason=reason, variance=variance)
+        result = game_tools.navigate_to_direct(env, x, y, reason=reason, variance=variance)
 
         if not result.get("success"):
             return result
@@ -3220,9 +3263,9 @@ async def mcp_navigate_to(request: dict):
 async def mcp_add_knowledge(request: dict):
     """MCP Tool: Add knowledge to knowledge base (persistent across runs)"""
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        result = pokemon_mcp_server.add_knowledge_direct(
+        result = game_tools.add_knowledge_direct(
             category=request.get("category"),
             title=request.get("title"),
             content=request.get("content"),
@@ -3231,16 +3274,18 @@ async def mcp_add_knowledge(request: dict):
             importance=request.get("importance", 3),
         )
         # Keep agent_scratch_space in sync for real-time access of knowledge base
-        try:
-            from utils.run_data_manager import get_run_data_manager
+        # CLI agents do not use knowledge_base; skip when POKEAGENT_CLI_MODE
+        if os.environ.get("POKEAGENT_CLI_MODE") != "1":
+            try:
+                from utils.run_data_manager import get_run_data_manager
 
-            run_manager = get_run_data_manager()
-            if run_manager:
-                run_manager.copy_knowledge_base()
-            else:
-                logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
-        except Exception as e:
-            logger.warning(f"Failed to copy knowledge_base: {e}")
+                run_manager = get_run_data_manager()
+                if run_manager:
+                    run_manager.copy_knowledge_base()
+                else:
+                    logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
+            except Exception as e:
+                logger.warning(f"Failed to copy knowledge_base: {e}")
 
         return result
     except Exception as e:
@@ -3252,9 +3297,9 @@ async def mcp_add_knowledge(request: dict):
 async def mcp_search_knowledge(request: dict):
     """MCP Tool: Search knowledge base (persistent across runs)"""
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        return pokemon_mcp_server.search_knowledge_direct(
+        return game_tools.search_knowledge_direct(
             category=request.get("category"),
             query=request.get("query"),
             location=request.get("location"),
@@ -3269,9 +3314,9 @@ async def mcp_search_knowledge(request: dict):
 async def mcp_search_knowledge_summary(request: dict):
     """MCP Tool: Get knowledge summary (persistent across runs)"""
     try:
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        return pokemon_mcp_server.get_knowledge_summary_direct(min_importance=request.get("min_importance", 3))
+        return game_tools.get_knowledge_summary_direct(min_importance=request.get("min_importance", 3))
     except Exception as e:
         logger.error(f"Error getting knowledge summary: {e}")
         return {"success": False, "error": str(e)}
@@ -3677,7 +3722,7 @@ async def mcp_create_direct_objectives(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.direct_objectives import DirectObjectiveManager
+        from agent.objectives import DirectObjectiveManager
 
         objectives_data = request.get("objectives", [])
         reasoning = request.get("reasoning", "")
@@ -3722,10 +3767,15 @@ async def mcp_create_direct_objectives(request: dict):
                 }
 
             # Use run_data agent_scratch_space for dynamics backup
+            # CLI agents do not use objectives; pass None when POKEAGENT_CLI_MODE
             from utils.run_data_manager import get_run_data_manager
 
             run_manager = get_run_data_manager()
-            objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
+            objectives_run_dir = (
+                None
+                if os.environ.get("POKEAGENT_CLI_MODE") == "1"
+                else (str(run_manager.get_scratch_space_dir()) if run_manager else None)
+            )
 
             start_index = len(direct_objectives_manager._get_sequence_for_category(category))
             direct_objectives_manager.add_objectives_to_category(
@@ -3769,9 +3819,9 @@ async def mcp_create_direct_objectives(request: dict):
 
         # Get current game state for context
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         game_state = game_state_result.get("raw_state", {})
 
         # Get next objective guidance (should now be the first of the newly created objectives)
@@ -3798,7 +3848,7 @@ async def mcp_create_direct_objectives(request: dict):
             next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
             sequence_status = direct_objectives_manager.get_sequence_status()
 
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         return serialize_for_json({
             "success": True,
             "message": f"Created {len(objectives_data)} objectives",
@@ -3836,9 +3886,9 @@ async def mcp_get_progress_summary():
 
         # Get current game state
         from utils.state_formatter import format_state_for_llm
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         game_state = game_state_result.get("raw_state", {})
 
         # Get direct objective status
@@ -3849,18 +3899,19 @@ async def mcp_get_progress_summary():
             obj_status = direct_objectives_manager.get_sequence_status()
 
             # Load completed objectives history from current run directory
+            # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
             global current_run_dir
-            if current_run_dir:
+            completed_obj_file = None
+            if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
                 # Use agent_scratch_space in run_data
                 from utils.run_data_manager import get_run_data_manager
 
                 run_manager = get_run_data_manager()
                 if not run_manager:
                     logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
-                    completed_obj_file = None
                 else:
                     completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
-                if os.path.exists(completed_obj_file):
+            if completed_obj_file and os.path.exists(completed_obj_file):
                     import json
 
                     with open(completed_obj_file, "r") as f:
@@ -3871,14 +3922,14 @@ async def mcp_get_progress_summary():
                             completed_history = history_data.get("sequences", [])
 
         # Get knowledge summary (persistent)
-        kb_result = pokemon_mcp_server.get_knowledge_summary_direct(min_importance=3)
+        kb_result = game_tools.get_knowledge_summary_direct(min_importance=3)
         kb_summary = kb_result.get("summary", "No knowledge yet") if isinstance(kb_result, dict) else "No knowledge yet"
 
         # Get location and coordinates
         location = game_state.get("player", {}).get("location", "Unknown")
         player_pos = game_state_result.get("player_position", {}) if game_state_result.get("success") else {}
 
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         return serialize_for_json({
             "success": True,
             "progress": {
@@ -3986,9 +4037,9 @@ async def mcp_reflect(request: dict):
 
         # Get current game state
         from utils.state_formatter import format_state_for_llm, _format_porymap_info
-        from server.cli import pokemon_mcp_server
+        from server import game_tools
 
-        game_state_result = pokemon_mcp_server.get_game_state_direct(env, format_state_for_llm)
+        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
         state_text = game_state_result.get("state_text", "")
         player_pos = game_state_result.get("player_position", {})
         location = game_state_result.get("raw_state", {}).get("player", {}).get("location", "Unknown")
@@ -4027,7 +4078,7 @@ async def mcp_reflect(request: dict):
             )
 
         # Return all context for agent to analyze
-        from server.cli.pokemon_mcp_server import serialize_for_json
+        from utils.json_utils import serialize_for_json
         
         # Build objective info based on mode
         if categorized_objectives:
@@ -4200,13 +4251,33 @@ async def stop_server():
     return {"status": "stopping"}
 
 
+def _require_state_api_key(request: Request) -> Optional[JSONResponse]:
+    """
+    When POKEMON_STATE_API_KEY is set (e.g. by run_cli), require X-Internal-API-Key header.
+    Prevents the CLI agent from loading/saving state via Bash curl.
+    """
+    key = os.environ.get("POKEMON_STATE_API_KEY")
+    if not key:
+        return None
+    if request.headers.get("X-Internal-API-Key") != key:
+        logger.warning("Rejected state endpoint call: missing or invalid X-Internal-API-Key")
+        return JSONResponse(status_code=403, content={"error": "Forbidden: state API protected"})
+    return None
+
+
 @app.post("/save_state")
-async def save_state_endpoint(request: dict):
+async def save_state_endpoint(request: Request):
     """Save the current emulator state to a file"""
+    if err := _require_state_api_key(request):
+        return err
     try:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
         from utils.run_data_manager import get_cache_path
         default_filepath = str(get_cache_path("manual_save.state"))
-        filepath = request.get("filepath", default_filepath)
+        filepath = body.get("filepath", default_filepath)
         if env:
             env.save_state(filepath)
             logger.info(f"💾 State saved to: {filepath}")
@@ -4219,12 +4290,18 @@ async def save_state_endpoint(request: dict):
 
 
 @app.post("/load_state")
-async def load_state_endpoint(request: dict):
+async def load_state_endpoint(request: Request):
     """Load an emulator state from a file"""
+    if err := _require_state_api_key(request):
+        return err
     try:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
         from utils.run_data_manager import get_cache_path
         default_filepath = str(get_cache_path("manual_save.state"))
-        filepath = request.get("filepath", default_filepath)
+        filepath = body.get("filepath", default_filepath)
         if env:
             if not os.path.exists(filepath):
                 return JSONResponse(status_code=404, content={"error": f"State file not found: {filepath}"})
@@ -4300,6 +4377,9 @@ async def sync_llm_metrics(request: Request):
             server_last_objective_step = llm_logger.cumulative_metrics.get("_last_objective_step")
             server_last_objective_tokens = llm_logger.cumulative_metrics.get("_last_objective_tokens")
             server_last_objective_time = llm_logger.cumulative_metrics.get("_last_objective_time")
+            # total_run_time and last_update_time are updated by server on take_action; run_cli never has them
+            server_total_run_time = llm_logger.cumulative_metrics.get("total_run_time")
+            server_last_update_time = llm_logger.cumulative_metrics.get("last_update_time")
 
             llm_logger.cumulative_metrics.update(cumulative_metrics)
 
@@ -4326,12 +4406,17 @@ async def sync_llm_metrics(request: Request):
                 llm_logger.cumulative_metrics["_last_objective_tokens"] = server_last_objective_tokens
             if server_last_objective_time is not None:
                 llm_logger.cumulative_metrics["_last_objective_time"] = server_last_objective_time
+            # Preserve gameplay time (server updates on take_action; run_cli sync would overwrite with 0)
+            if server_total_run_time is not None:
+                llm_logger.cumulative_metrics["total_run_time"] = server_total_run_time
+            if server_last_update_time is not None:
+                llm_logger.cumulative_metrics["last_update_time"] = server_last_update_time
 
             # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
             global latest_metrics
             with step_lock:
                 for key, value in cumulative_metrics.items():
-                    if key in latest_metrics and key not in ["total_actions", "start_time"]:
+                    if key in latest_metrics and key not in ["total_actions", "start_time", "total_run_time"]:
                         latest_metrics[key] = value
 
             # Persist to cache so steps/milestones are saved promptly
@@ -4481,16 +4566,13 @@ def main():
 
     if env_load_checkpoint_mode == "true":
         checkpoint_loading_enabled = True
-        print("🔄 Checkpoint loading enabled - will restore LLM metrics from checkpoint_llm.txt")
+        print("🔄 Checkpoint loading enabled - will restore LLM metrics from cumulative_metrics.json")
 
         # Initialize LLM logger and load checkpoint immediately during server startup
         from utils.llm_logger import get_llm_logger
-        from utils.run_data_manager import get_cache_path
+        from utils.run_data_manager import get_checkpoint_llm_path
         llm_logger = get_llm_logger()
-        # Check both cache folder and old location
-        checkpoint_file = get_cache_path("checkpoint_llm.txt")
-        if not checkpoint_file.exists() and os.path.exists("checkpoint_llm.txt"):
-            checkpoint_file = Path("checkpoint_llm.txt")
+        checkpoint_file = get_checkpoint_llm_path()
         
         # First try to load lightweight cumulative metrics
         metrics_loaded = llm_logger.load_cumulative_metrics() if llm_logger else False
@@ -4519,12 +4601,12 @@ def main():
             print("ℹ️ Server startup: no checkpoint_llm.txt file found")
     elif env_load_checkpoint_mode == "false":
         checkpoint_loading_enabled = False
-        print("✨ Fresh start mode - will NOT load LLM metrics from checkpoint_llm.txt")
+        print("✨ Fresh start mode - will NOT load LLM metrics from cumulative_metrics.json")
     else:
         # Default behavior: allow checkpoint loading unless explicitly disabled
         checkpoint_loading_enabled = True
         print(
-            "🔄 Checkpoint loading enabled by default - will restore LLM metrics from checkpoint_llm.txt if available"
+            "🔄 Checkpoint loading enabled by default - will restore LLM metrics from cumulative_metrics.json if available"
         )
 
     # ALWAYS try to load cumulative metrics, regardless of checkpoint mode

@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Local imports
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from utils.run_data_manager import get_run_data_manager
 from utils.prompt_optimizer import create_prompt_optimizer
 from utils.run_data_manager import get_run_data_manager
@@ -161,9 +161,9 @@ class AutonomousCLIAgent:
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.optimization_enabled:
-                system_instructions_file = "system_prompt.md"  # Lean: just tools + core objective
+                system_instructions_file = "agent/prompts/system_prompt.md"  # Lean: just tools + core objective
             else:
-                system_instructions_file = "POKEAGENT.md"  # Full: everything included
+                system_instructions_file = "agent/prompts/POKEAGENT.md"  # Full: everything included
 
         # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
@@ -196,7 +196,7 @@ class AutonomousCLIAgent:
                 self.prompt_optimizer = create_prompt_optimizer(
                     vlm=self.vlm,
                     run_data_manager=run_manager,
-                    base_prompt_path="base_prompt.md"
+                    base_prompt_path="agent/prompts/base_prompt.md"
                 )
                 logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
             else:
@@ -205,7 +205,7 @@ class AutonomousCLIAgent:
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
-        filepath = Path(__file__).parent.parent / filename
+        filepath = Path(__file__).resolve().parent.parent / filename
         if not filepath.exists():
             logger.warning(f"System instructions file not found: {filepath}")
             return "You are an AI agent playing Pokemon Emerald. Use the available tools to progress through the game."
@@ -237,7 +237,7 @@ class AutonomousCLIAgent:
                 logger.info(f"📋 No prompt_optimizer attribute found")
         
         # Otherwise load from file
-        filepath = Path(__file__).parent.parent / "base_prompt.md"
+        filepath = Path(__file__).resolve().parent.parent / "agent" / "prompts" / "base_prompt.md"
         if not filepath.exists():
             logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
             return """# Strategic Guidance
@@ -2723,7 +2723,7 @@ def main():
     parser.add_argument(
         "--system-instructions",
         type=str,
-        default="POKEAGENT.md",
+        default="agent/prompts/POKEAGENT.md",
         help="System instructions file"
     )
     parser.add_argument(

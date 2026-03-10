@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from PIL import Image
 
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from utils.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
 from utils.pathfinding import Pathfinder
