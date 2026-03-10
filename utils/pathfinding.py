@@ -10,6 +10,7 @@ import logging
 import random
 from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass, field
+import os
 
 # Try to import MetatileBehavior, but don't fail if not available
 try:
@@ -436,6 +437,10 @@ class Pathfinder:
             start_row = grid[start_pos[1]]
             if start_pos[0] < len(start_row):
                 player_in_water = start_row[start_pos[0]] == "W"
+        
+        game_type = os.getenv("GAME_TYPE", "emerald")
+        red_block_symbols = {"#", "X", "?", "P", "T", "B", "^", "U", "C", "="}
+        block_symbols = red_block_symbols if game_type.upper() == "RED" else {"#", "X"}
 
         for y, row in enumerate(grid):
             if isinstance(row, list):
@@ -449,7 +454,7 @@ class Pathfinder:
                     pos = (x, y)
 
                     # Always block walls and out of bounds
-                    if cell in ["#", "X"]:
+                    if cell in block_symbols:
                         # CRITICAL: Never block the starting position - player is there so it must be walkable
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
@@ -564,7 +569,7 @@ class Pathfinder:
                     pos = (x, y)
 
                     # Always block walls and out of bounds
-                    if cell in ["#", "X"]:
+                    if cell in block_symbols:
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
