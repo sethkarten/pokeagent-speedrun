@@ -12,6 +12,11 @@ import json
 import logging
 import os
 import re
+import sys
+
+# Allow import of sibling utils whether used as package or run from project root
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
+from red_metatile_behavior import RedMetatileBehavior  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -397,10 +402,11 @@ class RedMapReader:
     def get_whole_map_data(self) -> dict:
         """Return complete map data for /whole_map endpoint.
 
-        Returns a dict matching the shape of Emerald's /whole_map response:
-          location, player_position, dimensions, grid (symbol arrays),
-          raw_tiles (4-tuples), elevation_map, behavior_map,
-          special_tiles, warps, objects
+        Returns a dict aligned with Emerald's porymap event structure:
+          location, player_position, player_elevation, dimensions,
+          grid (list-of-strings), raw_tiles (4-tuples),
+          elevation_map, behavior_map,
+          warp_events, bg_events, objects
         """
         map_name = self.read_map_name()
         data = self._load_map_data(map_name)
@@ -413,67 +419,94 @@ class RedMapReader:
                 "player_position": {"x": player_x, "y": player_y},
                 "dimensions": {"width": 0, "height": 0},
                 "grid": [], "raw_tiles": [], "elevation_map": [],
-                "behavior_map": [], "special_tiles": {},
-                "warps": [], "objects": [],
+                "behavior_map": [],
+                "warp_events": [], "bg_events": [], "objects": [],
             }
 
         map_h = len(grid)
         map_w = len(grid[0]) if map_h > 0 else 0
 
-        # Build raw_tiles and behavior/elevation maps from grid symbols
+        # Build raw_tiles from JSON raw_tile field (RedMetatileBehavior ints)
+        raw_tile_json = data.get("raw_tile", [])
         raw_tiles = []
-        behavior_map = []
-        elevation_map = []
-        for y, row in enumerate(grid):
-            tile_row = []
-            behav_row = []
-            elev_row = []
-            for x, symbol in enumerate(row):
-                type_str, collision_int = self._classify_grid_symbol(symbol)
-                tile_row.append((0, type_str, collision_int, 0))
-                behav_row.append(type_str)
-                elev_row.append(0)
-            raw_tiles.append(tile_row)
-            behavior_map.append(behav_row)
-            elevation_map.append(elev_row)
+        if raw_tile_json:
+            for row in raw_tile_json:
+                tile_row = []
+                for cell in row:
+                    tid, beh_int, col, elev = cell
+                    tile_row.append((tid, RedMetatileBehavior(beh_int), col, elev))
+                raw_tiles.append(tile_row)
+        else:
+            # Fallback for old JSONs without raw_tile (builds from grid symbol strings)
+            for row_s in grid:
+                tile_row = []
+                for symbol in row_s:
+                    type_str, collision_int = self._classify_grid_symbol(symbol)
+                    tile_row.append((0, type_str, collision_int, 0))
+                raw_tiles.append(tile_row)
+
+        # Derive behavior/elevation maps from raw_tiles
+        behavior_map = [[t[1] for t in tile_row] for tile_row in raw_tiles]
+        elevation_map = [[t[3] for t in tile_row] for tile_row in raw_tiles]
 
         # Structured data from JSON
-        warps_data = data.get("warps", [])
-        signs_data = data.get("signs", [])
+        warps_data  = data.get("warps", [])
+        signs_data  = data.get("signs", [])
         hidden_data = data.get("hidden_objects", [])
 
-        # Build special_tiles from structured data
-        special_tiles = {}
-        if warps_data:
-            special_tiles["WARP"] = [
-                {"x": w["x"], "y": w["y"], "elevation": 0,
-                 "dest_map": w.get("dest_map", ""), "dest_warp_id": w.get("dest_warp_id", 0)}
-                for w in warps_data
-            ]
-        if signs_data:
-            special_tiles["SIGN"] = [
-                {"x": s["x"], "y": s["y"], "elevation": 0, "text_id": s.get("text_id", "")}
-                for s in signs_data
-            ]
-        if hidden_data:
-            special_tiles["HIDDEN"] = [
-                {"x": h["x"], "y": h["y"], "elevation": 0,
-                 "script": h.get("script", ""), "symbol": h.get("symbol", "#")}
-                for h in hidden_data
-            ]
+        # warp_events — matches Emerald's warps list shape (explicit elevation field)
+        warp_events = [
+            {"x": w["x"], "y": w["y"], "elevation": 0,
+             "dest_map": w.get("dest_map", ""), "dest_warp_id": w.get("dest_warp_id", 0)}
+            for w in warps_data
+        ]
 
-        # NPC/object data from RAM
+        # bg_events — signs + hidden objects combined, typed (matches Emerald bg_events)
+        # "sign" entries carry text_id in script; "hidden_item" entries carry func name.
+        # Both carry a Gen-1-specific symbol field (P/T/B/^/U/?) from classify_sign/hidden.
+        bg_events = []
+        for s in signs_data:
+            bg_events.append({
+                "type": "sign",
+                "x": s["x"], "y": s["y"], "elevation": 0,
+                "player_facing_dir": 0,
+                "script": s.get("text_id", ""),
+                "symbol": s.get("symbol", "?"),
+            })
+        for h in hidden_data:
+            bg_events.append({
+                "type": "hidden_item",
+                "x": h["x"], "y": h["y"], "elevation": 0,
+                "player_facing_dir": 0,
+                "script": h.get("script", ""),
+                "symbol": h.get("symbol", "#"),
+            })
+
+        # objects — NPC list from processed map data; correct positions with live RAM
         objects = []
+        npc_data = data.get("npc_data", [])
+        # try reading npc list from memory
         try:
+            npc_dict = {}
             for s in self.read_sprites():
-                objects.append({
-                    "x": s["map_x"], "y": s["map_y"],
-                    "sprite_name": s["sprite_name"],
-                    "facing": s["facing"],
-                    "graphics_id": s["picture_id"],
-                })
-        except Exception:
-            pass
+                npc_dict[s["sprite_name"]] = (s["map_x"], s["map_y"])
+        except Exception as e:
+            logger.warning(f"Failed to read NPC data from memory; Using processed map data only. {e}")
+            npc_dict = None
+
+        for s in npc_data:
+            obj_tmp = {
+                "x": s["x"], "y": s["y"], "elevation": 0,
+                "sprite_name": s["sprite"],
+                "movement_type": s["movement"],
+                "facing": s["direction"],
+                "graphics_id": s["text_id"]
+            }
+            if npc_dict is not None:
+                live_pos = npc_dict.get(obj_tmp["sprite_name"])
+                if live_pos is not None and (obj_tmp["x"], obj_tmp["y"]) != live_pos:
+                    obj_tmp["x"], obj_tmp["y"] = live_pos
+            objects.append(obj_tmp)
 
         return {
             "location": map_name,
@@ -484,11 +517,8 @@ class RedMapReader:
             "raw_tiles": raw_tiles,
             "elevation_map": elevation_map,
             "behavior_map": behavior_map,
-            "special_tiles": special_tiles,
-            "warps": [{"x": w["x"], "y": w["y"],
-                       "dest_map": w.get("dest_map", ""),
-                       "dest_warp_id": w.get("dest_warp_id", 0)}
-                      for w in warps_data],
+            "warp_events": warp_events,
+            "bg_events": bg_events,
             "objects": objects,
         }
 

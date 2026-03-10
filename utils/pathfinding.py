@@ -688,6 +688,7 @@ class Pathfinder:
                     or "WANDER" in movement_type_upper  # WANDER_AROUND
                     or "LOOK" in movement_type_upper  # LOOK_AROUND, LOOK_AROUND_EX
                     or "BERRY" in movement_type_upper  # BERRY_TREE_GROWTH
+                    or "STAY" in movement_type_upper  # pokemon red npc movement
                     or not movement_type
                 ):
                     obj_pos = (obj_x, obj_y)

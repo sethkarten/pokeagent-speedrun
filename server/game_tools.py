@@ -165,9 +165,9 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
 
         state = env.get_comprehensive_state(screenshot=screenshot)
 
-        # For Red: inject red_whole_map and porymap grid (mirrors app.py:1339-1351)
-        # Without this, movement preview uses the raw_tiles path which has a
-        # viewport-center assumption that breaks on small maps (e.g. 8x8 houses).
+        # For Red: inject red_whole_map so _format_red_map_info() can build the ASCII map
+        # and write porymap back into state for movement preview. porymap is NOT pre-injected
+        # here because _format_map_info() constructs it from red_whole_map automatically.
         game_type = os.environ.get("GAME_TYPE", "emerald")
         if game_type == "red":
             try:
@@ -175,13 +175,6 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
                     whole_map = env.memory_reader.map_reader.get_whole_map_data()
                     if whole_map and whole_map.get("grid"):
                         state.setdefault("map", {})["red_whole_map"] = whole_map
-                        state["map"]["porymap"] = {
-                            "grid": whole_map["grid"],
-                            "objects": whole_map.get("objects", []),
-                            "dimensions": whole_map.get("dimensions", {}),
-                            "warps": whole_map.get("warps", []),
-                            "raw_tiles": whole_map.get("raw_tiles"),
-                        }
             except Exception as e:
                 logger.warning(f"Failed to inject red_whole_map in get_game_state_direct: {e}")
 
@@ -261,7 +254,7 @@ def navigate_to_direct(
                             "grid": whole_map["grid"],
                             "objects": whole_map.get("objects", []),
                             "dimensions": whole_map.get("dimensions", {}),
-                            "warps": whole_map.get("warps", []),
+                            "warps": whole_map.get("warp_events", []),
                             "raw_tiles": whole_map.get("raw_tiles"),
                         }
                         logger.info(
