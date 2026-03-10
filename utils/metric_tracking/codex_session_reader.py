@@ -23,15 +23,16 @@ SESSIONS_REL = "sessions"
 
 
 def find_session_files(data_path: Path) -> list[Path]:
-    """Return JSONL files under data_path/sessions/, sorted by mtime (most recent first)."""
+    """Return JSONL files under data_path/sessions/, sorted by mtime (most recent first).
+    Codex stores sessions in nested dirs like sessions/2026/03/10/rollout-*.jsonl."""
     sessions_dir = Path(data_path).resolve() / SESSIONS_REL
     if not sessions_dir.is_dir():
         # Fallback: look for jsonl directly under data_path
         if data_path.is_dir():
-            files = list(Path(data_path).glob("*.jsonl"))
+            files = list(Path(data_path).rglob("*.jsonl"))
             return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
         return []
-    files = list(sessions_dir.glob("*.jsonl")) + list(sessions_dir.glob("*.json"))
+    files = list(sessions_dir.rglob("*.jsonl")) + list(sessions_dir.rglob("*.json"))
     return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
 
 
@@ -76,10 +77,13 @@ def extract_tokens_from_entry(entry: dict) -> dict[str, Any] | None:
     # event_msg with token_count payload
     payload = entry.get("payload")
     if isinstance(payload, dict) and payload.get("type") == "token_count":
-        inp = int(payload.get("input_tokens", 0) or 0)
-        out = int(payload.get("output_tokens", 0) or 0)
-        cached = int(payload.get("cached_input_tokens", 0) or 0)
-        reasoning = int(payload.get("reasoning_tokens", 0) or 0)
+        # Codex nests counts under payload.info.last_token_usage or payload.info.total_token_usage
+        info = payload.get("info") or {}
+        usage = info.get("last_token_usage") or info.get("total_token_usage") or payload
+        inp = int(usage.get("input_tokens", 0) or 0)
+        out = int(usage.get("output_tokens", 0) or 0)
+        cached = int(usage.get("cached_input_tokens", 0) or 0)
+        reasoning = int(usage.get("reasoning_output_tokens", 0) or 0)
         total = inp + out + cached + reasoning
         if total == 0:
             return None
