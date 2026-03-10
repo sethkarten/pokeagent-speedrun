@@ -1588,48 +1588,44 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
     context_parts.append(f"Location: {location_name}")
     context_parts.append(f"Dimensions: {w}x{h}")
 
-    # Build ASCII map string with player marked as 'P'
-    # Use space-separated format to handle multi-char symbols (e.g. "PC")
-    # TODO: double check this
-    has_multichar = any(len(c) > 1 for row in grid for c in row)
+    # Build ASCII map string with player marked as 'I'
+    # has_multichar = any(len(c) > 1 for row in grid for c in row)
     ascii_lines = []
     for y, row in enumerate(grid):
         line = list(row)
         if player_coords and y == player_coords[1]:
             px = player_coords[0]
             if 0 <= px < len(line):
-                line[px] = 'P'
-        if has_multichar:
-            ascii_lines.append(' '.join(f'{c:>2}' for c in line))
-        else:
-            ascii_lines.append(''.join(line))
+                line[px] = 'I'
+        ascii_lines.append(''.join(line))
     ascii_map = '\n'.join(ascii_lines)
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: P=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter PC=computer T=TV N=NPC)")
+    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer T=TV/machine N=NPC)")
 
-    # Compact JSON summary (warps, objects)
+    # Compact JSON summary (warp_events, bg_events, objects)
     compact_json = {
         "name": location_name,
         "dimensions": dims,
-        "warps": whole_map.get('warps', []),
-        "objects": whole_map.get('objects', []),
-        "special_tiles": whole_map.get('special_tiles', {}),
+        "warp_events": whole_map.get('warp_events', []),
+        "bg_events":   whole_map.get('bg_events', []),
+        "objects":     whole_map.get('objects', []),
     }
     context_parts.append("\nMap Data (JSON):")
     context_parts.append(json.dumps(compact_json, indent=2))
 
     # Return same tuple shape as _format_porymap_info
+    # map_data['warps'] is populated from warp_events for pathfinder compat
     map_data = {
-        'grid': grid,
-        'raw_tiles': whole_map.get('raw_tiles'),
+        'grid':       grid,
+        'raw_tiles':  whole_map.get('raw_tiles'),
         'dimensions': dims,
-        'objects': whole_map.get('objects', []),
-        'warps': whole_map.get('warps', []),
+        'objects':    whole_map.get('objects', []),
+        'warps':      whole_map.get('warp_events', []),
     }
 
-    logger.info(f"Red map: formatted '{location_name}' ({w}x{h}) with {len(whole_map.get('warps', []))} warps, {len(whole_map.get('objects', []))} objects")
+    logger.info(f"Red map: formatted '{location_name}' ({w}x{h}) with {len(whole_map.get('warp_events', []))} warps, {len(whole_map.get('objects', []))} objects")
     return context_parts, map_data
 
 
