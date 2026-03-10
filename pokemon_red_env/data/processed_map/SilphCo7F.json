@@ -1961,9 +1961,9 @@
     "#.....####..####.##......#",
     "#....D#........#.##...##.#",
     "#######........#.##...##.#",
-    "#.#####.##..##.#.##...##.#",
+    "#O#####.##..##.#.##...##.#",
     "#.....#.##..##.#.##...##.#",
-    "#.....#.##..##.#.##......#",
+    "#.....#.##..##.#.##.....O#",
     "#..##.#.##..##.#.###..####",
     "#..##.#........#.#.......#",
     "#.....#........#.#.......#",
@@ -3403,7 +3403,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -3857,7 +3857,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -4856,7 +4856,20 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [],
+  "hidden_objects": [
+    {
+      "x": 1,
+      "y": 9,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 24,
+      "y": 11,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    }
+  ],
   "npc_data": [
     {
       "x": 1,
@@ -4929,22 +4942,6 @@
       "movement": "STAY",
       "direction": "UP",
       "text_id": "TEXT_SILPHCO7F_RIVAL"
-    },
-    {
-      "x": 1,
-      "y": 9,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SILPHCO7F_CALCIUM"
-    },
-    {
-      "x": 24,
-      "y": 11,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SILPHCO7F_TM_SWORDS_DANCE"
     }
   ]
 }

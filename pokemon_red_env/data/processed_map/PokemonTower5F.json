@@ -1534,7 +1534,7 @@
     "####.#....##......##",
     "####?##........#####",
     "#####.####..####.###",
-    "######..........####",
+    "######O.........####",
     "########......######",
     "#########....#######",
     "####################"
@@ -3287,7 +3287,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -3758,6 +3758,12 @@
       "y": 12,
       "script": "HiddenItems",
       "symbol": "?"
+    },
+    {
+      "x": 6,
+      "y": 14,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -3800,14 +3806,6 @@
       "movement": "STAY",
       "direction": "RIGHT",
       "text_id": "TEXT_POKEMONTOWER5F_CHANNELER5"
-    },
-    {
-      "x": 6,
-      "y": 14,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_POKEMONTOWER5F_NUGGET"
     }
   ]
 }

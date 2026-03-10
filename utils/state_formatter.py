@@ -1588,11 +1588,23 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
     context_parts.append(f"Location: {location_name}")
     context_parts.append(f"Dimensions: {w}x{h}")
 
-    # Build ASCII map string with player marked as 'I'
-    # has_multichar = any(len(c) > 1 for row in grid for c in row)
+    # Build ASCII map string with NPCs as 'N' and player as 'I' (player wins ties)
+    objects = whole_map.get('objects', [])
+    npc_by_y: dict = {}
+    for obj in objects:
+        ny, nx = obj.get('y'), obj.get('x')
+        if ny is not None and nx is not None:
+            npc_by_y.setdefault(int(ny), set()).add(int(nx))
+
     ascii_lines = []
     for y, row in enumerate(grid):
         line = list(row)
+        # Overlay NPCs first
+        if y in npc_by_y:
+            for nx in npc_by_y[y]:
+                if 0 <= nx < len(line):
+                    line[nx] = 'N'
+        # Player always on top of NPCs
         if player_coords and y == player_coords[1]:
             px = player_coords[0]
             if 0 <= px < len(line):
@@ -1602,7 +1614,7 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC)")
+    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC O=pokéball)")
 
     # Compact JSON summary (warp_events, bg_events, objects)
     compact_json = {

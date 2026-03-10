@@ -3239,7 +3239,7 @@
     ".#....#.................#.?..#",
     ".#....?.................#....#",
     ".#........#......#......#....#",
-    ".#........#......#......#....#",
+    ".#.......O#......#.O....#....#",
     ".#........#......#......#....#",
     ".#........#####..#......#....#",
     ".##WWWWWWW#####..#......#....#",
@@ -3250,9 +3250,9 @@
     "##............#........#.....#",
     "#...#..................#.....#",
     "#...#............####.##.....#",
-    "#..~#............#...........#",
+    "#..~#............#O..........#",
     "#.~~##.###########...........#",
-    "#.~~~~~~~~~~~~~~~~#..........#",
+    "#.~~~~~~O~~~~~~~~~#..........#",
     "#.~~~~~~~~~~~~~~~~#..........#",
     "#...~~~~~~~~~~~~..#.....?....D",
     "#....~~~~~~..~~...#..........D",
@@ -4591,7 +4591,7 @@
       ],
       [
         48,
-        0,
+        160,
         0,
         0
       ],
@@ -4651,7 +4651,7 @@
       ],
       [
         55,
-        0,
+        160,
         0,
         0
       ],
@@ -6647,7 +6647,7 @@
       ],
       [
         48,
-        0,
+        160,
         0,
         0
       ],
@@ -6951,7 +6951,7 @@
       ],
       [
         32,
-        2,
+        160,
         0,
         0
       ],
@@ -8075,40 +8075,31 @@
       "y": 5,
       "script": "HiddenItems",
       "symbol": "?"
-    }
-  ],
-  "npc_data": [
+    },
     {
       "x": 8,
       "y": 20,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEWEST_MAX_POTION"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 9,
       "y": 7,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEWEST_TM_DOUBLE_TEAM"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 18,
       "y": 18,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEWEST_MAX_REVIVE"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 19,
       "y": 7,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEWEST_GOLD_TEETH"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
-  ]
+  ],
+  "npc_data": []
 }

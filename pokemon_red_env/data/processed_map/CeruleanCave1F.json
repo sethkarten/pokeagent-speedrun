@@ -2240,10 +2240,10 @@
     ]
   ],
   "grid": [
-    "#...#............##.#.#......#",
+    "#...#O...........##.#.#......#",
     "#####..D.........######....D.#",
     "#####............######......#",
-    "#D.############.###.###.######",
+    "#D.############.###O###.######",
     "#.....#.#.####WWWWWWWWWWWWWWWW",
     "#####.#.######WWWWWWWWWWWWWWWW",
     "D#....#.WWWWWWWW#####.....##WW",
@@ -2253,7 +2253,7 @@
     "#......#WW#...##...##..#WWWWWW",
     "#..D.###WW#...?#...##.##WWWWWW",
     "#....###WW#.....##.##..####..#",
-    "#.#####.WW#.###.##.##...###..#",
+    "#.#####OWW#.###.##.##...###..#",
     "...##...WWWW#.#....#......#..#",
     "....####WWWW#####.##......#..#",
     "#......########...###.....#..#",
@@ -2293,7 +2293,7 @@
       ],
       [
         5,
-        0,
+        160,
         0,
         0
       ],
@@ -2923,7 +2923,7 @@
       ],
       [
         32,
-        0,
+        160,
         0,
         0
       ],
@@ -4671,7 +4671,7 @@
       ],
       [
         32,
-        0,
+        160,
         0,
         0
       ],
@@ -5600,32 +5600,25 @@
       "y": 11,
       "script": "HiddenItems",
       "symbol": "?"
-    }
-  ],
-  "npc_data": [
+    },
     {
       "x": 7,
       "y": 13,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_CERULEANCAVE1F_FULL_RESTORE"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 19,
       "y": 3,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_CERULEANCAVE1F_MAX_ELIXER"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 5,
       "y": 0,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_CERULEANCAVE1F_NUGGET"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
-  ]
+  ],
+  "npc_data": []
 }

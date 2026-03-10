@@ -363,7 +363,7 @@
     "##########",
     "..........",
     "##..##.###",
-    "....^^.#.#",
+    "....^^.#O#",
     "..........",
     "..........",
     "#........#",
@@ -607,7 +607,7 @@
       ],
       [
         38,
-        0,
+        160,
         0,
         0
       ],
@@ -895,7 +895,14 @@
       "symbol": "^"
     }
   ],
-  "hidden_objects": [],
+  "hidden_objects": [
+    {
+      "x": 8,
+      "y": 3,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    }
+  ],
   "npc_data": [
     {
       "x": 2,
@@ -904,14 +911,6 @@
       "movement": "STAY",
       "direction": "NONE",
       "text_id": "TEXT_WARDENSHOUSE_WARDEN"
-    },
-    {
-      "x": 8,
-      "y": 3,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_WARDENSHOUSE_RARE_CANDY"
     },
     {
       "x": 8,

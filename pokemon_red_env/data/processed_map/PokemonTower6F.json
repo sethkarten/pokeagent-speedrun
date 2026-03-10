@@ -1528,13 +1528,13 @@
     "#####.......##...###",
     "####........##..####",
     "###.........##.....#",
-    "######.#....##.....#",
+    "######O#....##.....#",
     "######.#####......D#",
     "###.....####.......#",
     "######......###.####",
     "#####.........#..###",
     "######..##..###.####",
-    "######......##..####",
+    "######......##O.####",
     "##########..########",
     "#########D...#######",
     "####################"
@@ -2555,7 +2555,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -3335,7 +3335,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -3752,7 +3752,20 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [],
+  "hidden_objects": [
+    {
+      "x": 6,
+      "y": 8,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 14,
+      "y": 14,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    }
+  ],
   "npc_data": [
     {
       "x": 12,
@@ -3777,22 +3790,6 @@
       "movement": "STAY",
       "direction": "LEFT",
       "text_id": "TEXT_POKEMONTOWER6F_CHANNELER3"
-    },
-    {
-      "x": 6,
-      "y": 8,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_POKEMONTOWER6F_RARE_CANDY"
-    },
-    {
-      "x": 14,
-      "y": 14,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_POKEMONTOWER6F_X_ACCURACY"
     }
   ]
 }

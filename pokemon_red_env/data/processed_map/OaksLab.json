@@ -539,7 +539,7 @@
     "####^^####",
     "^^##..####",
     "..........",
-    "......###.",
+    "......OOO.",
     "..........",
     "..........",
     "####..####",
@@ -775,20 +775,20 @@
       ],
       [
         78,
-        1,
-        1,
+        160,
+        0,
         0
       ],
       [
         57,
-        1,
-        1,
+        160,
+        0,
         0
       ],
       [
         57,
-        1,
-        1,
+        160,
+        0,
         0
       ],
       [
@@ -1334,6 +1334,24 @@
       "y": 1,
       "script": "DisplayOakLabEmailText",
       "symbol": "^"
+    },
+    {
+      "x": 6,
+      "y": 3,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 8,
+      "y": 3,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -1344,30 +1362,6 @@
       "movement": "STAY",
       "direction": "NONE",
       "text_id": "TEXT_OAKSLAB_RIVAL"
-    },
-    {
-      "x": 6,
-      "y": 3,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_OAKSLAB_CHARMANDER_POKE_BALL"
-    },
-    {
-      "x": 7,
-      "y": 3,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_OAKSLAB_SQUIRTLE_POKE_BALL"
-    },
-    {
-      "x": 8,
-      "y": 3,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_OAKSLAB_BULBASAUR_POKE_BALL"
     },
     {
       "x": 5,

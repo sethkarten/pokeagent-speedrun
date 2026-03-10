@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Grid symbol walkability (matching map_formatter.py conventions)
 # ---------------------------------------------------------------------------
-_WALKABLE_SYMBOLS = {".", "~", "D", "S", "↓", "←", "→", "↑", "&"}
+_WALKABLE_SYMBOLS = {".", "~", "D", "S", "↓", "←", "→", "↑", "&", "O"}
 
 # Compact single-char aliases for multi-char grid symbols (for format_map_for_llm)
 _COMPACT_SYMBOL = {

@@ -537,7 +537,7 @@
   ],
   "grid": [
     "####??####",
-    "#..#..#..#",
+    "#..#OO#..#",
     "#..#..#..#",
     "#..#..#..#",
     "#........#",
@@ -639,13 +639,13 @@
       ],
       [
         17,
-        0,
+        160,
         0,
         0
       ],
       [
         17,
-        0,
+        160,
         0,
         0
       ],
@@ -1334,6 +1334,18 @@
       "y": 0,
       "script": "PrintFightingDojoText3",
       "symbol": "?"
+    },
+    {
+      "x": 4,
+      "y": 1,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -1376,22 +1388,6 @@
       "movement": "STAY",
       "direction": "LEFT",
       "text_id": "TEXT_FIGHTINGDOJO_BLACKBELT4"
-    },
-    {
-      "x": 4,
-      "y": 1,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_FIGHTINGDOJO_HITMONLEE_POKE_BALL"
-    },
-    {
-      "x": 5,
-      "y": 1,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_FIGHTINGDOJO_HITMONCHAN_POKE_BALL"
     }
   ]
 }

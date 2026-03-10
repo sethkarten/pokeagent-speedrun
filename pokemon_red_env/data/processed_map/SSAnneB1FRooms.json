@@ -1610,7 +1610,7 @@
   "grid": [
     "########################",
     "##.?########.#########.#",
-    "...#######...#######...#",
+    "...#######O..#######O..#",
     "....######....######....",
     "....######....######....",
     "..DD######..DD######..DD",
@@ -1619,7 +1619,7 @@
     "########################",
     "########################",
     "########################",
-    "##.#########.#########.#",
+    "##.#########O#########.#",
     "...#######...#######...#",
     "....######....######....",
     "....######....######....",
@@ -1981,7 +1981,7 @@
       ],
       [
         29,
-        0,
+        160,
         0,
         0
       ],
@@ -2041,7 +2041,7 @@
       ],
       [
         29,
-        0,
+        160,
         0,
         0
       ],
@@ -3307,7 +3307,7 @@
       ],
       [
         29,
-        0,
+        160,
         0,
         0
       ],
@@ -4032,6 +4032,24 @@
       "y": 1,
       "script": "HiddenItems",
       "symbol": "?"
+    },
+    {
+      "x": 20,
+      "y": 2,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 10,
+      "y": 2,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 12,
+      "y": 11,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -4098,30 +4116,6 @@
       "movement": "STAY",
       "direction": "NONE",
       "text_id": "TEXT_SSANNEB1FROOMS_MACHOKE"
-    },
-    {
-      "x": 20,
-      "y": 2,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SSANNEB1FROOMS_ETHER"
-    },
-    {
-      "x": 10,
-      "y": 2,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SSANNEB1FROOMS_TM_REST"
-    },
-    {
-      "x": 12,
-      "y": 11,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SSANNEB1FROOMS_MAX_POTION"
     }
   ]
 }
