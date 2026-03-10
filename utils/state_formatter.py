@@ -1602,7 +1602,7 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer T=TV/machine N=NPC)")
+    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC)")
 
     # Compact JSON summary (warp_events, bg_events, objects)
     compact_json = {
