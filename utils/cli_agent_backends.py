@@ -1162,6 +1162,430 @@ class GeminiCliBackend(CliAgentBackend):
         return True
 
 
+class CodexCliBackend(CliAgentBackend):
+    """Backend for OpenAI Codex CLI (codex exec --json, non-interactive only).
+
+    Uses exec mode exclusively for JSONL stdout and resume support.
+    Config and sessions live under ~/.codex (CODEX_HOME); MCP via config.toml.
+    """
+
+    WORKSPACE_PATH = "/workspace"
+    AGENT_MEMORY_PATH = "/home/codex-agent/.codex"
+    DIRECTIVE_FILENAME = ".agent_directive.txt"
+    CONFIG_FILENAME = "config.toml"
+    SESSIONS_SUBDIR = "sessions"
+
+    @property
+    def name(self) -> str:
+        return "codex"
+
+    @property
+    def agent_memory_subdir(self) -> str:
+        return "codex_memory"
+
+    @property
+    def container_image(self) -> str:
+        return "codex-agent-devcontainer"
+
+    @property
+    def devcontainer_build_context(self) -> str:
+        return ".devcontainer/codex-agent"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_event_time: float | None = None
+
+    def is_auth_fatal_error(self, text: str) -> bool:
+        """Detect Codex auth failures (OpenRouter/API key or ChatGPT login)."""
+        return (
+            "not logged in" in text.lower()
+            or "401" in text
+            or "authentication" in text.lower()
+            or "expired" in text.lower()
+            or "invalid api key" in text.lower()
+        )
+
+    def seed_agent_auth(self, agent_memory_dir: Path) -> None:
+        """Seed container with host Codex auth (credentials, config) if present."""
+        import shutil
+
+        host_codex = Path.home() / ".codex"
+        if not host_codex.exists():
+            if not os.environ.get("OPENROUTER_API_KEY"):
+                print("⚠️  Host ~/.codex not found and OPENROUTER_API_KEY not set.")
+                print("   Configure OpenRouter in config.toml or set OPENROUTER_API_KEY.")
+            return
+
+        # Copy auth-related files; avoid overwriting our MCP config
+        for name in ["auth.json", "credentials.json"]:
+            src = host_codex / name
+            if src.exists():
+                dst = agent_memory_dir / name
+                shutil.copy2(src, dst)
+                print(f"   ✓ Seeded {name}")
+
+    def _ensure_codex_config(
+        self,
+        agent_memory_dir: Path,
+        mcp_sse_url: str | None = None,
+        mcp_sse_port: int = 8001,
+        *,
+        server_url: str | None = None,
+        project_root: str | None = None,
+    ) -> Path:
+        """Ensure config.toml exists with MCP config. Use SSE url when containerized, stdio when local."""
+        agent_memory_dir = Path(agent_memory_dir).resolve()
+        agent_memory_dir.mkdir(parents=True, exist_ok=True)
+        config_path = agent_memory_dir / self.CONFIG_FILENAME
+
+        if mcp_sse_url:
+            mcp_section = f'''
+[mcp_servers.pokemon-emerald]
+url = "{mcp_sse_url}"
+'''
+        elif server_url and project_root:
+            exe = Path(sys.executable).as_posix()
+            mcp_section = f'''
+[mcp_servers.pokemon-emerald]
+command = "{exe}"
+args = ["-m", "server.cli.pokemon_mcp_server"]
+env = {{ "POKEMON_SERVER_URL" = "{server_url}", "PYTHONPATH" = "{project_root}" }}
+'''
+        else:
+            mcp_url = f"http://localhost:{mcp_sse_port}/sse"
+            mcp_section = f'''
+[mcp_servers.pokemon-emerald]
+url = "{mcp_url}"
+'''
+
+        openrouter_block = ""
+        if os.environ.get("OPENROUTER_API_KEY"):
+            openrouter_block = '''
+            # OpenRouter (uses OPENROUTER_API_KEY from environment)
+            model_provider = "openrouter"
+            model = "openai/gpt-5.4-codex"
+
+            [model_providers.openrouter]
+            name = "openrouter"
+            base_url = "https://openrouter.ai/api/v1"
+            env_key = "OPENROUTER_API_KEY"
+            '''
+
+        if config_path.exists():
+            try:
+                content = config_path.read_text()
+                if "[mcp_servers.pokemon-emerald]" not in content and "pokemon-emerald" not in content:
+                    content = content.rstrip() + "\n" + mcp_section
+                    config_path.write_text(content)
+                    logger.info("Appended MCP config to existing config.toml")
+                if openrouter_block and "model_provider" not in content and "[model_providers.openrouter]" not in content:
+                    content = openrouter_block.strip() + "\n\n" + content
+                    config_path.write_text(content)
+                    logger.info("Prepended OpenRouter config to existing config.toml")
+            except (OSError, Exception) as e:
+                logger.warning("Could not merge config.toml: %s", e)
+        else:
+            header = openrouter_block.strip() if openrouter_block else "# Set model_provider and model, or use codex login for ChatGPT auth."
+            base = f'''# Codex config for pokeagent (auto-generated)
+{header}
+
+{mcp_section.strip()}
+'''
+            config_path.write_text(base)
+            logger.info("Wrote config.toml: %s", config_path)
+
+        return config_path
+
+    def build_launch_cmd(
+        self,
+        directive_path: str,
+        server_url: str,
+        working_dir: str,
+        *,
+        dangerously_skip_permissions: bool = True,
+        project_root: str | None = None,
+        containerized: bool = False,
+        session_number: int = 1,
+        resume_session_id: str | None = None,
+        thinking_effort: str | None = None,
+        mcp_sse_port: int | None = None,
+        run_id: str | None = None,
+        agent_memory_dir: str | None = None,
+    ) -> tuple[list[str], dict[str, str], str, str | None]:
+        env = os.environ.copy()
+        env["POKEMON_MCP_SERVER_URL"] = server_url
+        env["POKEMON_SERVER_URL"] = server_url
+
+        bootstrap = self._build_bootstrap_content(directive_path, server_url)
+        working_dir_abs = Path(working_dir).resolve()
+        working_dir_abs.mkdir(parents=True, exist_ok=True)
+
+        # Write directive to workspace for codex to read
+        directive_file = working_dir_abs / self.DIRECTIVE_FILENAME
+        directive_file.write_text(bootstrap)
+
+        mcp_port = mcp_sse_port or 8001
+        mcp_url = f"http://host.docker.internal:{mcp_port}/sse"
+
+        if containerized:
+            if not run_id or not agent_memory_dir:
+                raise ValueError("containerized mode requires run_id and agent_memory_dir")
+            if not mcp_sse_port:
+                raise ValueError("containerized mode requires mcp_sse_port")
+
+            agent_memory_path = Path(agent_memory_dir).resolve()
+            self._ensure_codex_config(agent_memory_path, mcp_sse_url=mcp_url, mcp_sse_port=mcp_port)
+
+            game_port = server_url.rstrip("/").split(":")[-1]
+
+            docker_cmd = [
+                "docker", "run", "--rm",
+                "--name", f"codex-agent-{run_id}",
+                "--cap-add=NET_ADMIN",
+                "--security-opt=seccomp=unconfined",
+                "--network=bridge",
+                "--add-host=host.docker.internal:host-gateway",
+                "-v", f"{agent_memory_path}:{self.AGENT_MEMORY_PATH}",
+                "-v", f"{working_dir_abs}:{self.WORKSPACE_PATH}",
+                "-w", self.WORKSPACE_PATH,
+                "-e", f"MCP_PORT={mcp_sse_port}",
+                "-e", f"GAME_SERVER_PORT={game_port}",
+                "-e", f"RUN_DATA_ID={run_id}",
+                "-e", f"CODEX_HOME={self.AGENT_MEMORY_PATH}",
+            ]
+
+            for env_var in ["OPENROUTER_API_KEY", "OPENAI_API_KEY"]:
+                if os.environ.get(env_var):
+                    docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
+
+            docker_cmd.append(self.container_image)
+
+            if resume_session_id:
+                if resume_session_id == "--last":
+                    inner = "codex exec resume --last --json"
+                else:
+                    inner = f"codex exec resume {shlex.quote(resume_session_id)} --json"
+            else:
+                inner = f"cat {self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME} | codex exec --json -C {self.WORKSPACE_PATH} --dangerously-bypass-approvals-and-sandbox -"
+
+            shell_cmd = "'" + inner.replace("'", "'\"'\"'") + "'"
+            docker_cmd.extend(["sh", "-c", shell_cmd])
+
+            return docker_cmd, env, bootstrap, None
+
+        else:
+            # Local: use agent_memory_dir for config if provided; use stdio MCP (no SSE server)
+            if agent_memory_dir:
+                agent_memory_path = Path(agent_memory_dir).resolve()
+                agent_memory_path.mkdir(parents=True, exist_ok=True)
+                pythonpath = project_root or os.getcwd()
+                self._ensure_codex_config(
+                    agent_memory_path,
+                    server_url=server_url,
+                    project_root=pythonpath,
+                )
+                env["CODEX_HOME"] = str(agent_memory_path)
+
+            if resume_session_id:
+                if resume_session_id == "--last":
+                    return (["codex", "exec", "resume", "--last", "--json"], env, bootstrap, None)
+                return (["codex", "exec", "resume", resume_session_id, "--json"], env, bootstrap, None)
+
+            cat_cmd = f"cat {shlex.quote(str(directive_file))} | codex exec --json -C {shlex.quote(working_dir)} --dangerously-bypass-approvals-and-sandbox -"
+            return (["sh", "-c", cat_cmd], env, bootstrap, None)
+
+    def _handle_thread_started(
+        self,
+        event: dict,
+        now: float,
+        metrics: CliSessionMetrics | None,
+    ) -> None:
+        """Handle thread.started: set session_id from thread_id."""
+        self._last_event_time = now
+        thread_id = event.get("thread_id", "")
+        if metrics and thread_id:
+            metrics.session_id = thread_id
+        logger.info("[codex] thread.started thread_id=%s", thread_id)
+
+    def _handle_turn_completed(
+        self,
+        event: dict,
+        metrics: CliSessionMetrics | None,
+    ) -> None:
+        """Handle turn.completed: update metrics from usage."""
+        if metrics:
+            usage = event.get("usage") or {}
+            metrics.input_tokens = int(usage.get("input_tokens", 0) or 0)
+            metrics.output_tokens = int(usage.get("output_tokens", 0) or 0)
+        logger.info(
+            "[codex] turn.completed input=%d output=%d",
+            (event.get("usage") or {}).get("input_tokens", 0),
+            (event.get("usage") or {}).get("output_tokens", 0),
+        )
+
+    def _handle_turn_failed(self, event: dict, metrics: CliSessionMetrics | None) -> None:
+        """Handle turn.failed: set error state."""
+        if metrics:
+            metrics.is_error = True
+            metrics.error = (event.get("error") or {}).get("message", "turn failed")
+        logger.warning("[codex] turn.failed: %s", (event.get("error") or {}).get("message", ""))
+
+    def _handle_item_mcp_tool_call(
+        self,
+        event: dict,
+        now: float,
+        metrics: CliSessionMetrics | None,
+        server_url: str | None,
+    ) -> None:
+        """Handle item.completed with item.type mcp_tool_call: tool_use count and _post_thinking."""
+        duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+        self._last_event_time = now
+        if metrics:
+            metrics.tool_use_count += 1
+        item = event.get("item") or {}
+        tool_name = item.get("tool", "?")
+        args = item.get("arguments") or {}
+        args_preview = json.dumps(args)
+        if len(args_preview) > 120:
+            args_preview = args_preview[:120] + "..."
+        logger.info("[codex:mcp_tool_call] %s %s", tool_name, args_preview)
+        thinking_text = f"[{tool_name}]"
+        if server_url:
+            self._post_thinking(server_url, thinking_text, duration_sec, interaction_type="codex")
+
+    def _handle_item_reasoning(
+        self,
+        event: dict,
+        now: float,
+        server_url: str | None,
+    ) -> None:
+        """Handle item.completed with item.type reasoning: optional thinking POST."""
+        duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+        self._last_event_time = now
+        item = event.get("item") or {}
+        text = (item.get("text") or "").strip()
+        if text and server_url:
+            preview = (text[:200] + "...") if len(text) > 200 else text
+            self._post_thinking(server_url, preview, duration_sec, interaction_type="codex")
+
+    def _handle_error(self, event: dict) -> None:
+        """Handle error event (may be transient reconnect notice)."""
+        msg = event.get("message", "")
+        if "Reconnecting" in msg:
+            logger.debug("[codex] %s", msg)
+        else:
+            logger.warning("[codex] error: %s", msg)
+
+    def handle_stream_event(
+        self,
+        event: dict,
+        metrics: CliSessionMetrics | None,
+        server_url: str | None = None,
+    ) -> None:
+        """Dispatch Codex exec --json events to typed handlers."""
+        etype = event.get("type", "")
+        now = time.time()
+
+        if etype == "thread.started":
+            self._handle_thread_started(event, now, metrics)
+        elif etype == "turn.completed":
+            self._handle_turn_completed(event, metrics)
+        elif etype == "turn.failed":
+            self._handle_turn_failed(event, metrics)
+        elif etype == "error":
+            self._handle_error(event)
+        elif etype in ("item.started", "item.updated", "item.completed"):
+            item = event.get("item") or {}
+            item_type = item.get("type", "")
+            if etype == "item.completed" and item_type == "mcp_tool_call":
+                self._handle_item_mcp_tool_call(event, now, metrics, server_url)
+            elif etype == "item.completed" and item_type == "reasoning":
+                self._handle_item_reasoning(event, now, server_url)
+
+    def log_cli_interaction(
+        self,
+        agent_memory_dir: Path,
+        processed_hashes: set,
+        last_cli_step: int,
+        server_url: str | None = None,
+    ) -> tuple[set, int]:
+        """Poll Codex session JSONL files and append new entries as steps."""
+        from utils.metric_tracking.codex_session_reader import load_new_usage_entries
+        from utils.llm_logger import get_llm_logger
+
+        search_path = Path(agent_memory_dir).resolve()
+        if not search_path.is_dir():
+            return processed_hashes, last_cli_step
+
+        try:
+            new_entries, updated_hashes = load_new_usage_entries(search_path, processed_hashes)
+        except Exception as exc:
+            logger.warning("Codex session poll failed: %s", exc)
+            return processed_hashes, last_cli_step
+
+        if not new_entries:
+            return updated_hashes, last_cli_step
+
+        logger.info("Codex session: appending %d step(s)", len(new_entries))
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+
+        llm_logger = get_llm_logger()
+        prev_ts: float | None = None
+        for entry in new_entries:
+            tokens = entry.get("_tokens", {})
+            tool_calls = entry.get("_tool_calls", [])
+            parsed_ts = entry.get("_parsed_timestamp")
+            ts_float = parsed_ts.timestamp() if parsed_ts is not None else time.time()
+            duration = max(0.0, ts_float - prev_ts) if prev_ts is not None else 0.0
+            prev_ts = ts_float
+
+            model_name = entry.get("_model", "gpt-5-codex")
+            model_info = {"model": model_name}
+
+            last_cli_step += 1
+            try:
+                llm_logger.append_cli_step(
+                    step_number=last_cli_step,
+                    token_usage=tokens,
+                    duration=duration,
+                    timestamp=ts_float,
+                    model_info=model_info,
+                    tool_calls=tool_calls if tool_calls else None,
+                )
+            except Exception as exc:
+                logger.warning("Failed to append Codex CLI step %d: %s", last_cli_step, exc)
+                last_cli_step -= 1
+
+        if server_url and new_entries:
+            self._sync_metrics_to_server(server_url)
+
+        return updated_hashes, last_cli_step
+
+    def get_resume_session_id(self, agent_memory_dir: Path) -> str | None:
+        """Find the most recent Codex session ID from sessions dir."""
+        sessions_dir = Path(agent_memory_dir) / self.SESSIONS_SUBDIR
+        if not sessions_dir.is_dir():
+            return None
+        files = list(sessions_dir.glob("*.jsonl")) + list(sessions_dir.glob("*.json"))
+        if not files:
+            return None
+        most_recent = max(files, key=lambda p: p.stat().st_mtime)
+        return most_recent.stem
+
+    def run_login(self) -> bool:
+        """Run codex login if needed; no-op when using OpenRouter API key."""
+        if os.environ.get("OPENROUTER_API_KEY"):
+            print("\nℹ️  Codex can use OPENROUTER_API_KEY. No interactive login required.")
+            return True
+        print("\n🔐 Running 'codex login' (interactive)...")
+        try:
+            result = subprocess.run(["codex", "login"], check=False)
+            return result.returncode == 0
+        except FileNotFoundError:
+            print("❌ Codex CLI not found. Install: npm install -g @openai/codex")
+            return False
+
+
 def get_backend(cli_type: str) -> CliAgentBackend:
     """Return the backend for the given CLI type."""
     if cli_type == "claude":
@@ -1169,7 +1593,5 @@ def get_backend(cli_type: str) -> CliAgentBackend:
     if cli_type == "gemini":
         return GeminiCliBackend()
     if cli_type == "codex":
-        raise NotImplementedError(
-            "Codex CLI integration is not implemented yet. Use --cli-type claude for now."
-        )
+        return CodexCliBackend()
     raise ValueError(f"Unknown CLI type: {cli_type}. Supported: claude, gemini, codex")
