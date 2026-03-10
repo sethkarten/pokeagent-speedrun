@@ -1521,7 +1521,7 @@
   ],
   "grid": [
     "####################",
-    "#########....#######",
+    "#########...O#######",
     "#########.....######",
     "#########.......####",
     "#####............###",
@@ -1737,7 +1737,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -3752,7 +3752,14 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [],
+  "hidden_objects": [
+    {
+      "x": 12,
+      "y": 1,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    }
+  ],
   "npc_data": [
     {
       "x": 12,
@@ -3777,14 +3784,6 @@
       "movement": "STAY",
       "direction": "DOWN",
       "text_id": "TEXT_POKEMONTOWER3F_CHANNELER3"
-    },
-    {
-      "x": 12,
-      "y": 1,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_POKEMONTOWER3F_ESCAPE_ROPE"
     }
   ]
 }

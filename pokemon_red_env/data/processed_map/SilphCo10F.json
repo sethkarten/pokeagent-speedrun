@@ -1243,10 +1243,10 @@
     "###..#####..####",
     "#......#.......#",
     "#.####.#....##.#",
-    "#.###..#.D..##.#",
-    "#..###.#..####.#",
+    "#.###O.#.D..##.#",
+    "#.O###.#..####.#",
     "#.####.#..##...#",
-    "#.#..#.#..##...#",
+    "#.#.O#.#..##...#",
     "#...##.#.....D.#",
     "#......#.......#",
     "################"
@@ -2363,7 +2363,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -2443,7 +2443,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -2651,7 +2651,7 @@
       ],
       [
         1,
-        0,
+        160,
         0,
         0
       ],
@@ -3056,7 +3056,26 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [],
+  "hidden_objects": [
+    {
+      "x": 2,
+      "y": 12,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 4,
+      "y": 14,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 5,
+      "y": 11,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    }
+  ],
   "npc_data": [
     {
       "x": 1,
@@ -3081,30 +3100,6 @@
       "movement": "WALK",
       "direction": "ANY_DIR",
       "text_id": "TEXT_SILPHCO10F_SILPH_WORKER_F"
-    },
-    {
-      "x": 2,
-      "y": 12,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SILPHCO10F_TM_EARTHQUAKE"
-    },
-    {
-      "x": 4,
-      "y": 14,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SILPHCO10F_RARE_CANDY"
-    },
-    {
-      "x": 5,
-      "y": 11,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SILPHCO10F_CARBOS"
     }
   ]
 }

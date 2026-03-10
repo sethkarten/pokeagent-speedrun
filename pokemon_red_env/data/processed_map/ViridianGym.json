@@ -1529,7 +1529,7 @@
     ".....#.#.######..#..",
     ".....#.#.........#..",
     "..##.#.#......##.#..",
-    "..##.#.#.......#.#..",
+    "..##.#.#.......#O#..",
     "..##.#.#.......#.#..",
     "..##...#.......#.#..",
     "..##.#########......",
@@ -2737,7 +2737,7 @@
       ],
       [
         17,
-        0,
+        160,
         0,
         0
       ],
@@ -3764,6 +3764,12 @@
       "y": 15,
       "script": "GymStatues",
       "symbol": "?"
+    },
+    {
+      "x": 16,
+      "y": 9,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -3846,14 +3852,6 @@
       "movement": "STAY",
       "direction": "DOWN",
       "text_id": "TEXT_VIRIDIANGYM_GYM_GUIDE"
-    },
-    {
-      "x": 16,
-      "y": 9,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_VIRIDIANGYM_REVIVE"
     }
   ]
 }

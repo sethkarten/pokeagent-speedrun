@@ -9115,7 +9115,7 @@
     "####..WWWW..WWWWWWW#",
     "####..WWWW..WWWWWWW#",
     "####........WW..WWW#",
-    "####........WW..WWW#",
+    "####........WWO.WWW#",
     "####..WWWWWWWW..WWW#",
     "####..WWWWWWWW..WWW#",
     "####..WWWWWWWWWWWWW#",
@@ -9169,7 +9169,7 @@
     "...#####WW..WWWWWWW#",
     "...#...#WW..WWWWWWW#",
     "...#...#....WWWWWWW#",
-    "...#..#.....WWWWWWW#",
+    "...#.O#.....WWWWWWW#",
     "...###..WW......WWW#",
     "...#....WW......WWW#",
     "...#........WWWWWWW#",
@@ -13547,7 +13547,7 @@
       ],
       [
         60,
-        0,
+        160,
         0,
         0
       ],
@@ -20081,7 +20081,7 @@
       ],
       [
         44,
-        0,
+        160,
         0,
         0
       ],
@@ -22413,6 +22413,18 @@
       "y": 63,
       "script": "HiddenItems",
       "symbol": "?"
+    },
+    {
+      "x": 14,
+      "y": 35,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 5,
+      "y": 89,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -22479,22 +22491,6 @@
       "movement": "STAY",
       "direction": "DOWN",
       "text_id": "TEXT_ROUTE12_FISHER5"
-    },
-    {
-      "x": 14,
-      "y": 35,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_ROUTE12_TM_PAY_DAY"
-    },
-    {
-      "x": 5,
-      "y": 89,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_ROUTE12_IRON"
     }
   ]
 }

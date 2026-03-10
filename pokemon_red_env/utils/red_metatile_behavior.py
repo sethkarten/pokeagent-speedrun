@@ -63,6 +63,8 @@ class RedMetatileBehavior(IntEnum):
                        # [Emerald AQUA_HIDEOUT_WARP=103 — hidden facility warp pad]
     SPINNER     = 68   # Spinner tile; spinner_tiles.asm (Facility/Gym)
                        # [Emerald SLIDE_EAST=68 — forced movement tile]
+    POKE_BALL   = 160  # Visible item sprite on the ground (walkable, interact to pick up)
+                       # [Emerald BERRY_TREE_SOIL=160 — walkable interactable ground tile]
 
     # --- Gen-1 specific (repurposed unused/least-mismatched Emerald values) ---
     IMPASSABLE = 1    # Wall/blocked; any tile not in collision passable set;
@@ -92,6 +94,7 @@ BEHAVIOR_COLLISION: dict[RedMetatileBehavior, int] = {
     RedMetatileBehavior.JUMP_WEST:          0,  # ledge: entered, then forced west
     RedMetatileBehavior.JUMP_SOUTH:         0,  # ledge: entered, then forced south
     RedMetatileBehavior.SPINNER:            0,  # walkable, spins player facing
+    RedMetatileBehavior.POKE_BALL:          0,  # pokéball sprite tile is walkable
     # Hidden interactive objects — all collision=1 (player cannot walk through them)
     RedMetatileBehavior.PC:            1,
     RedMetatileBehavior.TELEVISION:    1,
@@ -115,4 +118,5 @@ HIDDEN_SYMBOL_TO_BEHAVIOR: dict[str, RedMetatileBehavior] = {
     "?": RedMetatileBehavior.QUESTIONNAIRE,  # Statue, Quiz, Binoculars, Dojo kiosk events
     "=": RedMetatileBehavior.IMPASSABLE,     # Bench events (no Emerald equivalent)
     "#": RedMetatileBehavior.IMPASSABLE,     # HiddenItems, HiddenCoins, Mansion switches, etc.
+    "O": RedMetatileBehavior.POKE_BALL,      # Visible pokéball item on the ground (walkable)
 }

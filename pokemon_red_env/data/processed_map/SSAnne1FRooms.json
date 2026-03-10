@@ -1623,7 +1623,7 @@
     "....######....######....",
     "....######....######....",
     "...#######...#######...#",
-    "##.#########.#########.#"
+    "##.#########O#########.#"
   ],
   "raw_tile": [
     [
@@ -3891,7 +3891,7 @@
       ],
       [
         29,
-        0,
+        160,
         0,
         0
       ],
@@ -4002,7 +4002,14 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [],
+  "hidden_objects": [
+    {
+      "x": 12,
+      "y": 15,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    }
+  ],
   "npc_data": [
     {
       "x": 2,
@@ -4075,14 +4082,6 @@
       "movement": "STAY",
       "direction": "RIGHT",
       "text_id": "TEXT_SSANNE1FROOMS_GIRL2"
-    },
-    {
-      "x": 12,
-      "y": 15,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SSANNE1FROOMS_TM_BODY_SLAM"
     },
     {
       "x": 21,

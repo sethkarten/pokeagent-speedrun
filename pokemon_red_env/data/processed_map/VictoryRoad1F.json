@@ -1520,9 +1520,9 @@
     ]
   ],
   "grid": [
-    "###########.##..####",
+    "###########O##..####",
     "#D..#######.###..###",
-    "##..#####.........##",
+    "##..#####O........##",
     "##...######..#.....#",
     "#...#............#..",
     "#...#............#..",
@@ -1609,7 +1609,7 @@
       ],
       [
         32,
-        0,
+        160,
         0,
         0
       ],
@@ -1841,7 +1841,7 @@
       ],
       [
         32,
-        0,
+        160,
         0,
         0
       ],
@@ -3758,7 +3758,20 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [],
+  "hidden_objects": [
+    {
+      "x": 11,
+      "y": 0,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    },
+    {
+      "x": 9,
+      "y": 2,
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
+    }
+  ],
   "npc_data": [
     {
       "x": 7,
@@ -3775,22 +3788,6 @@
       "movement": "STAY",
       "direction": "DOWN",
       "text_id": "TEXT_VICTORYROAD1F_COOLTRAINER_M"
-    },
-    {
-      "x": 11,
-      "y": 0,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_VICTORYROAD1F_TM_SKY_ATTACK"
-    },
-    {
-      "x": 9,
-      "y": 2,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_VICTORYROAD1F_RARE_CANDY"
     },
     {
       "x": 5,

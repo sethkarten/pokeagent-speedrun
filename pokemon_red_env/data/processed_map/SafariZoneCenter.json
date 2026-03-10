@@ -3242,7 +3242,7 @@
     "#..~~~~....#...~~~~..~~~~....#",
     "#...~~.~#WWWWWWWWWWWWW......##",
     "#...~.~~#WWWWWWWWWWWWW########",
-    "D.....~~#WWW......#WWW.......D",
+    "D.....~~#WWW..O...#WWW.......D",
     "D.....~~#WWW......#WWW.......D",
     "#.....~~#WWWWWWWWWWWWW~~~....#",
     "#......~#WWWWWWWWWWWWW~~~~...#",
@@ -5167,7 +5167,7 @@
       ],
       [
         48,
-        0,
+        160,
         0,
         0
       ],
@@ -8063,15 +8063,13 @@
       "symbol": "?"
     }
   ],
-  "hidden_objects": [],
-  "npc_data": [
+  "hidden_objects": [
     {
       "x": 14,
       "y": 10,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONECENTER_NUGGET"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
-  ]
+  ],
+  "npc_data": []
 }

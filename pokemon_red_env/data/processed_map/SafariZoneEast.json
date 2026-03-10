@@ -3239,13 +3239,13 @@
     "D.....?...#........#~~~~~~~~~#",
     "D.........#........#.~~~~~~~~#",
     "###########........#~~~~~~~~.#",
-    "#.........##.####.##.~.~~.~..#",
+    "#..O......##.####.##.~.~~.~..#",
     "#..~....~.....##........####.#",
     "#.~~....~~....##........#D##.#",
-    "#~..~~~~...#WWWWWWWW......?..#",
+    "#~..~~~~...#WWWWWWWW.O....?..#",
     "#~..~~~~...#WWWWWWWW.........#",
-    "#~..~~~~..~~~~~~#W#........###",
-    "#~..~~~~..~~~~~~#W#........###",
+    "#~..~~~~..~~~~~O#W#........###",
+    "#~..~~~~..~~~~~~#W#.O......###",
     "#.~~....~~.#WWWWWW#........###",
     "#..~....~..#WWWWWW###..#.#####",
     "#..........#WWWWWWWW#..#.....#",
@@ -4555,7 +4555,7 @@
       ],
       [
         48,
-        0,
+        160,
         0,
         0
       ],
@@ -5209,7 +5209,7 @@
       ],
       [
         48,
-        0,
+        160,
         0,
         0
       ],
@@ -5537,7 +5537,7 @@
       ],
       [
         32,
-        2,
+        160,
         0,
         0
       ],
@@ -5749,7 +5749,7 @@
       ],
       [
         46,
-        0,
+        160,
         0,
         0
       ],
@@ -8045,39 +8045,31 @@
       "symbol": "?"
     }
   ],
-  "hidden_objects": [],
-  "npc_data": [
+  "hidden_objects": [
     {
       "x": 21,
       "y": 10,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEEAST_FULL_RESTORE"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 3,
       "y": 7,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEEAST_MAX_RESTORE"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 20,
       "y": 13,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEEAST_CARBOS"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     },
     {
       "x": 15,
       "y": 12,
-      "sprite": "SPRITE_POKE_BALL",
-      "movement": "STAY",
-      "direction": "NONE",
-      "text_id": "TEXT_SAFARIZONEEAST_TM_EGG_BOMB"
+      "script": "SPRITE_POKE_BALL",
+      "symbol": "O"
     }
-  ]
+  ],
+  "npc_data": []
 }
