@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 # Local imports
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -160,7 +160,7 @@ class VisionOnlyAgent:
         model: str = "gemini-2.5-flash",
         backend: str = "gemini",
         max_steps: Optional[int] = None,
-        system_instructions_file: str = "POKEAGENT.md",
+        system_instructions_file: str = "agent/prompts/POKEAGENT.md",
         max_context_chars: int = 100000,  # ~25k tokens for gemini-2.5-flash
         target_context_chars: int = 50000,  # Compact down to this when exceeded
         allow_walkthrough: bool = False,  # Enable get_walkthrough tool
@@ -1776,7 +1776,7 @@ def main():
     parser.add_argument(
         "--system-instructions",
         type=str,
-        default="POKEAGENT.md",
+        default="agent/prompts/POKEAGENT.md",
         help="System instructions file"
     )
     parser.add_argument(

@@ -1,683 +1,98 @@
 #!/usr/bin/env python3
 """
-MCP Server for Pokemon Emerald Game
-Exposes game state and actions as MCP tools for use with gemini-cli or other MCP clients.
+Thin MCP proxy for the Pokemon Emerald game server.
 
-This server provides:
-- get_game_state: Retrieve current game state (manual request)
-- press_buttons: Execute button presses on the emulator
-- navigate_to: Pathfind to coordinates automatically
-- add_knowledge: Store discoveries in knowledge base
-- search_knowledge: Query knowledge base
-- get_knowledge_summary: View important discoveries
-- lookup_pokemon_info: Fetch info from Pokemon wikis (Bulbapedia, Serebii, etc.)
-- list_wiki_sources: List available wiki sources
-- get_walkthrough: Get official Emerald walkthrough (Parts 1-21)
+Every @mcp.tool() function forwards its arguments as an HTTP request to the
+corresponding /mcp/* endpoint on the game server (server/app.py).  No game
+logic lives here — this module is purely a transport adapter between the
+MCP protocol (used by Claude Code / Codex CLI / Gemini CLI) and the game server's
+REST API.
+
+TOOL RESTRICTION: For CLI agent experiments, only core game interaction tools
+are exposed. CLI agents are expected to implement their own internal reflection,
+memory, and planning systems. The objective system is not exposed as CLI agents
+use milestones for progress tracking.
+
+Available tools (3 total):
+  Game: get_game_state, press_buttons, navigate_to
 """
 
-import sys
 import logging
 import re
+import os
 from typing import Any, Dict, List, Optional, Tuple
+import os
+import sys
 from pathlib import Path
-from urllib.parse import quote_plus
+from typing import Any, Dict, List, Optional
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mcp.server.fastmcp import FastMCP
+import base64
 import requests
-from bs4 import BeautifulSoup
+from mcp.server.fastmcp.utilities.types import Image as MCPImage
 
-from utils.pathfinding import Pathfinder
-from utils.knowledge_base import get_knowledge_base
-from utils.state_formatter import format_state_for_llm
-
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Server configuration
-SERVER_URL = "http://localhost:8000"
+SERVER_URL = os.environ.get("POKEMON_SERVER_URL", "http://localhost:8000")
 
-# Initialize MCP server
-mcp = FastMCP(name="pokemon-emerald")
+# MCP server port and host (for SSE transport -- note, the mcp-config may need to know we are using SSE transport)
+# Port/host are set at FastMCP init time, not at run() time
+_MCP_PORT = int(os.environ.get("MCP_PORT", "8001"))
+_MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")  # Bind to all interfaces for Docker access
 
-# Initialize game tools
-pathfinder = Pathfinder()
-knowledge_base = get_knowledge_base()
+mcp = FastMCP(name="pokemon-emerald", host=_MCP_HOST, port=_MCP_PORT)
 
-# Screenshot cache to avoid re-encoding the same frame
-_screenshot_cache = {"frame_count": -1, "base64": None}
+_TIMEOUT_SHORT = 10   # seconds — lightweight reads
+_TIMEOUT_MEDIUM = 30  # seconds — actions/pathfinding
 
 
-def load_porymap_for_pathfinding(state: dict) -> tuple:
-    """
-    Load porymap data into state for pathfinding, with game-state-aware override support.
-    
-    Returns:
-        (coord_offset, state) - coord_offset is (offset_x, offset_y) if using override map, else None
-    """
-    coord_offset = None
-    location_name = state.get("player", {}).get("location", "Unknown")
-    
-    if not location_name or location_name in ("Unknown", "TITLE_SEQUENCE"):
-        return coord_offset, state
-    
+def _post(path: str, body: dict | None = None, timeout: int = _TIMEOUT_MEDIUM) -> dict:
+    """POST to the game server and return the JSON response (or an error dict)."""
     try:
-        from utils.porymap_json_builder import build_json_map_for_llm
-        from utils.state_formatter import ROM_TO_PORYMAP_MAP
-        from utils.ascii_map_loader import get_effective_map_name, get_override
-        from pathlib import Path
-        import os
-        
-        # Get badge count for game-state-aware map selection
-        badge_count = 0
-        badges = state.get("game", {}).get("badges", [])
-        if isinstance(badges, list):
-            badge_count = len(badges)
-        elif isinstance(badges, int):
-            badge_count = badges
-        
-        # Get pokeemerald root
-        pokeemerald_root = None
-        root = os.environ.get("POKEEMERALD_ROOT")
-        if root:
-            root_path = Path(root).resolve()
-            if (root_path / "data" / "maps").exists():
-                pokeemerald_root = root_path
-        
-        if not pokeemerald_root:
-            current_dir = Path(__file__).parent.parent.parent
-            porymap_path = current_dir / "porymap_data"
-            if (porymap_path / "data" / "maps").exists():
-                pokeemerald_root = porymap_path.resolve()
-        
-        if not pokeemerald_root:
-            return coord_offset, state
-        
-        porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
-        if not porymap_map_name:
-            return coord_offset, state
-        
-        # Check for game-state-aware map selection and coordinate offset
-        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
-        override = get_override(effective_map_name)
-        if override and ('offset_x' in override or 'offset_y' in override):
-            offset_x = override.get('offset_x', 0)
-            offset_y = override.get('offset_y', 0)
-            coord_offset = (offset_x, offset_y)
-            logger.info(f"Porymap pathfinding: Using override map '{effective_map_name}' with coord offset ({offset_x}, {offset_y})")
-        
-        # Build JSON map with grid for pathfinding (with badge_count for override selection)
-        try:
-            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root, badge_count=badge_count)
-        except ValueError as e:
-            logger.error(f"Failed to build porymap for '{porymap_map_name}': {e}")
-            return coord_offset, state
-        
-        if json_map and "grid" in json_map:
-            raw_tiles = json_map.get("raw_tiles")
-            
-            # Ensure map dict exists
-            if "map" not in state:
-                state["map"] = {}
-            if "porymap" not in state["map"]:
-                state["map"]["porymap"] = {}
-            
-            # Add porymap data for pathfinding
-            state["map"]["porymap"]["grid"] = json_map["grid"]
-            state["map"]["porymap"]["objects"] = json_map.get("objects", [])
-            state["map"]["porymap"]["dimensions"] = json_map.get("dimensions", {})
-            state["map"]["porymap"]["warps"] = json_map.get("warps", [])
-            state["map"]["porymap"]["raw_tiles"] = raw_tiles
-            
-            grid_dims = f"{len(json_map['grid'][0])}x{len(json_map['grid'])}" if json_map.get("grid") else "None"
-            logger.info(f"Loaded porymap for pathfinding: '{effective_map_name}' (ROM: '{location_name}'), grid: {grid_dims}, badges: {badge_count}")
-    
-    except Exception as e:
-        logger.warning(f"Failed to load porymap data for pathfinding: {e}")
-    
-    return coord_offset, state
-
-
-def serialize_for_json(obj):
-    """Recursively convert non-JSON-serializable objects to JSON-compatible types.
-    
-    Handles:
-    - IntEnum/Enum -> int (via .value)
-    - numpy types -> native Python int/float
-    - dicts -> recursively serialize values
-    - lists/tuples -> recursively serialize items
-    - Objects with __dict__ -> convert to dict
-    - None/bool/str/int/float -> pass through
-    """
-    from enum import IntEnum, Enum
-    import numpy as np
-    
-    # Handle None and basic JSON types
-    if obj is None or isinstance(obj, (bool, str, int, float)):
-        return obj
-    
-    # Handle bytes
-    if isinstance(obj, bytes):
-        try:
-            return obj.decode('utf-8')
-        except:
-            import base64
-            return base64.b64encode(obj).decode('utf-8')
-    
-    # Handle numpy types before checking other types (numpy subclasses int/float)
-    try:
-        if isinstance(obj, (np.integer, np.int64, np.int32, np.int16, np.int8, np.uint8, np.uint16, np.uint32, np.uint64)):
-            return int(obj)
-        elif isinstance(obj, (np.floating, np.float64, np.float32, np.float16)):
-            return float(obj)
-        elif isinstance(obj, np.ndarray):
-            return obj.tolist()
-        elif isinstance(obj, np.bool_):
-            return bool(obj)
-    except:
-        pass
-    
-    # Handle enums
-    if isinstance(obj, (IntEnum, Enum)):
-        return obj.value
-    
-    # Handle dicts
-    if isinstance(obj, dict):
-        return {str(k): serialize_for_json(v) for k, v in obj.items()}
-    
-    # Handle sets
-    if isinstance(obj, set):
-        return [serialize_for_json(item) for item in obj]
-    
-    # Handle lists and tuples
-    if isinstance(obj, (list, tuple)):
-        return [serialize_for_json(item) for item in obj]
-    
-    # Handle objects with __dict__ (convert to dict representation)
-    if hasattr(obj, '__dict__') and not isinstance(obj, type):
-        try:
-            return serialize_for_json(obj.__dict__)
-        except Exception:
-            pass
-    
-    # Try to convert to string as last resort
-    try:
-        return str(obj)
-    except Exception:
-        logger.warning(f"Could not serialize object of type {type(obj)}: {obj}")
-        return None
-
-
-# ============================================================================
-# HELPER FUNCTIONS FOR SERVER ENDPOINTS (NO HTTP CALLS)
-# ============================================================================
-
-
-def get_game_state_direct(env, state_formatter, action_history=None, current_obs=None) -> dict:
-    """
-    Get game state without HTTP calls - for use by server endpoints.
-
-    Args:
-        env: EmeraldEmulator instance
-        state_formatter: format_state_for_llm function
-        action_history: Optional list of recent actions with start/end positions
-        current_obs: Optional numpy array of current frame (from game loop)
-
-    Returns:
-        Dictionary with success status and state data including screenshot
-    """
-    try:
-        import base64
-        import io
-        from PIL import Image
-        import numpy as np
-
-        # CRITICAL FIX: Use current_obs (latest frame from game loop) instead of env.get_screenshot()
-        # This ensures we get the frame that's synchronized with the most recent game loop tick
-        # Using env.get_screenshot() can cause desyncs between memory and visuals
-        screenshot = None
-        if current_obs is not None:
-            # Use the latest frame from game loop (most reliable - guaranteed latest)
-            screenshot = Image.fromarray(current_obs)
-            logger.debug("Using current_obs (latest frame from game loop)")
-        elif hasattr(env, "current_frame") and env.current_frame is not None:
-            # Fallback: Use background-polled frame if available
-            screenshot = Image.fromarray(env.current_frame)
-            logger.debug("Using env.current_frame (background-polled)")
-        elif hasattr(env, "get_screenshot"):
-            # Last resort: Direct screenshot (may be stale/desynced)
-            screenshot = env.get_screenshot()
-            logger.debug("Using env.get_screenshot() (direct video buffer - may be stale)")
-
-        # Get state WITH screenshot to ensure consistency
-        state = env.get_comprehensive_state(screenshot=screenshot)
-        # Pass action history to state formatter
-        state_text = state_formatter(state, action_history=action_history)
-
-        # Get screenshot as base64 for vision models (NO CACHING - always fresh)
-        # CRITICAL: Caching was causing stale images to be sent to the agent
-        # The frame_count wasn't updating properly, causing the same image to be reused
-        screenshot_b64 = None
-        if screenshot is not None:
-            # Always encode fresh screenshot - no caching
-            buffered = io.BytesIO()
-            screenshot.save(buffered, format="PNG")
-            screenshot_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-            logger.debug("Encoded fresh screenshot (caching disabled)")
-
-        # Serialize state to ensure JSON compatibility (converts enums, numpy types)
-        result = {
-            "success": True,
-            "state_text": state_text,
-            "screenshot_base64": screenshot_b64,
-            "player_position": state.get("player", {}).get("position", {}),
-            "location": state.get("player", {}).get("location", "Unknown"),
-            "raw_state": state,
-        }
-        
-        return serialize_for_json(result)
-
-    except Exception as e:
-        logger.error(f"Failed to get game state: {e}")
+        resp = requests.post(f"{SERVER_URL}{path}", json=body or {}, timeout=timeout)
+        resp.raise_for_status()
+        return resp.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"HTTP error calling {path}: {e}")
         return {"success": False, "error": str(e)}
 
 
-def press_buttons_direct(buttons, action_queue, reasoning="", source=None, metadata=None) -> dict:
-    """
-    Queue buttons without HTTP calls - for use by server endpoints.
-
-    Args:
-        buttons: List of button strings
-        action_queue: Global action queue to extend
-        reasoning: Reason for pressing buttons
-
-    Returns:
-        Dictionary with success status
-    """
-    if not buttons:
-        return {"success": False, "error": "No buttons provided"}
-
-    try:
-        # Validate and normalize buttons
-        VALID_BUTTONS = {"A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R"}
-        normalized_buttons = []
-
-        for button in buttons:
-            # Normalize to uppercase
-            button_upper = str(button).upper().strip()
-
-            # Check if valid
-            if button_upper in VALID_BUTTONS:
-                normalized_buttons.append(button_upper)
-            else:
-                # Invalid button - fallback to A and warn
-                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
-                normalized_buttons.append("A")
-
-        # Add to action queue
-        action_queue.extend(normalized_buttons)
-        logger.info(f"🎮 Queued buttons: {normalized_buttons} - {reasoning}")
-
-        return {"success": True, "buttons_queued": normalized_buttons, "reasoning": reasoning}
-    except Exception as e:
-        logger.error(f"Failed to queue buttons: {e}")
-        return {"success": False, "error": str(e)}
-
-
-def navigate_to_direct(
-    env,
-    x,
-    y,
-    reason: str = "",
-    variance: Optional[str] = None,
-    consider_npcs: bool = True,
-    blocked_coords: Optional[List[Tuple[int, int]]] = None,
-) -> dict:
-    """
-    Calculate path to coordinates without HTTP calls - for use by server endpoints.
-    Returns buttons to be queued via take_action.
-
-    Args:
-        env: EmeraldEmulator instance
-        x: Target X coordinate (will be converted to int)
-        y: Target Y coordinate (will be converted to int)
-        reason: Reason for navigation
-        variance: Path variance level ('low', 'medium', 'high', or None)
-        consider_npcs: Whether to avoid NPC positions during pathfinding (default False)
-        blocked_coords: Optional list of additional blocked coordinates
-
-    Returns:
-        Dictionary with success status, buttons, and path info
-    """
-    try:
-        # Ensure x and y are integers
-        x = int(x)
-        y = int(y)
-
-        variance_level = None
-        nav_reason = "" if reason is None else str(reason)
-
-        if variance is not None:
-            variance_str = str(variance).strip()
-            variance_lower = variance_str.lower()
-            if variance_lower in {"low", "medium", "high"}:
-                variance_level = variance_lower
-            elif variance_lower in {"", "none"}:
-                variance_level = None
-            elif not reason:
-                nav_reason = variance_str
-        elif nav_reason.lower() in {"low", "medium", "high"}:
-            variance_level = nav_reason.lower()
-            nav_reason = ""
-
-        # Get current state for pathfinding
-        state = env.get_comprehensive_state()
-
-        # (CRITICAL: Load porymap data remains same...)
-
-        # CRITICAL: Load porymap data into state for pathfinding
-        # The pathfinder needs map['porymap']['grid'] which is normally added by format_state_for_llm
-        location_name = state.get("player", {}).get("location", "Unknown")
-        coord_offset = None  # Will be set if using an override map with coordinate translation
-        if location_name and location_name != "Unknown" and location_name != "TITLE_SEQUENCE":
-            try:
-                from utils.porymap_json_builder import build_json_map_for_llm
-                from utils.pokeemerald_parser import PokeemeraldMapLoader
-                from utils.ascii_map_loader import get_effective_map_name, get_override
-                from pathlib import Path
-                import os
-
-                # Get badge count for game-state-aware map selection
-                badge_count = 0
-                badges = state.get("game", {}).get("badges", [])
-                if isinstance(badges, list):
-                    badge_count = len(badges)
-                elif isinstance(badges, int):
-                    badge_count = badges
-
-                # Get pokeemerald root (use same logic as state_formatter)
-                pokeemerald_root = None
-                # Try environment variable first (same as state_formatter)
-                root = os.environ.get("POKEEMERALD_ROOT")
-                if root:
-                    root_path = Path(root).resolve()
-                    if (root_path / "data" / "maps").exists():
-                        pokeemerald_root = root_path
-
-                # Try porymap_data directory (same as state_formatter)
-                if not pokeemerald_root:
-                    # Get the server/cli directory's parent's parent (pokeagent-speedrun root)
-                    current_dir = Path(__file__).parent.parent.parent
-                    porymap_path = current_dir / "porymap_data"
-                    if (porymap_path / "data" / "maps").exists():
-                        pokeemerald_root = porymap_path.resolve()
-
-                # Try common relative paths (same as state_formatter)
-                if not pokeemerald_root:
-                    current_dir = Path(__file__).parent.parent.parent
-                    possible_paths = [
-                        current_dir / "pokeemerald",
-                        current_dir / "../pokeemerald",
-                        current_dir / "../../pokeemerald",
-                    ]
-                    for path in possible_paths:
-                        resolved = path.resolve()
-                        if (resolved / "data" / "maps").exists():
-                            pokeemerald_root = resolved
-                            break
-
-                if pokeemerald_root:
-                    # Import comprehensive ROM to Porymap mapping from state_formatter
-                    from utils.state_formatter import ROM_TO_PORYMAP_MAP
-
-                    porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
-
-                    if porymap_map_name:
-                        # Check for game-state-aware map selection and coordinate offset
-                        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
-                        override = get_override(effective_map_name)
-                        if override and ('offset_x' in override or 'offset_y' in override):
-                            offset_x = override.get('offset_x', 0)
-                            offset_y = override.get('offset_y', 0)
-                            coord_offset = (offset_x, offset_y)
-                            logger.info(f"Using override map '{effective_map_name}' with coord offset ({offset_x}, {offset_y})")
-
-                        # Build JSON map with grid for pathfinding (with badge_count for override selection)
-                        try:
-                            json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root, badge_count=badge_count)
-                        except ValueError as e:
-                            logger.error(
-                                f"Failed to build porymap for '{porymap_map_name}' due to corrupted tileset: {e}"
-                            )
-                            json_map = None
-
-                        if json_map and "grid" in json_map:
-                            # Apply elevation filtering (same logic as state_formatter.py)
-                            raw_tiles = json_map.get("raw_tiles")
-                            grid = json_map["grid"]
-                            player_pos = state.get("player", {}).get("position", {})
-                            px = player_pos.get("x", 0)
-                            py = player_pos.get("y", 0)
-
-                            if raw_tiles and 0 <= py < len(raw_tiles) and 0 <= px < len(raw_tiles[py]):
-                                player_tile = raw_tiles[py][px]
-                                if len(player_tile) >= 4:
-                                    player_elevation = player_tile[3]
-
-                                    # Check if cave-like (elevation variety)
-                                    elevations_in_map = set()
-                                    for row in raw_tiles:
-                                        for tile in row:
-                                            if len(tile) >= 4:
-                                                elevations_in_map.add(tile[3])
-
-                                    # NO ELEVATION FILTERING - pathfinding handles elevation changes via E0 connectors
-                                    # The pathfinding algorithm in utils/pathfinding.py now enforces that elevation
-                                    # changes can ONLY happen through E0 connector tiles (lines 730-749).
-                                    # We don't filter by elevation here because pathfinding needs to see all tiles
-                                    # to navigate through E0 connectors to reach different elevation areas.
-                                    logger.info(
-                                        f"Skipping elevation filtering - pathfinding handles elevation via E0 connectors (player at elevation {player_elevation})"
-                                    )
-
-                            # Ensure map dict exists
-                            if "map" not in state:
-                                state["map"] = {}
-                            if "porymap" not in state["map"]:
-                                state["map"]["porymap"] = {}
-
-                            # Add porymap data for pathfinding (UNFILTERED grid for pathfinding to navigate via E0)
-                            state["map"]["porymap"]["grid"] = json_map["grid"]
-                            state["map"]["porymap"]["objects"] = json_map.get("objects", [])
-                            state["map"]["porymap"]["dimensions"] = json_map.get("dimensions", {})
-                            state["map"]["porymap"]["warps"] = json_map.get("warps", [])
-                            state["map"]["porymap"]["raw_tiles"] = raw_tiles  # Include for pathfinding elevation checks
-
-                            # Debug: verify grid is unfiltered
-                            grid_dims = (
-                                f"{len(json_map['grid'][0])}x{len(json_map['grid'])}"
-                                if json_map.get("grid")
-                                else "None"
-                            )
-                            logger.info(
-                                f"Loaded UNFILTERED porymap for pathfinding: '{porymap_map_name}' (ROM: '{location_name}'), grid: {grid_dims}"
-                            )
-                            logger.debug(f"Loaded porymap data for '{porymap_map_name}' (ROM: '{location_name}')")
-                        else:
-                            logger.warning(f"Porymap data for '{porymap_map_name}' missing grid data")
-                    else:
-                        logger.warning(f"Could not map ROM location '{location_name}' to porymap map name")
-                else:
-                    logger.warning(f"Could not find pokeemerald root for porymap data")
-            except Exception as porymap_err:
-                logger.warning(f"Failed to load porymap data for pathfinding: {porymap_err}")
-
-        # Get player position (ROM coordinates)
-        player_pos = state.get("player", {}).get("position", {})
-        rom_start_x = player_pos.get("x", 0)
-        rom_start_y = player_pos.get("y", 0)
-        
-        # Apply coordinate offset if using an override map
-        # This translates ROM coordinates to the local override map coordinate space
-        start_x = rom_start_x
-        start_y = rom_start_y
-        goal_x = x
-        goal_y = y
-        if coord_offset:
-            offset_x, offset_y = coord_offset
-            start_x = rom_start_x - offset_x
-            start_y = rom_start_y - offset_y
-            # Goal coordinates from agent are already in local map space (agent sees translated coords)
-            # So we don't translate the goal - it's already in the override map's coordinate system
-            logger.info(f"Coordinate translation: ROM ({rom_start_x}, {rom_start_y}) -> local ({start_x}, {start_y}), goal ({goal_x}, {goal_y})")
-        
-        start = (start_x, start_y)
-        goal = (goal_x, goal_y)
-
-        # Check if requested goal is blocked (for agent notification)
-        goal_was_blocked = False
-        map_data = state.get("map", {}).get("porymap", {})
-        if map_data.get("grid"):
-            grid = map_data["grid"]
-            if 0 <= goal_y < len(grid):
-                row = grid[goal_y]
-                if isinstance(row, (list, str)) and 0 <= goal_x < len(row):
-                    cell = row[goal_x] if isinstance(row, str) else row[goal_x]
-                    if cell == "#":
-                        goal_was_blocked = True
-
-        # Calculate path buttons using Pathfinder
-        buttons = pathfinder.find_path(
-            start, goal, state, variance=variance_level, consider_npcs=consider_npcs, blocked_coords=blocked_coords
-        )
-
-        if not buttons:
-            # Provide detailed error message about why path failed
-            error_msg = f"No path found from ({start_x}, {start_y}) to ({x}, {y})"
-
-            # Check if target is blocked
-            map_data = state.get("map", {}).get("porymap", {})
-            if map_data.get("grid"):
-                grid = map_data["grid"]
-                if 0 <= y < len(grid):
-                    row = grid[y]
-                    if isinstance(row, (list, str)) and 0 <= x < len(row):
-                        cell = row[x] if isinstance(row, str) else row[x]
-                        if cell == "#":
-                            error_msg += " - Target is blocked by a wall or obstacle"
-                        elif cell == "W":
-                            error_msg += " - Target requires Surf (water)"
-                        elif cell in ["X", "?"]:
-                            error_msg += " - Target is out of bounds or unexplored"
-                        else:
-                            error_msg += f" - Target tile '{cell}' may be unreachable from current position"
-
-            # Check distance to see if it's just too far
-            manhattan_dist = abs(x - start_x) + abs(y - start_y)
-            if manhattan_dist > 100:
-                error_msg += f" (distance: {manhattan_dist} tiles - may be too far)"
-
-            return {"success": False, "error": error_msg, "target": f"({x}, {y})", "reason": "unreachable"}
-
-        nav_reason_text = f"Navigating from ({start_x}, {start_y}) to ({x}, {y})"
-        if nav_reason:
-            nav_reason_text += f": {nav_reason}"
-        if variance_level:
-            nav_reason_text += f" (variance={variance_level})"
-
-        logger.info(f"🗺️ {nav_reason_text} - Buttons calculated: {len(buttons)}")
-
-        result = {
-            "success": True,
-            "buttons": buttons,
-            "target": f"({x}, {y})",
-            "path_length": len(buttons),
-            "reason": nav_reason,
-            "variance": variance_level or "none",
-        }
-
-        # Inform agent if goal was blocked and adjusted
-        if goal_was_blocked:
-            result["note"] = f"Requested target ({x}, {y}) was blocked; navigated to nearest reachable tile"
-
-        return result
-    except Exception as e:
-        logger.error(f"Failed to navigate: {e}")
-        import traceback
-
-        logger.error(traceback.format_exc())
-        return {"success": False, "error": str(e)}
-
-
-def add_knowledge_direct(category, title, content, location=None, coordinates=None, importance=3) -> dict:
-    """Add knowledge to knowledge base - for use by server endpoints."""
-    try:
-        entry_id = knowledge_base.add(
-            category=category,
-            title=title,
-            content=content,
-            location=location,
-            coordinates=coordinates,
-            importance=importance,
-        )
-        logger.info(f"📝 Added knowledge: {title} ({category})")
-        return {"success": True, "entry_id": entry_id, "message": f"Stored knowledge: {title}"}
-    except Exception as e:
-        logger.error(f"Failed to add knowledge: {e}")
-        return {"success": False, "error": str(e)}
-
-
-def search_knowledge_direct(category=None, query="", location="", min_importance=1) -> dict:
-    """Search knowledge base - for use by server endpoints."""
-    try:
-        results = knowledge_base.search(
-            category=category, location=location or None, query=query or None, min_importance=min_importance
-        )
-        return {"success": True, "count": len(results), "results": results}
-    except Exception as e:
-        logger.error(f"Failed to search knowledge: {e}")
-        return {"success": False, "error": str(e)}
-
-
-def get_knowledge_summary_direct(min_importance=3) -> dict:
-    """Get knowledge summary - for use by server endpoints."""
-    try:
-        summary = knowledge_base.get_summary(min_importance=min_importance)
-        return {"success": True, "summary": summary}
-    except Exception as e:
-        logger.error(f"Failed to get knowledge summary: {e}")
-        return {"success": False, "error": str(e)}
-
+# ---------------------------------------------------------------------------
+# Game tools
+# ---------------------------------------------------------------------------
 
 @mcp.tool()
-def get_game_state() -> dict:
+def get_game_state():
     """
     Get the current game state including player position, party, map, items, and screenshot.
-    Use this to manually inspect the game state when needed.
+    The screenshot is returned as a native image so you can visually inspect the game.
 
     Returns:
-        Dictionary containing formatted state text and raw state data
+        State data as text content plus the game screenshot as an image
     """
-    try:
-        response = requests.get(f"{SERVER_URL}/state", timeout=5)
-        response.raise_for_status()
-        state = response.json()
+    result = _post("/mcp/get_game_state", timeout=_TIMEOUT_SHORT)
+    screenshot_b64 = result.pop("screenshot_base64", None)
+    # Drop raw_state so the tool result matches what the VLM sees (~9k tokens): state_text + key fields + image.
+    # In-process agents call the game server HTTP directly and still receive full raw_state.
+    result.pop("raw_state", None)
 
-        # Format state for LLM
-        state_text = format_state_for_llm(state)
-
-        return {
-            "success": True,
-            "state_text": state_text,
-            "player_position": state.get("player", {}).get("position", {}),
-            "location": state.get("map", {}).get("current_map", "Unknown"),
-        }
-    except Exception as e:
-        logger.error(f"Failed to get game state: {e}")
-        return {"success": False, "error": str(e)}
+    if screenshot_b64:
+        # Hint for the model: image is the next content block (helps when output is large/persisted)
+        result["_screenshot_location"] = (
+            "The game screenshot is the next content block: a PNG image. "
+            "Use the image immediately after this text to see the current game frame."
+        )
+        img_bytes = base64.b64decode(screenshot_b64)
+        logger.info("get_game_state: attached screenshot (PNG, %d KB) as next content block", len(img_bytes) // 1024)
+        return [
+            result,
+            MCPImage(data=img_bytes, format="png"),
+        ]
+    return result
 
 
 @mcp.tool()
@@ -715,80 +130,21 @@ def press_buttons(
         - Example: press_buttons(["WAIT"], speed="slow") for a long wait
         - Example: press_buttons(["WAIT"], release_frames=60) for a custom 60-frame wait
 
-    Examples:
-        # Fast dialogue advancement
-        press_buttons(["A", "A", "A"], speed="fast", reasoning="Advancing through NPC dialogue")
-
-        # Normal movement
-        press_buttons(["UP", "UP", "RIGHT"], speed="normal", reasoning="Walking to Pokemon Center")
-
-        # Wait for NPC to move
-        press_buttons(["WAIT"], speed="slow", reasoning="Waiting for NPC to finish walking")
-
     Returns:
         Dictionary with success status, buttons pressed, and updated game state
     """
-    if not buttons:
-        return {"success": False, "error": "No buttons provided"}
-
-    try:
-        # Validate and normalize buttons
-        VALID_BUTTONS = {"A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"}
-        normalized_buttons = []
-        invalid_buttons = []
-
-        for button in buttons:
-            # Normalize to uppercase
-            button_upper = str(button).upper().strip()
-
-            # Check if valid
-            if button_upper in VALID_BUTTONS:
-                normalized_buttons.append(button_upper)
-            else:
-                # Invalid button - fallback to A and warn
-                invalid_buttons.append(button)
-                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
-                normalized_buttons.append("A")
-
-        # Send normalized buttons to server with speed parameters
-        payload = {"buttons": normalized_buttons}
-
-        # Add speed control parameters
-        if speed:
-            payload["speed"] = speed
-        if hold_frames is not None:
-            payload["hold_frames"] = hold_frames
-        if release_frames is not None:
-            payload["release_frames"] = release_frames
-
-        if source:
-            payload["source"] = source
-        if metadata is not None:
-            payload["metadata"] = metadata
-
-        response = requests.post(f"{SERVER_URL}/action", json=payload, timeout=10)
-        response.raise_for_status()
-        result = response.json()
-
-        # Get updated state after action
-        state_response = get_game_state()
-
-        response_dict = {
-            "success": True,
-            "buttons_pressed": normalized_buttons,
-            "reasoning": reasoning,
-            "result": result,
-            "new_state": state_response.get("state_text", "State unavailable"),
-        }
-
-        # Include warning if any buttons were invalid
-        if invalid_buttons:
-            response_dict["warning"] = f"Invalid buttons replaced with 'A': {invalid_buttons}"
-
-        return response_dict
-    except Exception as e:
-        logger.error(f"Failed to press buttons: {e}")
-        return {"success": False, "error": str(e)}
+    body: Dict[str, Any] = {"buttons": buttons, "reasoning": reasoning}
+    if speed:
+        body["speed"] = speed
+    if hold_frames is not None:
+        body["hold_frames"] = hold_frames
+    if release_frames is not None:
+        body["release_frames"] = release_frames
+    if source:
+        body["source"] = source
+    if metadata is not None:
+        body["metadata"] = metadata
+    return _post("/mcp/press_buttons", body)
 
 
 @mcp.tool()
@@ -816,230 +172,31 @@ def navigate_to(
     Returns:
         Dictionary with success status, path information, and navigation result
     """
-    # Get current state
-    state_response = get_game_state()
-    if not state_response.get("success"):
-        return {"success": False, "error": "Failed to get current game state"}
-
-    # Convert list of lists to list of tuples for internal use
-    internal_blocked = None
+    body: Dict[str, Any] = {"x": x, "y": y, "reason": reason}
+    if variance and variance != "none":
+        body["variance"] = variance
+    if not consider_npcs:
+        body["consider_npcs"] = False
     if blocked_coords:
-        internal_blocked = [tuple(c) for c in blocked_coords]
-
-    # Disable navigate_to for Mauville Gym due to map coordinate issues
-    location = state_response.get("state", {}).get("player", {}).get("location", {})
-    if isinstance(location, dict):
-        location_name = location.get("map_name", "")
-    else:
-        location_name = str(location)
-
-    if location_name and "MAUVILLE" in location_name.upper() and "GYM" in location_name.upper():
-        return {
-            "success": False,
-            "error": "navigate_to is disabled in Mauville Gym due to coordinate mapping issues. Please use press_button with directional inputs (UP, DOWN, LEFT, RIGHT) to navigate manually.",
-        }
-
-    # Get raw state for pathfinding
-    try:
-        response = requests.get(f"{SERVER_URL}/state", timeout=5)
-        response.raise_for_status()
-        state = response.json()
-    except Exception as e:
-        return {"success": False, "error": f"Failed to get state for pathfinding: {e}"}
-
-    try:
-        variance_level = None
-        nav_reason = "" if reason is None else str(reason)
-
-        if variance is not None:
-            variance_str = str(variance).strip()
-            variance_lower = variance_str.lower()
-            if variance_lower in {"low", "medium", "high"}:
-                variance_level = variance_lower
-            elif variance_lower in {"", "none"}:
-                variance_level = None
-            elif not reason:
-                nav_reason = variance_str
-        elif nav_reason.lower() in {"low", "medium", "high"}:
-            variance_level = nav_reason.lower()
-            nav_reason = ""
-
-        # Load porymap data with game-state-aware override support
-        coord_offset, state = load_porymap_for_pathfinding(state)
-
-        # Get player position from state (ROM coordinates)
-        player_pos = state.get("player", {}).get("position", {})
-        rom_start_x = player_pos.get("x", 0)
-        rom_start_y = player_pos.get("y", 0)
-        
-        # Apply coordinate offset if using an override map
-        start_x = rom_start_x
-        start_y = rom_start_y
-        goal_x = x
-        goal_y = y
-        if coord_offset:
-            offset_x, offset_y = coord_offset
-            start_x = rom_start_x - offset_x
-            start_y = rom_start_y - offset_y
-            # Goal coordinates from agent are already in local map space
-            logger.info(f"MCP navigate_to: Coord translation ROM ({rom_start_x}, {rom_start_y}) -> local ({start_x}, {start_y})")
-        
-        start = (start_x, start_y)
-        goal = (goal_x, goal_y)
-
-        # Calculate path using Pathfinder
-        buttons = pathfinder.find_path(
-            start, goal, state, variance=variance_level, consider_npcs=consider_npcs, blocked_coords=internal_blocked
-        )
-
-        if not buttons:
-            return {"success": False, "error": "No path found to target location", "target": f"({x}, {y})"}
-
-        # Execute navigation
-        nav_reason_text = f"Navigating to ({x}, {y})"
-        if nav_reason:
-            nav_reason_text += f": {nav_reason}"
-        if variance_level:
-            nav_reason_text += f" (variance={variance_level})"
-
-        variance_metadata = variance_level or "none"
-        result = press_buttons(buttons, nav_reason_text, source="navigate_to", metadata={"variance": variance_metadata})
-
-        return {
-            "success": True,
-            "target": f"({x}, {y})",
-            "path_length": len(buttons),
-            "buttons_executed": len(buttons),
-            "reason": nav_reason,
-            "variance": variance_level or "none",
-            "navigation_result": result,
-        }
-    except Exception as e:
-        logger.error(f"Navigation failed: {e}")
-        return {"success": False, "error": str(e)}
+        body["blocked_coords"] = blocked_coords
+    return _post("/mcp/navigate_to", body)
 
 
-@mcp.tool()
-def add_knowledge(
-    category: str, title: str, content: str, location: str = "", coordinates: str = "", importance: int = 3
-) -> dict:
-    """
-    Store important information in your persistent knowledge base.
-    Use this to remember locations, NPCs, items, strategies, or any other useful information you discover.
+# ---------------------------------------------------------------------------
+# Removed tools for CLI agent experiments:
+# - Knowledge tools (add_knowledge, search_knowledge, get_knowledge_summary)
+#   CLI agents should implement their own internal memory systems
+# - Wiki tools (lookup_pokemon_info, list_wiki_sources, get_walkthrough)
+#   CLI agents can access web information through their native capabilities
+# - Objective tools (complete_direct_objective, create_direct_objectives, get_progress_summary)
+#   CLI agents use milestone-based tracking instead of objectives
+# - Reflection tools (reflect)
+#   CLI agents implement their own reflection mechanisms
+#
+# These endpoints remain available in server/app.py for VLM agents.
+# ---------------------------------------------------------------------------
 
-    Args:
-        category: Category of knowledge (location, npc, item, pokemon, strategy, custom)
-        title: Brief title for this knowledge
-        content: Detailed description or notes
-        location: Map name where this applies (optional)
-        coordinates: Coordinates like 'X:10,Y:20' (optional)
-        importance: Importance level 1-5 (5 = critical, 3 = normal, 1 = minor)
-
-    Returns:
-        Dictionary with success status and entry ID
-    """
-    valid_categories = ["location", "npc", "item", "pokemon", "strategy", "custom"]
-    if category not in valid_categories:
-        return {"success": False, "error": f"Invalid category. Must be one of: {', '.join(valid_categories)}"}
-
-    if not 1 <= importance <= 5:
-        return {"success": False, "error": "Importance must be between 1 and 5"}
-
-    try:
-        entry_id = knowledge_base.add(
-            category=category,
-            title=title,
-            content=content,
-            location=location or None,
-            coordinates=coordinates or None,
-            importance=importance,
-        )
-
-        return {"success": True, "entry_id": entry_id, "message": f"Stored knowledge: {title}"}
-    except Exception as e:
-        logger.error(f"Failed to add knowledge: {e}")
-        return {"success": False, "error": str(e)}
-
-
-@mcp.tool()
-def search_knowledge(category: str = "all", query: str = "", location: str = "", min_importance: int = 1) -> dict:
-    """
-    Search your knowledge base for stored information.
-    Use this to recall what you've learned about locations, NPCs, items, or strategies.
-
-    Args:
-        category: Category to search (location, npc, item, pokemon, strategy, custom, all)
-        query: Text to search for in titles and content (optional)
-        location: Filter by map name (optional)
-        min_importance: Minimum importance level (1-5, default 1)
-
-    Returns:
-        Dictionary with success status, count, and search results
-    """
-    try:
-        search_category = None if category == "all" else category
-
-        results = knowledge_base.search(
-            category=search_category, location=location or None, query=query or None, min_importance=min_importance
-        )
-
-        return {"success": True, "count": len(results), "results": results}
-    except Exception as e:
-        logger.error(f"Failed to search knowledge: {e}")
-        return {"success": False, "error": str(e)}
-
-
-@mcp.tool()
-def get_knowledge_summary(min_importance: int = 3) -> dict:
-    """
-    Get a summary of the most important things you've learned.
-    Shows your top discoveries and notes.
-
-    Args:
-        min_importance: Minimum importance level to include (1-5, default 3)
-
-    Returns:
-        Dictionary with success status and formatted summary
-    """
-    try:
-        summary = knowledge_base.get_summary(min_importance=min_importance)
-
-        return {"success": True, "summary": summary}
-    except Exception as e:
-        logger.error(f"Failed to get knowledge summary: {e}")
-        return {"success": False, "error": str(e)}
-
-
-# ============================================================================
-# POKEMON WIKI RESOURCES
-# ============================================================================
-
-# Curated list of Pokemon Emerald information sources
-POKEMON_WIKI_SOURCES = {
-    "bulbapedia": {
-        "base_url": "https://bulbapedia.bulbagarden.net/wiki/",
-        "search_url": "https://bulbapedia.bulbagarden.net/w/index.php?search=",
-        "description": "Comprehensive Pokemon encyclopedia",
-    },
-    "serebii": {
-        "base_url": "https://www.serebii.net/",
-        "emerald_url": "https://www.serebii.net/emerald/",
-        "description": "Detailed Pokemon Emerald guides and data",
-    },
-    "pokemondb": {
-        "base_url": "https://pokemondb.net/",
-        "emerald_url": "https://pokemondb.net/pokedex/game/emerald",
-        "description": "Pokemon database with stats and locations",
-    },
-    "marriland": {
-        "base_url": "https://marriland.com/",
-        "emerald_url": "https://marriland.com/pokemon-emerald/",
-        "description": "Strategy guides and walkthroughs",
-    },
-}
-
-
-@mcp.tool()
+# @mcp.tool()
 def lookup_pokemon_info(topic: str, source: str = "bulbapedia") -> dict:
     """
     Look up information about Pokemon Emerald from trusted wiki sources.
@@ -1057,102 +214,10 @@ def lookup_pokemon_info(topic: str, source: str = "bulbapedia") -> dict:
         lookup_pokemon_info("Route 103", "serebii")  # Route 103 details from Serebii
         lookup_pokemon_info("Norman", "bulbapedia")  # Info about Gym Leader Norman
     """
-    try:
-        if source not in POKEMON_WIKI_SOURCES:
-            return {
-                "success": False,
-                "error": f"Unknown source '{source}'. Available: {', '.join(POKEMON_WIKI_SOURCES.keys())}",
-            }
-
-        source_info = POKEMON_WIKI_SOURCES[source]
-
-        # Build URL based on source
-        if source == "bulbapedia":
-            # Bulbapedia uses wiki-style URLs
-            formatted_topic = topic.replace(" ", "_")
-            url = f"{source_info['base_url']}{formatted_topic}"
-        elif source == "serebii":
-            # Try emerald-specific section first
-            formatted_topic = topic.lower().replace(" ", "")
-            url = f"{source_info['emerald_url']}{formatted_topic}.shtml"
-        elif source == "pokemondb":
-            # PokemonDB uses lowercase with hyphens
-            formatted_topic = topic.lower().replace(" ", "-")
-            url = f"{source_info['base_url']}pokedex/{formatted_topic}"
-        elif source == "marriland":
-            formatted_topic = topic.lower().replace(" ", "-")
-            url = f"{source_info['emerald_url']}{formatted_topic}/"
-        else:
-            url = f"{source_info['base_url']}{topic}"
-
-        logger.info(f"Fetching Pokemon info: {topic} from {source} ({url})")
-
-        # Fetch the page
-        response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; PokeAgent/1.0)"})
-
-        # If 404, try search instead
-        if response.status_code == 404 and source == "bulbapedia":
-            search_url = f"{source_info['search_url']}{quote_plus(topic)}"
-            logger.info(f"Page not found, trying search: {search_url}")
-            response = requests.get(
-                search_url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; PokeAgent/1.0)"}
-            )
-
-        response.raise_for_status()
-
-        # Parse HTML
-        soup = BeautifulSoup(response.content, "html.parser")
-
-        # Remove unwanted elements
-        for element in soup(["script", "style", "nav", "footer", "header"]):
-            element.decompose()
-
-        # Extract main content based on source
-        content = ""
-        if source == "bulbapedia":
-            # Bulbapedia has content in #mw-content-text
-            main_content = soup.find("div", id="mw-content-text")
-            if main_content:
-                # Get first few paragraphs
-                paragraphs = main_content.find_all("p", limit=5)
-                content = "\n\n".join(p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True))
-        else:
-            # For other sources, get text from body
-            content = soup.get_text()
-            # Clean up whitespace
-            lines = (line.strip() for line in content.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-            content = "\n".join(chunk for chunk in chunks if chunk)
-
-        # Limit content length
-        max_chars = 5000
-        if len(content) > max_chars:
-            content = content[:max_chars] + f"\n\n[Content truncated - {len(content)} total characters]"
-
-        if not content or len(content) < 50:
-            return {
-                "success": False,
-                "error": f"Could not extract meaningful content from {url}. Page may not exist or format changed.",
-            }
-
-        return {
-            "success": True,
-            "topic": topic,
-            "source": source,
-            "url": url,
-            "content": content,
-            "description": source_info["description"],
-        }
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch {topic} from {source}: {e}")
-        return {"success": False, "error": f"Failed to fetch from {source}: {str(e)}"}
-    except Exception as e:
-        logger.error(f"Error looking up {topic}: {e}")
-        return {"success": False, "error": str(e)}
+    return _post("/mcp/lookup_pokemon_info", {"topic": topic, "source": source}, timeout=_TIMEOUT_MEDIUM)
 
 
-@mcp.tool()
+# @mcp.tool()
 def list_wiki_sources() -> dict:
     """
     List available Pokemon wiki sources and what they're good for.
@@ -1161,26 +226,10 @@ def list_wiki_sources() -> dict:
     Returns:
         Dictionary with available sources and their descriptions
     """
-    sources = []
-    for name, info in POKEMON_WIKI_SOURCES.items():
-        sources.append(
-            {
-                "name": name,
-                "description": info["description"],
-                "base_url": info.get("base_url", ""),
-                "emerald_url": info.get("emerald_url", ""),
-            }
-        )
-
-    return {
-        "success": True,
-        "sources": sources,
-        "count": len(sources),
-        "usage": "Use lookup_pokemon_info(topic, source) to fetch information",
-    }
+    return _post("/mcp/list_wiki_sources", timeout=_TIMEOUT_SHORT)
 
 
-@mcp.tool()
+# @mcp.tool()
 def get_walkthrough(part: int) -> dict:
     """
     Get the official Bulbapedia walkthrough for Pokemon Emerald.
@@ -1217,91 +266,132 @@ def get_walkthrough(part: int) -> dict:
         get_walkthrough(1)  # Get Part 1: Introduction and Littleroot Town
         get_walkthrough(6)  # Get Part 6: Roxanne battle and Route 116
     """
-    try:
-        if not 1 <= part <= 21:
-            return {"success": False, "error": f"Part must be between 1 and 21 (got {part})"}
+    return _post("/mcp/get_walkthrough", {"part": part}, timeout=_TIMEOUT_MEDIUM)
 
-        # Build Bulbapedia walkthrough URL
-        url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
 
-        logger.info(f"Fetching Emerald walkthrough part {part}: {url}")
+# ---------------------------------------------------------------------------
+# Objective / progress tools
+# ---------------------------------------------------------------------------
 
-        # Fetch the page
-        response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; PokeAgent/1.0)"})
-        response.raise_for_status()
+# @mcp.tool()
+def complete_direct_objective(
+    objective_id: str,
+    completion_notes: str = "",
+    category: str = "",
+) -> dict:
+    """
+    Mark the current direct objective as completed.
+    Call this when you've successfully accomplished the current objective.
 
-        # Parse HTML
-        soup = BeautifulSoup(response.content, "html.parser")
+    Args:
+        objective_id: The ID of the objective to complete (must match the current objective)
+        completion_notes: Optional notes about how the objective was completed
+        category: Category of the objective (story, battling, dynamics) — required in categorized mode
 
-        # Remove unwanted elements
-        for element in soup(["script", "style", "nav", "footer", "header", "table"]):
-            element.decompose()
+    Returns:
+        Dictionary with success status, completed objective info, and next objective
+    """
+    body: Dict[str, Any] = {"objective_id": objective_id}
+    if completion_notes:
+        body["completion_notes"] = completion_notes
+    if category:
+        body["category"] = category
+    return _post("/mcp/complete_direct_objective", body)
 
-        # Extract main content
-        main_content = soup.find("div", id="mw-content-text")
-        if not main_content:
-            return {"success": False, "error": f"Could not find main content for Part {part}"}
 
-        # Get all paragraphs and headings for structured walkthrough
-        content_parts = []
-        for element in main_content.find_all(["h2", "h3", "h4", "p", "ul"], limit=50):
-            if element.name in ["h2", "h3", "h4"]:
-                # Add headings with formatting
-                heading_text = element.get_text(strip=True)
-                if heading_text and not heading_text.startswith("[edit]"):
-                    level = element.name
-                    if level == "h2":
-                        content_parts.append(f"\n## {heading_text}")
-                    elif level == "h3":
-                        content_parts.append(f"\n### {heading_text}")
-                    else:
-                        content_parts.append(f"\n#### {heading_text}")
-            elif element.name == "p":
-                # Add paragraphs
-                para_text = element.get_text(strip=True)
-                if para_text and len(para_text) > 20:  # Skip short fragments
-                    content_parts.append(para_text)
-            elif element.name == "ul":
-                # Add lists
-                for li in element.find_all("li"):
-                    li_text = li.get_text(strip=True)
-                    if li_text:
-                        content_parts.append(f"  - {li_text}")
+# @mcp.tool()
+def create_direct_objectives(
+    objectives: List[Dict[str, Any]],
+    reasoning: str = "",
+    category: str = "",
+) -> dict:
+    """
+    Create the next 3 direct objectives dynamically.
+    Use this after completing all objectives in a sequence to plan your next steps.
 
-        content = "\n\n".join(content_parts)
+    Args:
+        objectives: List of exactly 3 objective dicts, each with:
+            - id (str): Unique objective identifier
+            - description (str): What needs to be done
+            - action_type (str): Type of action (navigate, interact, battle, create_new_objectives)
+            - target_location (str, optional): Where this takes place
+            - navigation_hint (str, optional): How to get there
+            - completion_condition (str, optional): How to know it's done
+            - priority (int, optional): Priority level
+        reasoning: Why these objectives were chosen
+        category: Category for categorized mode (story, battling, dynamics)
 
-        # Limit content length
-        max_chars = 8000  # Larger for walkthrough
-        if len(content) > max_chars:
-            content = content[:max_chars] + f"\n\n[Content truncated - {len(content)} total characters]"
+    Returns:
+        Dictionary with success status and next objective guidance
+    """
+    body: Dict[str, Any] = {"objectives": objectives}
+    if reasoning:
+        body["reasoning"] = reasoning
+    if category:
+        body["category"] = category
+    return _post("/mcp/create_direct_objectives", body)
 
-        if not content or len(content) < 100:
-            return {"success": False, "error": f"Could not extract meaningful content from Part {part}"}
 
-        return {
-            "success": True,
-            "part": part,
-            "url": url,
-            "content": content,
-            "description": f"Pokemon Emerald Walkthrough - Part {part}",
-        }
+# @mcp.tool()
+def get_progress_summary() -> dict:
+    """
+    Get comprehensive progress summary including milestones, completed objectives, and knowledge.
+    Use this to review your overall progress and plan next steps.
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to fetch walkthrough part {part}: {e}")
-        return {"success": False, "error": f"Failed to fetch Part {part}: {str(e)}"}
-    except Exception as e:
-        logger.error(f"Error getting walkthrough part {part}: {e}")
-        return {"success": False, "error": str(e)}
+    Returns:
+        Dictionary with success status and progress data including:
+        - Milestones completed
+        - Direct objectives status
+        - Knowledge base summary
+        - Current location and coordinates
+    """
+    return _post("/mcp/get_progress_summary", timeout=_TIMEOUT_SHORT)
 
+
+# @mcp.tool()
+def reflect(situation: str = "Agent requested reflection") -> dict:
+    """
+    Return context data for self-reflection on current progress.
+    Use this to analyze what you've done recently, assess whether you're stuck,
+    and plan your next moves based on game state and objective progress.
+
+    Args:
+        situation: Description of the current situation or why you're reflecting
+
+    Returns:
+        Dictionary with context data including:
+        - Current game state summary
+        - Current objective and progress
+        - Recent action history
+        - Porymap ground truth data
+    """
+    return _post("/mcp/reflect", {"situation": situation})
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    logger.info("Pokemon MCP Server starting...")
+    logger.info("Pokemon MCP Server starting (thin proxy mode)...")
+    logger.info(f"Proxying to game server at: {SERVER_URL}")
     logger.info("Server name: pokemon-emerald")
-    logger.info("Available tools:")
+    logger.info("Available tools (3 total, CLI agent minimal set):")
     logger.info("  Game: get_game_state, press_buttons, navigate_to")
-    logger.info("  Knowledge: add_knowledge, search_knowledge, get_knowledge_summary")
-    logger.info("  Wiki: lookup_pokemon_info, list_wiki_sources, get_walkthrough")
-    logger.info("  Walkthrough: 21 parts available (Part 1-21)")
+    logger.info("")
+    logger.info("Note: Knowledge, Wiki, Objectives, and Reflection tools removed for CLI experiments.")
+    logger.info("      CLI agents implement their own internal memory and planning systems.")
 
-    # Run the MCP server with stdio transport
-    mcp.run(transport="stdio")
+    # Check for SSE transport mode (used when running in containerized environment)
+    transport_mode = os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    
+    if transport_mode == "sse":
+        # SSE mode: run as HTTP server for remote MCP clients
+        # Port/host were configured in FastMCP() init above
+        logger.info(f"🌐 Starting SSE transport on {_MCP_HOST}:{_MCP_PORT}")
+        logger.info(f"   Remote clients can connect via: http://<host>:{_MCP_PORT}/sse")
+        mcp.run(transport="sse")
+    else:
+        # Stdio mode (default): for local subprocess spawning
+        logger.info("📡 Starting stdio transport (local subprocess mode)")
+        mcp.run(transport="stdio")

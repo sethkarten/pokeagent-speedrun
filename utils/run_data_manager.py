@@ -49,11 +49,11 @@ class RunDataManager:
                 # append run_name to run_id if provided
                 if run_name:
                     run_id = f"{run_id}_{run_name}"
-            # Fallback to run_name if provided (deprecated)
+            # Run name only (e.g. CLI): datetime then name, same pattern as run_data and .pokeagent_cache
             elif run_name:
                 import re
                 sanitized_name = re.sub(r'[^\w\-_]', '_', run_name)
-                run_id = f"run_{timestamp}_{sanitized_name}"
+                run_id = f"{timestamp}_{sanitized_name}"
             else:
                 # Default format (no objectives specified)
                 run_id = f"run_{timestamp}"
@@ -480,84 +480,21 @@ class RunDataManager:
             logger.debug(f"Frame cache file not found: {frame_cache_file}")
     
     def copy_video_recording(self, record_enabled: bool = False):
-        """Copy video recording to run_data end_state
-        
-        Simplified: If recording was enabled, find the most recent .mp4 file and copy it.
-        
+        """Video is saved directly to run_data/end_state/videos/ when recording is enabled.
+        No copy needed - this method verifies the file exists (kept for API compatibility).
+
         Args:
-            record_enabled: Whether --record flag was used (if True, search for video file)
+            record_enabled: Whether --record flag was used.
         """
         if not record_enabled:
-            logger.debug("Video recording was not enabled, skipping video copy")
+            logger.debug("Video recording was not enabled, skipping")
             return
-        
-        import glob
-        
-        logger.info(f"🔍 [VIDEO] Searching for video files (record_enabled=True)")
-        logger.info(f"🔍 [VIDEO] Current working directory: {os.getcwd()}")
-        logger.info(f"🔍 [VIDEO] Run ID: {self.run_id}")
-        
-        # Find all .mp4 files matching the pattern in current directory
-        # Try multiple search patterns (new format with run_id and old format)
-        search_patterns = [
-            f"{self.run_id}.mp4",  # New format
-            f"./{self.run_id}.mp4",
-            "pokegent_recording_*.mp4",  # Old format (fallback)
-            "./pokegent_recording_*.mp4",
-            os.path.join(os.getcwd(), "pokegent_recording_*.mp4"),
-        ]
-        
-        video_files = []
-        for pattern in search_patterns:
-            found = glob.glob(pattern)
-            if found:
-                video_files.extend(found)
-                logger.info(f"🔍 [VIDEO] Found {len(found)} files with pattern '{pattern}': {found}")
-        
-        # Remove duplicates while preserving order
-        video_files = list(dict.fromkeys(video_files))
-        
-        logger.info(f"🔍 [VIDEO] Total unique video files found: {len(video_files)}")
-        if video_files:
-            logger.info(f"🔍 [VIDEO] Video files: {video_files}")
-        
-        if video_files:
-            # Use the most recent video file (by modification time)
-            video_file = max(video_files, key=os.path.getmtime)
-            logger.info(f"🔍 [VIDEO] Using most recent video: {video_file}")
-            logger.info(f"🔍 [VIDEO] Video file exists: {os.path.exists(video_file)}")
-            logger.info(f"🔍 [VIDEO] Video file absolute path: {os.path.abspath(video_file)}")
-            
-            try:
-                # Check source file size
-                source_size = os.path.getsize(video_file)
-                logger.info(f"🔍 [VIDEO] Source video size: {source_size} bytes")
-                
-                if source_size == 0:
-                    logger.warning(f"⚠️ [VIDEO] Source video file is empty (0 bytes), skipping copy")
-                    return
-                
-                dest_file = self.run_dir / "end_state" / "videos" / os.path.basename(video_file)
-                dest_file.parent.mkdir(parents=True, exist_ok=True)
-                
-                logger.info(f"🔍 [VIDEO] Destination: {dest_file}")
-                
-                shutil.copy2(video_file, dest_file)
-                
-                # Verify copy
-                if dest_file.exists():
-                    dest_size = os.path.getsize(dest_file)
-                    logger.info(f"✅ [VIDEO] Copied video: {video_file} -> {dest_file} ({source_size} -> {dest_size} bytes)")
-                    if dest_size != source_size:
-                        logger.warning(f"⚠️ [VIDEO] Size mismatch! Source: {source_size}, Dest: {dest_size}")
-                else:
-                    logger.error(f"❌ [VIDEO] Copy failed - destination file does not exist: {dest_file}")
-            except Exception as e:
-                logger.error(f"❌ [VIDEO] Error copying video: {e}", exc_info=True)
+
+        expected = self.run_dir / "end_state" / "videos" / f"{self.run_id}.mp4"
+        if expected.exists():
+            logger.info(f"Video recording saved directly: {expected}")
         else:
-            logger.warning(f"⚠️ [VIDEO] Video recording was enabled but no pokegent_recording_*.mp4 file found")
-            logger.warning(f"🔍 [VIDEO] Searched patterns: {search_patterns}")
-            logger.warning(f"🔍 [VIDEO] Current directory contents (first 20): {os.listdir('.')[:20]}")
+            logger.warning(f"Video recording was enabled but file not found: {expected}")
     
     def save_end_state_snapshot(self):
         """Save current end-state snapshot (can be called periodically)
@@ -667,26 +604,29 @@ def get_cache_path(relative_path: str) -> Path:
     return cache_dir / relative_path
 
 
-def cleanup_old_cache_runs():
-    """Clean up old run_ directories in .pokeagent_cache (deprecated structure)
+def get_cli_workspace_dir() -> Path:
+    """Get the CLI agent workspace directory (inside cache for backup/restore).
+    For containerized runs, /workspace is mounted from this path."""
+    path = get_cache_path("workspace")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_checkpoint_llm_path() -> Path:
+    """Get path to checkpoint_llm.txt (cache folder first, then legacy location).
     
-    This preserves the files but marks them as deprecated.
+    Returns:
+        Path to checkpoint_llm.txt
     """
-    cache_dir = Path(".pokeagent_cache")
-    if not cache_dir.exists():
-        return
-    
-    run_dirs = list(cache_dir.glob("run_*"))
-    if not run_dirs:
-        return
-    
-    deprecated_dir = cache_dir / "_deprecated_runs"
-    deprecated_dir.mkdir(exist_ok=True)
-    
-    for run_dir in run_dirs:
-        if run_dir.is_dir():
-            dest = deprecated_dir / run_dir.name
-            if not dest.exists():
-                shutil.move(str(run_dir), str(dest))
-                logger.info(f"Moved deprecated run: {run_dir} -> {dest}")
+    checkpoint_file = get_cache_path("checkpoint_llm.txt")
+    if not checkpoint_file.exists() and Path("checkpoint_llm.txt").exists():
+        return Path("checkpoint_llm.txt")
+    return checkpoint_file
+
+
+def cleanup_old_cache_runs() -> None:
+    """Deprecated. No-op: CLI and other runs now use datetime_runname (no run_* prefix).
+    Kept for compatibility with server shutdown path; does nothing.
+    """
+    pass
 

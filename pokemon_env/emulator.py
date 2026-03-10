@@ -24,6 +24,28 @@ logger = logging.getLogger(__name__)
 
 # some acknowledgement to https://github.com/dvruette/pygba
 
+# COMPARISON_MILESTONES: Canonical ordering of key milestones for fair data analysis
+# These map directly to the MILESTONE_OBJECTIVES used in direct objectives sequences
+# and ensure consistent split-time calculation across different agent implementations.
+COMPARISON_MILESTONES = [
+    "LITTLEROOT_TOWN",       # tutorial_000
+    "ROUTE_101",             # tutorial_006
+    "STARTER_CHOSEN",        # tutorial_007
+    "OLDALE_TOWN",           # early_011
+    "RIVAL_BATTLE_WON",      # early_014 (newly added)
+    "RECEIVED_POKEDEX",      # early_015 (also called BIRCH_LAB_RECEIVED_POKEDEX)
+    "ROUTE_102",             # petalburg_019
+    "PETALBURG_CITY",        # petalburg_020
+    "DAD_FIRST_MEETING",     # petalburg_021
+    "ROUTE_104_SOUTH",       # petalburg_023
+    "PETALBURG_WOODS",       # petalburg_024
+    "ROUTE_104_NORTH",       # petalburg_028
+    "RUSTBORO_CITY",         # petalburg_029
+    "RUSTBORO_GYM_ENTERED",  # rustboro_031
+    "ROXANNE_DEFEATED",      # rustboro_033
+]
+
+
 class MilestoneTracker:
     """Persistent milestone tracking system integrated with emulator"""
     
@@ -129,6 +151,23 @@ class MilestoneTracker:
                 except Exception as e:
                     logger.debug(f"Could not log milestone to LLM logger: {e}")
             
+            # Trigger backup for CLI agents when COMPARISON_MILESTONES are reached
+            # This ensures CLI agents have checkpoint backups at the same game progress points
+            # as VLM agents (who use objective-triggered backups)
+            if milestone_id in COMPARISON_MILESTONES:
+                try:
+                    is_cli_run = os.environ.get("POKEAGENT_CLI_MODE", "") == "1"
+                    
+                    if is_cli_run:
+                        from utils.backup_manager import create_cache_backup
+                        logger.info(f"[milestone-backup] Triggering backup for CLI agent at {milestone_id}")
+                        create_cache_backup(
+                            objective_id=f"milestone_{milestone_id.lower()}",
+                            objective_description=f"Milestone: {milestone_id}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Could not create milestone backup: {e}")
+            
             return True
         return False
     
@@ -162,7 +201,7 @@ class MilestoneTracker:
             "ROUTE_101", "STARTER_CHOSEN", "BIRCH_LAB_VISITED",
             
             # Phase 4: Rival
-            "OLDALE_TOWN", "ROUTE_103", "RECEIVED_POKEDEX",
+            "OLDALE_TOWN", "ROUTE_103", "RIVAL_BATTLE_WON", "RECEIVED_POKEDEX",
             
             # Phase 5: Route 102 & Petalburg
             "ROUTE_102", "PETALBURG_CITY", "DAD_FIRST_MEETING", "GYM_EXPLANATION",
@@ -1308,6 +1347,9 @@ class EmeraldEmulator:
                 return False
             elif milestone_id == "BIRCH_LAB_VISITED":
                 if game_state:
+                    # Only count when returning to lab to receive Pokedex (after Route 103 rival battle)
+                    if not self.milestone_tracker.is_completed("ROUTE_103"):
+                        return False
                     location = game_state.get("player", {}).get("location", "")
                     return "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" in str(location).upper()
                 return False
@@ -1323,18 +1365,32 @@ class EmeraldEmulator:
                     location = game_state.get("player", {}).get("location", "")
                     return "ROUTE_103" in str(location).upper() or "ROUTE 103" in str(location).upper()
                 return False
-            # elif milestone_id == "RIVAL_BATTLE_1":
-            #     # Check for specific state hash from dialog after the battle (c9086d56)
-            #     if game_state:
-            #         # Create state hash for comparison
-            #         state_str = str(game_state)
-            #         state_hash = hashlib.md5(state_str.encode()).hexdigest()[:8]
+            elif milestone_id == "RIVAL_BATTLE_WON":
+                if game_state:
+                    # Must have visited Route 103 first
+                    if not self.milestone_tracker.is_completed("ROUTE_103"):
+                        return False
+                    # Must NOT already have RECEIVED_POKEDEX (that comes after this milestone)
+                    if self.milestone_tracker.is_completed("RECEIVED_POKEDEX"):
+                        return False
                     
-            #         # Check for battle completion state hash or traditional conditions
-            #         return (state_hash == "c9086d56" or 
-            #                 (self.milestone_tracker.is_completed("ROUTE_103") and
-            #                  self.milestone_tracker.is_completed("STARTER_CHOSEN")))
-            #     return False
+                    party = game_state.get("player", {}).get("party", [])
+                    if not party:
+                        return False
+                    
+                    # Starter begins at level 5; if first pokemon is > level 5,
+                    # it gained EXP from the rival fight (strongest pre-Pokedex signal)
+                    first_pokemon_level = party[0].get("level", 0)
+                    location = game_state.get("player", {}).get("location", "")
+                    location_upper = str(location).upper()
+                    
+                    in_littleroot_area = (
+                        "LITTLEROOT" in location_upper or 
+                        "BIRCH" in location_upper
+                    )
+                    
+                    return first_pokemon_level > 5 and in_littleroot_area
+                return False
             elif milestone_id == "RECEIVED_POKEDEX":
                 if game_state:
                     # Check if we're in Birch's lab AND have completed Route 103

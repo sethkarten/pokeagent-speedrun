@@ -14,7 +14,7 @@ import logging
 import json
 import os
 
-from agent.objective_types import DirectObjective
+from .objective_types import DirectObjective
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def get_first_objective_info(sequence_name: str, start_index: int = 0) -> tuple:
             return ("autonomous", "autonomous_objective_creation")
         elif sequence_name == "categorized_full_game":
             # Load the first story objective
-            from agent.all_obj_categorized import STORY_OBJECTIVES
+            from .all_obj_categorized import STORY_OBJECTIVES
             if start_index < len(STORY_OBJECTIVES):
                 obj = STORY_OBJECTIVES[start_index]
                 return (obj.id, obj.description)
@@ -2985,7 +2985,7 @@ class DirectObjectiveManager:
         self.sequence_name = "full_game"
 
         # Import ALL_OBJECTIVES from all_obj.py
-        from agent.all_obj import ALL_OBJECTIVES
+        from .all_obj import ALL_OBJECTIVES
 
         self.current_sequence = ALL_OBJECTIVES
         self.current_index = start_index
@@ -3363,7 +3363,7 @@ class DirectObjectiveManager:
                 - Index 45-50: Elite Four prep (prerequisite: league_219)
                 - Index 51-56: Post-game (prerequisite: post_237)
         """
-        from agent.all_obj_categorized import STORY_OBJECTIVES, BATTLING_OBJECTIVES
+        from .all_obj_categorized import STORY_OBJECTIVES, BATTLING_OBJECTIVES
 
         # Enable categorized mode
         self.enable_categorized_mode()
@@ -3444,6 +3444,49 @@ class DirectObjectiveManager:
                 logger.info(f"💾 Saved categorized objectives initial state to {filename}")
             except Exception as e:
                 logger.warning(f"Failed to save initial state: {e}")
+
+    def load_dummy_categorized_sequence(self):
+        """Load a small dummy sequence for testing categorized objectives."""
+        self.mode = "categorized"
+        self.sequence_name = "dummy_categorized"
+        
+        # Import DirectObjective if not available
+        from .objective_types import DirectObjective
+        
+        self.story_sequence = [
+            DirectObjective(
+                id="dummy_story_01",
+                description="Exit the moving truck to start your adventure",
+                action_type="navigate",
+                target_location="Littleroot Town",
+                completion_condition="map_is_littleroot_town"
+            ),
+            DirectObjective(
+                id="dummy_story_02",
+                description="Enter your house (Brendan's House)",
+                action_type="navigate",
+                target_location="Brendan's House",
+                completion_condition="map_is_brendans_house"
+            )
+        ]
+        
+        self.battling_sequence = [
+            DirectObjective(
+                id="dummy_battle_01",
+                description="Check your PC for a potion",
+                action_type="interact",
+                target_location="Bedroom PC",
+                completion_condition="withdrawn_potion"
+            )
+        ]
+        
+        self.dynamics_sequence = []
+        
+        self.story_index = 0
+        self.battling_index = 0
+        self.dynamics_index = 0
+        
+        logger.info("Loaded dummy categorized sequence for testing")
 
     def get_current_objectives_by_category(self) -> Dict[str, Optional[DirectObjective]]:
         """Get current objectives for all 3 categories

@@ -2,11 +2,11 @@
 """
 Pytest for Agent Prompts Validation
 
-Tests that validate the actual prompt outputs from agent modules:
-- action.py: Action decision prompts
-- memory.py: Memory context generation
-- perception.py: Observation and scene analysis
-- planning.py: Strategic planning prompts
+Tests that validate the actual prompt outputs from agent.deprecated modules:
+- agent.deprecated.action: Action decision prompts
+- agent.deprecated.memory: Memory context generation
+- agent.deprecated.perception: Observation and scene analysis
+- agent.deprecated.planning: Strategic planning prompts
 
 This test validates that the agent modules generate proper prompts without "Unknown" values.
 """
@@ -25,12 +25,12 @@ from pathlib import Path
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import agent modules
-from agent.action import action_step
-from agent.memory import memory_step, extract_key_state_info
-from agent.perception import perception_step
-from agent.planning import planning_step
-from utils.vlm import VLM
+# Import agent modules (four-module pipeline lives under agent.deprecated)
+from agent.deprecated.action import action_step
+from agent.deprecated.memory import memory_step, extract_key_state_info
+from agent.deprecated.perception import perception_step
+from agent.deprecated.planning import planning_step
+from utils.vlm_backends import VLM
 from utils.state_formatter import format_state_for_llm, format_state_summary
 
 

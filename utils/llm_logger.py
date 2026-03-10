@@ -116,6 +116,8 @@ class LLMLogger:
             "o1-pro": {"prompt": 0.15, "completion": 0.60},         # $150/$600 per 1M (no cached)
 
             # Anthropic Claude (Base input / 5m cache write / Cache hits per MTok from official pricing)
+            "claude-sonnet-4-6": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},   # Claude Code CLI model string uses dashes
+            "claude-sonnet-4.6": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
             "claude-sonnet-4.5": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},   # $3/$3.75/$0.30/$15 per 1M
             "claude-sonnet-4": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
             "claude-sonnet-3.7": {"prompt": 0.003, "completion": 0.015, "cached_prompt": 0.0003, "cache_write_prompt": 0.00375},
@@ -168,7 +170,20 @@ class LLMLogger:
         if flag is None:
             return True
         return flag.strip().lower() not in ("0", "false", "no")
-    
+
+    def _ensure_metrics_structure(self) -> None:
+        """Ensure cumulative_metrics has all required fields (for loading old format)."""
+        if "steps" not in self.cumulative_metrics:
+            self.cumulative_metrics["steps"] = []
+        if "milestones" not in self.cumulative_metrics:
+            self.cumulative_metrics["milestones"] = []
+        if "metadata" not in self.cumulative_metrics:
+            self.cumulative_metrics["metadata"] = {}
+        if "objectives" not in self.cumulative_metrics:
+            self.cumulative_metrics["objectives"] = []
+        if "cache_write_tokens" not in self.cumulative_metrics:
+            self.cumulative_metrics["cache_write_tokens"] = 0
+
     def _log_session_start(self):
         """Log session start information"""
         session_info = {
@@ -228,19 +243,21 @@ class LLMLogger:
         if metadata and "token_usage" in metadata:
             token_usage = metadata["token_usage"]
             if token_usage:
+                cw = token_usage.get("cache_write_tokens")
                 step_tokens = {
                     "prompt": token_usage.get("prompt_tokens", 0),
                     "completion": token_usage.get("completion_tokens", 0),
                     "total": token_usage.get("total_tokens", 0),
                     "cached": token_usage.get("cached_tokens", 0),
-                    "cache_write": token_usage.get("cache_write_tokens", 0),
+                    "cache_write": cw,  # None for Gemini implicit caching; store as-is for step_entry
                 }
-                
+                cw_for_math = int(cw or 0)
+
                 self.cumulative_metrics["total_tokens"] += step_tokens["total"]
                 self.cumulative_metrics["prompt_tokens"] += step_tokens["prompt"]
                 self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
                 self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
-                self.cumulative_metrics["cache_write_tokens"] += step_tokens["cache_write"]
+                self.cumulative_metrics["cache_write_tokens"] += cw_for_math
                 
                 # Calculate cost based on model (exact match first, then longest-key match)
                 model_name = (model_info.get("model", "") or "").lower()
@@ -263,12 +280,11 @@ class LLMLogger:
                 
                 prompt_tokens = max(0, step_tokens["prompt"])
                 cached_tokens = max(0, step_tokens["cached"])
-                cache_write_tokens = max(0, step_tokens["cache_write"])
+                cache_write_tokens = max(0, cw_for_math)
 
-                # Providers report cache buckets in two common shapes:
-                # 1) Subset style: cached/cache_write are included in prompt_tokens.
-                # 2) Distinct style: prompt_tokens is uncached input, while cache buckets are separate.
-                # Handle both without double-counting or dropping billed tokens.
+                # Providers report cache buckets in two shapes:
+                # 1) Subset (Gemini): prompt_tokens = total input; cached is a SUBSET. uncached = prompt - cached.
+                # 2) Distinct (Claude & others): prompt, cached, cache_write are ADDITIVE. uncached = prompt.
                 if (cached_tokens + cache_write_tokens) <= prompt_tokens:
                     # Subset style (OpenAI/OpenRouter/Gemini style in most responses)
                     uncached_prompt_tokens = prompt_tokens - cached_tokens - cache_write_tokens
@@ -302,16 +318,12 @@ class LLMLogger:
                 "prompt_tokens": step_tokens["prompt"],
                 "completion_tokens": step_tokens["completion"],
                 "cached_tokens": step_tokens["cached"],
-                "cache_write_tokens": step_tokens["cache_write"],
+                "cache_write_tokens": step_tokens["cache_write"],  # None for Gemini (implicit caching)
                 "total_tokens": step_tokens["total"],
                 "time_taken": round(duration, 3),
                 "timestamp": time.time()
             }
             self.cumulative_metrics["steps"].append(step_entry)
-            
-            # Keep only last 1000 steps to prevent unbounded growth
-            if len(self.cumulative_metrics["steps"]) > 1000:
-                self.cumulative_metrics["steps"] = self.cumulative_metrics["steps"][-1000:]
 
         # Save metrics to cache file after every interaction
         self.save_cumulative_metrics()
@@ -322,7 +334,130 @@ class LLMLogger:
             logger.debug(f"Prompt length: {len(prompt)} chars, Response length: {len(response)} chars")
         else:
             logger.info(f"LLM {interaction_type.upper()}")
-    
+
+    def append_cli_step(
+        self,
+        step_number: int,
+        token_usage: Dict[str, Any],
+        duration: float,
+        timestamp: float,
+        model_info: Optional[Dict[str, Any]] = None,
+        tool_calls: Optional[list] = None,
+    ) -> None:
+        """Append one step derived from a Claude Code JSONL entry into cumulative_metrics.
+
+        Unlike log_interaction this method does NOT write to llm_log.jsonl – the
+        JSONL files produced by Claude Code already serve as the raw interaction
+        log.  Only cumulative_metrics.json is updated.
+
+        In-memory metrics are ALWAYS updated regardless of LLM_METRICS_WRITE_ENABLED so
+        that run_cli can accumulate steps in memory and forward them to the server via
+        /sync_llm_metrics even when disk writes are disabled.
+
+        Args:
+            step_number:  Monotonically increasing step index for this run.
+            token_usage:  Dict with keys prompt, completion, cached, cache_write, total, cost.
+            duration:     Seconds elapsed since the previous JSONL entry (best estimate).
+            timestamp:    UNIX timestamp of the JSONL entry.
+            model_info:   Optional dict with at least a "model" key for pricing lookup.
+            tool_calls:   Optional list of {name, args} dicts from the assistant message.
+        """
+        # NOTE: intentionally not gated by _metrics_write_enabled() here – in-memory
+        # update must happen even when disk writes are off so the sync path works.
+
+        step_tokens = {
+            "prompt": int(token_usage.get("prompt", 0) or 0),
+            "completion": int(token_usage.get("completion", 0) or 0),
+            "cached": int(token_usage.get("cached", 0) or 0),
+            # cache_write may be None (e.g. Gemini implicit caching); use 0 for cumulative math
+            "cache_write": token_usage.get("cache_write")
+            if token_usage.get("cache_write") is not None
+            else None,
+            "total": int(token_usage.get("total", 0) or 0),
+        }
+        cache_write_for_math = int(step_tokens["cache_write"] or 0)
+
+        # Update cumulative token counters
+        self.cumulative_metrics["total_tokens"] += step_tokens["total"]
+        self.cumulative_metrics["prompt_tokens"] += step_tokens["prompt"]
+        self.cumulative_metrics["completion_tokens"] += step_tokens["completion"]
+        self.cumulative_metrics["cached_tokens"] += step_tokens["cached"]
+        self.cumulative_metrics["cache_write_tokens"] += cache_write_for_math
+        self.cumulative_metrics["total_llm_calls"] += 1
+
+        # Cost calculation
+        # If token_usage provides explicit cost (e.g. from OpenRouter), use that.
+        explicit_cost = float(token_usage.get("cost") or 0.0)
+        
+        if explicit_cost > 0:
+            step_cost = explicit_cost
+        else:
+            # Fallback to local pricing logic
+            model_name = ((model_info or {}).get("model", "") or "").lower()
+            pricing = self.pricing.get("default")
+            if model_name:
+                if model_name in self.pricing:
+                    pricing = self.pricing[model_name]
+                else:
+                    candidates = [
+                        (k, self.pricing[k])
+                        for k in self.pricing
+                        if k != "default" and k in model_name
+                    ]
+                    if candidates:
+                        candidates.sort(key=lambda x: len(x[0]), reverse=True)
+                        pricing = candidates[0][1]
+
+            prompt_t = max(0, step_tokens["prompt"])
+            cached_t = max(0, step_tokens["cached"])
+            cache_write_t = max(0, cache_write_for_math)
+
+            if (cached_t + cache_write_t) <= prompt_t:
+                uncached_prompt = prompt_t - cached_t - cache_write_t
+            else:
+                uncached_prompt = prompt_t
+
+            step_cost = (
+                (uncached_prompt / 1000) * pricing["prompt"]
+                + (cached_t / 1000) * pricing.get("cached_prompt", pricing["prompt"])
+                + (cache_write_t / 1000) * pricing.get("cache_write_prompt", pricing["prompt"])
+                + (step_tokens["completion"] / 1000) * pricing["completion"]
+            )
+        
+        self.cumulative_metrics["total_cost"] += step_cost
+
+        step_entry: Dict[str, Any] = {
+            "step": step_number,
+            "prompt_tokens": step_tokens["prompt"],
+            "completion_tokens": step_tokens["completion"],
+            "cached_tokens": step_tokens["cached"],
+            "cache_write_tokens": step_tokens["cache_write"],  # None for Gemini (implicit caching)
+            "total_tokens": step_tokens["total"],
+            "time_taken": round(duration, 3),
+            "timestamp": timestamp,
+        }
+        if tool_calls:
+            cleaned = [
+                {"name": c["name"], "args": c.get("args", {})}
+                for c in tool_calls
+                if c.get("name")
+            ]
+            if cleaned:
+                step_entry["tool_calls"] = cleaned
+
+        self.cumulative_metrics["steps"].append(step_entry)
+        # Only write to disk when this process owns the file (server in single-writer mode).
+        # run_cli keeps steps in memory and syncs to server via /sync_llm_metrics.
+        if self._metrics_write_enabled():
+            self.save_cumulative_metrics()
+        logger.debug(
+            "CLI step %d appended: tokens=%d cost=$%.5f tools=%d",
+            step_number,
+            step_tokens["total"],
+            step_cost,
+            len(step_entry.get("tool_calls", [])),
+        )
+
     def log_error(self, 
                   interaction_type: str,
                   prompt: str,
@@ -451,6 +586,22 @@ class LLMLogger:
                 f.write(json.dumps(log_entry, ensure_ascii=False) + '\n')
         except Exception as e:
             logger.error(f"Failed to write log entry: {e}")
+
+    def log_thinking(self, text: str, interaction_type: str = "thinking", duration: float = 0) -> None:
+        """Log agent thinking for UI streaming (same format as log_interaction, no metrics update).
+        Used by CLI agent and any path that POSTs thinking to /agent_step so the SSE has one source.
+        """
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "type": "interaction",
+            "interaction_type": interaction_type,
+            "prompt": "",
+            "response": text,
+            "duration": duration,
+            "metadata": {},
+            "model_info": {},
+        }
+        self._write_log_entry(log_entry)
     
     def increment_action_count(self, count: int = 1):
         """Increment the action counter (called when buttons are actually queued)
@@ -667,31 +818,26 @@ class LLMLogger:
             return {"error": str(e)}
     
     def save_cumulative_metrics(self, metrics_file: str = None):
-        """Save just the cumulative metrics to a lightweight cache file
+        """Save just the cumulative metrics to a lightweight cache file.
 
-        Args:
-            metrics_file: Path to save metrics (defaults to cache folder)
+        Single-writer pattern: only the server writes (LLM_METRICS_WRITE_ENABLED=true).
+        run_cli accumulates steps in-memory and syncs to the server via /sync_llm_metrics.
         """
         try:
             if not self._metrics_write_enabled():
                 logger.debug("Metrics write disabled; skipping save_cumulative_metrics()")
                 return
 
-            # Determine metrics file path
             if metrics_file is None:
                 from utils.run_data_manager import get_cache_path
                 metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
-            # Create a clean copy without internal tracking fields
             metrics_to_save = self.cumulative_metrics.copy()
-            
-            # Remove internal tracking fields (these are only for runtime calculation)
             for key in list(metrics_to_save.keys()):
                 if key.startswith("_"):
                     del metrics_to_save[key]
-            
-            # Save metrics
-            with open(metrics_file, 'w', encoding='utf-8') as f:
+
+            with open(metrics_file, "w", encoding="utf-8") as f:
                 json.dump(metrics_to_save, f, indent=2)
 
             logger.debug(f"Saved cumulative metrics to {metrics_file}")
@@ -724,18 +870,7 @@ class LLMLogger:
 
             # Update current metrics (including new arrays if present)
             self.cumulative_metrics.update(saved_metrics)
-            
-            # Ensure new fields exist even if loading old format
-            if "steps" not in self.cumulative_metrics:
-                self.cumulative_metrics["steps"] = []
-            if "milestones" not in self.cumulative_metrics:
-                self.cumulative_metrics["milestones"] = []
-            if "metadata" not in self.cumulative_metrics:
-                self.cumulative_metrics["metadata"] = {}
-            if "objectives" not in self.cumulative_metrics:
-                self.cumulative_metrics["objectives"] = []
-            if "cache_write_tokens" not in self.cumulative_metrics:
-                self.cumulative_metrics["cache_write_tokens"] = 0
+            self._ensure_metrics_structure()
 
             # Restore internal tracking from last milestone if available
             if self.cumulative_metrics["milestones"]:
@@ -842,14 +977,13 @@ class LLMLogger:
             
             # Don't recalculate run time - it's already tracked accurately per-interaction
 
-            # Add checkpoint metadata
+            # Add checkpoint metadata (cumulative_metrics stored only in cumulative_metrics.json)
             checkpoint_data = {
                 "checkpoint_timestamp": datetime.now().isoformat(),
                 "session_id": self.session_id,
                 "original_log_file": self.log_file,
                 "total_entries": len(log_entries),
-                "agent_step_count": agent_step_count,  # Save current step count
-                "cumulative_metrics": self.cumulative_metrics,  # Save metrics
+                "agent_step_count": agent_step_count,
                 "log_entries": log_entries
             }
             
@@ -891,19 +1025,9 @@ class LLMLogger:
                 checkpoint_data = json.load(f)
             
             log_entries = checkpoint_data.get("log_entries", [])
-            
-            # Restore cumulative metrics if available
-            if "cumulative_metrics" in checkpoint_data:
-                saved_metrics = checkpoint_data["cumulative_metrics"]
-                # Restore all metrics including the original start_time
-                self.cumulative_metrics.update(saved_metrics)
-                
-                # If the checkpoint has a start_time, use it to preserve the original session start
-                if "start_time" in saved_metrics:
-                    logger.info(f"Restored original start time from checkpoint: {saved_metrics['start_time']}")
-                else:
-                    logger.warning("No start_time found in checkpoint, using current time")
-            
+
+            # Cumulative metrics are loaded from cumulative_metrics.json only (not from checkpoint)
+
             # Restore log entries to current log file
             with open(self.log_file, 'w', encoding='utf-8') as f:
                 for entry in log_entries:
@@ -983,6 +1107,7 @@ def log_llm_interaction(interaction_type: str, prompt: str, response: str,
     """
     logger = get_llm_logger()
     logger.log_interaction(interaction_type, prompt, response, metadata, duration, model_info, step_number)
+
 
 def log_llm_error(interaction_type: str, prompt: str, error: str, 
                  metadata: Optional[Dict[str, Any]] = None):

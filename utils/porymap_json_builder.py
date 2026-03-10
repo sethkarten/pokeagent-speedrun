@@ -106,6 +106,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
             dimensions = {"width": width, "height": height}
 
     # Build grid and ASCII for any metatiles (corrected or binary)
+    ascii_from_override = False
     if metatiles:
         height = len(metatiles)
         width = len(metatiles[0]) if height > 0 else 0
@@ -153,16 +154,26 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                     # Clock events
                     if "WallClock" in script or "Clock" in script:
                         ascii_grid[bg_y][bg_x] = 'K'  # Clock marker
-                    # PC events
-                    elif "PC" in script and "TurnOnPC" in script:
+                    # PC events (script often ends with _PC or contains EventScript_PC)
+                    elif "PC" in script:
                         ascii_grid[bg_y][bg_x] = 'P'  # PC marker
-                    # TV/GameCube events (optional - might already be visible)
-                    elif "TV" in script or "GameCube" in script:
-                        ascii_grid[bg_y][bg_x] = 'V'  # TV marker
+                    # TV/GameCube/Notebook events
+                    elif "TV" in script or "GameCube" in script or "Notebook" in script:
+                        ascii_grid[bg_y][bg_x] = 'V'  # TV/notebook marker
 
             # Convert back to strings
             ascii_lines = [''.join(row) for row in ascii_grid]
             ascii_map = "\n".join(ascii_lines)
+
+            # When an override provides ASCII, use it verbatim so P/V/K/S/I/D match exactly
+            # (rebuilding from metatiles can change symbols, and binary fallback can differ)
+            if override and "ascii" in override:
+                override_ascii = "\n".join(
+                    line.strip() for line in override["ascii"].strip().split("\n") if line.strip()
+                )
+                if override_ascii:
+                    ascii_map = override_ascii
+                    ascii_from_override = True
     
     # Extract warps
     warps = []
@@ -480,6 +491,21 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                     "map": conn.get("map", "?")
                 })
     
+    # Extract bg_events (PC, clock, TV, notebook, etc.) - use override if provided, else porymap data
+    if override and 'bg_events' in override:
+        bg_events = override['bg_events']
+    else:
+        bg_events = []
+        for bg in map_data.get("bg_events", []):
+            bg_events.append({
+                "type": bg.get("type", "?"),
+                "x": bg.get("x", 0),
+                "y": bg.get("y", 0),
+                "elevation": bg.get("elevation", 0),
+                "player_facing_dir": bg.get("player_facing_dir", "?"),
+                "script": bg.get("script", "?")
+            })
+    
     # Use override warps if provided (already extracted above, but override takes precedence)
     if override and 'warps' in override:
         warps = override['warps']
@@ -493,6 +519,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
         "dimensions": dimensions,
         "warps": warps,
         "objects": objects,
+        "bg_events": bg_events,
         "connections": connections,
     }
     
@@ -502,6 +529,8 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     
     if include_ascii and ascii_map:
         json_map["ascii"] = ascii_map
+        if ascii_from_override:
+            json_map["ascii_from_override"] = True
     
     # Include raw tiles with elevation for pathfinding elevation checks
     if metatiles:
