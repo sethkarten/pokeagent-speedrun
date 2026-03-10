@@ -2,12 +2,8 @@
 Agent modules for Pokemon Emerald speedrunning agent
 """
 
-from utils.vlm import VLM
-from .deprecated.action import action_step
-from .deprecated.memory import memory_step
-from .deprecated.perception import perception_step
-from .deprecated.planning import planning_step
-from .simple import SimpleAgent, get_simple_agent, simple_mode_processing_multiprocess, configure_simple_agent_defaults
+from utils.vlm_backends import VLM
+from .deprecated.simple import SimpleAgent, get_simple_agent, simple_mode_processing_multiprocess, configure_simple_agent_defaults
 from .react import ReActAgent, create_react_agent
 from .claude_plays import ClaudePlaysAgent, create_claude_plays_agent
 
@@ -88,15 +84,10 @@ class Agent:
             print(f"   Scaffold: GeminiPlaysPokemon (15 tools: goals, memory, navigation, self-critique)")
             print(f"   Server: {server_url}")
             
-        else:  # fourmodule (default)
-            # Four-module agent context
-            self.agent_impl = None  # Will use internal four-module processing
-            self.context = {
-                'perception_output': None,
-                'planning_output': None,
-                'memory': []
-            }
-            print(f"   Scaffold: Four-module (Perception->Planning->Memory->Action)")
+        else:  # fourmodule (deprecated and currently broken)
+            self.agent_impl = None
+            self.context = {}
+            print(f"   Scaffold: Four-module (DEPRECATED - pipeline signature mismatch; use simple/react/claudeplays/geminiplays)")
     
     def step(self, game_state):
         """
@@ -152,53 +143,15 @@ class Agent:
                 return {'action': button, 'reasoning': 'GeminiPlaysPokemon agent decision'}
                 
         else:
-            # Four-module processing (default)
-            try:
-                # 1. Perception - understand what's happening
-                perception_output = perception_step(
-                    self.vlm, 
-                    game_state, 
-                    self.context.get('memory', [])
-                )
-                self.context['perception_output'] = perception_output
-                
-                # 2. Planning - decide strategy
-                planning_output = planning_step(
-                    self.vlm, 
-                    perception_output, 
-                    self.context.get('memory', [])
-                )
-                self.context['planning_output'] = planning_output
-                
-                # 3. Memory - update context
-                memory_output = memory_step(
-                    perception_output, 
-                    planning_output, 
-                    self.context.get('memory', [])
-                )
-                self.context['memory'] = memory_output
-                
-                # 4. Action - choose button press
-                action_output = action_step(
-                    self.vlm, 
-                    game_state, 
-                    planning_output,
-                    perception_output
-                )
-                
-                return action_output
-                
-            except Exception as e:
-                print(f"❌ Agent error: {e}")
-                return None
+            # Four-module scaffold is deprecated: step signatures don't match and required state is not built
+            raise NotImplementedError(
+                "fourmodule scaffold is deprecated and currently broken (step signatures/state mismatch). "
+                "Use --scaffold simple, react, claudeplays, or geminiplays instead."
+            )
 
 
 __all__ = [
     'Agent',
-    'action_step',
-    'memory_step', 
-    'perception_step',
-    'planning_step',
     'SimpleAgent',
     'get_simple_agent',
     'simple_mode_processing_multiprocess',

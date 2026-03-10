@@ -9,7 +9,7 @@ This list is imported by direct_objectives.py's load_full_game_sequence() method
 NOTE: For categorized objectives (story/battling), use all_obj_categorized.py instead.
 """
 
-from agent.objective_types import DirectObjective
+from .objective_types import DirectObjective
 
 
 ALL_OBJECTIVES = [

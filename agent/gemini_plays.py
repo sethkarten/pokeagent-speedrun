@@ -24,7 +24,7 @@ from collections import deque
 
 import google.generativeai as genai
 
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 from utils.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
 from utils.pathfinding import Pathfinder

@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import google.generativeai as genai
 from utils.agent_helpers import update_server_metrics
 from utils.llm_logger import get_llm_logger
-from utils.vlm import VLM
+from utils.vlm_backends import VLM
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -65,7 +65,7 @@ class MyCLIAgent:
         model="gemini-2.5-flash",
         backend="gemini",
         max_steps=None,
-        system_instructions_file="POKEAGENT.md",
+        system_instructions_file="agent/prompts/POKEAGENT.md",
         max_context_chars=100000,
         target_context_chars=50000,
         enable_prompt_optimization=False,
@@ -104,11 +104,11 @@ class MyCLIAgent:
         self.sampling_thread.start()
 
     def _load_system_instructions(self, f):
-        p = Path(__file__).parent.parent / f
+        p = Path(__file__).resolve().parent.parent / f
         return p.read_text() if p.exists() else "AI agent playing Pokemon Emerald."
 
     def _load_base_prompt(self):
-        p = Path(__file__).parent.parent / "base_prompt.md"
+        p = Path(__file__).resolve().parent.parent / "agent" / "prompts" / "base_prompt.md"
         return p.read_text() if p.exists() else "Make intelligent decisions."
 
     def _sample_frames_loop(self):
@@ -844,7 +844,7 @@ def main():
     p.add_argument("--server-url", default="http://localhost:8000")
     p.add_argument("--model", default="gemini-2.5-flash")
     p.add_argument("--max-steps", type=int, default=None)
-    p.add_argument("--system-instructions", default="POKEAGENT.md")
+    p.add_argument("--system-instructions", default="agent/prompts/POKEAGENT.md")
     p.add_argument("--backend", default="gemini")
     args = p.parse_args()
     agent = MyCLIAgent(

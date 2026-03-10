@@ -137,6 +137,8 @@ def load_checkpoint(emulator, llm_logger=None):
             print(f"   ⚠️ Failed to load location maps: {e}")
         
         # Load LLM history if logger available
+        # NOTE: This expects deprecated SimpleAgent format (history, step_counter).
+        # LLMLogger uses log_entries, agent_step_count - use llm_logger.load_checkpoint() for that.
         checkpoint_file = get_cache_path("checkpoint_llm.txt")
         if llm_logger and checkpoint_file.exists():
             with open(checkpoint_file, "r") as f:
@@ -220,7 +222,7 @@ def load_simple_agent_state(simple_agent, filename="agent_state.json"):
         bool: True if loaded successfully
     """
     try:
-        from agent.simple import HistoryEntry, Objective
+        from agent.deprecated.simple import HistoryEntry, Objective
         
         with open(filename, 'r') as f:
             state_data = json.load(f)

@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class PromptOptimizer:
     """Optimizes agent base prompt based on trajectory analysis."""
     
-    def __init__(self, vlm, run_data_manager, base_prompt_path: str = "base_prompt.md", system_prompt_path: str = "system_prompt.md"):
+    def __init__(self, vlm, run_data_manager, base_prompt_path: str = "agent/prompts/base_prompt.md", system_prompt_path: str = "agent/prompts/system_prompt.md"):
         """
         Initialize the prompt optimizer.
         
@@ -30,7 +30,7 @@ class PromptOptimizer:
         """
         # Load system prompt so optimizer knows what tools the agent has access to
         # We'll include this in the optimization prompt (not as system instruction)
-        system_prompt_file = Path(__file__).parent.parent / system_prompt_path
+        system_prompt_file = Path(__file__).resolve().parent.parent / system_prompt_path
         self.system_prompt_content = None
         if system_prompt_file.exists():
             with open(system_prompt_file, 'r') as f:
@@ -41,7 +41,7 @@ class PromptOptimizer:
         
         # Create a separate VLM instance WITHOUT tools for text-only optimization calls
         # This ensures get_text_query returns a string, not a GenerateContentResponse object
-        from utils.vlm import VLM
+        from utils.vlm_backends import VLM
         self.vlm = VLM(
             backend=vlm.backend_type,
             model_name=vlm.model_name,
@@ -49,8 +49,9 @@ class PromptOptimizer:
             system_instruction=None  # No system instruction - we'll include system prompt in the optimization prompt instead
         )
         self.run_manager = run_data_manager
-        self.base_prompt_path = Path(base_prompt_path)
-        
+        _base = Path(base_prompt_path)
+        self.base_prompt_path = _base if _base.is_absolute() else Path(__file__).resolve().parent.parent / base_prompt_path
+
         # Load initial base prompt
         if self.base_prompt_path.exists():
             with open(self.base_prompt_path, 'r') as f:
@@ -140,7 +141,14 @@ class PromptOptimizer:
         
         # Format trajectories for LLM analysis
         trajectory_summary = self._format_trajectories_for_analysis(recent_trajectories)
-        
+        logger.info(
+            "📋 Trajectory summary for optimization (steps %d–%d, %d chars):\n%s",
+            current_step - num_trajectory_steps + 1,
+            current_step,
+            len(trajectory_summary),
+            trajectory_summary,
+        )
+
         # Build optimization prompt with system prompt context
         system_prompt_section = ""
         if self.system_prompt_content:
@@ -168,9 +176,7 @@ Analyze the agent's recent performance and create an IMPROVED base prompt that:
 
 1. **Addresses observed failures** - If the agent made mistakes, add specific guidance to prevent them
 2. **Reinforces successful patterns** - If certain strategies worked well, emphasize them
-3. **Maintains structure** - Keep the overall organization (Decision-Making, Strategy, Pitfalls, etc.)
-4. **Stays concise** - Focus on actionable, high-level strategic guidance
-5. **Adds learned lessons** - Include insights derived from trajectory analysis
+3. **Adds learned lessons** - Include insights derived from trajectory analysis
 
 ## Analysis Guidelines:
 
@@ -178,16 +184,9 @@ Analyze the agent's recent performance and create an IMPROVED base prompt that:
 - Repeated failures (stuck in loops, wrong tool usage, blocked navigation)
 - Successful strategies (good knowledge base usage, efficient pathfinding, smart battle decisions)
 - Progress toward objectives (completing tasks, leveling up, advancing story)
-- Tool usage patterns (are they using navigate_to vs press_buttons effectively?)
+- Tool usage patterns (are they using the tools at their disposal effectively?)
 - Knowledge management (are they storing and retrieving knowledge appropriately?)
 - Not adapting when stuck → emphasize flexibility and trying new approaches
-
-**Successful patterns to reinforce:**
-- Effective use of navigate_to with variance adjustments
-- Proactive knowledge storage with appropriate importance levels
-- Good use of progress_summary and walkthrough for planning
-- Efficient battle decisions with type advantages
-- Completing objectives promptly with good reasoning
 
 ## Output Format:
 Provide the complete improved base prompt as markdown. Make targeted improvements, keeping the elements that are working while adding additional guidance if necessary.
@@ -327,7 +326,7 @@ IMPROVED BASE PROMPT:
         return self.current_base_prompt
 
 
-def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = "base_prompt.md", system_prompt_path: str = "system_prompt.md") -> PromptOptimizer:
+def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = "agent/prompts/base_prompt.md", system_prompt_path: str = "agent/prompts/system_prompt.md") -> PromptOptimizer:
     """Factory function to create a PromptOptimizer instance."""
     return PromptOptimizer(vlm, run_data_manager, base_prompt_path, system_prompt_path)
 
