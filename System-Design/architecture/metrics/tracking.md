@@ -65,6 +65,7 @@ External CLI agents (run via `run_cli.py`) run in a separate process or containe
 |---------|--------|--------------|----------------|
 | Claude Code | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_jsonl_reader.py` | Best-entry by message ID (highest total tokens) |
 | Gemini CLI | Session JSON in `gemini_memory/tmp/workspace/chats/session-*.json` | `utils/metric_tracking/gemini_session_reader.py` | Message ID (globally unique) |
+| Codex CLI | Rollout JSONL in `codex_memory/sessions/YYYY/MM/DD/rollout-*.jsonl` | `utils/metric_tracking/codex_session_reader.py` | Session file path + cumulative token total (per rollout) |
 
 ### Flow (Common)
 1. **Polling**: `run_cli` calls `backend.log_cli_interaction()` every 15 seconds and once after each session exits.
@@ -80,6 +81,24 @@ External CLI agents (run via `run_cli.py`) run in a separate process or containe
 - **Token mapping**: `input` → prompt, `output + thoughts + tool` → completion, `cached` → cached.
 - **Implicit caching**: Gemini CLI uses *implicit caching* (automatic, no explicit cache creation API). Cache creation cost is included in the first request's input tokens. The session format does not expose `cache_write`; we store `cache_write_tokens: null` in step entries for Gemini runs. **This is expected**—plotting/analytics should treat null as "not applicable" rather than zero.
 - **Cost calculation (subset vs distinct)**: Certain APIS reports prompt and cached as *additive* (distinct). Gemini, in particular, reports prompt = total input with cached as a *subset*. `LLMLogger` detects subset when `cached + cache_write <= prompt` and computes `uncached = prompt - cached - cache_write` for correct billing. Both schemes produce correct costs. cumulatove totals are still consistent for the purposes of graphing!
+
+### Codex-Specific Details
+- **Source**: Codex stores one append-only rollout file per session under `~/.codex/sessions/YYYY/MM/DD/rollout-<uuid>.jsonl` (see [Codex CLI features](https://developers.openai.com/codex/cli/features)). Our cache mounts this as `.pokeagent_cache/{run_id}/codex_memory/sessions/`.
+- **Resume behavior**: `codex resume` / `codex exec resume --last` continues the *same* session; new events are appended to the same rollout file. No new file is created for a resumed session.
+- **Subagents**: In Codex multi-agent workflows, subagent activity is typically embedded in the parent session’s rollout (same JSONL stream). A separate rollout file is only created when a new Codex process/session is started (e.g. a script runs another `codex exec`, or a different workspace starts its own session).
+- **Dedup**: We have no per-response message ID in the rollout. Steps are inferred from `event_msg` with `payload.type === "token_count"`. We deduplicate by `(session_file_path, cumulative_total_tokens, compaction_offset)` so that multiple token_count snapshots for the same API call collapse into one step. Tool calls are taken from `response_item` with `payload.type === "function_call"` and attached to the next advancing token snapshot.
+- **Compaction robustness**: When `cumulative_total` decreases (e.g. after [context compaction](https://github.com/openai/codex/pull/3446)), we increment `compaction_offset` and include it in the dedup hash. Post-compaction steps thus get fresh hashes and are not mis-deduplicated with pre-compaction steps. If totals remain monotonic, `compaction_offset` stays 0.
+- **Token totals**: Codex/OpenRouter reports `cached_input_tokens` as a *subset* of `input_tokens`. We use the API's `total_tokens` when available to avoid double-counting cached tokens in step totals.
+
+### Potential problems for Codex (turn vs message pattern)
+Codex rollout logs use a **turn/task** and **event stream** model rather than discrete **messages** with stable IDs. That leads to the following caveats:
+
+1. **No per-response message ID**: Claude and Gemini expose a unique message (or request) ID per API response, so dedup is globally stable. Codex rollout events do not expose an equivalent; we rely on `(session_key, cumulative_total, compaction_offset)` as a synthetic step key. Compaction is handled by incrementing `compaction_offset` in case cumulative total token usage decreaseses in codex session log with compaction.
+2. **Cumulative-total monotonicity**: If cumulative token usage decreases (e.g. after compaction), [context compaction](https://github.com/openai/codex/pull/3446), we increment `compaction_offset` so post-compaction steps get distinct hashes and are not mis-deduplicated. Note [context compaction](https://github.com/openai/codex/pull/3446) suggests that `compaction_offset` may not be needed, though we include it for robustness if this is not the case. 
+3. **Same-file ordering**: Subagent and parent events are interleaved in one file. We process the file sequentially and attach buffered tool calls to the next advancing token snapshot. If event order or token_count placement changes in future CLI versions, step boundaries could shift.
+4. **Restart of run_cli**: `processed_hashes` is in-memory only. If `run_cli` is restarted against the same run cache, we re-read all rollout files and would re-append steps unless we persist processed hashes (or derive “already applied” from existing `cumulative_metrics.json` steps).
+
+These are documented so that future changes to Codex CLI (compaction, multi-agent logging, or new event shapes) can be checked against this contract.
 
 ### Pricing
 - Claude: `claude-sonnet-4-6` / `claude-sonnet-4.6` pricing. Cache writes: $3.75/M, cache hits: $0.30/M.
