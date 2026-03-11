@@ -32,7 +32,7 @@ class TestGeminiBackendProperties:
     def test_get_backend_returns_gemini(self):
         backend = get_backend("gemini")
         assert isinstance(backend, GeminiCliBackend)
-        assert backend.name == "gemini"
+        assert backend.name == "GeminiCLI"
 
     def test_agent_memory_subdir(self):
         backend = GeminiCliBackend()
