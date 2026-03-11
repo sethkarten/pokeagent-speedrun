@@ -879,17 +879,26 @@ class Pathfinder:
                             to_behavior = to_tile[1] if len(to_tile) > 1 else 0
                             from_behavior = from_tile[1] if len(from_tile) > 1 else 0
 
-                            # Get behavior names
+                            # Get behavior names — use Red's enum for Red maps so that
+                            # RedMetatileBehavior integer codes resolve to the correct names.
+                            # RedMetatileBehavior values deliberately match Emerald's for the
+                            # connector behaviours (LADDER, NON_ANIMATED_DOOR, WARP_*), so
+                            # the substring checks below work identically for both games.
                             to_behavior_name = ""
                             from_behavior_name = ""
                             try:
-                                from pokemon_env.enums import MetatileBehavior
+                                if os.environ.get("GAME_TYPE", "emerald").upper() == "RED":
+                                    from pokemon_red_env.utils.red_metatile_behavior import (
+                                        RedMetatileBehavior as _BehaviorEnum,
+                                    )
+                                else:
+                                    from pokemon_env.enums import MetatileBehavior as _BehaviorEnum
 
                                 if isinstance(to_behavior, int):
-                                    to_behavior_name = MetatileBehavior(to_behavior).name
+                                    to_behavior_name = _BehaviorEnum(to_behavior).name
                                 if isinstance(from_behavior, int):
-                                    from_behavior_name = MetatileBehavior(from_behavior).name
-                            except:
+                                    from_behavior_name = _BehaviorEnum(from_behavior).name
+                            except Exception:
                                 pass
 
                             # Check if destination has stair/ladder/door behavior

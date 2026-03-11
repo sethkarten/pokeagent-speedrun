@@ -10,7 +10,7 @@ import json
 import logging
 import numpy as np
 from PIL import Image
-from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol
+from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol, _get_behavior_enum
 import base64
 import io
 import os, sys
@@ -2231,8 +2231,11 @@ def get_movement_preview(state_data):
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
-    # Get NPCs from map info
-    npcs = map_info.get('object_events', [])
+    # Get NPCs from map info.
+    # Emerald stores NPCs in map_info['object_events']; Red stores them in
+    # porymap['objects'] (set by game_tools.py).  Fall back to porymap objects
+    # so Red NPC blocking works correctly.
+    npcs = map_info.get('object_events', []) or porymap.get('objects', [])
     
     directions = {
         'UP': (0, -1),
@@ -2290,8 +2293,16 @@ def get_movement_preview(state_data):
                 tile_symbol = porymap_grid[new_world_y][new_world_x]
                 target_tile = None  # Don't have the raw tile data when using porymap grid
 
-                # Determine if movement is blocked by terrain (using porymap symbols)
-                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'X']  # Walls, water, out of bounds
+                # Determine if movement is blocked by terrain (using porymap symbols).
+                # Whitelist of all symbols that are passable in either Emerald or Red.
+                # Everything else — furniture, interactables, walls — is blocked.
+                # 'O' is a pokéball tile in Red (walkable, collision=0).
+                _PASSABLE_SYMBOLS = {
+                    ".", "~", "D", "S",
+                    "↓", "←", "→", "↑", "↗", "↖", "↘", "↙",
+                    "&", "O",
+                }
+                is_blocked_by_terrain = tile_symbol not in _PASSABLE_SYMBOLS
 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
@@ -2395,7 +2406,9 @@ def get_movement_preview(state_data):
                         behavior_name = behavior.name
                     elif isinstance(behavior, int):
                         try:
-                            behavior_enum = MetatileBehavior(behavior)
+                            # Use Red's enum for Red maps so that RedMetatileBehavior
+                            # integer codes resolve to the correct names.
+                            behavior_enum = _get_behavior_enum()(behavior)
                             behavior_name = behavior_enum.name
                         except (ValueError, ImportError):
                             behavior_name = f"BEHAVIOR_{behavior}"
@@ -2498,10 +2511,11 @@ def format_movement_preview_for_llm(state_data):
             symbol = info['tile_symbol']
             status = "BLOCKED" if info['blocked'] else "WALKABLE"
             
-            # Special override: if description contains "Stairs" or "Warp", show 'W' instead of any other symbol
+            # Special override: if description confirms Stairs/Warp, show 'S' symbol.
+            # ('W' must NOT be used here — it means Water in both Emerald and Red grids.)
             desc = info.get('tile_description', '')
             if not info['blocked'] and ('Stairs' in desc or 'Warp' in desc):
-                symbol = 'W'
+                symbol = 'S'
             
             lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
             
