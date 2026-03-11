@@ -334,7 +334,7 @@ class ClaudeCodeBackend(CliAgentBackend):
 
     @property
     def name(self) -> str:
-        return "claude"
+        return "ClaudeCode"
 
     def is_auth_fatal_error(self, text: str) -> bool:
         """Detect Claude Code OAuth token expiration or not logged in. See anthropics/claude-code#18225."""
@@ -685,7 +685,9 @@ class ClaudeCodeBackend(CliAgentBackend):
         new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
 
         llm_logger = get_llm_logger()
-        prev_ts: float | None = None
+        # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
+        steps = llm_logger.cumulative_metrics.get("steps", [])
+        prev_ts: float | None = steps[-1]["timestamp"] if steps else None
         for entry in new_entries:
             tokens = entry["_tokens"]
             tool_calls = entry["_tool_calls"]
@@ -764,7 +766,7 @@ class GeminiCliBackend(CliAgentBackend):
 
     @property
     def name(self) -> str:
-        return "gemini"
+        return "GeminiCLI"
 
     @property
     def agent_memory_subdir(self) -> str:
@@ -997,9 +999,7 @@ class GeminiCliBackend(CliAgentBackend):
         reasoning = args.get("reasoning") or args.get("reason") or ""
         thinking_text = f"[{tool_name}] {reasoning}".strip() or f"[{tool_name}]"
         if server_url:
-            self._post_thinking(
-                server_url, thinking_text, duration_sec, interaction_type="gemini"
-            )
+            self._post_thinking(server_url, thinking_text, duration_sec, interaction_type=self.name)
 
     def _handle_gemini_tool_result(self, event: dict, now: float) -> None:
         """Handle tool_result event: logging."""
@@ -1100,7 +1100,9 @@ class GeminiCliBackend(CliAgentBackend):
         new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
 
         llm_logger = get_llm_logger()
-        prev_ts: float | None = None
+        # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
+        steps = llm_logger.cumulative_metrics.get("steps", [])
+        prev_ts: float | None = steps[-1]["timestamp"] if steps else None
         for entry in new_entries:
             tokens = entry.get("_tokens", {})
             tool_calls = entry.get("_tool_calls", [])
@@ -1177,7 +1179,7 @@ class CodexCliBackend(CliAgentBackend):
 
     @property
     def name(self) -> str:
-        return "codex"
+        return "CodexCLI"
 
     @property
     def agent_memory_subdir(self) -> str:
@@ -1474,7 +1476,7 @@ env_key = "OPENROUTER_API_KEY"
         self._pending_reasoning = ""  # Consume buffer
         thinking_text = f"[{short_name}] {reasoning}".strip() or f"[{short_name}]"
         if server_url:
-            self._post_thinking(server_url, thinking_text, duration_sec, interaction_type="codex")
+            self._post_thinking(server_url, thinking_text, duration_sec, interaction_type=self.name)
 
     def _handle_item_reasoning(
         self,

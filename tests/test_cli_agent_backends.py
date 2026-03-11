@@ -63,17 +63,17 @@ class TestGetBackend:
     def test_claude_returns_claude_code_backend(self):
         backend = get_backend("claude")
         assert isinstance(backend, ClaudeCodeBackend)
-        assert backend.name == "claude"
+        assert backend.name == "ClaudeCode"
 
     def test_gemini_returns_gemini_cli_backend(self):
         backend = get_backend("gemini")
         assert isinstance(backend, GeminiCliBackend)
-        assert backend.name == "gemini"
+        assert backend.name == "GeminiCLI"
 
     def test_codex_returns_codex_cli_backend(self):
         backend = get_backend("codex")
         assert isinstance(backend, CodexCliBackend)
-        assert backend.name == "codex"
+        assert backend.name == "CodexCLI"
 
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown CLI type"):
