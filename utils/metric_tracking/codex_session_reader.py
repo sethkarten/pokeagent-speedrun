@@ -55,12 +55,17 @@ def _create_step_hash(
     cumulative_total: int | None,
     parsed_ts: datetime | None,
     line_idx: int,
+    compaction_offset: int = 0,
 ) -> str:
-    """Stable dedup key for one logical Codex usage step."""
+    """Stable dedup key for one logical Codex usage step (a bit more complex due to how session rollout log emits data).
+
+    If cumulative_total decreases (e.g. after context compaction), compaction_offset
+    increments so post-compaction steps get fresh hashes and are not deduplicated.
+    """
     if cumulative_total is not None:
-        return f"{session_key}:usage:{cumulative_total}"
+        return f"{session_key}:usage:{cumulative_total}:compact:{compaction_offset}"
     ts = parsed_ts.isoformat() if parsed_ts is not None else f"line-{line_idx}"
-    return f"{session_key}:usage-ts:{ts}"
+    return f"{session_key}:usage-ts:{ts}:compact:{compaction_offset}"
 
 
 def _normalize_tool_args(raw_args: Any) -> dict[str, Any]:
@@ -77,7 +82,13 @@ def _normalize_tool_args(raw_args: Any) -> dict[str, Any]:
 
 
 def extract_usage_snapshot(entry: dict) -> tuple[dict[str, Any] | None, int | None]:
-    """Extract step token usage and cumulative total from a Codex entry."""
+    """Extract step token usage and cumulative total from a Codex entry.
+
+    Token semantics (OpenAI/OpenRouter): cached_input_tokens is a SUBSET of
+    input_tokens. total_tokens = input_tokens + output_tokens (reasoning is
+    included in output). We use the API's total_tokens when available to avoid
+    double-counting cached tokens.
+    """
     payload = entry.get("payload")
     if isinstance(payload, dict) and payload.get("type") == "token_count":
         info = payload.get("info") or {}
@@ -87,8 +98,10 @@ def extract_usage_snapshot(entry: dict) -> tuple[dict[str, Any] | None, int | No
         out = int(usage.get("output_tokens", 0) or 0)
         cached = int(usage.get("cached_input_tokens", 0) or 0)
         reasoning = int(usage.get("reasoning_output_tokens", 0) or 0)
-        total = inp + out + cached + reasoning
-        if total == 0:
+        # Prefer API total (cached is subset of input; adding cached double-counts)
+        api_total = usage.get("total_tokens") or total_usage.get("total_tokens")
+        total = int(api_total) if api_total is not None else (inp + out + reasoning)
+        if total == 0 and inp == 0 and out == 0:
             return None, None
         cumulative_total = total_usage.get("total_tokens")
         if cumulative_total is None:
@@ -112,8 +125,9 @@ def extract_usage_snapshot(entry: dict) -> tuple[dict[str, Any] | None, int | No
         out = int(usage.get("output_tokens", 0) or 0)
         cached = int(usage.get("cached_input_tokens", 0) or 0)
         reasoning = int(usage.get("reasoning_output_tokens", 0) or 0)
-        total = inp + out + cached + reasoning
-        if total == 0:
+        api_total = usage.get("total_tokens")
+        total = int(api_total) if api_total is not None else (inp + out + reasoning)
+        if total == 0 and inp == 0 and out == 0:
             return None, None
         cumulative_total = int(usage.get("total_tokens", 0) or total)
         return (
@@ -173,6 +187,10 @@ def load_new_usage_entries(
     usage-bearing entries. Deduplicates by hash. Returns entries with _tokens,
     _tool_calls, _parsed_timestamp, _model for append_cli_step compatibility.
 
+    Compaction handling: if cumulative_total decreases (e.g. after context
+    compaction), we increment compaction_offset and include it in the hash so
+    post-compaction steps are not treated as duplicates.
+
     Best-effort: skips malformed lines, never raises.
     """
     new_entries: list[dict] = []
@@ -182,6 +200,8 @@ def load_new_usage_entries(
         session_key = str(session_path.resolve())
         current_model = "gpt-5-codex"
         pending_tool_calls: list[dict[str, Any]] = []
+        last_cumulative_total: int | None = None
+        compaction_offset = 0
         try:
             with open(session_path, "r", encoding="utf-8") as fh:
                 for line_idx, raw_line in enumerate(fh):
@@ -206,10 +226,31 @@ def load_new_usage_entries(
                     if tokens is None:
                         continue
 
+                    # Potential compaction check for robust deduplication: cumulative_total may decreases 
+                    # HOWEVER: based on https://github.com/openai/codex/pull/3446#pullrequestreview-3214048488
+                    # we have reason to believe that cumulative_total won't decrease, which means we are in a strictly
+                    # monotonic case and this logic is redundant.
+                    if (
+                        last_cumulative_total is not None
+                        and cumulative_total is not None
+                        and cumulative_total < last_cumulative_total
+                    ):
+                        compaction_offset += 1
+                        logger.debug(
+                            "Codex compaction detected via cumulative_total decrease: cumulative_total %d -> %d, offset=%d",
+                            last_cumulative_total,
+                            cumulative_total,
+                            compaction_offset,
+                        )
+                    if cumulative_total is not None:
+                        last_cumulative_total = cumulative_total
+
                     parsed_ts = _parse_timestamp(
                         entry.get("timestamp") or entry.get("ts") or entry.get("created_at")
                     )
-                    uid = _create_step_hash(session_key, cumulative_total, parsed_ts, line_idx)
+                    uid = _create_step_hash(
+                        session_key, cumulative_total, parsed_ts, line_idx, compaction_offset
+                    )
                     if uid in updated_hashes:
                         # Re-reading old lines should not leak already-consumed tool calls into
                         # the next new step, especially when the file contains duplicate snapshots.

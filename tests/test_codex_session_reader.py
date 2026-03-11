@@ -59,7 +59,8 @@ class TestLoadNewUsageEntries:
         assert entries[0]["_tokens"]["prompt"] == 100
         assert entries[0]["_tokens"]["completion"] == 50
         assert entries[0]["_tokens"]["cached"] == 10
-        assert entries[0]["_tokens"]["total"] == 160
+        # total = input + output (cached is subset of input; no double-count)
+        assert entries[0]["_tokens"]["total"] == 150
         assert len(hashes) == 1
 
     def test_usage_object_extracted(self, tmp_path):

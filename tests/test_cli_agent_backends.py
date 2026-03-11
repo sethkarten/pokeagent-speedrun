@@ -262,6 +262,74 @@ class TestCodexCliBackendHandleStreamEvent:
         backend.handle_stream_event(event, metrics)
         assert metrics.tool_use_count == 1
 
+    def test_mcp_tool_call_formats_tool_reasoning_like_claude_gemini(self):
+        """Codex should post [tool] {reasoning} in one line, not separate reasoning + tool."""
+        backend = CodexCliBackend()
+        metrics = CliSessionMetrics()
+        posted = []
+
+        def capture_post(server_url, thinking_text, duration_sec=0.0, interaction_type="codex"):
+            posted.append({"thinking_text": thinking_text})
+
+        backend._post_thinking = capture_post
+        # First: reasoning block (buffered, not posted)
+        backend.handle_stream_event(
+            {
+                "type": "item.completed",
+                "item": {"type": "reasoning", "text": "Adding intermediate commentary updates"},
+            },
+            metrics,
+            server_url="http://test",
+        )
+        assert len(posted) == 0
+        # Second: tool call with reasoning in args (preferred over buffer)
+        backend.handle_stream_event(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "mcp_tool_call",
+                    "tool": "mcp__pokemon-emerald__press_buttons",
+                    "arguments": {"buttons": ["A"], "reasoning": "Confirm dialog"},
+                },
+            },
+            metrics,
+            server_url="http://test",
+        )
+        assert len(posted) == 1
+        assert posted[0]["thinking_text"] == "[press_buttons] Confirm dialog"
+
+    def test_mcp_tool_call_uses_buffered_reasoning_when_args_empty(self):
+        """When tool args lack reasoning, use buffered reasoning from prior reasoning block."""
+        backend = CodexCliBackend()
+        posted = []
+
+        def capture_post(server_url, thinking_text, duration_sec=0.0, interaction_type="codex"):
+            posted.append({"thinking_text": thinking_text})
+
+        backend._post_thinking = capture_post
+        backend.handle_stream_event(
+            {
+                "type": "item.completed",
+                "item": {"type": "reasoning", "text": "Continuing autonomous action cycles"},
+            },
+            CliSessionMetrics(),
+            server_url="http://test",
+        )
+        backend.handle_stream_event(
+            {
+                "type": "item.completed",
+                "item": {
+                    "type": "mcp_tool_call",
+                    "tool": "get_game_state",
+                    "arguments": {},
+                },
+            },
+            CliSessionMetrics(),
+            server_url="http://test",
+        )
+        assert len(posted) == 1
+        assert posted[0]["thinking_text"] == "[get_game_state] Continuing autonomous action cycles"
+
     def test_turn_failed_sets_error(self):
         backend = CodexCliBackend()
         metrics = CliSessionMetrics()
