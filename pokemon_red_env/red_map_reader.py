@@ -328,10 +328,12 @@ class RedMapReader:
         """Return compact ASCII map of the area around the player (for /stream).
 
         Symbols match map_formatter.py conventions:
-          P  player      .  walkable    #  wall / blocked
+          I  player      .  walkable    #  wall / blocked
           ~  tall grass  W  water       D  door / warp
           N  NPC         ?  sign        C  counter
           ↓  ledge down  ←  ledge left  →  ledge right
+          P  PC          T  TV/Machine  B  Bookshelf
+          ^  display     S  Stair/warp
         """
         map_name = self.read_map_name()
         data = self._load_map_data(map_name)
@@ -360,7 +362,7 @@ class RedMapReader:
             line = ""
             for sx in range(vx_start, vx_end):
                 if sx == player_x and sy == player_y:
-                    line += 'P'
+                    line += 'I'
                 elif (sx, sy) in npc_positions:
                     line += 'N'
                 else:

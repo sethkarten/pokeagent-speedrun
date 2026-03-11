@@ -78,16 +78,6 @@ STORY_OBJECTIVES = [
         completion_condition="rival_battle_1_won",
         priority=1
     ),
-    DirectObjective(
-        id="pallet_006",
-        description="Receive Pokédex from Professor Oak, then visit Daisy for the Town Map",
-        action_type="dialogue",
-        category="story",
-        target_location="Oak's Lab",
-        navigation_hint="After defeating Blue, talk to Oak. He gives you the Pokédex and asks you to complete it. Then go next door to the rival's house — talk to Daisy (Blue's sister) to get the Town Map.",
-        completion_condition="pokedex_obtained",
-        priority=1
-    ),
 
     # ============================================================
     # PHASE 2: ROUTE 1, VIRIDIAN CITY, OAK'S PARCEL
@@ -118,8 +108,18 @@ STORY_OBJECTIVES = [
         action_type="interact",
         category="story",
         target_location="Oak's Lab",
-        navigation_hint="Walk south back to Pallet Town. Enter Oak's Lab and talk to Oak. Give him the parcel. He rewards you by fully registering your Pokédex.",
+        navigation_hint="Walk south back to Pallet Town. Enter Oak's Lab and talk to Oak. Give him the parcel. Oak gives you the Pokédex for the first time and asks you to complete it.",
         completion_condition="oaks_parcel_delivered",
+        priority=1
+    ),
+    DirectObjective(
+        id="pallet_006",
+        description="Visit Daisy (Blue's sister) in Pallet Town to receive the Town Map",
+        action_type="dialogue",
+        category="story",
+        target_location="Pallet Town",
+        navigation_hint="After receiving the Pokédex from Oak, go next door to the rival's house. Talk to Daisy (Blue's sister) — she gives you the Town Map, a Key Item showing all of Kanto.",
+        completion_condition="town_map_obtained",
         priority=1
     ),
     DirectObjective(
@@ -162,7 +162,7 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Viridian Forest",
-        navigation_hint="Viridian Forest has 3 Bug Catcher trainers with Caterpie, Weedle, Pikachu (Lv 4-9). Pick up items on the ground: Poké Ball, Antidote ×2. Wild Pikachu has ~5% rate — worth catching. Exit through the north gate.",
+        navigation_hint="Viridian Forest has 3 Bug Catcher trainers with Caterpie, Weedle, Kakuna (Lv 6-9). Pick up items on the ground: Poké Ball, Antidote ×2. Wild Pikachu has ~5% encounter rate — worth catching for Misty. Exit through the north gate.",
         completion_condition="viridian_forest_cleared",
         priority=1,
         recommended_battling_objectives=["battle_002"]
@@ -277,32 +277,12 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cerulean_024",
-        description="Walk north on Route 24 (Nugget Bridge) and defeat 5 trainers plus Team Rocket grunt",
-        action_type="battle",
-        category="story",
-        target_location="Route 24",
-        navigation_hint="Route 24 = Nugget Bridge. Defeat 5 trainers in a row; the 5th gives a Nugget (sell for $5000). Then a Team Rocket grunt tries to recruit you — refuse and battle him for TM28 Dig. TM45 Thunder Wave is also on the northwest hill.",
-        completion_condition="nugget_bridge_cleared",
-        priority=1
-    ),
-    DirectObjective(
-        id="cerulean_025",
-        description="Walk east on Route 25 to Bill's Sea Cottage and help Bill restore himself",
-        action_type="interact",
-        category="story",
-        target_location="Bill's Sea Cottage",
-        navigation_hint="Bill accidentally fused with a Pokémon. Talk to the Pokémon-Bill, then use his PC to run the gene restoration program. He thanks you and gives you the S.S. Ticket — required to board S.S. Anne in Vermilion City.",
-        completion_condition="ss_ticket_obtained",
-        priority=1
-    ),
-    DirectObjective(
         id="cerulean_026",
-        description="Return to Cerulean City and enter the Cerulean Gym",
+        description="Enter the Cerulean Gym",
         action_type="navigate",
         category="story",
         target_location="Cerulean Gym",
-        navigation_hint="Walk back west along Routes 25 and 24 to Cerulean City. The Cerulean Gym is in the north of the city (swimming/pool theme). Defeat the two swimmers inside before reaching Misty.",
+        navigation_hint="The Cerulean Gym is in the north of Cerulean City (swimming/pool theme). Defeat the two swimmers inside before reaching Misty.",
         completion_condition="entered_cerulean_gym",
         priority=1
     ),
@@ -318,6 +298,36 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_005", "battle_006"]
     ),
     DirectObjective(
+        id="cerulean_029",
+        description="Battle rival Blue at the Route 24 entrance (third rival battle)",
+        action_type="battle",
+        category="story",
+        target_location="Route 24",
+        navigation_hint="Head north from Cerulean City toward Route 24. Blue ambushes you at the entrance to Nugget Bridge. He has Pidgeotto Lv 18, Abra Lv 15, Rattata Lv 15, and his evolved starter (Lv 17 — Charmeleon/Wartortle/Ivysaur). Use your strongest moves. Reward: $1,008.",
+        completion_condition="rival_battle_3_won",
+        priority=1
+    ),
+    DirectObjective(
+        id="cerulean_024",
+        description="Walk north on Route 24 (Nugget Bridge) and defeat 5 trainers plus Team Rocket grunt",
+        action_type="battle",
+        category="story",
+        target_location="Route 24",
+        navigation_hint="Route 24 = Nugget Bridge. Defeat 5 trainers in a row; the 6th is a Team Rocket grunt who tries to recruit you — refuse and defeat him to complete the challenge and claim the Nugget ($5000). TM45 Thunder Wave is also on the northwest hill.",
+        completion_condition="nugget_bridge_cleared",
+        priority=1
+    ),
+    DirectObjective(
+        id="cerulean_025",
+        description="Walk east on Route 25 to Bill's Sea Cottage and help Bill restore himself",
+        action_type="interact",
+        category="story",
+        target_location="Bill's Sea Cottage",
+        navigation_hint="Bill accidentally fused with a Pokémon. Talk to the Pokémon-Bill, then use his PC to run the gene restoration program. He thanks you and gives you the S.S. Ticket — required to board S.S. Anne in Vermilion City.",
+        completion_condition="ss_ticket_obtained",
+        priority=1
+    ),
+    DirectObjective(
         id="cerulean_028",
         description="Defeat Team Rocket grunt near the robbed house in Cerulean City",
         action_type="battle",
@@ -325,16 +335,6 @@ STORY_OBJECTIVES = [
         target_location="Cerulean City",
         navigation_hint="A Team Rocket grunt is near a house northeast of the Pokémon Center. He was stealing. Battle him to recover TM28 Dig (Ground-type, good coverage move). The house has items inside.",
         completion_condition="cerulean_rocket_grunt_defeated",
-        priority=1
-    ),
-    DirectObjective(
-        id="cerulean_029",
-        description="Walk south from Cerulean City and battle rival Blue on Route 5 (third rival battle)",
-        action_type="battle",
-        category="story",
-        target_location="Route 5",
-        navigation_hint="Blue ambushes you as you head south. He has Pidgeotto, Abra, Rattata, and his evolved starter (around Lv 16-18). Use your strongest moves. Reward: $1008.",
-        completion_condition="rival_battle_3_won",
         priority=1
     ),
 
@@ -605,7 +605,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Silph Co. 7F",
-        navigation_hint="Blue is on 7F northwest near a warp pad. Team: Pidgeot Lv 37, Alakazam Lv 35, Growlithe/Gyarados/Exeggcute Lv 38, and his starter's final evolution (~Lv 40). Use your strongest Pokémon. Reward: $2450.",
+        navigation_hint="Blue is on 7F northwest near a warp pad. Team: Pidgeot Lv 37, Alakazam Lv 35, Growlithe/Gyarados/Exeggcute Lv 38, and his starter's final evolution (~Lv 40). Use your strongest Pokémon. Reward: $2,600.",
         completion_condition="rival_battle_6_won",
         priority=1
     ),
@@ -916,6 +916,22 @@ BATTLING_OBJECTIVES = [
         priority=1,
         prerequisite_story_objective="viridian_009"
     ),
+    DirectObjective(
+        id="battle_001b",
+        description="Train your starter to Lv 10 and catch one wild Pokémon before battling Blue on Route 22",
+        action_type="battle",
+        category="battling",
+        target_location="Route 1 / Route 22",
+        navigation_hint=(
+            "Grind on Route 1 or in the wild grass on Route 22 (west of Viridian City) until "
+            "your starter reaches Lv 10+. Also catch a Rattata, Pidgey, or Nidoran♂/♀ as a "
+            "backup team member — the extra Pokémon helps absorb hits from Blue's Pidgey Lv 9 "
+            "and his Lv 8 starter. Do this before heading west to Route 22 for the rival fight."
+        ),
+        completion_condition="second_pokemon_caught_lv10",
+        priority=1,
+        prerequisite_story_objective="viridian_010"
+    ),
 
     # Pre-Brock
     DirectObjective(
@@ -1066,12 +1082,12 @@ BATTLING_OBJECTIVES = [
     # Pre-Koga
     DirectObjective(
         id="battle_014",
-        description="Train to Lv 37+ and prepare antidotes before battling Koga",
+        description="Train to Lv 40+ and prepare Antidotes/Awakenings before battling Koga",
         action_type="battle",
         category="battling",
         target_location="Route 15",
-        navigation_hint="Koga's Weezing is Lv 43. Train to Lv 37+ minimum on Routes 13-15 (diverse wild Pokémon). Psychic and Ground super effective vs Poison. Stock Antidotes and Awakenings — Koga uses Toxic and Sleep Powder constantly.",
-        completion_condition="team_level_37_koga",
+        navigation_hint="Koga's Weezing is Lv 43. Train to Lv 40+ minimum on Routes 13-15 (diverse wild Pokémon). Psychic and Ground super effective vs Poison. Stock Antidotes and Awakenings — Koga uses Toxic and Sleep Powder constantly.",
+        completion_condition="team_level_40_koga",
         priority=1,
         prerequisite_story_objective="fuchsia_060"
     ),
