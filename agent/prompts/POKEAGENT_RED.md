@@ -288,8 +288,8 @@ When there's conflicting information, trust these sources in priority order:
 
 1. **MAP DATA** (map layout) - Definitive source for tile walkability, map structure, warp locations
 2. **KNOWLEDGE BASE** (your accomplishments) - **ALWAYS CORRECT**, never outdated. Represents what you've actually done.
-3. **WALKTHROUGH** (game progression) - Official guide for correct sequence of steps
-4. **Current objectives** - May be WRONG if they conflict with the above sources
+3. **Current objectives** - Verified objectives for next steps, but can be wrong if they conflict with knowledge base
+4. **WALKTHROUGH** (game progression) - Guidance based on typical playthrough, but some information may be missing or not suitable for Pokemon Red (there may be information specific to Pokemon Blue)
 
 **CRITICAL**: If your current objectives conflict with the knowledge base, the **OBJECTIVES ARE WRONG**, not the knowledge base. Never dismiss the knowledge base as "outdated" or "stale" - it's ground truth of what you accomplished.
 
