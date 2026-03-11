@@ -1194,6 +1194,7 @@ class CodexCliBackend(CliAgentBackend):
     def __init__(self) -> None:
         super().__init__()
         self._last_event_time: float | None = None
+        self._pending_reasoning: str = ""  # Buffer for reasoning block; merged into next tool call
 
     def is_auth_fatal_error(self, text: str) -> bool:
         """Detect Codex auth failures (OpenRouter/API key or ChatGPT login)."""
@@ -1447,19 +1448,31 @@ env_key = "OPENROUTER_API_KEY"
         metrics: CliSessionMetrics | None,
         server_url: str | None,
     ) -> None:
-        """Handle item.completed with item.type mcp_tool_call: tool_use count and _post_thinking."""
+        """Handle item.completed with item.type mcp_tool_call: tool_use count and _post_thinking.
+
+        Formats as [tool] {reasoning} to match Claude/Gemini, using reasoning from args or
+        buffered reasoning block. Single _post_thinking per tool call (no separate reasoning line).
+        """
         duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
         self._last_event_time = now
         if metrics:
             metrics.tool_use_count += 1
         item = event.get("item") or {}
         tool_name = item.get("tool", "?")
+        short_name = tool_name.split("__")[-1] if "__" in tool_name else tool_name
         args = item.get("arguments") or {}
         args_preview = json.dumps(args)
         if len(args_preview) > 120:
             args_preview = args_preview[:120] + "..."
         logger.info("[codex:mcp_tool_call] %s %s", tool_name, args_preview)
-        thinking_text = f"[{tool_name}]"
+        reasoning = (
+            args.get("reasoning")
+            or args.get("reason")
+            or self._pending_reasoning
+            or ""
+        )
+        self._pending_reasoning = ""  # Consume buffer
+        thinking_text = f"[{short_name}] {reasoning}".strip() or f"[{short_name}]"
         if server_url:
             self._post_thinking(server_url, thinking_text, duration_sec, interaction_type="codex")
 
@@ -1469,14 +1482,15 @@ env_key = "OPENROUTER_API_KEY"
         now: float,
         server_url: str | None,
     ) -> None:
-        """Handle item.completed with item.type reasoning: optional thinking POST."""
-        duration_sec = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+        """Handle item.completed with item.type reasoning: buffer for next tool call.
+
+        Reasoning is merged into the next mcp_tool_call as [tool] {reasoning} (no separate post).
+        """
         self._last_event_time = now
         item = event.get("item") or {}
         text = (item.get("text") or "").strip()
-        if text and server_url:
-            preview = (text[:200] + "...") if len(text) > 200 else text
-            self._post_thinking(server_url, preview, duration_sec, interaction_type="codex")
+        if text:
+            self._pending_reasoning = (text[:500] + "...") if len(text) > 500 else text
 
     def _handle_error(self, event: dict) -> None:
         """Handle error event (may be transient reconnect notice)."""
@@ -1540,7 +1554,9 @@ env_key = "OPENROUTER_API_KEY"
         new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
 
         llm_logger = get_llm_logger()
-        prev_ts: float | None = None
+        # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
+        steps = llm_logger.cumulative_metrics.get("steps", [])
+        prev_ts: float | None = steps[-1]["timestamp"] if steps else None
         for entry in new_entries:
             tokens = entry.get("_tokens", {})
             tool_calls = entry.get("_tool_calls", [])
