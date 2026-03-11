@@ -50,21 +50,85 @@ def _parse_timestamp(ts: Any) -> datetime | None:
     return None
 
 
-def _create_unique_hash(entry: dict, line_idx: int, file_path: str) -> str:
-    """Stable dedup key for a session log entry."""
-    # Prefer explicit ids when present
-    session_id = entry.get("session_id") or entry.get("thread_id", "")
-    turn_id = entry.get("turn_id") or entry.get("turn_index")
-    ts = entry.get("timestamp") or entry.get("ts")
-    payload = entry.get("payload") or {}
+def _create_step_hash(
+    session_key: str,
+    cumulative_total: int | None,
+    parsed_ts: datetime | None,
+    line_idx: int,
+) -> str:
+    """Stable dedup key for one logical Codex usage step."""
+    if cumulative_total is not None:
+        return f"{session_key}:usage:{cumulative_total}"
+    ts = parsed_ts.isoformat() if parsed_ts is not None else f"line-{line_idx}"
+    return f"{session_key}:usage-ts:{ts}"
+
+
+def _normalize_tool_args(raw_args: Any) -> dict[str, Any]:
+    """Best-effort normalization for tool-call args."""
+    if isinstance(raw_args, dict):
+        return raw_args
+    if isinstance(raw_args, str):
+        try:
+            parsed = json.loads(raw_args)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def extract_usage_snapshot(entry: dict) -> tuple[dict[str, Any] | None, int | None]:
+    """Extract step token usage and cumulative total from a Codex entry."""
+    payload = entry.get("payload")
     if isinstance(payload, dict) and payload.get("type") == "token_count":
-        # Use cumulative fields to avoid duplicate counts
-        inp = payload.get("input_tokens", 0)
-        out = payload.get("output_tokens", 0)
-        key = f"{session_id}:{turn_id}:{ts}:{inp}:{out}"
-    else:
-        key = f"{session_id}:{turn_id}:{ts}:{line_idx}:{file_path}"
-    return key or f"line_{line_idx}_{file_path}"
+        info = payload.get("info") or {}
+        total_usage = info.get("total_token_usage") or {}
+        usage = info.get("last_token_usage") or total_usage or payload
+        inp = int(usage.get("input_tokens", 0) or 0)
+        out = int(usage.get("output_tokens", 0) or 0)
+        cached = int(usage.get("cached_input_tokens", 0) or 0)
+        reasoning = int(usage.get("reasoning_output_tokens", 0) or 0)
+        total = inp + out + cached + reasoning
+        if total == 0:
+            return None, None
+        cumulative_total = total_usage.get("total_tokens")
+        if cumulative_total is None:
+            cumulative_total = usage.get("total_tokens")
+        cumulative_total_int = int(cumulative_total or total)
+        return (
+            {
+                "prompt": inp,
+                "completion": out + reasoning,
+                "cached": cached,
+                "cache_write": 0,
+                "total": total,
+                "cost": 0.0,
+            },
+            cumulative_total_int,
+        )
+
+    usage = entry.get("usage")
+    if isinstance(usage, dict):
+        inp = int(usage.get("input_tokens", 0) or 0)
+        out = int(usage.get("output_tokens", 0) or 0)
+        cached = int(usage.get("cached_input_tokens", 0) or 0)
+        reasoning = int(usage.get("reasoning_output_tokens", 0) or 0)
+        total = inp + out + cached + reasoning
+        if total == 0:
+            return None, None
+        cumulative_total = int(usage.get("total_tokens", 0) or total)
+        return (
+            {
+                "prompt": inp,
+                "completion": out + reasoning,
+                "cached": cached,
+                "cache_write": 0,
+                "total": total,
+                "cost": 0.0,
+            },
+            cumulative_total,
+        )
+
+    return None, None
 
 
 def extract_tokens_from_entry(entry: dict) -> dict[str, Any] | None:
@@ -74,47 +138,8 @@ def extract_tokens_from_entry(entry: dict) -> dict[str, Any] | None:
     - event_msg with payload.type token_count (input_tokens, cached_input_tokens, output_tokens, reasoning_tokens)
     - usage object (input_tokens, output_tokens, cached_input_tokens) from turn.completed
     """
-    # event_msg with token_count payload
-    payload = entry.get("payload")
-    if isinstance(payload, dict) and payload.get("type") == "token_count":
-        # Codex nests counts under payload.info.last_token_usage or payload.info.total_token_usage
-        info = payload.get("info") or {}
-        usage = info.get("last_token_usage") or info.get("total_token_usage") or payload
-        inp = int(usage.get("input_tokens", 0) or 0)
-        out = int(usage.get("output_tokens", 0) or 0)
-        cached = int(usage.get("cached_input_tokens", 0) or 0)
-        reasoning = int(usage.get("reasoning_output_tokens", 0) or 0)
-        total = inp + out + cached + reasoning
-        if total == 0:
-            return None
-        return {
-            "prompt": inp,
-            "completion": out + reasoning,
-            "cached": cached,
-            "cache_write": 0,
-            "total": total,
-            "cost": 0.0,
-        }
-
-    # usage object (e.g. from turn.completed written to session)
-    usage = entry.get("usage")
-    if isinstance(usage, dict):
-        inp = int(usage.get("input_tokens", 0) or 0)
-        out = int(usage.get("output_tokens", 0) or 0)
-        cached = int(usage.get("cached_input_tokens", 0) or 0)
-        total = inp + out + cached
-        if total == 0:
-            return None
-        return {
-            "prompt": inp,
-            "completion": out,
-            "cached": cached,
-            "cache_write": 0,
-            "total": total,
-            "cost": 0.0,
-        }
-
-    return None
+    tokens, _ = extract_usage_snapshot(entry)
+    return tokens
 
 
 def extract_tool_calls_from_entry(entry: dict) -> list[dict[str, Any]]:
@@ -123,7 +148,16 @@ def extract_tool_calls_from_entry(entry: dict) -> list[dict[str, Any]]:
     payload = entry.get("payload")
     if isinstance(payload, dict) and payload.get("type") == "mcp_tool_call":
         tool = payload.get("tool")
-        args = payload.get("arguments") or {}
+        args = _normalize_tool_args(payload.get("arguments"))
+        if tool:
+            tool_calls.append({"name": tool, "args": args})
+    elif (
+        entry.get("type") == "response_item"
+        and isinstance(payload, dict)
+        and payload.get("type") == "function_call"
+    ):
+        tool = payload.get("name")
+        args = _normalize_tool_args(payload.get("arguments"))
         if tool:
             tool_calls.append({"name": tool, "args": args})
     return tool_calls
@@ -145,6 +179,9 @@ def load_new_usage_entries(
     updated_hashes = set(processed_hashes)
 
     for session_path in find_session_files(data_path):
+        session_key = str(session_path.resolve())
+        current_model = "gpt-5-codex"
+        pending_tool_calls: list[dict[str, Any]] = []
         try:
             with open(session_path, "r", encoding="utf-8") as fh:
                 for line_idx, raw_line in enumerate(fh):
@@ -157,30 +194,35 @@ def load_new_usage_entries(
                         logger.debug("Skipping malformed JSONL line in %s", session_path)
                         continue
 
-                    tokens = extract_tokens_from_entry(entry)
-                    if tokens is None:
-                        continue
+                    payload = entry.get("payload")
+                    if entry.get("type") == "turn_context" and isinstance(payload, dict):
+                        current_model = payload.get("model") or current_model
 
-                    uid = _create_unique_hash(entry, line_idx, str(session_path))
-                    if uid in updated_hashes:
+                    tool_calls = extract_tool_calls_from_entry(entry)
+                    if tool_calls:
+                        pending_tool_calls.extend(tool_calls)
+
+                    tokens, cumulative_total = extract_usage_snapshot(entry)
+                    if tokens is None:
                         continue
 
                     parsed_ts = _parse_timestamp(
                         entry.get("timestamp") or entry.get("ts") or entry.get("created_at")
                     )
-                    tool_calls = extract_tool_calls_from_entry(entry)
-                    model = (
-                        (entry.get("turn_context") or {}).get("model")
-                        if isinstance(entry.get("turn_context"), dict)
-                        else entry.get("model", "gpt-5-codex")
-                    )
+                    uid = _create_step_hash(session_key, cumulative_total, parsed_ts, line_idx)
+                    if uid in updated_hashes:
+                        # Re-reading old lines should not leak already-consumed tool calls into
+                        # the next new step, especially when the file contains duplicate snapshots.
+                        pending_tool_calls = []
+                        continue
 
                     new_entries.append({
                         "_tokens": tokens,
-                        "_tool_calls": tool_calls,
+                        "_tool_calls": pending_tool_calls.copy(),
                         "_parsed_timestamp": parsed_ts,
-                        "_model": model,
+                        "_model": current_model,
                     })
+                    pending_tool_calls = []
                     updated_hashes.add(uid)
 
         except OSError as exc:
