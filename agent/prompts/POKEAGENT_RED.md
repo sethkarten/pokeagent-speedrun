@@ -377,7 +377,8 @@ When there's conflicting information, trust these sources in priority order:
 - **Doors (D) / Warps (W)**: navigate to the warp tile, then press the direction
   you want to exit (e.g., press DOWN to walk through a door at the bottom of a room).
   Warps do NOT auto-trigger — you must press a direction after arriving.
-- If stuck on a floor, find S/D/W tiles on the map and navigate to them.
+- **NPCs / Signs / Objects / Poké Balls**: the player must be **facing** the target before pressing A to interact. Navigate to the adjacent tile, press the directional button toward the target to face it, then press A.
+- If stuck on a floor, find S/D tiles on the map and navigate to them.
 - **Coordinates**: UP (x, y-1), DOWN (x, y+1), LEFT (x-1, y), RIGHT (x+1, y).
 
 ## Game State Format
