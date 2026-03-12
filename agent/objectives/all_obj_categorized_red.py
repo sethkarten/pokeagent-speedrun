@@ -3,7 +3,7 @@ Categorized Game Objectives for Pokemon Red
 
 ~107 objectives split into 2 categories:
 - STORY_OBJECTIVES (~85): Narrative progression aligned with Bulbapedia walkthrough
-- BATTLING_OBJECTIVES (~22): Team building and training
+- BATTLING_OBJECTIVES (~22): Team building and training (battle_004 removed; battle_002b added)
 
 Location names use human-readable strings matching in-game map names.
 """
@@ -918,15 +918,17 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_001b",
-        description="Train your starter to Lv 12 and catch one wild Pokémon before battling Blue on Route 22",
+        description="Train your entire team to Lv 12 and catch one wild Pokémon before battling Blue on Route 22",
         action_type="battle",
         category="battling",
         target_location="Route 1 / Route 22",
         navigation_hint=(
             "Grind on Route 1 or in the wild grass on Route 22 (west of Viridian City) until "
-            "your starter reaches Lv 12+. Also catch a Rattata, Pidgey, or Nidoran♂/♀ as a "
+            "ALL party members reach Lv 12+. Catch a Rattata, Pidgey, or Nidoran♂/♀ as a "
             "backup team member — the extra Pokémon helps absorb hits from Blue's Pidgey Lv 9 "
-            "and his Lv 8 starter. Do this before heading west to Route 22 for the rival fight."
+            "and his Lv 8 starter. When training, send your stronger Pokémon to the back and "
+            "open each wild battle with your weakest team member so they gain full EXP. "
+            "Do this before heading west to Route 22 for the rival fight."
         ),
         completion_condition="second_pokemon_caught_lv12",
         priority=1,
@@ -948,36 +950,54 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_003",
-        description="Train your team to Lv 12-14 before battling Brock",
+        description="Train the entire team — especially Pikachu and other non-starters — to Lv 12 using wild encounters",
+        action_type="battle",
+        category="battling",
+        target_location="Viridian Forest / Route 2",
+        navigation_hint=(
+            "Fight wild encounters in Viridian Forest or Route 2 grass. The level requirement "
+            "is for ALL party members, not just the starter. Send your starter to the back and "
+            "open each fight with the weakest Pokémon (e.g. Pikachu or newly caught mons) so "
+            "they gain full EXP. Target Lv 12+ for every team member. Pikachu learns Quick "
+            "Attack at Lv 13, which is crucial for Misty. Building bench depth now means you "
+            "have real backup for Brock and beyond."
+        ),
+        completion_condition="non_starter_pokemon_level_12",
+        priority=1,
+        prerequisite_story_objective="viridian_012"
+    ),
+    DirectObjective(
+        id="battle_004",
+        description="Train your entire team to Lv 14 before battling Brock",
         action_type="battle",
         category="battling",
         target_location="Pewter City / Viridian Forest",
-        navigation_hint="Brock's Onix is Lv 14. Train in Viridian Forest, Route 2 grass, and Route 22 wild encounters before entering Pewter Gym. If you chose Charmander (type disadvantage), get to Lv 15+ and use Growl to lower Onix's attack. Mankey from Route 22 (Red) is a strong anti-Brock option.",
+        navigation_hint=(
+            "Brock's Onix is Lv 14. The Lv 14 target applies to EVERY party member, not just "
+            "your starter. Train in Viridian Forest, Route 2 grass, and Route 22 wild encounters. "
+            "Rotate low-level Pokémon to the front to give them full EXP — send them out first, "
+            "then switch to a stronger mon if needed. If you chose Charmander (type disadvantage), "
+            "get your team to Lv 15+ and use Growl to lower Onix's attack. Mankey from Route 22 "
+            "(Red) is a strong anti-Brock option worth leveling up."
+        ),
         completion_condition="team_level_13_brock",
         priority=1,
         prerequisite_story_objective="pewter_014"
     ),
-    DirectObjective(
-        id="battle_004",
-        description="Catch a Caterpie in Viridian Forest and evolve it to Butterfree for Brock",
-        action_type="catch",
-        category="battling",
-        target_location="Viridian Forest",
-        navigation_hint="If you chose Charmander, catch a Caterpie in Viridian Forest and train it to Lv 10 to evolve it into Butterfree. It learns Confusion, which deals heavy special damage to Brock's Rock/Ground types.",
-        completion_condition="butterfree_obtained",
-        priority=2,
-        optional=True,
-        prerequisite_story_objective="viridian_012"
-    ),
-
     # Pre-Misty
     DirectObjective(
         id="battle_005",
-        description="Train to Lv 18+ and prepare for Misty's Starmie",
+        description="Train your entire team to Lv 18+ and prepare for Misty's Starmie",
         action_type="battle",
         category="battling",
         target_location="Route 24",
-        navigation_hint="Misty's Starmie is Lv 21 with BubbleBeam. Have your team at Lv 18+ minimum. Pikachu (Electric) and Bulbasaur line (Grass) are ideal. Fight all Nugget Bridge trainers for extra EXP before the gym.",
+        navigation_hint=(
+            "Misty's Starmie is Lv 21 with BubbleBeam. All party members should be Lv 18+ — "
+            "not just your lead. In wild encounters, lead with your weakest Pokémon first so "
+            "they gain full EXP; switch to a stronger mon to finish the fight if needed. "
+            "Fight all Nugget Bridge trainers for extra EXP before the gym. Pikachu (Electric) "
+            "and Bulbasaur line (Grass) are ideal type matchups against Misty."
+        ),
         completion_condition="team_level_18_misty",
         priority=1,
         prerequisite_story_objective="cerulean_023"
@@ -1008,11 +1028,18 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_008",
-        description="Train to Lv 22+ before battling Lt. Surge",
+        description="Train your entire team to Lv 22+ before battling Lt. Surge",
         action_type="battle",
         category="battling",
         target_location="S.S. Anne",
-        navigation_hint="Lt. Surge's Raichu is Lv 24. Fight all trainers on S.S. Anne before the ship leaves — 12+ trainers with good EXP. Route 11 trainers (Gamblers, Youngsters, Engineers) also help. Target Lv 22+ across your team.",
+        navigation_hint=(
+            "Lt. Surge's Raichu is Lv 24. Target Lv 22+ for EVERY party member. Fight all "
+            "trainers on S.S. Anne before the ship leaves — 12+ trainers with good EXP. "
+            "Route 11 trainers (Gamblers, Youngsters, Engineers) also help. In wild encounters, "
+            "always lead with your lowest-level Pokémon first so they gain full EXP; swap to "
+            "a stronger mon to close the fight. Diglett/Dugtrio (Ground) is immune to all "
+            "Electric moves and should be in your party against Surge."
+        ),
         completion_condition="team_level_22_surge",
         priority=1,
         prerequisite_story_objective="vermilion_030"
@@ -1021,11 +1048,17 @@ BATTLING_OBJECTIVES = [
     # Pre-Erika
     DirectObjective(
         id="battle_009",
-        description="Train to Lv 28+ before battling Erika",
+        description="Train your entire team to Lv 28+ before battling Erika",
         action_type="battle",
         category="battling",
         target_location="Route 9",
-        navigation_hint="Erika's Vileplume is Lv 29. Train on Route 9 or through Rock Tunnel. Fire, Poison, Flying, Psychic, or Ice are super effective vs Grass. Don't use Water or Ground.",
+        navigation_hint=(
+            "Erika's Vileplume is Lv 29. All party members should reach Lv 28+ — not just your "
+            "lead. Train on Route 9 or through Rock Tunnel. In wild encounters, open each fight "
+            "with your weakest Pokémon so they get full EXP, then switch to a stronger mon if "
+            "you need to finish the fight. Fire, Poison, Flying, Psychic, or Ice are super "
+            "effective vs Grass. Don't use Water or Ground."
+        ),
         completion_condition="team_level_28_erika",
         priority=1,
         prerequisite_story_objective="celadon_041"
@@ -1056,11 +1089,17 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_012",
-        description="Train to Lv 40+ before tackling Silph Co. and Saffron Gym",
+        description="Train your entire team to Lv 40+ before tackling Silph Co. and Saffron Gym",
         action_type="battle",
         category="battling",
         target_location="Saffron City",
-        navigation_hint="Sabrina's Alakazam is Lv 43. Giovanni in Silph Co. has Nidoqueen Lv 41. Train on Routes 7-8 or in the Safari Zone area. Target Lv 40+ before entering Silph Co.",
+        navigation_hint=(
+            "Sabrina's Alakazam is Lv 43. Giovanni in Silph Co. has Nidoqueen Lv 41. Every "
+            "party member should be Lv 40+ before entering Silph Co. Train on Routes 7-8 or in "
+            "the Safari Zone area. In wild encounters, lead with your lowest-level Pokémon first "
+            "and switch to a stronger mon to finish — this ensures all team members level up "
+            "evenly instead of only your lead getting EXP."
+        ),
         completion_condition="team_level_40_saffron",
         priority=1,
         prerequisite_story_objective="pokemontower_051"
@@ -1082,11 +1121,17 @@ BATTLING_OBJECTIVES = [
     # Pre-Koga
     DirectObjective(
         id="battle_014",
-        description="Train to Lv 40+ and prepare Antidotes/Awakenings before battling Koga",
+        description="Train your entire team to Lv 40+ and prepare Antidotes/Awakenings before battling Koga",
         action_type="battle",
         category="battling",
         target_location="Route 15",
-        navigation_hint="Koga's Weezing is Lv 43. Train to Lv 40+ minimum on Routes 13-15 (diverse wild Pokémon). Psychic and Ground super effective vs Poison. Stock Antidotes and Awakenings — Koga uses Toxic and Sleep Powder constantly.",
+        navigation_hint=(
+            "Koga's Weezing is Lv 43. Every party member should be Lv 40+ — not just your lead. "
+            "Train on Routes 13-15 (diverse wild Pokémon). In wild encounters, open each battle "
+            "with your weakest Pokémon first so they gain full EXP; switch to a stronger mon "
+            "to finish. Psychic and Ground are super effective vs Poison. Stock Antidotes and "
+            "Awakenings — Koga uses Toxic and Sleep Powder constantly."
+        ),
         completion_condition="team_level_40_koga",
         priority=1,
         prerequisite_story_objective="fuchsia_060"
@@ -1107,11 +1152,17 @@ BATTLING_OBJECTIVES = [
     # Pre-Blaine
     DirectObjective(
         id="battle_016",
-        description="Train to Lv 42+ before battling Blaine",
+        description="Train your entire team to Lv 42+ before battling Blaine",
         action_type="battle",
         category="battling",
         target_location="Route 21",
-        navigation_hint="Blaine's Arcanine is Lv 47. Train on Route 21 (ocean trainers: Fishermen, Swimmers) or revisit Routes 13-15. Water-types are best against Fire. Target Lv 42+ across your team.",
+        navigation_hint=(
+            "Blaine's Arcanine is Lv 47. Target Lv 42+ for ALL party members. Train on Route 21 "
+            "(ocean trainers: Fishermen, Swimmers) or revisit Routes 13-15. In wild encounters, "
+            "lead with your lowest-level Pokémon first and switch to a stronger mon to finish — "
+            "this keeps the whole team leveling evenly. Water-types are best against Blaine's "
+            "Fire squad."
+        ),
         completion_condition="team_level_42_blaine",
         priority=1,
         prerequisite_story_objective="cinnabar_064"
@@ -1131,11 +1182,17 @@ BATTLING_OBJECTIVES = [
     # Pre-Giovanni (Viridian Gym)
     DirectObjective(
         id="battle_018",
-        description="Train to Lv 45+ before battling Giovanni in Viridian Gym",
+        description="Train your entire team to Lv 45+ before battling Giovanni in Viridian Gym",
         action_type="battle",
         category="battling",
         target_location="Route 23",
-        navigation_hint="Giovanni's Rhydon is Lv 50. Train to Lv 45+ minimum. Route 23 trainers (Lv 39-47) are excellent. Water, Grass, Ice super effective on his Ground/Rock team. Flying-types immune to Ground moves.",
+        navigation_hint=(
+            "Giovanni's Rhydon is Lv 50. Every party member should be Lv 45+ minimum. Route 23 "
+            "trainers (Lv 39-47) are excellent for EXP. In wild encounters, always open with "
+            "your weakest Pokémon first and switch to a stronger mon to finish — this ensures "
+            "the whole team levels up, not just your lead. Water, Grass, and Ice are super "
+            "effective on his Ground/Rock team. Flying-types are immune to Ground moves."
+        ),
         completion_condition="team_level_45_giovanni",
         priority=1,
         prerequisite_story_objective="viridian_gym_069"
@@ -1160,7 +1217,14 @@ BATTLING_OBJECTIVES = [
         action_type="battle",
         category="battling",
         target_location="Victory Road",
-        navigation_hint="Elite Four have Lv 53-62 Pokémon. Champion Blue has Lv 59-65. Train on Victory Road (Machop, Marowak, Onix, Geodude, Lv 35-50) or Route 23. Aim for Lv 55+ across all 6 party members — no healing between Elite Four rooms.",
+        navigation_hint=(
+            "Elite Four have Lv 53-62 Pokémon. Champion Blue has Lv 59-65. Aim for Lv 55+ "
+            "across ALL 6 party members — no healing between Elite Four rooms, so every slot "
+            "must pull its weight. Train on Victory Road (Machop, Marowak, Onix, Geodude, "
+            "Lv 35-50) or Route 23. In wild encounters, lead with your lowest-level Pokémon "
+            "first and switch to a stronger mon to finish the fight, so no team member falls "
+            "behind. A bench that caps at Lv 40 while your lead is Lv 55 will cost you."
+        ),
         completion_condition="team_level_55_elite4",
         priority=1,
         prerequisite_story_objective="victory_073"
