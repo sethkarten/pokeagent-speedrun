@@ -508,36 +508,27 @@ class RedMapReader:
                 "symbol": h.get("symbol", "#"),
             })
 
-        # objects — NPC list from processed map data; correct positions with live RAM.
-        # Poké Ball entries are excluded if their sprite is no longer active in RAM
-        # (i.e., the player already picked them up).
+        # objects — NPC list from processed map data, filtered by live RAM.
+        # For stationary sprites (movement == "STAY"): check if their static
+        # (x, y) position has an active sprite in RAM.  If not, the sprite was
+        # picked up / removed — skip it.
+        # For walking sprites: assume they exist (position may have changed).
         objects = []
         npc_data = data.get("npc_data", [])
         try:
             live_sprites = self.read_sprites()
-            npc_dict = {s["sprite_name"]: (s["map_x"], s["map_y"]) for s in live_sprites}
             live_sprite_positions = {(s["map_x"], s["map_y"]) for s in live_sprites}
         except Exception as e:
             logger.warning(f"Failed to read NPC data from memory; Using processed map data only. {e}")
-            npc_dict = None
+            live_sprites = None
             live_sprite_positions = None
 
-        # Build set of active Poké Ball positions (from npc_data filtered by live RAM)
-        pokeball_map_positions = {
-            (n["x"], n["y"]) for n in npc_data
-            if "POKE_BALL" in n.get("sprite", "").upper()
-        }
-        active_pokeball_positions = (
-            pokeball_map_positions & live_sprite_positions
-            if live_sprite_positions is not None
-            else pokeball_map_positions  # fallback: show all if RAM unavailable
-        )
-
         for s in npc_data:
-            is_pokeball = "POKE_BALL" in s.get("sprite", "").upper()
-            # Skip Poké Balls that were picked up (no longer in live RAM)
-            if is_pokeball and live_sprite_positions is not None:
-                if (s["x"], s["y"]) not in active_pokeball_positions:
+            is_stationary = s.get("movement", "").upper() == "STAY"
+
+            # For stationary sprites, verify they still exist in live RAM
+            if is_stationary and live_sprite_positions is not None:
+                if (s["x"], s["y"]) not in live_sprite_positions:
                     continue
 
             obj_tmp = {
@@ -547,10 +538,6 @@ class RedMapReader:
                 "facing": s["direction"],
                 "graphics_id": s["text_id"]
             }
-            if npc_dict is not None:
-                live_pos = npc_dict.get(obj_tmp["sprite_name"])
-                if live_pos is not None and (obj_tmp["x"], obj_tmp["y"]) != live_pos:
-                    obj_tmp["x"], obj_tmp["y"] = live_pos
             objects.append(obj_tmp)
 
         return {
