@@ -66,7 +66,6 @@ STORY_OBJECTIVES = [
         navigation_hint="Oak leads you inside his lab. Three Poké Balls are on the table: Bulbasaur (Grass — good vs Brock/Misty), Charmander (Fire — hardest early, great late), Squirtle (Water — easiest overall). Pick one and confirm your choice.",
         completion_condition="starter_pokemon_obtained",
         priority=1,
-        recommended_battling_objectives=["battle_000", "battle_001"]
     ),
     DirectObjective(
         id="pallet_005",
@@ -90,7 +89,8 @@ STORY_OBJECTIVES = [
         target_location="Route 1",
         navigation_hint="Walk north through Route 1. A Poké Mart employee near the entrance gives you a free Potion. Wild Pidgey and Rattata appear in tall grass. Viridian City is at the north end.",
         completion_condition="reached_viridian_city",
-        priority=1
+        priority=1, 
+        recommended_battling_objectives=["battle_000"]
     ),
     DirectObjective(
         id="viridian_008",
@@ -110,7 +110,8 @@ STORY_OBJECTIVES = [
         target_location="Oak's Lab",
         navigation_hint="Walk south back to Pallet Town. Enter Oak's Lab and talk to Oak. Give him the parcel. Oak gives you the Pokédex for the first time and asks you to complete it.",
         completion_condition="oaks_parcel_delivered",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_001"]
     ),
     DirectObjective(
         id="pallet_006",
@@ -130,7 +131,8 @@ STORY_OBJECTIVES = [
         target_location="Viridian City",
         navigation_hint="Walk north on Route 1 to Viridian City. Heal at the Pokémon Center (red-roof building). This is your base before Viridian Forest.",
         completion_condition="healed_at_viridian",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_002"]
     ),
     DirectObjective(
         id="viridian_011",
@@ -140,7 +142,8 @@ STORY_OBJECTIVES = [
         target_location="Route 22",
         navigation_hint="Go west from Viridian City to Route 22. Blue ambushes you with Pidgey Lv 9 and his starter Lv 8. Use your best attacks. Reward: $280.",
         completion_condition="rival_battle_2_won",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_002"]
     ),
     DirectObjective(
         id="viridian_012",
@@ -165,7 +168,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Viridian Forest has 3 Bug Catcher trainers with Caterpie, Weedle, Kakuna (Lv 6-9). Pick up items on the ground: Poké Ball, Antidote ×2. Wild Pikachu has ~5% encounter rate — worth catching for Misty. Exit through the north gate.",
         completion_condition="viridian_forest_cleared",
         priority=1,
-        recommended_battling_objectives=["battle_002"]
+        recommended_battling_objectives=["battle_003"]
     ),
     DirectObjective(
         id="pewter_014",
@@ -175,7 +178,8 @@ STORY_OBJECTIVES = [
         target_location="Pewter City",
         navigation_hint="Exit the forest north gate to reach Pewter City. Heal at the Pokémon Center. Stock up at the Poké Mart if you need Potions or Antidotes before the gym.",
         completion_condition="healed_at_pewter",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_004"]
     ),
     DirectObjective(
         id="pewter_015",
@@ -185,7 +189,8 @@ STORY_OBJECTIVES = [
         target_location="Pewter Gym",
         navigation_hint="Pewter Gym is northwest of the city. A Jr. Trainer♂ blocks the path with Diglett Lv 11 and Sandshrew Lv 11. Defeat him to clear the way to Brock. Reward: $220.",
         completion_condition="pewter_gym_trainer_defeated",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_004"]
     ),
     DirectObjective(
         id="pewter_016",
@@ -195,8 +200,7 @@ STORY_OBJECTIVES = [
         target_location="Pewter Gym",
         navigation_hint="Brock: Geodude Lv 12 (Tackle, Defense Curl), Onix Lv 14 (Tackle, Screech, Bide). Water/Grass 4× on Geodude, 2× on Onix. Charmander is at a disadvantage — spam Growl and Ember. Reward: $1386, Boulder Badge, TM34 Bide.",
         completion_condition="boulder_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_003", "battle_004"]
+        priority=1
     ),
 
     # ============================================================
@@ -260,7 +264,8 @@ STORY_OBJECTIVES = [
         target_location="Cerulean City",
         navigation_hint="After getting the fossil, exit east through B2F. Come out on Route 4 east. Walk east to Cerulean City. Heal at the Pokémon Center.",
         completion_condition="reached_cerulean_city",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_005"]
     ),
 
     # ============================================================
@@ -274,7 +279,8 @@ STORY_OBJECTIVES = [
         target_location="Cerulean City",
         navigation_hint="Pokémon Center is near the south entrance of Cerulean City. Heal before tackling the gym or Nugget Bridge.",
         completion_condition="healed_at_cerulean",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_005", "battle_006"]
     ),
     DirectObjective(
         id="cerulean_026",
@@ -294,8 +300,7 @@ STORY_OBJECTIVES = [
         target_location="Cerulean Gym",
         navigation_hint="Misty: Staryu Lv 18 (Water Gun, Swift, Harden, Tackle), Starmie Lv 21 (Water Gun, BubbleBeam, Swift, Harden). Grass or Electric types are super effective. Pikachu from Viridian Forest is ideal. Oddish/Bellsprout also work. Reward: $2142, Cascade Badge, TM11 BubbleBeam.",
         completion_condition="cascade_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_005", "battle_006"]
+        priority=1
     ),
     DirectObjective(
         id="cerulean_029",
@@ -349,7 +354,8 @@ STORY_OBJECTIVES = [
         target_location="Vermilion City",
         navigation_hint="Route 5 has a Pokémon Day Care and an Underground Path entrance. The Underground Path (Routes 5-6) skips trainer encounters. Exit on Route 6 and continue south to Vermilion City. Heal at the Pokémon Center.",
         completion_condition="reached_vermilion_city",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_007", "battle_008"]
     ),
     DirectObjective(
         id="vermilion_031",
@@ -409,8 +415,7 @@ STORY_OBJECTIVES = [
         target_location="Vermilion Gym",
         navigation_hint="Lt. Surge: Voltorb Lv 21 (SonicBoom), Pikachu Lv 18 (ThunderShock, Quick Attack), Raichu Lv 24 (ThunderShock, Mega Punch). Ground-types are completely immune to Electric — Diglett from Diglett's Cave is perfect. Reward: $2448, Thunder Badge, TM24 Thunderbolt.",
         completion_condition="thunder_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_007", "battle_008"]
+        priority=1
     ),
 
     # ============================================================
@@ -468,7 +473,8 @@ STORY_OBJECTIVES = [
         target_location="Celadon City",
         navigation_hint="Route 8 goes west from Lavender toward Saffron. The Saffron City gates are blocked — take the Route 7-8 Underground Path to bypass them and emerge on Route 7. Then walk west to Celadon City. Heal at the Pokémon Center.",
         completion_condition="reached_celadon_city",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_009", "battle_010"]
     ),
     DirectObjective(
         id="celadon_042",
@@ -488,8 +494,7 @@ STORY_OBJECTIVES = [
         target_location="Celadon Gym",
         navigation_hint="Celadon Gym is west of the city (tree-filled interior). Erika: Victreebel Lv 29 (Razor Leaf, Acid), Tangela Lv 24 (Constrict, Sleep Powder), Vileplume Lv 29 (Petal Dance, Sleep Powder). Fire, Poison, Flying, Psychic, Ice all work. Watch for Sleep — use Awakening. Reward: $2958, Rainbow Badge, TM21 Mega Drain.",
         completion_condition="rainbow_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_009", "battle_010"]
+        priority=1
     ),
     DirectObjective(
         id="celadon_044",
@@ -573,7 +578,8 @@ STORY_OBJECTIVES = [
         target_location="Mr. Fuji's House",
         navigation_hint="Mr. Fuji's house is in the south of Lavender Town. He gives you the Poké Flute — a Key Item that wakes sleeping Pokémon. Two Snorlax (Lv 30) block Routes 12 and 16. Use the Flute to wake them and clear the path.",
         completion_condition="poke_flute_obtained",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_011", "battle_012"]
     ),
 
     # ============================================================
@@ -587,7 +593,8 @@ STORY_OBJECTIVES = [
         target_location="Saffron City",
         navigation_hint="Saffron City is in the center of Kanto. Give any drink from Celadon Dept. Store vending machines (Fresh Water/Soda Pop/Lemonade) to a thirsty guard, then all guards allow passage. Enter from Routes 5/6/7/8. Saffron has the Silph Co. skyscraper, Saffron Gym, and Fighting Dojo.",
         completion_condition="reached_saffron_city",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_013"]
     ),
     DirectObjective(
         id="saffron_053",
@@ -617,8 +624,7 @@ STORY_OBJECTIVES = [
         target_location="Silph Co. 11F",
         navigation_hint="Giovanni (Silph): Nidorino Lv 37, Kangaskhan Lv 35, Rhyhorn Lv 37, Nidoqueen Lv 41. Water, Grass, Ice, Ground effective. After winning, the Silph Co. president gives you the Master Ball — a guaranteed catch of ANY Pokémon. Save it for a legendary or emergency.",
         completion_condition="master_ball_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_011", "battle_012"]
+        priority=1
     ),
     DirectObjective(
         id="saffron_056",
@@ -638,8 +644,7 @@ STORY_OBJECTIVES = [
         target_location="Saffron Gym",
         navigation_hint="Saffron Gym is a warp tile maze — navigate to reach Sabrina at the back. Sabrina: Mr. Mime Lv 28, Kadabra Lv 37, Alakazam Lv 43 (all Psychic). Normal-type moves are your best bet (Ghost is immune to Psychic, Normal is immune to Ghost — only Normal/Ghost is mutual, so use Normal). Reward: Marsh Badge, TM46 Psywave.",
         completion_condition="marsh_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_013"]
+        priority=1
     ),
 
     # ============================================================
@@ -673,7 +678,8 @@ STORY_OBJECTIVES = [
         target_location="Fuchsia City",
         navigation_hint="Route 17 is the Cycling Road — use your Bicycle to ride downhill fast. Multiple Biker trainers with Fighting/Poison types. Route 18 leads east to Fuchsia City. Enter Fuchsia from the west. Heal at the Pokémon Center.",
         completion_condition="reached_fuchsia_city",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_014", "battle_015"]
     ),
     DirectObjective(
         id="fuchsia_061",
@@ -703,8 +709,7 @@ STORY_OBJECTIVES = [
         target_location="Fuchsia Gym",
         navigation_hint="Fuchsia Gym has invisible glass wall maze — navigate carefully to Koga. Koga: Koffing Lv 37 (Smog, Toxic, SelfDestruct), Muk Lv 39 (Sludge, Minimize), Koffing Lv 37, Weezing Lv 43. All Poison-type. Ground/Psychic super effective. Watch for Toxic status — use Antidotes freely. Reward: Soul Badge (enables Surf outside battle), TM06 Toxic.",
         completion_condition="soul_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_014", "battle_015"]
+        priority=1
     ),
 
     # ============================================================
@@ -718,7 +723,8 @@ STORY_OBJECTIVES = [
         target_location="Cinnabar Island",
         navigation_hint="Fly to Pallet Town and Surf south (Route 21) to Cinnabar Island. Or Surf west from Fuchsia along Routes 19-20. Wild Tentacool (100%) on water routes. Heal at Cinnabar Pokémon Center on arrival.",
         completion_condition="reached_cinnabar_island",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_016", "battle_017"]
     ),
     DirectObjective(
         id="cinnabar_065",
@@ -758,8 +764,7 @@ STORY_OBJECTIVES = [
         target_location="Cinnabar Gym",
         navigation_hint="Blaine's Red team: Growlithe Lv 42, Ponyta Lv 40, Rapidash Lv 42, Arcanine Lv 47. Water is super effective against all. Rock also resists Fire. Keep Pokémon healthy — Fire Spin can trap targets. Reward: Volcano Badge, TM38 Fire Blast.",
         completion_condition="volcano_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_016", "battle_017"]
+        priority=1
     ),
 
     # ============================================================
@@ -773,7 +778,8 @@ STORY_OBJECTIVES = [
         target_location="Viridian Gym",
         navigation_hint="Fly to Viridian City. The Viridian Gym was previously locked — Giovanni is now here. Enter from the south. Multiple trainers with Ground/Rock types inside. Navigate spinner tiles to reach trainers, then Giovanni.",
         completion_condition="entered_viridian_gym",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_018", "battle_019"]
     ),
     DirectObjective(
         id="viridian_gym_070",
@@ -783,8 +789,7 @@ STORY_OBJECTIVES = [
         target_location="Viridian Gym",
         navigation_hint="Giovanni: Rhyhorn Lv 45 (Horn Drill, Fissure), Dugtrio Lv 42 (Dig, Slash), Nidoqueen Lv 44 (Poison Sting, Tail Whip), Nidoking Lv 45 (Thrash, Poison Sting), Rhydon Lv 50 (Horn Drill, Fissure). Water/Grass/Ice all super effective. Flying Pokémon immune to Ground. Rhydon is bulky — use high-power moves. Reward: Earth Badge (all Pokémon obey), TM27 Fissure.",
         completion_condition="earth_badge_obtained",
-        priority=1,
-        recommended_battling_objectives=["battle_018", "battle_019"]
+        priority=1
     ),
 
     # ============================================================
@@ -896,12 +901,12 @@ BATTLING_OBJECTIVES = [
     # Early Game
     DirectObjective(
         id="battle_000",
-        description="Train your starter Pokémon to Lv 7+ by battling wild Pokémon on Route 1",
+        description="Train your starter Pokémon to Lv 10+ by battling wild Pokémon on Route 1",
         action_type="battle",
         category="battling",
         target_location="Route 1",
-        navigation_hint="Battle wild Pokémons on Route 1. Reach Lv 7 minimum before going back to Pallet Town. More levels = better stats and possibly a new move.",
-        completion_condition="starter_level_7",
+        navigation_hint="Battle wild Pokémons on Route 1. Reach Lv 10 minimum before going back to Pallet Town. More levels = better stats and possibly a new move.",
+        completion_condition="starter_level_10",
         priority=1,
         prerequisite_story_objective="pallet_004"
     ),
@@ -917,8 +922,8 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="viridian_009"
     ),
     DirectObjective(
-        id="battle_001b",
-        description="Train your entire team to Lv 10 and catch one wild Pokémon before battling Blue on Route 22",
+        id="battle_002",
+        description="Catch one wild Pokémon and train it to Lv 10+ before battling Blue on Route 22",
         action_type="battle",
         category="battling",
         target_location="Route 1 / Route 22",
@@ -930,14 +935,14 @@ BATTLING_OBJECTIVES = [
             "open each wild battle with your weakest team member so they gain full EXP. "
             "Do this before heading west to Route 22 for the rival fight."
         ),
-        completion_condition="second_pokemon_caught_lv12",
+        completion_condition="second_pokemon_caught_lv10",
         priority=1,
         prerequisite_story_objective="viridian_010"
     ),
 
     # Pre-Brock
     DirectObjective(
-        id="battle_002",
+        id="battle_003",
         description="Catch a Pikachu in Viridian Forest for type advantage against Misty",
         action_type="catch",
         category="battling",
@@ -949,8 +954,8 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="viridian_012"
     ),
     DirectObjective(
-        id="battle_003",
-        description="Train the entire team — especially Pikachu and other non-starters — to Lv 12 using wild encounters",
+        id="battle_004",
+        description="Train the entire team — Pikachu and other non-starters — to Lv 14+ using wild encounters",
         action_type="battle",
         category="battling",
         target_location="Viridian Forest / Route 2",
@@ -962,27 +967,9 @@ BATTLING_OBJECTIVES = [
             "Attack at Lv 13, which is crucial for Misty. Building bench depth now means you "
             "have real backup for Brock and beyond."
         ),
-        completion_condition="non_starter_pokemon_level_12",
+        completion_condition="non_starter_pokemon_level_14",
         priority=1,
         prerequisite_story_objective="viridian_012"
-    ),
-    DirectObjective(
-        id="battle_004",
-        description="Train your entire team to Lv 14 before battling Brock",
-        action_type="battle",
-        category="battling",
-        target_location="Pewter City / Viridian Forest",
-        navigation_hint=(
-            "Brock's Onix is Lv 14. The Lv 14 target applies to EVERY party member, not just "
-            "your starter. Train in Viridian Forest, Route 2 grass, and Route 22 wild encounters. "
-            "Rotate low-level Pokémon to the front to give them full EXP — send them out first, "
-            "then switch to a stronger mon if needed. If you chose Charmander (type disadvantage), "
-            "get your team to Lv 15+ and use Growl to lower Onix's attack. Mankey from Route 22 "
-            "(Red) is a strong anti-Brock option worth leveling up."
-        ),
-        completion_condition="team_level_13_brock",
-        priority=1,
-        prerequisite_story_objective="pewter_014"
     ),
     # Pre-Misty
     DirectObjective(
