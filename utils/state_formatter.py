@@ -1588,23 +1588,25 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
     context_parts.append(f"Location: {location_name}")
     context_parts.append(f"Dimensions: {w}x{h}")
 
-    # Build ASCII map string with NPCs as 'N' and player as 'I' (player wins ties)
+    # Build ASCII map string: Poké Balls as 'O', other NPCs as 'N', player as 'I' (wins ties)
     objects = whole_map.get('objects', [])
-    npc_by_y: dict = {}
+    # Map (y, x) → display symbol; Poké Balls get 'O', everything else gets 'N'
+    obj_symbol: dict = {}
     for obj in objects:
         ny, nx = obj.get('y'), obj.get('x')
-        if ny is not None and nx is not None:
-            npc_by_y.setdefault(int(ny), set()).add(int(nx))
+        if ny is None or nx is None:
+            continue
+        is_pokeball = "POKE_BALL" in obj.get('sprite_name', '').upper()
+        obj_symbol[(int(ny), int(nx))] = 'O' if is_pokeball else 'N'
 
     ascii_lines = []
     for y, row in enumerate(grid):
         line = list(row)
-        # Overlay NPCs first
-        if y in npc_by_y:
-            for nx in npc_by_y[y]:
-                if 0 <= nx < len(line):
-                    line[nx] = 'N'
-        # Player always on top of NPCs
+        # Overlay objects first (Poké Balls as 'O', NPCs as 'N')
+        for (oy, ox), sym in obj_symbol.items():
+            if oy == y and 0 <= ox < len(line):
+                line[ox] = sym
+        # Player always on top
         if player_coords and y == player_coords[1]:
             px = player_coords[0]
             if 0 <= px < len(line):
@@ -1614,7 +1616,7 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door ?=sign ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC O=pokéball)")
+    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC)")
 
     # Compact JSON summary (warp_events, bg_events, objects)
     compact_json = {
@@ -2296,11 +2298,11 @@ def get_movement_preview(state_data):
                 # Determine if movement is blocked by terrain (using porymap symbols).
                 # Whitelist of all symbols that are passable in either Emerald or Red.
                 # Everything else — furniture, interactables, walls — is blocked.
-                # 'O' is a pokéball tile in Red (walkable, collision=0).
+                # '?' = hidden item in Red (walkable); '!' = sign (blocked); 'O' = Poké Ball (blocked).
                 _PASSABLE_SYMBOLS = {
                     ".", "~", "D", "S",
                     "↓", "←", "→", "↑", "↗", "↖", "↘", "↙",
-                    "&", "O",
+                    "&", "?",
                 }
                 is_blocked_by_terrain = tile_symbol not in _PASSABLE_SYMBOLS
 
@@ -2325,6 +2327,12 @@ def get_movement_preview(state_data):
                     tile_description = 'Wall'
                 elif tile_symbol == 'W':
                     tile_description = 'Water'
+                elif tile_symbol == '!':
+                    tile_description = 'Sign/Signpost (cannot walk through)'
+                elif tile_symbol == '?':
+                    tile_description = 'Hidden item (walkable)'
+                elif tile_symbol == 'O':
+                    tile_description = 'Poké Ball (interact from adjacent tile)'
                 else:
                     tile_description = f'Tile ({tile_symbol})'
 

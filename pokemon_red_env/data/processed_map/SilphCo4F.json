@@ -2247,9 +2247,9 @@
     "#.######.#..####..#.####..####",
     "#.######.#..####..#.#........#",
     "#.######.#........#.#.#....#.#",
-    "#.##O###.#.D......#.#.#.##.#.#",
-    "#.##.O##.###..#####.#...##...#",
-    "#.#O..##.#......###.#...##...#",
+    "#.##.###.#.D......#.#.#.##.#.#",
+    "#.##..##.###..#####.#...##...#",
+    "#.#...##.#......###.#...##...#",
     "#........#........#.#.#.##.#.#",
     "#........#.......D#.#.#.##.#.#",
     "####..######..#####.#...##...#",
@@ -3561,7 +3561,7 @@
       ],
       [
         1,
-        160,
+        0,
         0,
         0
       ],
@@ -3749,7 +3749,7 @@
       ],
       [
         1,
-        160,
+        0,
         0,
         0
       ],
@@ -3919,7 +3919,7 @@
       ],
       [
         1,
-        160,
+        0,
         0,
         0
       ],
@@ -5582,26 +5582,7 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [
-    {
-      "x": 3,
-      "y": 9,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    },
-    {
-      "x": 4,
-      "y": 7,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    },
-    {
-      "x": 5,
-      "y": 8,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    }
-  ],
+  "hidden_objects": [],
   "npc_data": [
     {
       "x": 6,
@@ -5634,6 +5615,30 @@
       "movement": "STAY",
       "direction": "UP",
       "text_id": "TEXT_SILPHCO4F_ROCKET2"
+    },
+    {
+      "x": 3,
+      "y": 9,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_SILPHCO4F_FULL_HEAL"
+    },
+    {
+      "x": 4,
+      "y": 7,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_SILPHCO4F_MAX_REVIVE"
+    },
+    {
+      "x": 5,
+      "y": 8,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_SILPHCO4F_ESCAPE_ROPE"
     }
   ]
 }

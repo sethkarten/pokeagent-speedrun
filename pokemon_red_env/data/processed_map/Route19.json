@@ -4553,7 +4553,7 @@
     "WWW#..........#WWWWW",
     "WWW#..........#WWWWW",
     "WWW#..........#WWWWW",
-    "####.......?..######",
+    "####.......!..######",
     "#WWWWWWWWWWWWWWWWWW#",
     "#WWWWWWWWWWWWWWWWWW#",
     "#WWWWWWWWWWWWWWWWWW#",
@@ -5767,7 +5767,7 @@
       ],
       [
         86,
-        143,
+        1,
         1,
         0
       ],
@@ -11195,7 +11195,7 @@
       "x": 11,
       "y": 9,
       "text_id": "ROUTE19_SIGN",
-      "symbol": "?"
+      "symbol": "!"
     }
   ],
   "hidden_objects": [],

@@ -2245,9 +2245,9 @@
     "##......#..........#.........#",
     "#..#.#..#..........#......#..#",
     "#....#..#..........#....#.#..#",
-    "#...##..#..######.##....##O..#",
+    "#...##..#..######.##....##...#",
     "..####..#..#............######",
-    "#.....#O#..#...........D#....#",
+    "#.....#.#..#...........D#....#",
     "#.....###..#.....###....#.D..#",
     "#.###.###..#......#..####....#",
     "#...#..#...#.........#....#..#",
@@ -3329,7 +3329,7 @@
       ],
       [
         32,
-        160,
+        0,
         0,
         0
       ],
@@ -3579,7 +3579,7 @@
       ],
       [
         32,
-        160,
+        0,
         0,
         0
       ],
@@ -5564,20 +5564,7 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [
-    {
-      "x": 26,
-      "y": 5,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    },
-    {
-      "x": 7,
-      "y": 7,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    }
-  ],
+  "hidden_objects": [],
   "npc_data": [
     {
       "x": 28,
@@ -5610,6 +5597,22 @@
       "movement": "STAY",
       "direction": "RIGHT",
       "text_id": "TEXT_VICTORYROAD3F_COOLTRAINER_F2"
+    },
+    {
+      "x": 26,
+      "y": 5,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_VICTORYROAD3F_MAX_REVIVE"
+    },
+    {
+      "x": 7,
+      "y": 7,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_VICTORYROAD3F_TM_EXPLOSION"
     },
     {
       "x": 22,

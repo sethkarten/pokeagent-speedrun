@@ -1609,7 +1609,7 @@
   ],
   "grid": [
     "########################",
-    "##.#########O#########.#",
+    "##.#########.#########.#",
     "...#######...#######...#",
     "....######....######....",
     "....######....######....",
@@ -1620,7 +1620,7 @@
     "########################",
     "########################",
     "##.#########.#########.#",
-    "O..#######...#######...#",
+    "...#######...#######...#",
     "....######....######....",
     "....######....######....",
     "..DD######..DD######..DD"
@@ -1847,7 +1847,7 @@
       ],
       [
         29,
-        160,
+        0,
         0,
         0
       ],
@@ -3381,7 +3381,7 @@
     [
       [
         29,
-        160,
+        0,
         0,
         0
       ],
@@ -4038,20 +4038,7 @@
     }
   ],
   "signs": [],
-  "hidden_objects": [
-    {
-      "x": 12,
-      "y": 1,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    },
-    {
-      "x": 0,
-      "y": 12,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    }
-  ],
+  "hidden_objects": [],
   "npc_data": [
     {
       "x": 10,
@@ -4094,6 +4081,14 @@
       "text_id": "TEXT_SSANNE2FROOMS_GENTLEMAN3"
     },
     {
+      "x": 12,
+      "y": 1,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_SSANNE2FROOMS_MAX_ETHER"
+    },
+    {
       "x": 21,
       "y": 2,
       "sprite": "SPRITE_GENTLEMAN",
@@ -4108,6 +4103,14 @@
       "movement": "STAY",
       "direction": "DOWN",
       "text_id": "TEXT_SSANNE2FROOMS_GRAMPS"
+    },
+    {
+      "x": 0,
+      "y": 12,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_SSANNE2FROOMS_RARE_CANDY"
     },
     {
       "x": 12,

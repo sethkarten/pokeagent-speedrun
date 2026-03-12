@@ -9093,7 +9093,7 @@
     "####........WWWWWWW#",
     "####........WWWWWWW#",
     "####..WWWW........W#",
-    "####..WWWW...?....W#",
+    "####..WWWW...!....W#",
     "####..WWWW..WWWWWWW#",
     "####..WWWWDDWWWWWWW#",
     "####..WW######WWWWW#",
@@ -9115,7 +9115,7 @@
     "####..WWWW..WWWWWWW#",
     "####..WWWW..WWWWWWW#",
     "####........WW..WWW#",
-    "####........WWO.WWW#",
+    "####........WW..WWW#",
     "####..WWWWWWWW..WWW#",
     "####..WWWWWWWW..WWW#",
     "####..WWWWWWWWWWWWW#",
@@ -9143,7 +9143,7 @@
     "####WWWWWW..WWWWWWW#",
     ".#.#######..WWWWWWW#",
     "............WWWWWWW#",
-    "#.?.######.?WWWWWWW#",
+    "#.?.######.!WWWWWWW#",
     "####WWWWWW..WWWWWWW#",
     "####WWWWWW..WWWWWWW#",
     "####WWWWWW..WWWWWWW#",
@@ -9169,7 +9169,7 @@
     "...#####WW..WWWWWWW#",
     "...#...#WW..WWWWWWW#",
     "...#...#....WWWWWWW#",
-    "...#.O#.....WWWWWWW#",
+    "...#..#.....WWWWWWW#",
     "...###..WW......WWW#",
     "...#....WW......WWW#",
     "...#........WWWWWWW#",
@@ -10857,7 +10857,7 @@
       ],
       [
         86,
-        143,
+        1,
         1,
         0
       ],
@@ -13547,7 +13547,7 @@
       ],
       [
         60,
-        160,
+        0,
         0,
         0
       ],
@@ -16891,8 +16891,8 @@
       ],
       [
         80,
-        143,
-        1,
+        0,
+        0,
         0
       ],
       [
@@ -16945,7 +16945,7 @@
       ],
       [
         86,
-        143,
+        1,
         1,
         0
       ],
@@ -20081,7 +20081,7 @@
       ],
       [
         44,
-        160,
+        0,
         0,
         0
       ],
@@ -22398,13 +22398,13 @@
       "x": 13,
       "y": 13,
       "text_id": "ROUTE12_SIGN",
-      "symbol": "?"
+      "symbol": "!"
     },
     {
       "x": 11,
       "y": 63,
       "text_id": "ROUTE12_SPORT_FISHING_SIGN",
-      "symbol": "?"
+      "symbol": "!"
     }
   ],
   "hidden_objects": [
@@ -22413,18 +22413,6 @@
       "y": 63,
       "script": "HiddenItems",
       "symbol": "?"
-    },
-    {
-      "x": 14,
-      "y": 35,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    },
-    {
-      "x": 5,
-      "y": 89,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -22491,6 +22479,22 @@
       "movement": "STAY",
       "direction": "DOWN",
       "text_id": "TEXT_ROUTE12_FISHER5"
+    },
+    {
+      "x": 14,
+      "y": 35,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_ROUTE12_TM_PAY_DAY"
+    },
+    {
+      "x": 5,
+      "y": 89,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_ROUTE12_IRON"
     }
   ]
 }

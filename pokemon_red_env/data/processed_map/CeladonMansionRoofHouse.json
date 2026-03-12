@@ -299,7 +299,7 @@
     "###BB###",
     ".......#",
     "........",
-    "...#O...",
+    "...##...",
     "...B#...",
     "........",
     "#......#",
@@ -483,8 +483,8 @@
       ],
       [
         47,
-        160,
-        0,
+        1,
+        1,
         0
       ],
       [
@@ -740,12 +740,6 @@
       "y": 4,
       "script": "PrintNotebookText",
       "symbol": "B"
-    },
-    {
-      "x": 4,
-      "y": 3,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
     }
   ],
   "npc_data": [
@@ -756,6 +750,14 @@
       "movement": "STAY",
       "direction": "DOWN",
       "text_id": "TEXT_CELADONMANSION_ROOF_HOUSE_HIKER"
+    },
+    {
+      "x": 4,
+      "y": 3,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_CELADONMANSION_ROOF_HOUSE_EEVEE_POKEBALL"
     }
   ]
 }

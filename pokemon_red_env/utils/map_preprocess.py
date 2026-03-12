@@ -81,9 +81,10 @@ _GRID_SYMBOL_TO_BEHAVIOR: Dict[str, "RedMetatileBehavior"] = {
     "B":  RedMetatileBehavior.BOOKSHELF,        # hidden bookshelf event
     "^":  RedMetatileBehavior.BLUEPRINT,        # hidden poster/painting event
     "U":  RedMetatileBehavior.TRASH_CAN,        # hidden trash-can event
-    "?":  RedMetatileBehavior.QUESTIONNAIRE,    # sign / statue / quiz kiosk
+    "?":  RedMetatileBehavior.NORMAL,            # hidden item / uncategorized bg_event (walkable)
+    "!":  RedMetatileBehavior.IMPASSABLE,       # road sign / signpost (blocked)
     "=":  RedMetatileBehavior.IMPASSABLE,       # bench (no Emerald equivalent)
-    "O":  RedMetatileBehavior.POKE_BALL,        # visible pokéball item (walkable)
+    # Note: "O" (Poké Ball) is an overlay-only symbol — never placed in the static grid.
 }
 
 
@@ -182,7 +183,7 @@ def classify_hidden_object(func_name: str) -> str:
     upper = func_name.upper()
     if "PC" in upper:
         return "P"
-    if any(k in upper for k in ("SNES", "GAMEBOY", "SLOTMACHINE")):
+    if any(k in upper for k in ("SNES", "GAMEBOY", "SLOTMACHINE", "QUIZ", "BINOCULARS")):
         return "T"
     if any(k in upper for k in ("BOOKCASE", "NOTEBOOK", "MAGAZINE", "BLACKBOARD", "BIKE")):
         return "B"
@@ -190,8 +191,8 @@ def classify_hidden_object(func_name: str) -> str:
         return "^"
     if "TRASH" in upper:
         return "U"
-    if any(k in upper for k in ("STATUE", "QUIZ", "BINOCULARS", "DOJO")):
-        return "?"
+    if "STATUE" in upper:
+        return "#"  # treat gymStatue as wall
     if "BENCH" in upper:
         return "="
     return "?"
@@ -222,7 +223,9 @@ def classify_sign(text_id: str) -> str:
         return "^"
     if "TRASH" in upper:                                            # trash can
         return "U"
-    return "?"                                                      # generic sign / blocked
+    if "_SIGN" in upper:                                           # road signpost (non-walkable)
+        return "!"
+    return "?"                                                      # generic sign / uncategorized bg_event
 
 
 def parse_ledge_tiles_asm(ledge_tiles_asm_path):
@@ -766,10 +769,6 @@ def main():
 
         warp_data, signs_data, npc_data = parse_map_objects_asm(root_dir, map_name)
 
-        # Pokéball object_events are walkable items — treat as hidden objects, not NPCs
-        poke_ball_data = [n for n in npc_data if "POKE_BALL" in n["sprite"].upper()]
-        npc_data       = [n for n in npc_data if "POKE_BALL" not in n["sprite"].upper()]
-
         # Build lookup sets for warps and signs
         warp_positions = {(w["x"], w["y"]) for w in warp_data}
         sign_positions = {(s["x"], s["y"]): s["text_id"] for s in signs_data}
@@ -800,14 +799,6 @@ def main():
                     "script": func_name,
                     "symbol": symbol,
                 })
-
-        # Add pokéballs to hidden_obj_list so they appear on the grid as 'O' (walkable)
-        for pb in poke_ball_data:
-            hidden_obj_list.append({
-                "x": pb["x"], "y": pb["y"],
-                "script": pb["sprite"],
-                "symbol": "O",
-            })
 
         # Build hidden position → symbol lookup
         hidden_symbol_lookup = {(h["x"], h["y"]): h["symbol"] for h in hidden_obj_list}
@@ -1017,15 +1008,6 @@ def main():
                         beh = _GRID_SYMBOL_TO_BEHAVIOR.get(sym, RedMetatileBehavior.IMPASSABLE)
                         behavior_map[cy][cx] = beh
                 print(f"[{map_name}] Applied MAP_OVERRIDES grid.")
-
-        # Re-stamp pokéball positions AFTER MAP_OVERRIDES so 'O' is never lost.
-        # MAP_OVERRIDES was authored before pokéballs were modelled and doesn't
-        # include 'O' cells, so we apply them last as a final authoritative pass.
-        for pb in poke_ball_data:
-            cx, cy = pb["x"], pb["y"]
-            if 0 <= cy < coll_map_h and 0 <= cx < coll_map_w:
-                grid[cy][cx] = "O"
-                behavior_map[cy][cx] = RedMetatileBehavior.POKE_BALL
 
         # Build raw_tile_map: [[tile_id, behavior_int, collision, elevation], ...]
         # tile_id = bottom-left tile of the 2×2 block (tile_id_map[2*cy+1][2*cx])

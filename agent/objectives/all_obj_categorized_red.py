@@ -918,17 +918,17 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_001b",
-        description="Train your starter to Lv 10 and catch one wild Pokémon before battling Blue on Route 22",
+        description="Train your starter to Lv 12 and catch one wild Pokémon before battling Blue on Route 22",
         action_type="battle",
         category="battling",
         target_location="Route 1 / Route 22",
         navigation_hint=(
             "Grind on Route 1 or in the wild grass on Route 22 (west of Viridian City) until "
-            "your starter reaches Lv 10+. Also catch a Rattata, Pidgey, or Nidoran♂/♀ as a "
+            "your starter reaches Lv 12+. Also catch a Rattata, Pidgey, or Nidoran♂/♀ as a "
             "backup team member — the extra Pokémon helps absorb hits from Blue's Pidgey Lv 9 "
             "and his Lv 8 starter. Do this before heading west to Route 22 for the rival fight."
         ),
-        completion_condition="second_pokemon_caught_lv10",
+        completion_condition="second_pokemon_caught_lv12",
         priority=1,
         prerequisite_story_objective="viridian_010"
     ),
