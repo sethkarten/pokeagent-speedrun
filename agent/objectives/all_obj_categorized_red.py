@@ -918,13 +918,13 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_001b",
-        description="Train your entire team to Lv 12 and catch one wild Pokémon before battling Blue on Route 22",
+        description="Train your entire team to Lv 10 and catch one wild Pokémon before battling Blue on Route 22",
         action_type="battle",
         category="battling",
         target_location="Route 1 / Route 22",
         navigation_hint=(
             "Grind on Route 1 or in the wild grass on Route 22 (west of Viridian City) until "
-            "ALL party members reach Lv 12+. Catch a Rattata, Pidgey, or Nidoran♂/♀ as a "
+            "ALL party members reach Lv 10+. Catch a Rattata, Pidgey, or Nidoran♂/♀ as a "
             "backup team member — the extra Pokémon helps absorb hits from Blue's Pidgey Lv 9 "
             "and his Lv 8 starter. When training, send your stronger Pokémon to the back and "
             "open each wild battle with your weakest team member so they gain full EXP. "
