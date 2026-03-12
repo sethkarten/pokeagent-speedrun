@@ -23,7 +23,8 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Grid symbol walkability (matching map_formatter.py conventions)
 # ---------------------------------------------------------------------------
-_WALKABLE_SYMBOLS = {".", "~", "D", "S", "↓", "←", "→", "↑", "&", "O"}
+_WALKABLE_SYMBOLS = {".", "~", "D", "S", "↓", "←", "→", "↑", "&", "?"}
+# "?" = hidden item (walkable); "O" = Poké Ball (non-walkable overlay, NOT in static grid)
 
 # Compact single-char aliases for multi-char grid symbols (for format_map_for_llm)
 _COMPACT_SYMBOL = {
@@ -300,11 +301,20 @@ class RedMapReader:
         vx_start, vx_end = self._clamp_viewport(player_x, radius, map_w)
         vy_start, vy_end = self._clamp_viewport(player_y, radius, map_h)
 
-        # Build NPC position set from RAM
+        # Build NPC position set from RAM; distinguish Poké Ball sprites from regular NPCs
         npc_positions = set()
+        pokeball_positions: set = set()
         try:
-            for s in self.read_sprites():
-                npc_positions.add((s['map_x'], s['map_y']))
+            npc_data_json = data.get("npc_data", [])
+            pokeball_map_positions = {
+                (n["x"], n["y"]) for n in npc_data_json
+                if "POKE_BALL" in n.get("sprite", "").upper()
+            }
+            live_sprites = self.read_sprites()
+            live_sprite_positions = {(s['map_x'], s['map_y']) for s in live_sprites}
+            npc_positions = live_sprite_positions
+            # Active Poké Balls = those whose sprite slot is still in RAM
+            pokeball_positions = pokeball_map_positions & live_sprite_positions
         except Exception as e:
             logger.debug(f"Could not read sprites: {e}")
 
@@ -315,8 +325,11 @@ class RedMapReader:
                 symbol = grid[sy][sx]
                 type_str, collision_int = self._classify_grid_symbol(symbol)
 
-                # Overlay NPC from RAM
-                if (sx, sy) in npc_positions:
+                # Overlay sprites from RAM (Poké Balls as 'POKE_BALL', NPCs as 'NPC')
+                if (sx, sy) in pokeball_positions:
+                    type_str = 'POKE_BALL'
+                    collision_int = 1
+                elif (sx, sy) in npc_positions:
                     type_str = 'NPC'
                     collision_int = 1
 
@@ -330,7 +343,8 @@ class RedMapReader:
         Symbols match map_formatter.py conventions:
           I  player      .  walkable    #  wall / blocked
           ~  tall grass  W  water       D  door / warp
-          N  NPC         ?  sign        C  counter
+          N  NPC         O  Poké Ball   C  counter
+          !  sign        ?  hidden item
           ↓  ledge down  ←  ledge left  →  ledge right
           P  PC          T  TV/Machine  B  Bookshelf
           ^  display     S  Stair/warp
@@ -349,11 +363,19 @@ class RedMapReader:
         vx_start, vx_end = self._clamp_viewport(player_x, radius, map_w)
         vy_start, vy_end = self._clamp_viewport(player_y, radius, map_h)
 
-        # NPC positions from RAM
+        # NPC and Poké Ball positions from RAM
         npc_positions = set()
+        pokeball_positions: set = set()
         try:
-            for s in self.read_sprites():
-                npc_positions.add((s['map_x'], s['map_y']))
+            npc_data_json = data.get("npc_data", [])
+            pokeball_map_positions = {
+                (n["x"], n["y"]) for n in npc_data_json
+                if "POKE_BALL" in n.get("sprite", "").upper()
+            }
+            live_sprites = self.read_sprites()
+            live_sprite_positions = {(s['map_x'], s['map_y']) for s in live_sprites}
+            npc_positions = live_sprite_positions
+            pokeball_positions = pokeball_map_positions & live_sprite_positions
         except Exception:
             pass
 
@@ -363,6 +385,8 @@ class RedMapReader:
             for sx in range(vx_start, vx_end):
                 if sx == player_x and sy == player_y:
                     line += 'I'
+                elif (sx, sy) in pokeball_positions:
+                    line += 'O'
                 elif (sx, sy) in npc_positions:
                     line += 'N'
                 else:
@@ -484,19 +508,38 @@ class RedMapReader:
                 "symbol": h.get("symbol", "#"),
             })
 
-        # objects — NPC list from processed map data; correct positions with live RAM
+        # objects — NPC list from processed map data; correct positions with live RAM.
+        # Poké Ball entries are excluded if their sprite is no longer active in RAM
+        # (i.e., the player already picked them up).
         objects = []
         npc_data = data.get("npc_data", [])
-        # try reading npc list from memory
         try:
-            npc_dict = {}
-            for s in self.read_sprites():
-                npc_dict[s["sprite_name"]] = (s["map_x"], s["map_y"])
+            live_sprites = self.read_sprites()
+            npc_dict = {s["sprite_name"]: (s["map_x"], s["map_y"]) for s in live_sprites}
+            live_sprite_positions = {(s["map_x"], s["map_y"]) for s in live_sprites}
         except Exception as e:
             logger.warning(f"Failed to read NPC data from memory; Using processed map data only. {e}")
             npc_dict = None
+            live_sprite_positions = None
+
+        # Build set of active Poké Ball positions (from npc_data filtered by live RAM)
+        pokeball_map_positions = {
+            (n["x"], n["y"]) for n in npc_data
+            if "POKE_BALL" in n.get("sprite", "").upper()
+        }
+        active_pokeball_positions = (
+            pokeball_map_positions & live_sprite_positions
+            if live_sprite_positions is not None
+            else pokeball_map_positions  # fallback: show all if RAM unavailable
+        )
 
         for s in npc_data:
+            is_pokeball = "POKE_BALL" in s.get("sprite", "").upper()
+            # Skip Poké Balls that were picked up (no longer in live RAM)
+            if is_pokeball and live_sprite_positions is not None:
+                if (s["x"], s["y"]) not in active_pokeball_positions:
+                    continue
+
             obj_tmp = {
                 "x": s["x"], "y": s["y"], "elevation": 0,
                 "sprite_name": s["sprite"],

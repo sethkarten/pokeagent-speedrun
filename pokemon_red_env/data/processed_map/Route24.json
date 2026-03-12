@@ -3037,7 +3037,7 @@
     "####################",
     "####################",
     "####.........→..←...",
-    "####......O..→..←...",
+    "####.........→..←...",
     "####.........→..←...",
     "####↓↓.↓↓↓↓↓↓#..#↓↓↓",
     "####................",
@@ -3743,7 +3743,7 @@
       ],
       [
         57,
-        160,
+        0,
         0,
         0
       ],
@@ -7465,14 +7465,7 @@
   ],
   "warps": [],
   "signs": [],
-  "hidden_objects": [
-    {
-      "x": 10,
-      "y": 5,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
-    }
-  ],
+  "hidden_objects": [],
   "npc_data": [
     {
       "x": 11,
@@ -7529,6 +7522,14 @@
       "movement": "STAY",
       "direction": "LEFT",
       "text_id": "TEXT_ROUTE24_YOUNGSTER2"
+    },
+    {
+      "x": 10,
+      "y": 5,
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_ROUTE24_TM_THUNDER_WAVE"
     }
   ]
 }

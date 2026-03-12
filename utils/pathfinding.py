@@ -439,7 +439,7 @@ class Pathfinder:
                 player_in_water = start_row[start_pos[0]] == "W"
         
         game_type = os.environ.get("GAME_TYPE", "emerald")
-        red_block_symbols = {"#", "X", "?", "P", "T", "B", "^", "U", "C", "="} # TODO: distinguish symbols of signs and items
+        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "="}  # "!": sign (blocked); "?": hidden item (walkable)
         block_symbols = red_block_symbols if game_type.upper() == "RED" else {"#", "X"}
 
         for y, row in enumerate(grid):

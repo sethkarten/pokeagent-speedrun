@@ -2240,10 +2240,10 @@
     ]
   ],
   "grid": [
-    "#...#O...........##.#.#......#",
+    "#...#............##.#.#......#",
     "#####..D.........######....D.#",
     "#####............######......#",
-    "#D.############.###O###.######",
+    "#D.############.###.###.######",
     "#.....#.#.####WWWWWWWWWWWWWWWW",
     "#####.#.######WWWWWWWWWWWWWWWW",
     "D#....#.WWWWWWWW#####.....##WW",
@@ -2253,7 +2253,7 @@
     "#......#WW#...##...##..#WWWWWW",
     "#..D.###WW#...?#...##.##WWWWWW",
     "#....###WW#.....##.##..####..#",
-    "#.#####OWW#.###.##.##...###..#",
+    "#.#####.WW#.###.##.##...###..#",
     "...##...WWWW#.#....#......#..#",
     "....####WWWW#####.##......#..#",
     "#......########...###.....#..#",
@@ -2293,7 +2293,7 @@
       ],
       [
         5,
-        160,
+        0,
         0,
         0
       ],
@@ -2923,7 +2923,7 @@
       ],
       [
         32,
-        160,
+        0,
         0,
         0
       ],
@@ -4349,8 +4349,8 @@
       ],
       [
         28,
-        143,
-        1,
+        0,
+        0,
         0
       ],
       [
@@ -4671,7 +4671,7 @@
       ],
       [
         32,
-        160,
+        0,
         0,
         0
       ],
@@ -5600,25 +5600,32 @@
       "y": 11,
       "script": "HiddenItems",
       "symbol": "?"
-    },
+    }
+  ],
+  "npc_data": [
     {
       "x": 7,
       "y": 13,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_CERULEANCAVE1F_FULL_RESTORE"
     },
     {
       "x": 19,
       "y": 3,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_CERULEANCAVE1F_MAX_ELIXER"
     },
     {
       "x": 5,
       "y": 0,
-      "script": "SPRITE_POKE_BALL",
-      "symbol": "O"
+      "sprite": "SPRITE_POKE_BALL",
+      "movement": "STAY",
+      "direction": "NONE",
+      "text_id": "TEXT_CERULEANCAVE1F_NUGGET"
     }
-  ],
-  "npc_data": []
+  ]
 }
