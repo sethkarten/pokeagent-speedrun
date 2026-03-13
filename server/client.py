@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
 Simple multiprocess client that connects to the server and runs the agent.
+
+Used by run.py for react and claudeplays scaffolds only. PokeAgent, vision_only,
+and geminiplays use their own entry paths (start_custom_agent or agent.run()).
 """
 
 import os

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Fixed Simple Pokemon Emerald server - headless FastAPI server
+Fixed Pokemon Emerald server - headless FastAPI server
 """
 
 # Standard library imports
@@ -39,20 +39,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Local application imports
 from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
-
-# MCP tool imports - lazy loaded to avoid circular imports
-_baseline_mcp_tools = None
-
-
-def _get_baseline_mcp_tools():
-    """Lazy load Baseline MCP tools"""
-    global _baseline_mcp_tools
-    if _baseline_mcp_tools is None:
-        from server.cli import baseline_mcp_server
-
-        _baseline_mcp_tools = baseline_mcp_server
-    return _baseline_mcp_tools
-
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -3519,112 +3505,6 @@ async def mcp_get_walkthrough(request: dict):
         return {"success": False, "error": str(e)}
 
 
-# Baseline MCP Tool Endpoints (File/Shell/Web/Memory)
-
-
-@app.post("/mcp/read_file")
-async def mcp_read_file(request: dict):
-    """MCP Tool: Read file contents"""
-    tools = _get_baseline_mcp_tools()
-    return tools.read_file(file_path=request.get("file_path"))
-
-
-@app.post("/mcp/write_file")
-async def mcp_write_file(request: dict):
-    """MCP Tool: Write file (restricted to .pokeagent_cache/cli/ or current run directory)"""
-    tools = _get_baseline_mcp_tools()
-
-    # Allow writing to current run directory as well
-    file_path = request.get("file_path")
-    global current_run_dir
-
-    # If path is relative and run_dir exists, allow writing to run_dir
-    if current_run_dir and file_path and not os.path.isabs(file_path):
-        # If relative path, write to run directory
-        run_file_path = os.path.join(current_run_dir, file_path)
-        try:
-            os.makedirs(os.path.dirname(run_file_path), exist_ok=True)
-            with open(run_file_path, "w", encoding="utf-8") as f:
-                f.write(request.get("content", ""))
-            return {
-                "success": True,
-                "message": f"Successfully wrote to {run_file_path}",
-                "path": run_file_path,
-                "write_dir": current_run_dir,
-            }
-        except Exception as e:
-            logger.error(f"Failed to write to run directory: {e}")
-            return {"success": False, "error": str(e)}
-
-    # Otherwise use baseline tool (restricted to .pokeagent_cache/cli/)
-    return tools.write_file(file_path=file_path, content=request.get("content"))
-
-
-@app.post("/mcp/list_directory")
-async def mcp_list_directory(request: dict):
-    """MCP Tool: List directory contents"""
-    tools = _get_baseline_mcp_tools()
-    return tools.list_directory(
-        path=request.get("path"), recursive=request.get("recursive", False), max_depth=request.get("max_depth", 3)
-    )
-
-
-@app.post("/mcp/glob")
-async def mcp_glob(request: dict):
-    """MCP Tool: Find files matching glob pattern"""
-    tools = _get_baseline_mcp_tools()
-    return tools.glob(pattern=request.get("pattern"), path=request.get("path", "."))
-
-
-@app.post("/mcp/search_file_content")
-async def mcp_search_file_content(request: dict):
-    """MCP Tool: Search files for regex pattern"""
-    tools = _get_baseline_mcp_tools()
-    return tools.search_file_content(
-        pattern=request.get("pattern"), path=request.get("path"), file_pattern=request.get("file_pattern", "*")
-    )
-
-
-@app.post("/mcp/replace")
-async def mcp_replace(request: dict):
-    """MCP Tool: Replace text in file"""
-    tools = _get_baseline_mcp_tools()
-    return tools.replace(
-        file_path=request.get("file_path"),
-        old_text=request.get("old_text"),
-        new_text=request.get("new_text"),
-        regex=request.get("regex", False),
-    )
-
-
-@app.post("/mcp/read_many_files")
-async def mcp_read_many_files(request: dict):
-    """MCP Tool: Read multiple files"""
-    tools = _get_baseline_mcp_tools()
-    return tools.read_many_files(file_paths=request.get("file_paths", []))
-
-
-@app.post("/mcp/run_shell_command")
-async def mcp_run_shell_command(request: dict):
-    """MCP Tool: Run shell command (allowlist only)"""
-    tools = _get_baseline_mcp_tools()
-    return tools.run_shell_command(command=request.get("command"), description=request.get("description", ""))
-
-
-@app.post("/mcp/web_fetch")
-async def mcp_web_fetch(request: dict):
-    """MCP Tool: Fetch and parse web pages"""
-    tools = _get_baseline_mcp_tools()
-    return tools.web_fetch(prompt=request.get("prompt"))
-
-
-@app.post("/mcp/google_web_search")
-async def mcp_google_web_search(request: dict):
-    """MCP Tool: Search web using DuckDuckGo"""
-    tools = _get_baseline_mcp_tools()
-    return tools.google_web_search(query=request.get("query"))
-
-
 @app.post("/mcp/save_memory")
 async def mcp_save_memory(request: dict):
     """MCP Tool: Save facts to persistent memory (saved to run directory)"""
@@ -3634,36 +3514,29 @@ async def mcp_save_memory(request: dict):
     if not fact:
         return {"success": False, "error": "fact is required"}
 
+    if not current_run_dir:
+        return {"success": False, "error": "No run directory available"}
+
     try:
-        # Save to current run directory if available
-        if current_run_dir:
-            memory_file = os.path.join(current_run_dir, "AGENT.md")
+        memory_file = os.path.join(current_run_dir, "AGENT.md")
 
-            # Read existing content
-            if os.path.exists(memory_file):
-                with open(memory_file, "r", encoding="utf-8") as f:
-                    content = f.read()
-            else:
-                content = "# Agent Memory\n\nThis file stores facts and observations from the AI agent.\n"
-
-            # Check if "## Agent Memories" section exists
-            if "## Agent Memories" not in content:
-                if content and not content.endswith("\n"):
-                    content += "\n"
-                content += "\n## Agent Memories\n"
-
-            # Append the fact
-            content += f"- {fact}\n"
-
-            # Write back
-            with open(memory_file, "w", encoding="utf-8") as f:
-                f.write(content)
-
-            return {"success": True, "message": f"Memory saved to {memory_file}", "path": memory_file}
+        if os.path.exists(memory_file):
+            with open(memory_file, "r", encoding="utf-8") as f:
+                content = f.read()
         else:
-            # Fallback to baseline tool if no run directory
-            tools = _get_baseline_mcp_tools()
-            return tools.save_memory(fact=fact)
+            content = "# Agent Memory\n\nThis file stores facts and observations from the AI agent.\n"
+
+        if "## Agent Memories" not in content:
+            if content and not content.endswith("\n"):
+                content += "\n"
+            content += "\n## Agent Memories\n"
+
+        content += f"- {fact}\n"
+
+        with open(memory_file, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        return {"success": True, "message": f"Memory saved to {memory_file}", "path": memory_file}
     except Exception as e:
         logger.error(f"Failed to save memory: {e}")
         return {"success": False, "error": str(e)}

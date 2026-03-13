@@ -445,7 +445,7 @@ def main():
             print("\n🚀 Starting client...")
             print("-" * 60)
 
-            # Run the client
+            # Run the generic multiprocess client (for ReAct and ClaudePlays agents)
             success = run_multiprocess_client(server_port=args.port, args=args)
 
             return 0 if success else 1
