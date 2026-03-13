@@ -1,8 +1,13 @@
 # PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald
 
-![PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald](emerald.png)
+![PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald](layout.png)
+
 
 An AI agent that plays Pokémon Emerald using vision-language models to perceive the game environment, plan actions, and execute gameplay strategies. This is a **starter kit** designed to be easily customizable for different VLMs and agent behaviors.
+
+## Custom PokeAgent Harness
+![Custom PokeAgent Harness](pokeagent_architecture.png)
+
 
 ## Table of Contents
 
