@@ -104,12 +104,12 @@ These are documented so that future changes to Codex CLI (compaction, multi-agen
 - Claude: `claude-sonnet-4-6` / `claude-sonnet-4.6` pricing. Cache writes: $3.75/M, cache hits: $0.30/M.
 - Gemini: `gemini-2.5-pro` / `gemini-2.5-flash` pricing already present in `LLMLogger.pricing`.
 
-### Pre-Scaffold Agents (e.g., `MyCLIAgent`)
+### Legacy Custom Agents (historical)
 - **Stream-JSON**: Output raw JSON lines to stdout/stderr; captured into `run_data/{run_id}/agent_logs/session_{NNN}.jsonl`.
 - **Integration**: Sync metrics to the server via `/sync_llm_metrics`.
 
 ### Autonomous Agents
-- **Direct Logging**: `AutonomousCLIAgent` integrates directly with `LLMLogger`, ensuring all internal thought processes and tool calls are structured and stored in the main `llm_log.jsonl`.
+- **Direct Logging**: `PokeAgent` integrates directly with `LLMLogger`, ensuring all internal thought processes and tool calls are structured and stored in the main `llm_log.jsonl`.
 
 ## 3. Areas for Improvement
 

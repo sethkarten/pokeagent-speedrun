@@ -2594,7 +2594,7 @@ async def mcp_get_game_state():
     try:
         from utils.state_formatter import format_state_for_llm
         from server import game_tools
-        from agent.objectives import DirectObjectiveManager
+        from agents.objectives import DirectObjectiveManager
 
         # Get recent button presses with position history
         global recent_button_presses, current_obs
@@ -2654,24 +2654,8 @@ async def mcp_get_game_state():
                     run_manager = get_run_data_manager()
                     objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
 
-                    if direct_objectives_sequence == "tutorial_to_rival":
-                        direct_objectives_manager.load_tutorial_to_rival_sequence(
-                            direct_objectives_start_index, run_dir=objectives_run_dir
-                        )
-                    elif direct_objectives_sequence == "tutorial_to_rustboro_city":
-                        direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(
-                            direct_objectives_start_index, run_dir=objectives_run_dir
-                        )
-                    elif direct_objectives_sequence == "part_1_walkthrough_claude_4_5":
-                        direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(
-                            direct_objectives_start_index, run_dir=objectives_run_dir
-                        )
-                    elif direct_objectives_sequence == "autonomous_objective_creation":
+                    if direct_objectives_sequence == "autonomous_objective_creation":
                         direct_objectives_manager.load_autonomous_objective_creation_sequence(
-                            direct_objectives_start_index, run_dir=objectives_run_dir
-                        )
-                    elif direct_objectives_sequence == "full_game":
-                        direct_objectives_manager.load_full_game_sequence(
                             direct_objectives_start_index, run_dir=objectives_run_dir
                         )
                     elif direct_objectives_sequence == "categorized_full_game":
@@ -2680,8 +2664,6 @@ async def mcp_get_game_state():
                             start_battling_index=direct_objectives_battling_start_index,
                             run_dir=objectives_run_dir,
                         )
-                    elif direct_objectives_sequence == "dummy_categorized":
-                        direct_objectives_manager.load_dummy_categorized_sequence()
                     else:
                         logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
 
@@ -2835,7 +2817,7 @@ async def mcp_complete_direct_objective(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.objectives import DirectObjectiveManager
+        from agents.objectives import DirectObjectiveManager
 
         # Get current game state to check objective completion
         from utils.state_formatter import format_state_for_llm
@@ -2880,24 +2862,8 @@ async def mcp_complete_direct_objective(request: dict):
                 run_manager = get_run_data_manager()
                 objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
 
-                if direct_objectives_sequence == "tutorial_to_rival":
-                    direct_objectives_manager.load_tutorial_to_rival_sequence(
-                        direct_objectives_start_index, run_dir=objectives_run_dir
-                    )
-                elif direct_objectives_sequence == "tutorial_to_rustboro_city":
-                    direct_objectives_manager.load_tutorial_to_rustboro_city_sequence(
-                        direct_objectives_start_index, run_dir=objectives_run_dir
-                    )
-                elif direct_objectives_sequence == "part_1_walkthrough_claude_4_5":
-                    direct_objectives_manager.load_part_1_walkthrough_claude_4_5_sequence(
-                        direct_objectives_start_index, run_dir=objectives_run_dir
-                    )
-                elif direct_objectives_sequence == "autonomous_objective_creation":
+                if direct_objectives_sequence == "autonomous_objective_creation":
                     direct_objectives_manager.load_autonomous_objective_creation_sequence(
-                        direct_objectives_start_index, run_dir=objectives_run_dir
-                    )
-                elif direct_objectives_sequence == "full_game":
-                    direct_objectives_manager.load_full_game_sequence(
                         direct_objectives_start_index, run_dir=objectives_run_dir
                     )
                 elif direct_objectives_sequence == "categorized_full_game":
@@ -2906,8 +2872,6 @@ async def mcp_complete_direct_objective(request: dict):
                         start_battling_index=direct_objectives_battling_start_index,
                         run_dir=objectives_run_dir,
                     )
-                elif direct_objectives_sequence == "dummy_categorized":
-                    direct_objectives_manager.load_dummy_categorized_sequence()
                 else:
                     logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
 
@@ -2951,7 +2915,7 @@ async def mcp_complete_direct_objective(request: dict):
             # Advance the appropriate index, and inject guidance when a category ends
             if category == "story":
                 if direct_objectives_manager.story_index >= len(direct_objectives_manager.story_sequence) - 1:
-                    from agent.objectives import DirectObjective
+                    from agents.objectives import DirectObjective
 
                     next_obj = DirectObjective(
                         id="autonomous_01_create_next_story_objectives",
@@ -3160,7 +3124,7 @@ async def mcp_complete_direct_objective(request: dict):
 
             # Automatically create a new objective to guide the agent through next steps
             try:
-                from agent.objectives import DirectObjective
+                from agents.objectives import DirectObjective
 
                 # Get current game state for context
                 next_step_obj = DirectObjective(
@@ -3722,7 +3686,7 @@ async def mcp_create_direct_objectives(request: dict):
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        from agent.objectives import DirectObjectiveManager
+        from agents.objectives import DirectObjectiveManager
 
         objectives_data = request.get("objectives", [])
         reasoning = request.get("reasoning", "")
@@ -4514,7 +4478,7 @@ def main():
     parser.add_argument(
         "--direct-objectives",
         type=str,
-        help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival', 'categorized_full_game')",
+        help="Load a specific direct objective sequence ('categorized_full_game' or 'autonomous_objective_creation')",
     )
     parser.add_argument(
         "--direct-objectives-start",

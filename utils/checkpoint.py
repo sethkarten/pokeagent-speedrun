@@ -7,7 +7,6 @@ agent states, and LLM history.
 import os
 import json
 import traceback
-from collections import deque
 from datetime import datetime
 
 
@@ -136,9 +135,9 @@ def load_checkpoint(emulator, llm_logger=None):
         except Exception as e:
             print(f"   ⚠️ Failed to load location maps: {e}")
         
-        # Load LLM history if logger available
-        # NOTE: This expects deprecated SimpleAgent format (history, step_counter).
-        # LLMLogger uses log_entries, agent_step_count - use llm_logger.load_checkpoint() for that.
+        # Load LLM history if logger available.
+        # LLMLogger uses log_entries / agent_step_count; prefer llm_logger.load_checkpoint()
+        # for richer state restoration when available.
         checkpoint_file = get_cache_path("checkpoint_llm.txt")
         if llm_logger and checkpoint_file.exists():
             with open(checkpoint_file, "r") as f:
@@ -156,121 +155,6 @@ def load_checkpoint(emulator, llm_logger=None):
         
     except Exception as e:
         print(f"❌ Failed to load checkpoint: {e}")
-        traceback.print_exc()
-        return None
-
-
-def save_simple_agent_state(simple_agent, filename="agent_state.json"):
-    """
-    Save SimpleAgent state to JSON file.
-    
-    Args:
-        simple_agent: The SimpleAgent instance
-        filename: Output filename
-    
-    Returns:
-        bool: True if saved successfully
-    """
-    try:
-        # Convert SimpleAgent state to serializable format
-        state_data = {
-            "step_counter": simple_agent.state.step_counter,
-            "stuck_detection": simple_agent.state.stuck_detection,
-            "objectives_updated": simple_agent.state.objectives_updated,
-            "history": [],
-            "objectives": []
-        }
-        
-        # Convert history entries
-        for entry in simple_agent.state.history:
-            state_data["history"].append({
-                "timestamp": entry.timestamp.isoformat() if hasattr(entry.timestamp, 'isoformat') else str(entry.timestamp),
-                "screenshot": None,  # Don't save screenshots
-                "game_state": entry.game_state,
-                "llm_output": entry.llm_output
-            })
-        
-        # Convert objectives
-        for obj in simple_agent.state.objectives:
-            state_data["objectives"].append({
-                "description": obj.description,
-                "completed": obj.completed
-            })
-        
-        # Save to file
-        with open(filename, 'w') as f:
-            json.dump(state_data, f, indent=2)
-        
-        print(f"✅ Saved SimpleAgent state to {filename}")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Failed to save SimpleAgent state: {e}")
-        traceback.print_exc()
-        return False
-
-
-def load_simple_agent_state(simple_agent, filename="agent_state.json"):
-    """
-    Load SimpleAgent state from JSON file.
-    
-    Args:
-        simple_agent: The SimpleAgent instance to load state into
-        filename: Input filename
-    
-    Returns:
-        bool: True if loaded successfully
-    """
-    try:
-        from agent.deprecated.simple import HistoryEntry, Objective
-        
-        with open(filename, 'r') as f:
-            state_data = json.load(f)
-        
-        # Restore basic counters
-        simple_agent.state.step_counter = state_data.get("step_counter", 0)
-        simple_agent.state.stuck_detection = state_data.get("stuck_detection", {})
-        simple_agent.state.objectives_updated = state_data.get("objectives_updated", False)
-        
-        # Restore history
-        simple_agent.state.history = deque(maxlen=10)
-        for entry_data in state_data.get("history", []):
-            # Parse timestamp
-            timestamp_str = entry_data.get("timestamp", "")
-            try:
-                timestamp = datetime.fromisoformat(timestamp_str)
-            except:
-                timestamp = datetime.now()
-            
-            entry = HistoryEntry(
-                timestamp=timestamp,
-                screenshot=None,  # Don't restore screenshots
-                game_state=entry_data.get("game_state", {}),
-                llm_output=entry_data.get("llm_output", {})
-            )
-            simple_agent.state.history.append(entry)
-        
-        # Restore objectives
-        simple_agent.state.objectives = []
-        for obj_data in state_data.get("objectives", []):
-            obj = Objective(
-                description=obj_data.get("description", ""),
-                completed=obj_data.get("completed", False)
-            )
-            simple_agent.state.objectives.append(obj)
-        
-        print(f"✅ Loaded SimpleAgent state from {filename}")
-        print(f"   - Step counter: {simple_agent.state.step_counter}")
-        print(f"   - History entries: {len(simple_agent.state.history)}")
-        print(f"   - Objectives: {len(simple_agent.state.objectives)}")
-        
-        return True
-        
-    except FileNotFoundError:
-        print(f"⚠️ No saved state found at {filename}")
-        return False
-    except Exception as e:
-        print(f"❌ Failed to load SimpleAgent state: {e}")
         traceback.print_exc()
         return False
 

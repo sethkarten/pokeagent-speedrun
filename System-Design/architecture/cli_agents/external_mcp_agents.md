@@ -4,7 +4,7 @@ This document describes the architecture for running external CLI agents (**Clau
 
 ## Overview
 
-Unlike the internal Python agents (e.g. `MyCLIAgent`, `AutonomousCLIAgent`) which run in the same process tree as the game client, **External MCP Agents** run as completely separate processes—typically inside a Docker container for isolation—and communicate with the game via a standardized MCP server.
+Unlike the internal Python agents (e.g. `PokeAgent`, `VisionOnlyAgent`) which run in the same process tree as the game client, **External MCP Agents** run as completely separate processes—typically inside a Docker container for isolation—and communicate with the game via a standardized MCP server.
 
 This architecture allows us to use powerful, proprietary agentic tools (Anthropic's Claude Code, Google's Gemini CLI) which require their own runtime environment, while keeping the game infrastructure secure and stable.
 
