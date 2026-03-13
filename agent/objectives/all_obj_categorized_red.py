@@ -1,9 +1,9 @@
 """
 Categorized Game Objectives for Pokemon Red
 
-~107 objectives split into 2 categories:
-- STORY_OBJECTIVES (~85): Narrative progression aligned with Bulbapedia walkthrough
-- BATTLING_OBJECTIVES (~22): Team building and training (battle_004 removed; battle_002b added)
+~100 objectives split into 2 categories:
+- STORY_OBJECTIVES (78): Narrative progression aligned with Bulbapedia walkthrough (IDs 001-078, continuous)
+- BATTLING_OBJECTIVES (22): Team building and training
 
 Location names use human-readable strings matching in-game map names.
 """
@@ -82,7 +82,7 @@ STORY_OBJECTIVES = [
     # PHASE 2: ROUTE 1, VIRIDIAN CITY, OAK'S PARCEL
     # ============================================================
     DirectObjective(
-        id="viridian_007",
+        id="viridian_006",
         description="Walk north on Route 1 to Viridian City",
         action_type="navigate",
         category="story",
@@ -93,7 +93,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_000"]
     ),
     DirectObjective(
-        id="viridian_008",
+        id="viridian_007",
         description="Visit Viridian City Poké Mart and receive Oak's Parcel from the shopkeeper",
         action_type="interact",
         category="story",
@@ -103,7 +103,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="viridian_009",
+        id="viridian_008",
         description="Return south on Route 1 to Pallet Town and deliver Oak's Parcel",
         action_type="interact",
         category="story",
@@ -114,7 +114,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_001"]
     ),
     DirectObjective(
-        id="pallet_006",
+        id="pallet_009",
         description="Visit Daisy (Blue's sister) in Pallet Town to receive the Town Map",
         action_type="dialogue",
         category="story",
@@ -228,41 +228,31 @@ STORY_OBJECTIVES = [
     ),
     DirectObjective(
         id="mtmoon_019",
-        description="Enter Mt. Moon and navigate through its three floors",
+        description="Navigate Mt. Moon to defeat Super Nerd and obtain a fossil",
         action_type="navigate",
         category="story",
-        target_location="Mt. Moon 1F",
-        navigation_hint="Mt. Moon has 3 floors: 1F, B1F, B2F. Wild: Zubat (55%), Geodude (35%), Paras (10%), Clefairy (rare ~1%). Bring Antidotes for Zubat's Poison. Items include TM12 Water Gun, HP Up, TM01 Mega Punch, Moon Stones. Multiple Team Rocket grunts on B1F and B2F.",
-        completion_condition="entered_mt_moon",
-        priority=1
-    ),
-    DirectObjective(
-        id="mtmoon_020",
-        description="Defeat Team Rocket grunts throughout Mt. Moon B1F and B2F",
-        action_type="battle",
-        category="story",
-        target_location="Mt. Moon B1F",
-        navigation_hint="Multiple Team Rocket grunts guard item rooms on B1F and B2F. They have Rattata, Sandshrew, Zubat (Lv 8-15). Defeating them gives money and clears the path.",
-        completion_condition="mt_moon_rockets_defeated",
-        priority=1
-    ),
-    DirectObjective(
-        id="mtmoon_021",
-        description="Defeat the Super Nerd on B2F and choose Dome Fossil or Helix Fossil",
-        action_type="battle",
-        category="story",
         target_location="Mt. Moon B2F",
-        navigation_hint="Find the Super Nerd guarding two fossils on B2F. Defeat him, then choose: Dome Fossil → Kabuto (Water/Rock, fast attacker), Helix Fossil → Omanyte (Water/Rock, bulky special). Both are revived on Cinnabar Island much later. Pick your preferred one.",
+        navigation_hint="From Mt. Moon 1F, head to the top-left area to find the ladder (warp point) that leads down to B1F. In B1F, navigate to the other end of this isolated area and take the ladder (warp point) down to B2F. In B2F, navigate to the Super Nerd guarding two fossils. Defeat him, then choose: Dome Fossil → Kabuto or Helix Fossil → Omanyte (both revived on Cinnabar Island later). You may encounter trainers and Team Rocket grunts along the way — defeat them as needed. Wild encounters: Zubat, Geodude, Paras, Clefairy (rare).",
         completion_condition="fossil_obtained",
         priority=1
     ),
     DirectObjective(
-        id="mtmoon_022",
-        description="Exit Mt. Moon east to Route 4 and reach Cerulean City",
+        id="mtmoon_020",
+        description="Exit Mt. Moon to Route 4",
+        action_type="navigate",
+        category="story",
+        target_location="Route 4",
+        navigation_hint="After obtaining the fossil, go to the top-left ladder of B2F which leads back up to B1F. Navigate to the other end of this isolated B1F area to find the exit that leads out to Route 4.",
+        completion_condition="exited_mt_moon_to_route4",
+        priority=1
+    ),
+    DirectObjective(
+        id="mtmoon_021",
+        description="Walk east from Route 4 to reach Cerulean City",
         action_type="navigate",
         category="story",
         target_location="Cerulean City",
-        navigation_hint="After getting the fossil, exit east through B2F. Come out on Route 4 east. Walk east to Cerulean City. Heal at the Pokémon Center.",
+        navigation_hint="From the Mt. Moon exit on Route 4, head east along Route 4 to reach Cerulean City.",
         completion_condition="reached_cerulean_city",
         priority=1,
         recommended_battling_objectives=["battle_005"]
@@ -272,7 +262,7 @@ STORY_OBJECTIVES = [
     # PHASE 5: CERULEAN CITY
     # ============================================================
     DirectObjective(
-        id="cerulean_023",
+        id="cerulean_022",
         description="Heal at Cerulean City Pokémon Center",
         action_type="interact",
         category="story",
@@ -283,7 +273,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_005", "battle_006"]
     ),
     DirectObjective(
-        id="cerulean_026",
+        id="cerulean_023",
         description="Enter the Cerulean Gym",
         action_type="navigate",
         category="story",
@@ -293,7 +283,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cerulean_027",
+        id="cerulean_024",
         description="Battle Gym Leader Misty for the Cascade Badge",
         action_type="battle",
         category="story",
@@ -303,7 +293,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cerulean_029",
+        id="cerulean_025",
         description="Battle rival Blue at the Route 24 entrance (third rival battle)",
         action_type="battle",
         category="story",
@@ -313,7 +303,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cerulean_024",
+        id="cerulean_026",
         description="Walk north on Route 24 (Nugget Bridge) and defeat 5 trainers plus Team Rocket grunt",
         action_type="battle",
         category="story",
@@ -323,7 +313,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cerulean_025",
+        id="cerulean_027",
         description="Walk east on Route 25 to Bill's Sea Cottage and help Bill restore himself",
         action_type="interact",
         category="story",
@@ -347,7 +337,7 @@ STORY_OBJECTIVES = [
     # PHASE 6: VERMILION CITY & S.S. ANNE
     # ============================================================
     DirectObjective(
-        id="vermilion_030",
+        id="vermilion_029",
         description="Walk south via Routes 5-6 and Underground Path to reach Vermilion City",
         action_type="navigate",
         category="story",
@@ -358,7 +348,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_007", "battle_008"]
     ),
     DirectObjective(
-        id="vermilion_031",
+        id="vermilion_030",
         description="Visit the Pokémon Fan Club in Vermilion City to get the Bike Voucher",
         action_type="dialogue",
         category="story",
@@ -368,7 +358,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="vermilion_032",
+        id="vermilion_031",
         description="Board the S.S. Anne using the S.S. Ticket and explore the ship",
         action_type="navigate",
         category="story",
@@ -378,7 +368,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="vermilion_033",
+        id="vermilion_032",
         description="Battle rival Blue on S.S. Anne 2F (fourth rival battle)",
         action_type="battle",
         category="story",
@@ -388,7 +378,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="vermilion_034",
+        id="vermilion_033",
         description="Get HM01 Cut from the Captain in his cabin on S.S. Anne",
         action_type="interact",
         category="story",
@@ -398,7 +388,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="vermilion_035",
+        id="vermilion_034",
         description="Enter Vermilion Gym and solve the two trash can switch puzzle",
         action_type="interact",
         category="story",
@@ -408,7 +398,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="vermilion_036",
+        id="vermilion_035",
         description="Battle Gym Leader Lt. Surge for the Thunder Badge",
         action_type="battle",
         category="story",
@@ -422,7 +412,7 @@ STORY_OBJECTIVES = [
     # PHASE 7: BICYCLE, ROCK TUNNEL, LAVENDER TOWN
     # ============================================================
     DirectObjective(
-        id="lavender_037",
+        id="lavender_036",
         description="Return to Cerulean City and exchange the Bike Voucher for a Bicycle",
         action_type="interact",
         category="story",
@@ -432,7 +422,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="lavender_038",
+        id="lavender_037",
         description="Walk east from Cerulean City along Route 9 toward Rock Tunnel",
         action_type="navigate",
         category="story",
@@ -442,7 +432,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="lavender_039",
+        id="lavender_038",
         description="Enter Rock Tunnel from Route 10 and navigate through both floors",
         action_type="navigate",
         category="story",
@@ -452,7 +442,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="lavender_040",
+        id="lavender_039",
         description="Exit Rock Tunnel south and walk to Lavender Town",
         action_type="navigate",
         category="story",
@@ -466,7 +456,7 @@ STORY_OBJECTIVES = [
     # PHASE 8: CELADON CITY & TEAM ROCKET HIDEOUT
     # ============================================================
     DirectObjective(
-        id="celadon_041",
+        id="celadon_040",
         description="Walk west from Lavender Town through Route 8 and Underground Path to Celadon City",
         action_type="navigate",
         category="story",
@@ -477,7 +467,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_009", "battle_010"]
     ),
     DirectObjective(
-        id="celadon_042",
+        id="celadon_041",
         description="Get the Coin Case from the restaurant near the Celadon Game Corner",
         action_type="interact",
         category="story",
@@ -487,7 +477,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="celadon_043",
+        id="celadon_042",
         description="Enter Celadon Gym and battle Gym Leader Erika for the Rainbow Badge",
         action_type="battle",
         category="story",
@@ -497,7 +487,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="celadon_044",
+        id="celadon_043",
         description="Find the Team Rocket poster in the Game Corner and reveal the hidden switch",
         action_type="interact",
         category="story",
@@ -507,7 +497,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="celadon_045",
+        id="celadon_044",
         description="Clear Team Rocket Hideout B1F-B3F and find the Lift Key on B4F",
         action_type="navigate",
         category="story",
@@ -517,7 +507,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="celadon_046",
+        id="celadon_045",
         description="Ride the elevator to Giovanni and defeat the Team Rocket boss to get the Silph Scope",
         action_type="battle",
         category="story",
@@ -531,7 +521,7 @@ STORY_OBJECTIVES = [
     # PHASE 9: POKÉMON TOWER (LAVENDER TOWN)
     # ============================================================
     DirectObjective(
-        id="pokemontower_047",
+        id="pokemontower_046",
         description="Return to Lavender Town and enter Pokémon Tower",
         action_type="navigate",
         category="story",
@@ -541,7 +531,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_048",
+        id="pokemontower_047",
         description="Battle rival Blue on Pokémon Tower 2F (fifth rival battle)",
         action_type="battle",
         category="story",
@@ -551,7 +541,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_049",
+        id="pokemontower_048",
         description="Climb Pokémon Tower floors 3-6, battling Channelers",
         action_type="battle",
         category="story",
@@ -561,7 +551,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_050",
+        id="pokemontower_049",
         description="Reach Pokémon Tower 7F, free Mr. Fuji from Team Rocket",
         action_type="battle",
         category="story",
@@ -571,7 +561,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_051",
+        id="pokemontower_050",
         description="Receive the Poké Flute from Mr. Fuji in his house",
         action_type="interact",
         category="story",
@@ -586,7 +576,7 @@ STORY_OBJECTIVES = [
     # PHASE 10: SAFFRON CITY & SILPH CO.
     # ============================================================
     DirectObjective(
-        id="saffron_052",
+        id="saffron_051",
         description="Enter Saffron City after giving a drink to the gate guards",
         action_type="navigate",
         category="story",
@@ -597,7 +587,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_013"]
     ),
     DirectObjective(
-        id="saffron_053",
+        id="saffron_052",
         description="Enter Silph Co. and find the Card Key on 5F",
         action_type="navigate",
         category="story",
@@ -607,7 +597,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_054",
+        id="saffron_053",
         description="Battle rival Blue on Silph Co. 7F (sixth rival battle)",
         action_type="battle",
         category="story",
@@ -617,7 +607,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_055",
+        id="saffron_054",
         description="Battle Giovanni on Silph Co. 11F and receive the Master Ball from the president",
         action_type="battle",
         category="story",
@@ -627,7 +617,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_056",
+        id="saffron_055",
         description="Challenge the Fighting Dojo west of Silph Co. and win a Pokémon",
         action_type="battle",
         category="story",
@@ -637,7 +627,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_057",
+        id="saffron_056",
         description="Battle Gym Leader Sabrina in Saffron Gym for the Marsh Badge",
         action_type="battle",
         category="story",
@@ -651,7 +641,7 @@ STORY_OBJECTIVES = [
     # PHASE 11: FUCHSIA CITY & SAFARI ZONE
     # ============================================================
     DirectObjective(
-        id="fuchsia_058",
+        id="fuchsia_057",
         description="Wake the Snorlax on Route 16 using the Poké Flute and continue west",
         action_type="interact",
         category="story",
@@ -661,7 +651,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_059",
+        id="fuchsia_058",
         description="Get HM02 Fly from the girl north of the Route 16 gate",
         action_type="interact",
         category="story",
@@ -671,7 +661,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_060",
+        id="fuchsia_059",
         description="Ride the Cycling Road (Routes 16-18) south to reach Fuchsia City",
         action_type="navigate",
         category="story",
@@ -682,7 +672,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_014", "battle_015"]
     ),
     DirectObjective(
-        id="fuchsia_061",
+        id="fuchsia_060",
         description="Enter the Safari Zone and collect the Gold Teeth and HM03 Surf",
         action_type="navigate",
         category="story",
@@ -692,7 +682,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_062",
+        id="fuchsia_061",
         description="Give the Gold Teeth to the Safari Zone Warden to get HM04 Strength",
         action_type="interact",
         category="story",
@@ -702,7 +692,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_063",
+        id="fuchsia_062",
         description="Battle Gym Leader Koga in the Fuchsia Gym for the Soul Badge",
         action_type="battle",
         category="story",
@@ -716,7 +706,7 @@ STORY_OBJECTIVES = [
     # PHASE 12: CINNABAR ISLAND
     # ============================================================
     DirectObjective(
-        id="cinnabar_064",
+        id="cinnabar_063",
         description="Surf south from Pallet Town or Fuchsia City to reach Cinnabar Island",
         action_type="navigate",
         category="story",
@@ -727,7 +717,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_016", "battle_017"]
     ),
     DirectObjective(
-        id="cinnabar_065",
+        id="cinnabar_064",
         description="Explore the Pokémon Mansion and find the Secret Key for Cinnabar Gym",
         action_type="navigate",
         category="story",
@@ -737,7 +727,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cinnabar_066",
+        id="cinnabar_065",
         description="Visit the Cinnabar Lab to revive your fossil from Mt. Moon",
         action_type="interact",
         category="story",
@@ -747,7 +737,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cinnabar_067",
+        id="cinnabar_066",
         description="Use the Secret Key to enter Cinnabar Gym and solve the quiz to reach Blaine",
         action_type="interact",
         category="story",
@@ -757,7 +747,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cinnabar_068",
+        id="cinnabar_067",
         description="Battle Gym Leader Blaine for the Volcano Badge",
         action_type="battle",
         category="story",
@@ -771,7 +761,7 @@ STORY_OBJECTIVES = [
     # PHASE 13: VIRIDIAN GYM
     # ============================================================
     DirectObjective(
-        id="viridian_gym_069",
+        id="viridian_gym_068",
         description="Fly to Viridian City and enter the now-open Viridian Gym",
         action_type="navigate",
         category="story",
@@ -782,7 +772,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_018", "battle_019"]
     ),
     DirectObjective(
-        id="viridian_gym_070",
+        id="viridian_gym_069",
         description="Battle Gym Leader Giovanni for the Earth Badge (eighth and final badge)",
         action_type="battle",
         category="story",
@@ -796,7 +786,7 @@ STORY_OBJECTIVES = [
     # PHASE 14: VICTORY ROAD
     # ============================================================
     DirectObjective(
-        id="victory_071",
+        id="victory_070",
         description="Walk west to Route 22 and battle rival Blue (seventh rival battle)",
         action_type="battle",
         category="story",
@@ -806,7 +796,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="victory_072",
+        id="victory_071",
         description="Walk north on Route 23 and show all 8 badges to the guards",
         action_type="navigate",
         category="story",
@@ -816,7 +806,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="victory_073",
+        id="victory_072",
         description="Navigate Victory Road floors 1-3 using Strength to solve boulder puzzles",
         action_type="navigate",
         category="story",
@@ -830,7 +820,7 @@ STORY_OBJECTIVES = [
     # PHASE 15: INDIGO PLATEAU & ELITE FOUR
     # ============================================================
     DirectObjective(
-        id="elite_074",
+        id="elite_073",
         description="Arrive at Indigo Plateau and stock up at the Poké Mart",
         action_type="interact",
         category="story",
@@ -841,7 +831,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_020", "battle_021"]
     ),
     DirectObjective(
-        id="elite_075",
+        id="elite_074",
         description="Battle Elite Four Lorelei (Ice/Water specialist)",
         action_type="battle",
         category="story",
@@ -851,7 +841,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_076",
+        id="elite_075",
         description="Battle Elite Four Bruno (Fighting/Rock specialist)",
         action_type="battle",
         category="story",
@@ -861,7 +851,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_077",
+        id="elite_076",
         description="Battle Elite Four Agatha (Ghost/Poison specialist)",
         action_type="battle",
         category="story",
@@ -871,7 +861,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_078",
+        id="elite_077",
         description="Battle Elite Four Lance (Dragon/Flying specialist)",
         action_type="battle",
         category="story",
@@ -881,7 +871,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_079",
+        id="elite_078",
         description="Battle Champion Blue to become the Pokémon League Champion",
         action_type="battle",
         category="story",
@@ -919,7 +909,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Buy: 3 Poké Balls ($600), 6 Antidotes ($600). Total: $1200. Essential for Viridian Forest. The Poké Mart is unlocked after delivering Oak's Parcel.",
         completion_condition="viridian_shopping_done",
         priority=1,
-        prerequisite_story_objective="viridian_009"
+        prerequisite_story_objective="viridian_008"
     ),
     DirectObjective(
         id="battle_002",
@@ -987,7 +977,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_18_misty",
         priority=1,
-        prerequisite_story_objective="cerulean_023"
+        prerequisite_story_objective="cerulean_022"
     ),
     DirectObjective(
         id="battle_006",
@@ -998,7 +988,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Buy: 10 Potions ($3000), 5 Repels ($1750). Stock up on basic healing before Nugget Bridge.",
         completion_condition="cerulean_shopping_done",
         priority=1,
-        prerequisite_story_objective="cerulean_023"
+        prerequisite_story_objective="cerulean_022"
     ),
 
     # Pre-Surge
@@ -1011,7 +1001,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Diglett's Cave is on Route 11 east of Vermilion City. Diglett (95%, Lv 15-22) or rare Dugtrio (5%, Lv 29-31). Ground-type is IMMUNE to all Electric moves — this destroys Lt. Surge's entire team.",
         completion_condition="ground_type_for_surge",
         priority=1,
-        prerequisite_story_objective="vermilion_030"
+        prerequisite_story_objective="vermilion_029"
     ),
     DirectObjective(
         id="battle_008",
@@ -1029,7 +1019,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_22_surge",
         priority=1,
-        prerequisite_story_objective="vermilion_030"
+        prerequisite_story_objective="vermilion_029"
     ),
 
     # Pre-Erika
@@ -1048,7 +1038,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_28_erika",
         priority=1,
-        prerequisite_story_objective="celadon_041"
+        prerequisite_story_objective="celadon_040"
     ),
     DirectObjective(
         id="battle_010",
@@ -1059,7 +1049,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Celadon Dept Store (6 floors). Key purchases: Super Potions/Great Balls (1F), useful battle TMs (2F), and X items/Revives (4F). Rooftop vending machine: Fresh Water to the rooftop girl for TM13 Ice Beam. Also keep one extra drink for Saffron gate guards.",
         completion_condition="celadon_shopping_done",
         priority=1,
-        prerequisite_story_objective="celadon_041"
+        prerequisite_story_objective="celadon_040"
     ),
 
     # Silph Co. area
@@ -1072,7 +1062,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="An employee on Silph Co. 7F gives you a free Lapras (Lv 15). Lapras learns Ice Beam and Blizzard — devastating for Lance's Dragon types later. Also an excellent Surfer. Don't miss this!",
         completion_condition="lapras_obtained",
         priority=1,
-        prerequisite_story_objective="saffron_053"
+        prerequisite_story_objective="saffron_052"
     ),
     DirectObjective(
         id="battle_012",
@@ -1089,7 +1079,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_40_saffron",
         priority=1,
-        prerequisite_story_objective="pokemontower_051"
+        prerequisite_story_objective="pokemontower_050"
     ),
 
     # Pre-Sabrina
@@ -1102,7 +1092,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Mr. Psychic lives in a house in east Saffron City. He gives you TM29 Psychic for free. Psychic is the strongest Psychic-type move in Gen 1 — teach it to Kadabra, Starmie, Jynx, or similar. Essential for late-game.",
         completion_condition="tm29_psychic_obtained",
         priority=1,
-        prerequisite_story_objective="saffron_052"
+        prerequisite_story_objective="saffron_051"
     ),
 
     # Pre-Koga
@@ -1121,7 +1111,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_40_koga",
         priority=1,
-        prerequisite_story_objective="fuchsia_060"
+        prerequisite_story_objective="fuchsia_059"
     ),
     DirectObjective(
         id="battle_015",
@@ -1133,7 +1123,7 @@ BATTLING_OBJECTIVES = [
         completion_condition="safari_zone_catch",
         priority=2,
         optional=True,
-        prerequisite_story_objective="fuchsia_061"
+        prerequisite_story_objective="fuchsia_060"
     ),
 
     # Pre-Blaine
@@ -1152,7 +1142,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_42_blaine",
         priority=1,
-        prerequisite_story_objective="cinnabar_064"
+        prerequisite_story_objective="cinnabar_063"
     ),
     DirectObjective(
         id="battle_017",
@@ -1163,7 +1153,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Cinnabar Island Poké Mart stocks Hyper Potions ($1500) and Revives ($1500). Buy 10 Hyper Potions and 5 Revives before the Pokémon Mansion and Cinnabar Gym. Full Restores are not available until the Elite Four.",
         completion_condition="cinnabar_supplies_bought",
         priority=1,
-        prerequisite_story_objective="cinnabar_064"
+        prerequisite_story_objective="cinnabar_063"
     ),
 
     # Pre-Giovanni (Viridian Gym)
@@ -1182,7 +1172,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_45_giovanni",
         priority=1,
-        prerequisite_story_objective="viridian_gym_069"
+        prerequisite_story_objective="viridian_gym_068"
     ),
     DirectObjective(
         id="battle_019",
@@ -1194,7 +1184,7 @@ BATTLING_OBJECTIVES = [
         completion_condition="zapdos_caught",
         priority=2,
         optional=True,
-        prerequisite_story_objective="viridian_gym_069"
+        prerequisite_story_objective="viridian_gym_068"
     ),
 
     # Pre-Elite Four
@@ -1214,7 +1204,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_55_elite4",
         priority=1,
-        prerequisite_story_objective="victory_073"
+        prerequisite_story_objective="victory_072"
     ),
     DirectObjective(
         id="battle_021",
@@ -1225,6 +1215,6 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Indigo Plateau Poké Mart: Full Restore $3000, Revive $1500, Max Potion $2500, Full Heal $600, Ultra Ball $1200, Max Repel $700. Buy: 20 Full Restores ($60k), 15 Revives ($22.5k), 10 Max Potions ($25k), 10 Full Heals ($6k). Spend generously — this is your last chance before the final gauntlet.",
         completion_condition="elite4_supplies_bought",
         priority=1,
-        prerequisite_story_objective="victory_073"
+        prerequisite_story_objective="victory_072"
     ),
 ]
