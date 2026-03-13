@@ -1231,7 +1231,7 @@ class CodexCliBackend(CliAgentBackend):
         self,
         agent_memory_dir: Path,
         mcp_sse_url: str | None = None,
-        mcp_sse_port: int = 8001,
+        mcp_sse_port: int = 8002,
         *,
         server_url: str | None = None,
         project_root: str | None = None,
@@ -1332,7 +1332,7 @@ env_key = "OPENROUTER_API_KEY"
         directive_file = working_dir_abs / self.DIRECTIVE_FILENAME
         directive_file.write_text(bootstrap)
 
-        mcp_port = mcp_sse_port or 8001
+        mcp_port = mcp_sse_port or 8002
         # Codex expects Streamable HTTP at /mcp (not legacy SSE at /sse).
         # See https://developers.openai.com/codex/mcp/
         mcp_url = f"http://host.docker.internal:{mcp_port}/mcp"
