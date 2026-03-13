@@ -1,6 +1,4 @@
 *.log
-*.gba
-*.pyc
 *.cpython
 *.pem
 *.gba

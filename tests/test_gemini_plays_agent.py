@@ -22,7 +22,7 @@ from PIL import Image
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.gemini_plays import (
+from agents.simple.gemini_plays import (
     GeminiPlaysAgent, Goal, MapMemory, AgentContext,
     PathfindingAgent, BattleAgent, PuzzleAgent
 )

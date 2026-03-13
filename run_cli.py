@@ -36,6 +36,7 @@ from utils.cli_agent_backends import (
     CliSessionMetrics,
     get_backend,
 )
+from agents.prompts.paths import CLI_AGENT_DIRECTIVE_PATH
 
 # Configure logging
 logging.basicConfig(
@@ -862,7 +863,7 @@ def main():
     parser.add_argument("--login", action="store_true",
                        help="Run backend-specific auth login before starting (e.g. 'claude auth login')")
     parser.add_argument("--directive", type=str,
-                       default="agent/prompts/cli_directives/pokemon_directive.md",
+                       default=CLI_AGENT_DIRECTIVE_PATH,
                        help="Path to system prompt/directive file for CLI agent")
     parser.add_argument("--port", type=int, default=8000, help="Port for the game server (default: 8000)")
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")

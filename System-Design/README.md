@@ -59,7 +59,7 @@ Optimize token usage and understanding by reading high-level architectural docum
 
 1.  **Locate Architecture Docs**:
     - Prioritize reading high-level overviews in `System-Design/architecture/` (or similar documentation directories) relevant to the task.
-    - Key directories to check: `client_server`, `autonomous_agent`, `cli_agents`, `data_persistence`, `metrics`, `pokemon_infrastructure`. In the repo: `agent/objectives`, `agent/prompts`, `agent/deprecated`, `server/`, `scripts/`, `tests/`.
+    - Key directories to check: `client_server`, `autonomous_agent`, `cli_agents`, `data_persistence`, `metrics`, `pokemon_infrastructure`. In the repo: `agents/objectives`, `agents/prompts`, `agents/custom`, `agents/simple`, `server/`, `scripts/`, `tests/`.
 
 2.  **Gain Broad Context**:
     - Read the architectural summaries to understand component relationships and data flow.
