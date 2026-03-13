@@ -509,10 +509,11 @@ class RedMapReader:
             })
 
         # objects — NPC list from processed map data, filtered by live RAM.
-        # For stationary sprites (movement == "STAY"): check if their static
-        # (x, y) position has an active sprite in RAM.  If not, the sprite was
-        # picked up / removed — skip it.
-        # For walking sprites: assume they exist (position may have changed).
+        # Only item sprites (Poké Balls, Fossils) are filtered via live RAM:
+        # they are permanently removed when the player picks them up.
+        # Regular NPCs are always included from static data — Gen 1 only loads
+        # on-screen sprites, so NPCs off-screen won't be in sprite slots even
+        # though they still exist on the map.
         objects = []
         npc_data = data.get("npc_data", [])
         try:
@@ -524,10 +525,11 @@ class RedMapReader:
             live_sprite_positions = None
 
         for s in npc_data:
-            is_stationary = s.get("movement", "").upper() == "STAY"
+            sprite_upper = s.get("sprite", "").upper()
+            is_item_sprite = "POKE_BALL" in sprite_upper or "FOSSIL" in sprite_upper
 
-            # For stationary sprites, verify they still exist in live RAM
-            if is_stationary and live_sprite_positions is not None:
+            # Filter item sprites: only include if still present in live sprite RAM
+            if is_item_sprite and live_sprite_positions is not None:
                 if (s["x"], s["y"]) not in live_sprite_positions:
                     continue
 
