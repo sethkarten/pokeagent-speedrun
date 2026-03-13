@@ -7,6 +7,7 @@ An AI agent that plays Pokémon Emerald using vision-language models to perceive
 
 ## Custom PokeAgent Harness
 ![Custom PokeAgent Harness](pokeagent_architecture.png)
+Our `PokeAgent`
 
 
 ## Table of Contents
@@ -114,6 +115,8 @@ pokeagent-speedrun/
 │   ├── emulator.py           # EmeraldEmulator (mGBA, input, frame advance)
 │   ├── memory_reader.py      # PokemonEmeraldReader (DO NOT MODIFY for submissions)
 │   ├── emerald_utils.py, enums.py, types.py, utils.py
+│   ├── porymap_paths.py      # Centralized path resolution for porymap data
+│   ├── porymap/              # Pokeemerald decompilation data (data/maps, data/tilesets)
 │   └── ...
 ├── tests/
 │   ├── run_tests.py, states/, ground_truth/, test_*.py
