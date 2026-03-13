@@ -234,6 +234,7 @@ STORY_OBJECTIVES = [
         target_location="Mt. Moon B2F",
         navigation_hint="From Mt. Moon 1F, head to the top-left area to find the ladder (warp point) that leads down to B1F. In B1F, navigate to the other end of this isolated area and take the ladder (warp point) down to B2F. In B2F, navigate to the Super Nerd guarding two fossils. Defeat him, then choose: Dome Fossil → Kabuto or Helix Fossil → Omanyte (both revived on Cinnabar Island later). You may encounter trainers and Team Rocket grunts along the way — defeat them as needed. Wild encounters: Zubat, Geodude, Paras, Clefairy (rare).",
         completion_condition="fossil_obtained",
+        recommended_battling_objectives=["battle_005"],
         priority=1
     ),
     DirectObjective(
@@ -255,7 +256,6 @@ STORY_OBJECTIVES = [
         navigation_hint="From the Mt. Moon exit on Route 4, head east along Route 4 to reach Cerulean City.",
         completion_condition="reached_cerulean_city",
         priority=1,
-        recommended_battling_objectives=["battle_005"]
     ),
 
     # ============================================================
@@ -270,7 +270,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Pokémon Center is near the south entrance of Cerulean City. Heal before tackling the gym or Nugget Bridge.",
         completion_condition="healed_at_cerulean",
         priority=1,
-        recommended_battling_objectives=["battle_005", "battle_006"]
+        recommended_battling_objectives=["battle_006"]
     ),
     DirectObjective(
         id="cerulean_023",
@@ -964,20 +964,18 @@ BATTLING_OBJECTIVES = [
     # Pre-Misty
     DirectObjective(
         id="battle_005",
-        description="Train your entire team to Lv 18+ and prepare for Misty's Starmie",
+        description="Train your entire team to Lv 21+ and prepare for Misty's Starmie",
         action_type="battle",
         category="battling",
-        target_location="Route 24",
+        target_location="Mt. Moon 1F / Mt. Moon B2F",
         navigation_hint=(
-            "Misty's Starmie is Lv 21 with BubbleBeam. All party members should be Lv 18+ — "
-            "not just your lead. In wild encounters, lead with your weakest Pokémon first so "
-            "they gain full EXP; switch to a stronger mon to finish the fight if needed. "
-            "Fight all Nugget Bridge trainers for extra EXP before the gym. Pikachu (Electric) "
-            "and Bulbasaur line (Grass) are ideal type matchups against Misty."
+            "Misty's Starmie is Lv 21 with BubbleBeam. All party members should be Lv 21+ — "
+            "not just your lead. Train ALL your Pokémons with wild encounters and trainer battles -"
+            "you should lead with your weakest Pokémon first so they gain full EXP; switch to a stronger mon to finish the fight if needed. "
         ),
-        completion_condition="team_level_18_misty",
+        completion_condition="team_level_21",
         priority=1,
-        prerequisite_story_objective="cerulean_022"
+        prerequisite_story_objective="mtmoon_018"
     ),
     DirectObjective(
         id="battle_006",
