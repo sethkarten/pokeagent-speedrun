@@ -65,7 +65,7 @@ For deeper detail and known deviations (e.g., monolithic server, polling-based s
 - **Map system**: Porymap integration, NPC display, movement preview, portal tracking
 - **Web interface**: Real-time stream at `http://localhost:8000/stream`
 - **Video recording**: Optional MP4 recording of gameplay
-- **Customizable prompts**: Edit `agent/system_prompt.py` and module prompts to change behavior
+- **Customizable prompts**: Edit `agent/system_prompt.py` and module prompts to change behavior. CLI agents also use prompt files under `agent/prompts/` (e.g. `base_prompt.md`, `POKEAGENT.md`).
 
 ## Directory Structure
 
@@ -78,6 +78,7 @@ pokeagent-speedrun/
 ├── server/
 │   ├── app.py                # FastAPI game server (emulator, /state, /action, /mcp/*, etc.)
 │   ├── client.py             # In-repo client used by run.py (agent loop, optional pygame)
+│   ├── agent_thinking.txt    # Runtime file (gitignored); server writes latest thinking for UI
 │   ├── frame_server.py       # Frame streaming
 │   ├── stream.html           # Web UI for streaming
 │   └── cli/
@@ -301,6 +302,7 @@ run.py:
 ## Customizing Agent Behavior (Prompt Editing Guide)
 
 - **System prompt**: `agent/system_prompt.py` — overall role and behavior.
+- **Prompt files**: `agent/prompts/` holds `POKEAGENT.md`, `base_prompt.md`, `system_prompt.md` used by CLI agents; paths are repo-root-relative.
 - **Perception**: `agent/deprecated/perception.py` — how the agent interprets the screen (fourmodule).
 - **Planning**: `agent/deprecated/planning.py` — high-level strategy (fourmodule).
 - **Memory**: `agent/deprecated/memory.py` — what to remember (fourmodule).
