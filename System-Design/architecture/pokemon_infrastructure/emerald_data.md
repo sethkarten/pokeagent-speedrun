@@ -43,6 +43,10 @@ The system uses a layered architecture to bridge the gap between the raw Game Bo
 ### Purpose
 To provide the agent with ground-truth map data (walls, warps, ledges) that cannot be easily inferred from the visual screen alone.
 
+### Data Location
+- **In-repo only**: `pokemon_env/porymap/` (pokeemerald layout: `data/maps`, `data/tilesets`, `data/layouts`)
+- **Path resolution**: `pokemon_env/porymap_paths.py` → `get_porymap_root()`
+
 ### Components
 - **`utils/pokeemerald_parser.py`**:
   - `PokeemeraldMapLoader`: Reads JSON map definitions from the `pokeemerald` decompilation project.
