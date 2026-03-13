@@ -4,7 +4,7 @@ This document describes the architecture of the custom autonomous agents in the 
 
 ## Overview
 
-The `AutonomousCLIAgent` represents a significant evolution from simple reactive agents. It is designed to operate autonomously by formulating its own objectives, maintaining a persistent knowledge base, and utilizing a wide range of tools to interact with the game environment.
+The `AutonomousCLIAgent` represents a significant evolution from simple reactive agents. It is designed to operate autonomously by formulating its own objectives, maintaining a persistent knowledge base, and utilizing a wide range of tools to interact with the game environment. **Entry path**: `my_cli_agent`, `autonomous_cli`, and `vision_only` are selected in `run.py` via `start_cli_agent()` and do not go through the unified `agent.Agent` in `agent/__init__.py`; only `simple`, `react`, `claudeplays`, and `geminiplays` use `server/client.py` and `agent.Agent`.
 
 ## 1. Core Architecture
 
