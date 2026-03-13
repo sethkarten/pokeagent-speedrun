@@ -49,7 +49,7 @@ The system uses a **headless server architecture**: the game and emulator run in
 
 The design follows the structure documented in `System-Design/architecture/`:
 
-- **Server** (`server/app.py`): FastAPI server on port 8000. Runs the mGBA emulator, game loop, state caching (100ms for full state, 5s for map data), and exposes REST endpoints (`/action`, `/state`, `/status`, `/screenshot`, `/save_state`, `/load_state`, `/checkpoint`, etc.). WebSocket `/ws/frames` streams frames to the web UI. MCP tool endpoints under `/mcp/*` allow external agents to interact with the game.
+- **Server** (`server/app.py`): FastAPI server on port 8000. Runs the mGBA emulator, game loop, state caching (100ms for full state, 5s for map data), and exposes REST endpoints (`/action`, `/state`, `/status`, `/screenshot`, `/save_state`, `/load_state`, `/checkpoint`, etc.). WebSocket `/ws/frames` streams frames to the web UI. MCP tool endpoints under `/mcp/*` allow external agents to interact with the game. **Ports**: game=8000, frame=8001, mcp=8002.
 - **Clients**:
   - **run.py**: Starts the server as a subprocess, then runs an in-repo agent client (pygame display optional). The client polls `/state`, runs the selected agent scaffold (VLM + logic), and submits actions via `POST /action`.
   - **run_cli.py**: For external CLI agents (e.g., Claude Code). Spawns the game server and an MCP server (`server/cli/pokemon_mcp_server.py`) that translates MCP tool calls into HTTP requests to the game server. The external agent talks to the MCP server over stdio.
@@ -83,7 +83,7 @@ pokeagent-speedrun/
 ├── run_cli.py                # Entry for external CLI agents (MCP); spawns server + MCP proxy
 ├── server/
 │   ├── app.py                # FastAPI game server (emulator, /state, /action, /mcp/*, etc.)
-│   ├── client.py             # In-repo client used by run.py (agent loop, optional pygame)
+│   ├── client.py             # In-repo client used by run.py for react/claudeplays only (agent loop, optional pygame)
 │   ├── agent_thinking.txt    # Runtime file (gitignored); server writes latest thinking for UI
 │   ├── frame_server.py       # Frame streaming
 │   ├── stream.html           # Web UI for streaming

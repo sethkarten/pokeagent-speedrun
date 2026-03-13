@@ -74,19 +74,6 @@ class MCPToolAdapter:
                 "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
                 "reflect": "/mcp/reflect",
-
-                # Baseline MCP tools (file/shell/web)
-                # "read_file": "/mcp/read_file",
-                # "write_file": "/mcp/write_file",
-                # "list_directory": "/mcp/list_directory",
-                # "glob": "/mcp/glob",
-                # "search_file_content": "/mcp/search_file_content",
-                # "replace": "/mcp/replace",
-                # "read_many_files": "/mcp/read_many_files",
-                # "run_shell_command": "/mcp/run_shell_command",
-                # "web_fetch": "/mcp/web_fetch",
-                # "google_web_search": "/mcp/google_web_search",
-                # "save_memory": "/mcp/save_memory",
             }
 
             endpoint = endpoint_map.get(tool_name)
