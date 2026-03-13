@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from agents.prompts.paths import POKEAGENT_BASE_PROMPT_PATH, POKEAGENT_SYSTEM_PROMPT_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 class PromptOptimizer:
     """Optimizes agent base prompt based on trajectory analysis."""
     
-    def __init__(self, vlm, run_data_manager, base_prompt_path: str = "agent/prompts/base_prompt.md", system_prompt_path: str = "agent/prompts/system_prompt.md"):
+    def __init__(self, vlm, run_data_manager, base_prompt_path: str = POKEAGENT_BASE_PROMPT_PATH, system_prompt_path: str = POKEAGENT_SYSTEM_PROMPT_PATH):
         """
         Initialize the prompt optimizer.
         
@@ -326,7 +327,7 @@ IMPROVED BASE PROMPT:
         return self.current_base_prompt
 
 
-def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = "agent/prompts/base_prompt.md", system_prompt_path: str = "agent/prompts/system_prompt.md") -> PromptOptimizer:
+def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = POKEAGENT_BASE_PROMPT_PATH, system_prompt_path: str = POKEAGENT_SYSTEM_PROMPT_PATH) -> PromptOptimizer:
     """Factory function to create a PromptOptimizer instance."""
     return PromptOptimizer(vlm, run_data_manager, base_prompt_path, system_prompt_path)
 

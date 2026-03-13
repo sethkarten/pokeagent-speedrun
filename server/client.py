@@ -22,8 +22,8 @@ except ImportError:
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# from agent.my_agent import MyAgent # Agent
-from agent import Agent # ADDED
+# from agents.my_agent import MyAgent # Agent
+from agents import Agent
 from utils.state_formatter import format_state_for_llm
 
 

@@ -20,7 +20,7 @@ from PIL import Image
 # Add the project root to the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.claude_plays import ClaudePlaysAgent, ToolCall
+from agents.simple.claude_plays import ClaudePlaysAgent, ToolCall
 
 
 class TestClaudePlaysAgent:

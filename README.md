@@ -58,14 +58,14 @@ For deeper detail and known deviations (e.g., monolithic server, polling-based s
 
 - **Multiple VLM backends**: OpenAI, OpenRouter, Google Gemini, Anthropic, local HuggingFace (via `utils/vlm_backends.py`)
 - **Vision-based perception**: VLMs analyze game frames and state
-- **Agent scaffolds**: Four-module (perception/planning/memory/action), simple, ReAct, ClaudePlays, GeminiPlays, MyCLIAgent, AutonomousCLI, vision-only
+- **Agent scaffolds**: PokeAgent, vision-only, ReAct, ClaudePlays, GeminiPlays
 - **MCP support**: External CLI agents (e.g., Claude Code) interact via Model Context Protocol
 - **Checkpoints & backups**: Save/resume runs; backups in `backups/`; analysis data in `run_data/`
 - **Metrics & logging**: Per-step and cumulative tokens, cost, actions; LLM logs and session logs
 - **Map system**: Porymap integration, NPC display, movement preview, portal tracking
 - **Web interface**: Real-time stream at `http://localhost:8000/stream`
 - **Video recording**: Optional MP4 recording of gameplay
-- **Customizable prompts**: Edit `agent/system_prompt.py` and module prompts to change behavior. CLI agents also use prompt files under `agent/prompts/` (e.g. `base_prompt.md`, `POKEAGENT.md`).
+- **Customizable prompts**: Edit `agents/simple/system_prompt.py` and prompt assets under `agents/prompts/`.
 
 ## Directory Structure
 
@@ -83,17 +83,19 @@ pokeagent-speedrun/
 │   ├── stream.html           # Web UI for streaming
 │   └── cli/
 │       └── pokemon_mcp_server.py   # MCP proxy: stdio ↔ HTTP to game server
-├── agent/
+├── agents/
 │   ├── __init__.py           # Agent factory (scaffold selection)
-│   ├── system_prompt.py      # Main system prompt
-│   ├── my_cli_agent.py       # MyCLIAgent (CLI scaffolding)
-│   ├── my_cli_agent_autonomous.py  # AutonomousCLIAgent (objectives, knowledge base)
-│   ├── react.py              # ReAct agent
-│   ├── claude_plays.py       # ClaudePlaysPokemon
-│   ├── gemini_plays.py       # GeminiPlaysPokemon
-│   ├── vision_only_agent.py  # Vision-only agent
+│   ├── custom/
+│   │   ├── PokeAgent.py      # Main benchmark agent
+│   │   ├── vision_only_agent.py
+│   │   └── puzzle_solver.py
+│   ├── simple/
+│   │   ├── system_prompt.py  # Shared system prompt for ReAct
+│   │   ├── react.py          # ReAct agent
+│   │   ├── claude_plays.py
+│   │   └── gemini_plays.py
 │   ├── objectives/           # Direct objectives, types, categorization
-│   └── deprecated/           # Legacy four-module (perception, planning, memory, action, simple)
+│   └── prompts/              # Canonical prompt assets and path helpers
 ├── utils/
 │   ├── vlm_backends.py       # VLM facade and backends (OpenAI, Gemini, etc.)
 │   ├── state_formatter.py   # Game state formatting for LLM
@@ -193,7 +195,7 @@ Auto-detection: `--backend auto` picks a backend based on available keys.
 **run.py** (in-repo agent): Starts the game server, then runs the selected agent client (with optional pygame display).
 
 ```bash
-# Default (my_cli_agent scaffold, Gemini)
+# Default (PokeAgent scaffold, Gemini)
 python run.py
 
 # OpenAI
@@ -232,7 +234,7 @@ For security and isolation, it is recommended to run the Claude Code agent in a 
 Use the `--build` flag with `run_cli.py` to automatically build the image with your user's UID/GID. This ensures files created by the agent are owned by you (not root).
 
 ```bash
-python run_cli.py --cli-type claude --containerized --build --directive agent/prompts/cli_directives/pokemon_directive.md
+python run_cli.py --cli-type claude --containerized --build --directive agents/prompts/cli-agent-directives/pokemon_directive.md
 ```
 
 *Manual Build (Alternative):*
@@ -248,7 +250,7 @@ docker build \
 **2. Run the Agent**
 After building once, you can run without `--build`:
 ```bash
-python run_cli.py --cli-type claude --containerized --directive agent/prompts/cli_directives/pokemon_directive.md
+python run_cli.py --cli-type claude --containerized --directive agents/prompts/cli-agent-directives/pokemon_directive.md
 ```
 
 **How it works:**
@@ -263,14 +265,12 @@ python run_cli.py --cli-type claude --containerized --directive agent/prompts/cl
 
 ## Agent Scaffolds
 
-Choose behavior with `--scaffold` (default: `my_cli_agent`).
+Choose behavior with `--scaffold` (default: `pokeagent`).
 
 | Scaffold          | Description |
 |-------------------|-------------|
-| `my_cli_agent`    | Default. CLI-style agent with frame buffering and game-state tracking. |
-| `autonomous_cli`  | Autonomous agent with objectives and knowledge base. |
-| `fourmodule`      | Perception → Planning → Memory → Action (legacy). |
-| `simple`          | Direct frame + state → VLM → action; faster, no perception/planning/memory. |
+| `pokeagent`       | Default. Main benchmark agent with direct objectives, knowledge, and prompt optimization. |
+| `autonomous_cli`  | Legacy alias for `pokeagent`. |
 | `react`           | ReAct loop: thought → action → observation. |
 | `claudeplays`     | Tool-based (e.g. press_buttons, navigate_to), pathfinding, history summarization. |
 | `geminiplays`     | Gemini-native tool-based agent. |
@@ -279,12 +279,10 @@ Choose behavior with `--scaffold` (default: `my_cli_agent`).
 Examples:
 
 ```bash
-python run.py --scaffold simple --agent-auto
+python run.py --scaffold pokeagent --agent-auto
 python run.py --scaffold react --agent-auto
 python run.py --scaffold claudeplays --backend openai --model-name gpt-4o --agent-auto
 ```
-
-Deprecated: `--simple` still maps to `--scaffold simple` but triggers a deprecation warning.
 
 ## Command Line Options
 
@@ -294,19 +292,16 @@ run.py:
   --backend (openai|gemini|local|openrouter|anthropic|auto), --model-name TEXT
   --port INT (default 8000)
   --headless, --agent-auto, --manual
-  --record, --scaffold (fourmodule|simple|react|claudeplays|geminiplays|my_cli_agent|autonomous_cli|vision_only)
+  --record, --scaffold (pokeagent|autonomous_cli|react|claudeplays|geminiplays|vision_only)
   --no-ocr (disable OCR dialogue detection)
-  --simple (deprecated; use --scaffold simple)
 ```
 
 ## Customizing Agent Behavior (Prompt Editing Guide)
 
-- **System prompt**: `agent/system_prompt.py` — overall role and behavior.
-- **Prompt files**: `agent/prompts/` holds `POKEAGENT.md`, `base_prompt.md`, `system_prompt.md` used by CLI agents; paths are repo-root-relative.
-- **Perception**: `agent/deprecated/perception.py` — how the agent interprets the screen (fourmodule).
-- **Planning**: `agent/deprecated/planning.py` — high-level strategy (fourmodule).
-- **Memory**: `agent/deprecated/memory.py` — what to remember (fourmodule).
-- **Action**: `agent/deprecated/action.py` — button decisions (fourmodule).
+- **System prompt**: `agents/simple/system_prompt.py` — shared role and behavior for the lightweight ReAct agent.
+- **Prompt files**: `agents/prompts/` holds `pokeagent-directives/` and `cli-agent-directives/`; paths are repo-root-relative.
+- **Main benchmark agent**: `agents/custom/PokeAgent.py`.
+- **Vision-only variant**: `agents/custom/vision_only_agent.py`.
 
 Edit the prompts in those files and restart the agent. Use `--debug-state` for detailed state in logs. For Nuzlocke-style behavior, change the system prompt and action/memory logic accordingly.
 
