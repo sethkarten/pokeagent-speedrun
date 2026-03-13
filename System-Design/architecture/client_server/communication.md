@@ -36,6 +36,9 @@ The system follows a headless server architecture where the game logic and emula
 - `GET /health`: Health check endpoint.
 - `GET /screenshot`: Retrieve the current frame as an image.
 
+### Agent thinking (UI)
+- Agent thinking for the stream UI is driven by the LLM log (session log file) and optional `POST /thinking`; the server does not rely on a single static file for live thinking.
+
 ### MCP Tool Endpoints
 The server exposes ~23 specific endpoints under `/mcp/*` that map directly to agent tools:
 - **Game Interaction**: `/mcp/get_game_state`, `/mcp/press_buttons`, `/mcp/navigate_to`.
