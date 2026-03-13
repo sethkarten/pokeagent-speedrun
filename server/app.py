@@ -1597,19 +1597,9 @@ async def get_whole_map():
         from utils.state_formatter import ROM_TO_PORYMAP_MAP
         from pathlib import Path
 
-        # Get pokeemerald root
-        pokeemerald_root = None
-        root = os.environ.get("POKEEMERALD_ROOT")
-        if root:
-            root_path = Path(root).resolve()
-            if (root_path / "data" / "maps").exists():
-                pokeemerald_root = root_path
-
-        if not pokeemerald_root:
-            current_dir = Path(__file__).parent.parent
-            porymap_path = current_dir / "porymap_data"
-            if (porymap_path / "data" / "maps").exists():
-                pokeemerald_root = porymap_path.resolve()
+        # Get pokeemerald root (pokemon_env/porymap or POKEEMERALD_ROOT override)
+        from pokemon_env.porymap_paths import get_porymap_root
+        pokeemerald_root = get_porymap_root()
 
         if not pokeemerald_root:
             raise HTTPException(status_code=500, detail="Could not find pokeemerald root")

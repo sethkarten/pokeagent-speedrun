@@ -1098,40 +1098,10 @@ def _format_stitched_map_info(map_info):
     return context_parts
 
 def _get_pokeemerald_root() -> Optional[Path]:
-    """Get the pokeemerald root directory path."""
-    # Try environment variable first
-    root = os.environ.get('POKEEMERALD_ROOT')
-    if root:
-        root_path = Path(root).resolve()
-        if (root_path / "data" / "maps").exists():
-            logger.info(f"Found pokeemerald root from env var: {root_path}")
-            return root_path
-    
-    # Try porymap_data directory first (under pokeagent-speedrun)
-    current_dir = Path(__file__).parent.parent
-    porymap_path = current_dir / "porymap_data"
-    if (porymap_path / "data" / "maps").exists():
-        logger.info(f"Found pokeemerald root: {porymap_path}")
-        return porymap_path.resolve()
-    
-    # Try common relative paths
-    possible_paths = [
-        current_dir / "pokeemerald",
-        current_dir / "../pokeemerald",
-        current_dir / "../../pokeemerald",
-    ]
-    
-    for path in possible_paths:
-        resolved = path.resolve()
-        if (resolved / "data" / "maps").exists():
-            logger.info(f"Found pokeemerald root: {resolved}")
-            return resolved
-    
-    logger.warning("Could not find pokeemerald root directory. Checked:")
-    logger.warning(f"  - POKEEMERALD_ROOT env var: {os.environ.get('POKEEMERALD_ROOT', 'not set')}")
-    logger.warning(f"  - porymap_data: {porymap_path}")
-    logger.warning(f"  - Common paths: {possible_paths}")
-    return None
+    """Get the pokeemerald root directory path. Delegates to centralized resolver."""
+    from pokemon_env.porymap_paths import get_porymap_root
+    return get_porymap_root()
+
 
 # ROM location name to Porymap map name mapping
 ROM_TO_PORYMAP_MAP = {
@@ -1646,7 +1616,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             json_map = build_json_map_for_llm(porymap_map_name, pokeemerald_root, badge_count=badge_count)
         except ValueError as e:
             logger.error(f"Porymap: Failed to build map for '{porymap_map_name}' due to corrupted tileset data: {e}")
-            logger.error("This likely indicates missing or corrupted tileset files in the porymap_data directory.")
+            logger.error("This likely indicates missing or corrupted tileset files in pokemon_env/porymap.")
             logger.error("Pathfinding will not be available for this location.")
             return context_parts
         
