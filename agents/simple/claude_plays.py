@@ -22,13 +22,13 @@ from dataclasses import dataclass
 from io import BytesIO
 from PIL import Image
 
-from utils.vlm_backends import VLM
-from utils.llm_logger import LLMLogger
+from utils.agent_infrastructure.vlm_backends import VLM
+from utils.data_persistence.llm_logger import LLMLogger
 from utils.state_formatter import format_state_for_llm
-from utils.pathfinding import Pathfinder
+from utils.mapping.pathfinding import Pathfinder
 from utils.knowledge_base import get_knowledge_base, KnowledgeBase
 from utils.coordinate_overlay import add_coordinate_overlay
-from utils.agent_helpers import update_server_metrics
+from utils.metric_tracking.server_metrics import update_server_metrics
 
 logger = logging.getLogger(__name__)
 

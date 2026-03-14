@@ -10,7 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.cli_agent_backends import (
+from utils.agent_infrastructure.cli_agent_backends import (
     CliSessionMetrics,
     ClaudeCodeBackend,
     CodexCliBackend,

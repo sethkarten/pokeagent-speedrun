@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from agents.prompts.paths import POKEAGENT_BASE_PROMPT_PATH, POKEAGENT_SYSTEM_PROMPT_PATH
+from agents.prompts.paths import POKEAGENT_BASE_PROMPT_PATH, POKEAGENT_SYSTEM_PROMPT_PATH, resolve_repo_path
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class PromptOptimizer:
         """
         # Load system prompt so optimizer knows what tools the agent has access to
         # We'll include this in the optimization prompt (not as system instruction)
-        system_prompt_file = Path(__file__).resolve().parent.parent / system_prompt_path
+        system_prompt_file = resolve_repo_path(system_prompt_path)
         self.system_prompt_content = None
         if system_prompt_file.exists():
             with open(system_prompt_file, 'r') as f:
@@ -42,7 +42,7 @@ class PromptOptimizer:
         
         # Create a separate VLM instance WITHOUT tools for text-only optimization calls
         # This ensures get_text_query returns a string, not a GenerateContentResponse object
-        from utils.vlm_backends import VLM
+        from utils.agent_infrastructure.vlm_backends import VLM
         self.vlm = VLM(
             backend=vlm.backend_type,
             model_name=vlm.model_name,
@@ -51,7 +51,7 @@ class PromptOptimizer:
         )
         self.run_manager = run_data_manager
         _base = Path(base_prompt_path)
-        self.base_prompt_path = _base if _base.is_absolute() else Path(__file__).resolve().parent.parent / base_prompt_path
+        self.base_prompt_path = _base if _base.is_absolute() else resolve_repo_path(base_prompt_path)
 
         # Load initial base prompt
         if self.base_prompt_path.exists():

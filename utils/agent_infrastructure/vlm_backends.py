@@ -18,7 +18,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Import LLM logger
-from utils.llm_logger import log_llm_interaction, log_llm_error
+from utils.data_persistence.llm_logger import log_llm_interaction, log_llm_error
 
 
 # Define the retry decorator with exponential backoff
@@ -1971,7 +1971,7 @@ class VertexBackend(VLMBackend):
         # Save debug copy to see what it looks like
         try:
             from pathlib import Path
-            from utils.run_data_manager import get_cache_directory
+            from utils.data_persistence.run_data_manager import get_cache_directory
             debug_dir = get_cache_directory()
             debug_path = debug_dir / "debug_upscaled_frame.png"
             upscaled_image.save(debug_path)

@@ -237,7 +237,7 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 # Save state
                                 print("💾 Saving state...")
                                 try:
-                                    from utils.run_data_manager import get_cache_path
+                                    from utils.data_persistence.run_data_manager import get_cache_path
                                     save_path = str(get_cache_path("manual_save.state"))
                                     response = requests.post(f"{server_url}/save_state", 
                                                            json={"filepath": save_path}, 
@@ -252,7 +252,7 @@ def run_multiprocess_client(server_port=8000, args=None):
                                 # Load state
                                 print("📂 Loading state...")
                                 try:
-                                    from utils.run_data_manager import get_cache_path
+                                    from utils.data_persistence.run_data_manager import get_cache_path
                                     load_path = str(get_cache_path("manual_save.state"))
                                     response = requests.post(f"{server_url}/load_state", 
                                                            json={"filepath": load_path}, 
@@ -377,7 +377,7 @@ def run_multiprocess_client(server_port=8000, args=None):
                                                     try:
                                                         # Sync client's LLM metrics to server before saving checkpoint
                                                         try:
-                                                            from utils.llm_logger import get_llm_logger
+                                                            from utils.data_persistence.llm_logger import get_llm_logger
                                                             client_llm_logger = get_llm_logger()
                                                             if client_llm_logger:
                                                                 sync_response = requests.post(

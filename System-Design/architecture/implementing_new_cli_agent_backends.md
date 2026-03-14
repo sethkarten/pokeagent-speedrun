@@ -44,7 +44,7 @@ Put the system prompt for your agent under:
 1. **Backend class**: Subclass `CliAgentBackend`, implement `name`, `build_launch_cmd`, `handle_stream_event`.
 2. **Register**: In `get_backend(cli_type)` in `utils/cli_agent_backends.py`, return your backend for `cli_type == "your_backend"`.
 3. **Directive**: Add `agents/prompts/cli-agent-directives/your_backend_directive.md`.
-4. **Test**: `python run_cli.py --cli-type your_backend --directive agents/prompts/cli-agent-directives/your_backend_directive.md --termination-condition gym_badge_count --termination-threshold 1`.
+4. **Test**: `python run_cli.py --backend your_backend --directive agents/prompts/cli-agent-directives/your_backend_directive.md --termination-condition gym_badge_count --termination-threshold 1`.
 
 ## Metrics
 

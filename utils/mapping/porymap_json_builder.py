@@ -21,8 +21,8 @@ from typing import Dict, List, Optional, Tuple, Any
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.map_formatter import format_tile_to_symbol
-from utils.pokeemerald_parser import PokeemeraldMapLoader, PokeemeraldLayoutParser
+from utils.mapping.map_formatter import format_tile_to_symbol
+from utils.mapping.pokeemerald_parser import PokeemeraldMapLoader, PokeemeraldLayoutParser
 from pokemon_env.enums import MetatileBehavior
 
 
@@ -82,7 +82,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     dimensions = {"width": 0, "height": 0}
 
     # Check for map overrides (game-state-aware selection + partial/full overrides)
-    from utils.ascii_map_loader import get_effective_map_name, get_override, ascii_to_metatiles
+    from utils.mapping.ascii_map_loader import get_effective_map_name, get_override, ascii_to_metatiles
     
     effective_map_name = get_effective_map_name(map_name, badge_count=badge_count)
     override = get_override(effective_map_name)

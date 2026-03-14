@@ -8,7 +8,7 @@ Unlike the internal Python agents (e.g. `PokeAgent`, `VisionOnlyAgent`) which ru
 
 This architecture allows us to use powerful, proprietary agentic tools (Anthropic's Claude Code, Google's Gemini CLI) which require their own runtime environment, while keeping the game infrastructure secure and stable.
 
-The backend system is polymorphic: `run_cli.py` operates through the `CliAgentBackend` abstract base class (`utils/cli_agent_backends.py`), with concrete implementations `ClaudeCodeBackend` and `GeminiCliBackend`. Backend selection is via `--cli-type {claude,gemini}`.
+The backend system is polymorphic: `run_cli.py` operates through the `CliAgentBackend` abstract base class (`utils/cli_agent_backends.py`), with concrete implementations `ClaudeCodeBackend` and `GeminiCliBackend`. Backend selection is via `--backend {claude,gemini}`.
 
 ## 1. System Components
 

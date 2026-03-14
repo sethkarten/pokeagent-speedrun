@@ -11,7 +11,7 @@ from .enums import MetatileBehavior, StatusCondition, Tileset, PokemonType, Poke
 from .types import PokemonData
 from utils.ocr_dialogue import create_ocr_detector
 from utils import state_formatter
-from utils import map_stitcher_singleton
+from utils.mapping import map_stitcher_singleton
 
 logger = logging.getLogger(__name__)
 
@@ -3039,7 +3039,7 @@ class PokemonEmeraldReader:
         import os
         import shutil
         
-        from utils.run_data_manager import get_cache_directory
+        from utils.data_persistence.run_data_manager import get_cache_directory
         cache_dir = str(get_cache_directory())
         os.makedirs(cache_dir, exist_ok=True)
         cache_map_file = os.path.join(cache_dir, "map_stitcher_data.json")
@@ -3066,7 +3066,7 @@ class PokemonEmeraldReader:
         
         # Initialize MapStitcher if not already initialized
         if self._map_stitcher is None:
-            from utils.map_stitcher import MapStitcher
+            from utils.mapping.map_stitcher import MapStitcher
             # print( Initializing MapStitcher with cache file: {map_stitcher_filename}")
             self._map_stitcher = MapStitcher(save_file=map_stitcher_filename)
             # print( MapStitcher initialized, syncing connections...")
