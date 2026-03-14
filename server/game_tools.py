@@ -139,7 +139,20 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             logger.debug("Using env.get_screenshot() (direct video buffer - may be stale)")
 
         state = env.get_comprehensive_state(screenshot=screenshot)
-        state_text = state_formatter(state, action_history=action_history)
+        try:
+            state_text = state_formatter(state, action_history=action_history)
+        except Exception as formatter_err:
+            logger.exception("State formatter failed; returning fallback text with screenshot preserved")
+            game_state_name = state.get("game", {}).get("game_state") or "unknown"
+            location = state.get("player", {}).get("location") or "Unknown"
+            position = state.get("player", {}).get("position") or {}
+            state_text = (
+                "State text formatter unavailable for this screen.\n"
+                f"Game State: {game_state_name}\n"
+                f"Location: {location}\n"
+                f"Position: X={position.get('x', 'unknown')}, Y={position.get('y', 'unknown')}\n"
+                "Use the attached screenshot as the source of truth for the current UI."
+            )
 
         screenshot_b64 = None
         if screenshot is not None:

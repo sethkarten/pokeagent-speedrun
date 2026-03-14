@@ -21,7 +21,7 @@ CLI agent backends let the Pokemon Emerald harness talk to external coding agent
 - **Thinking for UI**: POST tool reasoning as `[tool_name] reasoning` for `tool_use` blocks; skip raw `text` to avoid clutter.
 - **Processes**: Use `os.setsid()` and `os.killpg()` for clean shutdown of the process group.
 - **Session**: Claude’s `--continue` uses `~/.claude/`; mount from host `.pokeagent_cache/{run_id}/claude_memory/` for persistence.
-- **Containers**: Run in Docker with firewall (allow API + MCP SSE; block game port). MCP via SSE URL; pass `--containerized`.
+- **Containers**: CLI agents always run in Docker with firewall (allow API + MCP SSE; block game port). MCP via SSE URL.
 
 ## Backend interface
 
@@ -32,7 +32,7 @@ Implement `CliAgentBackend` (in `utils/agent_infrastructure/cli_agent_backends.p
 - **`api_gateway`** (attribute): Set by `run_cli.py` from `--api-gateway` (`login` or `openrouter`). Backends use it to choose auth: OAuth vs OpenRouter. Gemini ignores it.
 - **`handle_stream_event(event, metrics, server_url=None, snapshot_path=None)`**: Parse agent stdout, update `CliSessionMetrics`, POST thinking to `/thinking`, write snapshot on `result`.
 
-MCP config: local mode uses `command` + `args` + `env` (e.g. `python -m server.cli.pokemon_mcp_server`); containerized mode uses `url` (e.g. `http://host.docker.internal:8449/sse`).
+MCP config: uses `url` (e.g. `http://host.docker.internal:8449/sse`) for containerized runs.
 
 ## Directive and paths
 
@@ -55,4 +55,4 @@ Default directive: `agents/prompts/cli-agent-directives/pokemon_directive.md` (C
 
 ## Best practices
 
-Minimal tool set (e.g. `get_game_state`, `press_buttons`, `navigate_to`); let agents use native knowledge/reflection. Use milestone-based progress for backups. Clean process and signal handling. Prefer containerized runs. Document backend-specific quirks. See `external_mcp_agents.md` for more.
+Minimal tool set (e.g. `get_game_state`, `press_buttons`, `navigate_to`); let agents use native knowledge/reflection. Use milestone-based progress for backups. Clean process and signal handling. CLI agents always run containerized. Document backend-specific quirks. See `external_mcp_agents.md` for more.
