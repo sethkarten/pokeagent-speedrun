@@ -829,7 +829,7 @@ class LLMLogger:
                 return
 
             if metrics_file is None:
-                from utils.run_data_manager import get_cache_path
+                from utils.data_persistence.run_data_manager import get_cache_path
                 metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
             metrics_to_save = self.cumulative_metrics.copy()
@@ -857,7 +857,7 @@ class LLMLogger:
         try:
             # Determine metrics file path
             if metrics_file is None:
-                from utils.run_data_manager import get_cache_path
+                from utils.data_persistence.run_data_manager import get_cache_path
                 metrics_file = str(get_cache_path("cumulative_metrics.json"))
 
             if not os.path.exists(metrics_file):
@@ -963,7 +963,7 @@ class LLMLogger:
         try:
             # Use cache folder by default
             if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
-                from utils.run_data_manager import get_cache_path
+                from utils.data_persistence.run_data_manager import get_cache_path
                 checkpoint_file = str(get_cache_path("checkpoint_llm.txt"))
             # Read all current log entries
             log_entries = []
@@ -1015,7 +1015,7 @@ class LLMLogger:
         try:
             # Use cache folder by default
             if checkpoint_file is None or checkpoint_file == "checkpoint_llm.txt":
-                from utils.run_data_manager import get_cache_path
+                from utils.data_persistence.run_data_manager import get_cache_path
                 checkpoint_file = str(get_cache_path("checkpoint_llm.txt"))
             
             if not os.path.exists(checkpoint_file):

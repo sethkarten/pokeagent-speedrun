@@ -718,7 +718,7 @@ class Pathfinder:
             return tile in ["#", "X", "█", "▓"]
 
         # Use shared walkability function (inverted)
-        from utils.map_formatter import is_tile_walkable
+        from utils.mapping.map_formatter import is_tile_walkable
 
         return not is_tile_walkable(tile)
 

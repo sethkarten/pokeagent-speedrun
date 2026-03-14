@@ -3130,7 +3130,7 @@ class DirectObjectiveManager:
         if not run_dir:
             # Try to use run_data manager if available
             try:
-                from utils.run_data_manager import get_run_data_manager
+                from utils.data_persistence.run_data_manager import get_run_data_manager
                 run_manager = get_run_data_manager()
                 if run_manager:
                     run_dir = str(run_manager.get_scratch_space_dir())
@@ -3611,7 +3611,7 @@ class DirectObjectiveManager:
         if not run_dir:
             # Try to use run_data manager if available
             try:
-                from utils.run_data_manager import get_run_data_manager
+                from utils.data_persistence.run_data_manager import get_run_data_manager
                 run_manager = get_run_data_manager()
                 if run_manager:
                     run_dir = str(run_manager.get_scratch_space_dir())

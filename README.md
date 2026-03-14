@@ -220,7 +220,7 @@ python run.py --load-checkpoint
 **run_cli.py** (external CLI agents via MCP): Starts the game server and MCP server; the external agent (e.g., Claude Code) connects via MCP and uses tools to play.
 
 ```bash
-python run_cli.py --cli-type claude --directive path/to/directive.txt
+python run_cli.py --backend claude --directive path/to/directive.txt
 ```
 
 ### Containerized CLI Agent (Recommended)
@@ -242,7 +242,7 @@ For security and isolation, it is recommended to run the Claude Code agent in a 
 Use the `--build` flag with `run_cli.py` to automatically build the image with your user's UID/GID. This ensures files created by the agent are owned by you (not root).
 
 ```bash
-python run_cli.py --cli-type claude --containerized --build --directive agents/prompts/cli-agent-directives/pokemon_directive.md
+python run_cli.py --backend claude --containerized --build --directive agents/prompts/cli-agent-directives/pokemon_directive.md
 ```
 
 *Manual Build (Alternative):*
@@ -258,7 +258,7 @@ docker build \
 **2. Run the Agent**
 After building once, you can run without `--build`:
 ```bash
-python run_cli.py --cli-type claude --containerized --directive agents/prompts/cli-agent-directives/pokemon_directive.md
+python run_cli.py --backend claude --containerized --directive agents/prompts/cli-agent-directives/pokemon_directive.md
 ```
 
 **How it works:**

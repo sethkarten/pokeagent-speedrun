@@ -36,7 +36,7 @@ def create_cache_backup(
     try:
         # Use run-specific cache if not provided
         if cache_dir is None:
-            from utils.run_data_manager import get_cache_directory
+            from utils.data_persistence.run_data_manager import get_cache_directory
             cache_dir = str(get_cache_directory())
         
         # Ensure cache directory exists
@@ -46,7 +46,7 @@ def create_cache_backup(
             return None
 
         # Get run_id for creating run-specific backup subfolder
-        from utils.run_data_manager import get_run_data_manager
+        from utils.data_persistence.run_data_manager import get_run_data_manager
         run_manager = get_run_data_manager()
         run_id = run_manager.run_id if run_manager else f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
@@ -186,7 +186,7 @@ def restore_cache_from_backup(
     try:
         # Use run-specific cache if not provided
         if cache_dir is None:
-            from utils.run_data_manager import get_cache_directory
+            from utils.data_persistence.run_data_manager import get_cache_directory
             cache_dir = str(get_cache_directory())
         
         backup_path = Path(backup_file)

@@ -386,10 +386,10 @@ class TestAppendCliStepIntegration:
     """Test that the poller correctly updates cumulative_metrics via LLMLogger."""
 
     def test_steps_appended_to_cumulative_metrics(self, tmp_path):
-        from utils.llm_logger import LLMLogger
+        from utils.data_persistence.llm_logger import LLMLogger
 
         metrics_file = tmp_path / "cumulative_metrics.json"
-        with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+        with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
             llm_logger = LLMLogger(log_dir=str(tmp_path), session_id="test_cli")
 
             # Write a JSONL file
@@ -468,20 +468,20 @@ class TestCumulativeMetricsSchema:
     """Ensure LLMLogger always produces a cumulative_metrics.json with the required schema."""
 
     def test_fresh_logger_has_required_keys(self, tmp_path):
-        from utils.llm_logger import LLMLogger
+        from utils.data_persistence.llm_logger import LLMLogger
 
         metrics_file = tmp_path / "cumulative_metrics.json"
-        with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+        with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
             ll = LLMLogger(log_dir=str(tmp_path), session_id="schema_test")
 
         missing = REQUIRED_TOP_LEVEL_KEYS - set(ll.cumulative_metrics.keys())
         assert not missing, f"Missing top-level keys: {missing}"
 
     def test_append_cli_step_produces_valid_step_shape(self, tmp_path):
-        from utils.llm_logger import LLMLogger
+        from utils.data_persistence.llm_logger import LLMLogger
 
         metrics_file = tmp_path / "cumulative_metrics.json"
-        with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+        with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
             ll = LLMLogger(log_dir=str(tmp_path), session_id="schema_test2")
 
         ll.append_cli_step(
@@ -498,10 +498,10 @@ class TestCumulativeMetricsSchema:
         assert not missing, f"Missing step keys: {missing}"
 
     def test_persisted_file_has_correct_schema(self, tmp_path):
-        from utils.llm_logger import LLMLogger
+        from utils.data_persistence.llm_logger import LLMLogger
 
         metrics_file = tmp_path / "cumulative_metrics.json"
-        with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+        with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
             ll = LLMLogger(log_dir=str(tmp_path), session_id="schema_test3")
             ll.append_cli_step(
                 step_number=0,

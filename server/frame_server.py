@@ -49,7 +49,7 @@ FRAME_UPDATE_INTERVAL = 0.025  # 40 FPS
 
 def get_frame_cache_file():
     """Get the frame cache file path based on current run_id"""
-    from utils.run_data_manager import get_cache_path
+    from utils.data_persistence.run_data_manager import get_cache_path
     return str(get_cache_path("frame_cache.json"))
 
 def load_frame_from_cache():

@@ -30,7 +30,7 @@ import requests
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from utils.cli_agent_backends import (
+from utils.agent_infrastructure.cli_agent_backends import (
     CliAgentBackend,
     CliSession,
     CliSessionMetrics,
@@ -291,7 +291,7 @@ def start_server(args, run_id=None):
         server_cmd.append("--record")
     
     if hasattr(args, 'load_checkpoint') and args.load_checkpoint:
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         checkpoint_state = get_cache_path("checkpoint.state")
         if checkpoint_state.exists():
             server_cmd.extend(["--load-state", str(checkpoint_state)])
@@ -471,7 +471,7 @@ LAST_CLI_SESSION_ID_FILENAME = "last_cli_session_id"
 def _load_last_session_id(backend: CliAgentBackend, agent_memory_dir: Path) -> str | None:
     """Load persisted CLI session ID from cache (for --resume across runs/restores)."""
     try:
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
         if path.exists():
             sid = path.read_text().strip()
@@ -487,7 +487,7 @@ def _load_last_session_id(backend: CliAgentBackend, agent_memory_dir: Path) -> s
 def _write_last_session_id(session_id: str) -> None:
     """Persist CLI session ID to cache (included in backups for restore)."""
     try:
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
         path.write_text(session_id)
         logger.debug("Persisted last_session_id: %s", session_id)
@@ -497,8 +497,8 @@ def _write_last_session_id(session_id: str) -> None:
 
 def _restore_from_backup(backup_path: str) -> bool:
     """Restore cache from backup zip. Returns True if successful."""
-    from utils.backup_manager import restore_cache_from_backup
-    from utils.run_data_manager import get_cache_directory
+    from utils.data_persistence.backup_manager import restore_cache_from_backup
+    from utils.data_persistence.run_data_manager import get_cache_directory
 
     print(f"\n📦 Restoring from backup: {backup_path}")
     success = restore_cache_from_backup(
@@ -668,7 +668,7 @@ def _run_agent_loop(
     backend: CliAgentBackend,
 ) -> tuple[str | None, CliSession | None, object]:
     """Run the agent loop until termination. Returns (termination_reason, last_cli_session, cli_log_file)."""
-    from utils.run_data_manager import get_cache_path
+    from utils.data_persistence.run_data_manager import get_cache_path
 
     run_id = run_manager.run_id
     server_url = services.server_url
@@ -722,7 +722,7 @@ def _run_agent_loop(
 
     # JSONL step tracking – persists across agent session restarts within one run
     processed_hashes: set[str] = set()
-    from utils.llm_logger import get_llm_logger as _get_llm_logger
+    from utils.data_persistence.llm_logger import get_llm_logger as _get_llm_logger
     _existing_steps = _get_llm_logger().cumulative_metrics.get("steps", [])
     last_cli_step: int = max((s["step"] for s in _existing_steps), default=-1)
     del _existing_steps, _get_llm_logger
@@ -858,8 +858,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run external CLI agents (Claude Code, Codex) for Pokemon Emerald experiments"
     )
-    parser.add_argument("--cli-type", type=str, default="claude", choices=["claude", "gemini", "codex"],
-                       help="Type of CLI agent to launch (default: claude)")
+    parser.add_argument("--backend", type=str, default="claude", choices=["claude", "gemini", "codex"],
+                       help="Backend to use for the CLI agent (default: claude)")
     parser.add_argument("--login", action="store_true",
                        help="Run backend-specific auth login before starting (e.g. 'claude auth login')")
     parser.add_argument("--directive", type=str,
@@ -900,7 +900,7 @@ def main():
     print("🎮 Pokemon Emerald - External CLI Agent Experiment")
     print("=" * 60)
 
-    from utils.run_data_manager import initialize_run_data_manager
+    from utils.data_persistence.run_data_manager import initialize_run_data_manager
 
     run_manager = initialize_run_data_manager(run_name=args.run_name or f"cli_{args.cli_type}")
     run_id = run_manager.run_id
@@ -941,7 +941,7 @@ def main():
         print("❌ Failed to start services, exiting...")
         return 1
 
-    from utils.run_data_manager import get_cache_path
+    from utils.data_persistence.run_data_manager import get_cache_path
     agent_memory_dir = get_cache_path(backend.agent_memory_subdir)
     agent_memory_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n💾 Agent memory directory: {agent_memory_dir}")
@@ -985,7 +985,7 @@ def main():
         return 0
     finally:
         try: # Always backup on termination
-            from utils.backup_manager import create_cli_agent_termination_backup
+            from utils.data_persistence.backup_manager import create_cli_agent_termination_backup
             backup_path = create_cli_agent_termination_backup(run_id, termination_reason)
             if backup_path:
                 print(f"📦 Termination backup: {backup_path}")

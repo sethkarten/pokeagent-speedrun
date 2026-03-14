@@ -104,7 +104,7 @@ def start_server(args, run_id=None):
     
     if args.load_checkpoint:
         # Auto-load checkpoint.state when --load-checkpoint is used
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         checkpoint_state = get_cache_path("checkpoint.state")
         if checkpoint_state.exists():
             server_cmd.extend(["--load-state", str(checkpoint_state)])
@@ -305,7 +305,7 @@ def main():
             print(f"    Using timestamp-based run_id format instead")
     
     # Initialize run data manager for this run (client creates the run_id)
-    from utils.run_data_manager import initialize_run_data_manager
+    from utils.data_persistence.run_data_manager import initialize_run_data_manager
     
     run_manager = initialize_run_data_manager(
         run_name=args.run_name,
@@ -342,8 +342,8 @@ def main():
     try:
         # Restore from backup if requested
         if args.backup_state:
-            from utils.backup_manager import restore_cache_from_backup
-            from utils.run_data_manager import get_cache_directory
+            from utils.data_persistence.backup_manager import restore_cache_from_backup
+            from utils.data_persistence.run_data_manager import get_cache_directory
             
             print(f"\n📦 Restoring from backup: {args.backup_state}")
             
@@ -362,7 +362,7 @@ def main():
         
         # Clear knowledge base if requested
         if args.clear_knowledge_base:
-            from utils.run_data_manager import get_cache_path
+            from utils.data_persistence.run_data_manager import get_cache_path
             knowledge_base_file = get_cache_path("knowledge_base.json")
             if knowledge_base_file.exists():
                 # Clear the file by writing empty JSON structure

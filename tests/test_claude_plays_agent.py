@@ -323,7 +323,7 @@ class TestClaudePlaysAgent:
         if not os.environ.get("GEMINI_API_KEY"):
             pytest.skip("GEMINI_API_KEY not set")
         
-        from utils.vlm_backends import VLM
+        from utils.agent_infrastructure.vlm_backends import VLM
         
         # Create real VLM client with gemini
         vlm_client = VLM(

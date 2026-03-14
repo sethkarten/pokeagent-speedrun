@@ -5,7 +5,7 @@ Shared helper functions for all agents.
 import logging
 import requests
 from typing import Dict, Any
-from utils.llm_logger import get_llm_logger
+from utils.data_persistence.llm_logger import get_llm_logger
 
 logger = logging.getLogger(__name__)
 
