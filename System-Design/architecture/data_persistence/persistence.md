@@ -28,7 +28,7 @@ Acts as the working directory for the active agent run. It stores the immediate 
   - **CLI session resume**: `last_cli_session_id` — persisted session ID for `--resume` across runs/restores. Written after each session; included in backups.
 
 ### Management
-- **Access**: Managed via `utils/run_data_manager.py` (e.g. `get_cache_directory()`, `get_checkpoint_llm_path()`).
+- **Access**: Managed via `utils/data_persistence/run_data_manager.py` (e.g. `get_cache_directory()`, `get_checkpoint_llm_path()`).
 - **Isolation**: Each run gets a unique subdirectory based on its ID, preventing collisions between parallel or sequential runs.
 
 ## 2. Backups (`backups/`)
@@ -40,7 +40,7 @@ Provides recovery points to restore the agent's state in case of crashes, errors
 - **Location**: `backups/{run_id}/{timestamp}_{objective_id}_{description}.zip`.
 - **Content**: A zipped archive of the entire `.pokeagent_cache/{run_id}/` directory at a specific point in time (usually after completing an objective).
 
-### Management (`utils/backup_manager.py`)
+### Management (`utils/data_persistence/backup_manager.py`)
 - **Creation**: `create_cache_backup()` is called automatically upon objective completion or termination.
   - **Permission Handling**: Uses a custom zipfile walker that gracefully skips files the host user cannot read (e.g., if a containerized agent created root-owned files by mistake, though UID matching should prevent this). Skipped files are logged as warnings.
 - **Restoration**: `restore_cache_from_backup()` rolls back state. Restores metrics from `cumulative_metrics.json` if present; otherwise metrics reset.
@@ -64,7 +64,7 @@ Stores structured data for post-run analysis, debugging, and visualization. This
 - **`agent_logs/` (CLI Mode)**:
   - `session_{NNN}.jsonl`: Raw stdout/stderr logs from CLI agent sessions.
 
-### Management (`utils/run_data_manager.py`)
+### Management (`utils/data_persistence/run_data_manager.py`)
 - **RunDataManager**: A singleton class that orchestrates data collection.
 - **Initialization**: Sets up the directory structure at run start.
 - **Finalization**: Copies relevant data from the runtime cache to the `run_data` directory upon shutdown.

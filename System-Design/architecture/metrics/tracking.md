@@ -27,9 +27,9 @@ The metric tracking system provides comprehensive visibility into the agent's pe
     "objectives": []    // Objectives with cumulative + delta metrics
   }
   ```
-- **Management**: Handled by the `LLMLogger` class in `utils/llm_logger.py`.
+- **Management**: Handled by the `LLMLogger` class in `utils/data_persistence/llm_logger.py`.
 
-### LLMLogger (`utils/llm_logger.py`)
+### LLMLogger (`utils/data_persistence/llm_logger.py`)
 - **Role**: Centralized singleton for tracking LLM interactions and game metrics.
 - **Functionality**:
   - **Logging**: Records every LLM interaction (prompt, response, usage) to `llm_logs/llm_log_{session_id}.jsonl`.
@@ -53,7 +53,7 @@ The metric tracking system provides comprehensive visibility into the agent's pe
 
 ## 2. CLI Agent Usage Monitoring (External Agents)
 
-External CLI agents (run via `run_cli.py`) run in a separate process or container and do not integrate directly with `LLMLogger`. Usage is derived from backend-specific sources and synced to the server via the abstract `log_cli_interaction()` method.
+External CLI agents (run via `run_cli.py`) run in a separate process or container and do not integrate directly with `LLMLogger`. Usage is derived from backend-specific sources and synced to the server via the abstract `log_cli_interaction()` method. Server-side metrics (e.g. action count) are updated via `utils/metric_tracking/server_metrics.py` (moved from former `agent_helpers`).
 
 ### Single-Writer Pattern
 - **Server** is the only process that writes `cumulative_metrics.json` (via `LLM_METRICS_WRITE_ENABLED=true`).
