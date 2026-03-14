@@ -35,19 +35,49 @@ Each backend has its own devcontainer under `.devcontainer/`:
 #### Claude Agent (`claude-agent-devcontainer`)
 *   **Image**: `node:20-bookworm-slim` + `@anthropic-ai/claude-code`
 *   **User**: `claude-agent` (UID/GID matched to host)
-*   **Auth**: OAuth credentials seeded from host `~/.claude` via `seed_agent_auth()`; `CLAUDE_CONFIG_DIR` points to mounted memory
+*   **Auth**: `--api-gateway login` → OAuth from host `~/.claude`; `--api-gateway openrouter` → `OPENROUTER_API_KEY`
 *   **MCP Config**: `.mcp_config.json` in workspace with `"type": "sse"`
 *   **Firewall**: DNS + HTTPS (443) + MCP port; blocks game server port
 
 #### Gemini Agent (`gemini-agent-devcontainer`)
 *   **Image**: `node:20-bookworm-slim` + `@google/gemini-cli`
 *   **User**: `gemini-agent` (UID/GID matched to host)
-*   **Auth**: `GEMINI_API_KEY` passed as env var (no login flow)
+*   **Auth**: `GEMINI_API_KEY` passed as env var (no login flow; unaffected by `--api-gateway`)
 *   **MCP Config**: `settings.json` in mounted `~/.gemini` with SSE server URL + `"trust": true`
 *   **Telemetry**: Enabled in `settings.json` with `outfile` pointing to `~/.gemini/telemetry.jsonl`
 *   **Firewall**: DNS + HTTPS (443, all Google domains) + MCP port; blocks game server port
 
-## 2. Data Flow & Communication
+#### Codex Agent (`codex-agent-devcontainer`)
+*   **Image**: Node-based + `@openai/codex`
+*   **User**: UID/GID matched to host
+*   **Auth**: `--api-gateway login` → `codex login` (ChatGPT OAuth); `--api-gateway openrouter` → `OPENROUTER_API_KEY`
+*   **MCP Config**: `config.toml` in `CODEX_HOME` with model provider and MCP server URL
+
+## 2. Authentication & API Gateway
+
+The `--api-gateway` flag controls how Claude Code and Codex authenticate. Gemini uses `GEMINI_API_KEY` only and is unaffected.
+
+| Option | Description | Required Env |
+|--------|-------------|--------------|
+| `login` (default) | OAuth/subscription: `claude auth login`, `codex login` | Host credentials in `~/.claude` or `~/.codex` |
+| `openrouter` | Use OpenRouter as API gateway; no interactive login | `OPENROUTER_API_KEY` |
+
+**Per-backend behavior:**
+- **Claude Code**: `login` → seeded OAuth from host; `openrouter` → `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` (OpenRouter key).
+- **Codex**: `login` → `codex login` (ChatGPT); `openrouter` → `model_provider = "openrouter"` in config, `OPENROUTER_API_KEY` in env.
+- **Gemini**: Always uses `GEMINI_API_KEY`; `--api-gateway` has no effect.
+
+**Running experiments:**
+```bash
+# OAuth (default): requires prior claude auth login or codex login
+python run_cli.py --backend claude --directive agents/prompts/cli-agent-directives/pokemon_directive.md
+
+# OpenRouter: set key, no login
+export OPENROUTER_API_KEY=sk-...
+python run_cli.py --backend claude --api-gateway openrouter --directive agents/prompts/cli-agent-directives/pokemon_directive.md
+```
+
+## 3. Data Flow & Communication
 
 ```mermaid
 sequenceDiagram
@@ -76,7 +106,7 @@ sequenceDiagram
     Host->>Host: Append steps to LLMLogger, sync to server
 ```
 
-## 3. Persistence & State
+## 4. Persistence & State
 
 Directories are bind-mounted from the Host for persistence:
 
@@ -92,7 +122,7 @@ Directories are bind-mounted from the Host for persistence:
 *   **Backend fallback** (`get_resume_session_id()`): Claude looks in `projects/-workspace/*.jsonl`; Gemini looks in `tmp/*/chats/*.json`.
 *   **Flow**: On restore, backup extracts to cache, session ID is loaded, and `--resume <session_id>` is passed.
 
-## 4. Usage Monitoring
+## 5. Usage Monitoring
 
 Metric tracking is backend-specific, accessed via the abstract `log_cli_interaction()` method:
 
@@ -105,14 +135,14 @@ Metric tracking is backend-specific, accessed via the abstract `log_cli_interact
 *   **Polling cadence**: Every 15 seconds (heartbeat) and once after each session exits.
 *   **Gemini implicit caching**: Gemini CLI uses implicit caching (automatic; no explicit cache creation API). Step entries have `cache_write_tokens: null`—this is expected. Cost of cache creation is included in the first request's input tokens.
 
-## 5. Security Measures
+## 6. Security Measures
 
 1.  **Network Isolation**: Agents cannot access the local network except via MCP. Firewall allows only DNS, HTTPS, and the MCP port.
 2.  **Filesystem Isolation**: Agents are confined to mounted volumes.
 3.  **Credential Safety**: Claude uses seeded OAuth; Gemini uses API key env var.
 4.  **Permission Safety**: Container users have matching UID/GID to the host user.
 
-## 6. Known Warnings (Gemini CLI)
+## 7. Known Warnings (Gemini CLI)
 
 When running the Gemini agent in containerized mode, the following messages may appear in logs. They are expected and do not indicate a failure:
 
