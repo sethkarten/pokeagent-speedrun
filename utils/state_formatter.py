@@ -506,9 +506,18 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         party_context = _format_party_info(player_data, game_data)
         context_parts.extend(party_context)
 
-        # Map/Location information with traversability (NOT shown in battle)
-        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
-        context_parts.extend(map_context)
+        # Menu-like UI screens (e.g. naming/gender selection) can have incomplete map data.
+        # Preserve the screenshot-driven state but skip heavy map formatting unless we're in
+        # an overworld-style state where map traversal context is actually useful.
+        game_state_name = game_data.get('game_state')
+        if game_state_name in {'overworld', 'dialog'}:
+            map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
+            context_parts.extend(map_context)
+        elif game_state_name:
+            context_parts.append("\n=== LOCATION & MAP INFO ===")
+            if player_location:
+                context_parts.append(f"Current Location: {player_location}")
+            context_parts.append(f"Map details hidden while in {game_state_name} UI")
 
         # Game state information (including dialogue if not in battle)
         game_context = _format_game_state(game_data, state_data, include_movement_preview)
@@ -1256,7 +1265,7 @@ def get_movement_preview(state_data):
     raw_tiles_for_elevation = porymap.get('raw_tiles') if porymap else None
 
     # Fallback to memory-read tiles if porymap not available
-    raw_tiles = map_info.get('tiles', [])
+    raw_tiles = map_info.get('tiles') or []
 
     if not raw_tiles and not porymap_grid:
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
