@@ -29,6 +29,7 @@ Implement `CliAgentBackend` (in `utils/agent_infrastructure/cli_agent_backends.p
 
 - **`name`** (property): e.g. `"claude"`, `"gemini"`.
 - **`build_launch_cmd(directive_path, server_url, working_dir, ...)`**: Returns `(cmd, env, bootstrap, temp_mcp_config_path)`.
+- **`api_gateway`** (attribute): Set by `run_cli.py` from `--api-gateway` (`login` or `openrouter`). Backends use it to choose auth: OAuth vs OpenRouter. Gemini ignores it.
 - **`handle_stream_event(event, metrics, server_url=None, snapshot_path=None)`**: Parse agent stdout, update `CliSessionMetrics`, POST thinking to `/thinking`, write snapshot on `result`.
 
 MCP config: local mode uses `command` + `args` + `env` (e.g. `python -m server.cli.pokemon_mcp_server`); containerized mode uses `url` (e.g. `http://host.docker.internal:8449/sse`).
@@ -42,7 +43,7 @@ Default directive: `agents/prompts/cli-agent-directives/pokemon_directive.md` (C
 1. **Backend class**: Subclass `CliAgentBackend`, implement `name`, `build_launch_cmd`, `handle_stream_event`.
 2. **Register**: In `get_backend(backend)` in `utils/agent_infrastructure/cli_agent_backends.py`, return your backend for `backend == "your_backend"`.
 3. **Directive**: Add `agents/prompts/cli-agent-directives/your_backend_directive.md`.
-4. **Test**: `python run_cli.py --backend your_backend --directive agents/prompts/cli-agent-directives/your_backend_directive.md --termination-condition gym_badge_count --termination-threshold 1`.
+4. **Test**: `python run_cli.py --backend your_backend --directive agents/prompts/cli-agent-directives/your_backend_directive.md --termination-condition gym_badge_count --termination-threshold 1`. For OpenRouter-capable backends, also test `--api-gateway openrouter` with `OPENROUTER_API_KEY` set.
 
 ## Metrics
 
