@@ -1,0 +1,394 @@
+2026-03-14 21:25:14,188 - utils.data_persistence.run_data_manager - INFO - RunDataManager initialized: run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX
+2026-03-14 21:25:14,195 - utils.data_persistence.llm_logger - WARNING - ⚠️  LLM Logger initialized WITHOUT cumulative metrics - starting fresh
+2026-03-14 21:25:14,195 - utils.data_persistence.llm_logger - INFO - LLM Logger initialized: llm_logs/llm_log_20260314_212514.jsonl
+WARNING:utils.data_persistence.llm_logger:⚠️  LLM Logger initialized WITHOUT cumulative metrics - starting fresh
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.63kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:20-bookworm-slim
+#2 DONE 1.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/7] FROM docker.io/library/node:20-bookworm-slim@sha256:a82f40540f5959e0003fb7b3c0f80490def2927be8bdbee7e3e0ac65cce3be92
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 38B done
+#5 DONE 0.0s
+
+#6 [2/7] RUN apt-get update && apt-get install -y     python3.11     python3-pip     git     iptables     iproute2     sudo     && rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [3/7] RUN if getent group 1014 > /dev/null 2>&1; then         groupdel $(getent group 1014 | cut -d: -f1);     fi &&     if getent passwd 1014 > /dev/null 2>&1; then         userdel -f $(getent passwd 1014 | cut -d: -f1);     fi &&     groupadd --gid 1014 codex-agent &&     useradd --uid 1014 --gid 1014 -m codex-agent &&     echo codex-agent ALL=(root) NOPASSWD:ALL > /etc/sudoers.d/codex-agent &&     chmod 0440 /etc/sudoers.d/codex-agent
+#7 CACHED
+
+#8 [4/7] RUN npm install -g @openai/codex
+#8 CACHED
+
+#9 [6/7] RUN chmod +x /usr/local/bin/init-firewall.sh
+#9 CACHED
+
+#10 [5/7] COPY init-firewall.sh /usr/local/bin/init-firewall.sh
+#10 CACHED
+
+#11 [7/7] WORKDIR /workspace
+#11 CACHED
+
+#12 exporting to image
+#12 exporting layers done
+#12 writing image sha256:4978f36f5baa8049639a58df4447e80c441534865c318ac3f1afca7deb8a34a8 done
+#12 naming to docker.io/library/codex-agent-devcontainer done
+#12 DONE 0.0s
+2026-03-14 21:25:21,146 - __main__ - INFO - Termination monitor started: gym_badge_count >= 1, polling every 10s
+2026-03-14 21:25:21,147 - __main__ - INFO - CLI agent working_dir=run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/agent_scratch_space project_root=/data3/tu8435/thesis-remote/pokeagent-speedrun
+2026-03-14 21:25:21,148 - __main__ - INFO - --- Agent session #1 ---
+2026-03-14 21:25:21,148 - __main__ - INFO - Agent JSONL log: run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/agent_logs/session_001.jsonl
+2026-03-14 21:25:21,148 - utils.agent_infrastructure.cli_agent_backends - INFO - Wrote config.toml: /data3/tu8435/thesis-remote/pokeagent-speedrun/.pokeagent_cache/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/codex_memory/config.toml
+2026-03-14 21:25:21,160 - __main__ - INFO - Agent running (pid=2080341, elapsed=0s)
+============================================================
+🎮 Pokemon Emerald - External CLI Agent Experiment
+============================================================
+📁 Run data directory: run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX
+📝 Session ID: 20260314_212514
+📋 Server command: /data3/tu8435/miniconda3/envs/pokeagent/bin/python -m server.app --port 8228 --load-state Emerald-GBAdvance/splits/01_tutorial/01_tutorial.state --no-ocr
+✅ Server started with PID 2079956
+⏳ Waiting 5 seconds for server to initialize...
+🖼️  Frame server started with PID 2080156
+
+🐳 Containerized mode enabled (MCP SSE port 8230)
+🌐 MCP SSE server started (PID 2080157, port 8230)
+   ✓ MCP server listening on port 8230
+
+💾 Agent memory directory: .pokeagent_cache/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/codex_memory
+🐳 Building container image: codex-agent-devcontainer
+   Context: /data3/tu8435/thesis-remote/pokeagent-speedrun/.devcontainer/codex-agent
+✅ Container image built: codex-agent-devcontainer
+
+🎥 Stream View: http://127.0.0.1:8228/stream
+
+ Starting termination monitor...
+   Condition: gym_badge_count >= 1
+   Poll interval: 10s
+   MCP: bridge network, host.docker.internal:8230
+📜 Loaded directive from: agents/prompts/cli-agent-directives/pokemon_directive.md
+🤖 Launching CodexCLI CLI agent...
+   Command: docker run --rm --name codex-agent-20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX --cap-add=NET_ADMIN --security-opt=seccomp=unconfined --network=bridge --add-host=host.docker.internal:host-gateway -v /data3/tu8435/thesis-remote/pokeagent-speedrun/.pokeagent_cache/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/codex_memory:/home/codex-agent/.codex -v /data3/tu8435/thesis-remote/pokeagent-speedrun/run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/agent_scratch_space:/workspace -w /workspace -e MCP_PORT=8230 -e GAME_SERVER_PORT=8228 -e RUN_DATA_ID=20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX -e CODEX_HOME=/home/codex-agent/.codex -e OPENROUTER_API_KEY=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 codex-agent-devcontainer sh -c 'cat /workspace/.agent_directive.txt | codex exec --json -C /workspace --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -'
+   Working directory: run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/agent_scratch_space
+   MCP Server: http://localhost:8228
+✅ CLI agent started (PID 2080341)
+🔒 Initializing container firewall...
+   ✓ MCP server allowed: 172.17.0.1:8230
+   ✓ Game server blocked: port 8228
+✅ Firewall initialized
+2026-03-14 21:25:21,791 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex] thread.started thread_id=019cee3d-50c5-74d2-b59c-bd4d7bcb30e0
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+2026-03-14 21:25:25,571 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+2026-03-14 21:25:32,207 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] press_buttons {"buttons": ["RIGHT"], "speed": "normal", "reasoning": "Step onto the truck exit warp to begin the game intro sequence"}
+2026-03-14 21:25:33,401 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+2026-03-14 21:25:35,186 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] press_buttons {"buttons": ["RIGHT"], "speed": "normal", "reasoning": "Exit the moving truck through the door warp"}
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+2026-03-14 21:25:36,176 - __main__ - INFO - Agent running (pid=2080341, elapsed=15s)
+2026-03-14 21:25:36,179 - utils.agent_infrastructure.cli_agent_backends - INFO - Codex session: appending 4 step(s)
+2026-03-14 21:25:36,184 - utils.agent_infrastructure.cli_agent_backends - INFO - Synced 4 step(s) to server
+2026-03-14 21:25:37,402 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+WARNING:utils.data_persistence.backup_manager:Backup skipped 4 path(s) due to permission errors (container-created files)
+2026-03-14 21:25:45,122 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] navigate_to {"x": 5, "y": 8, "variance": "none", "reason": "Move to the front door of the player's house to continue the intro seque...
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+2026-03-14 21:25:47,211 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+2026-03-14 21:25:50,472 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] press_buttons {"buttons": ["A"], "speed": "fast", "reasoning": "Advance Mom's introductory dialogue in Littleroot"}
+2026-03-14 21:25:51,200 - __main__ - INFO - Agent running (pid=2080341, elapsed=30s)
+2026-03-14 21:25:51,203 - utils.agent_infrastructure.cli_agent_backends - INFO - Codex session: appending 4 step(s)
+2026-03-14 21:25:51,208 - utils.agent_infrastructure.cli_agent_backends - INFO - Synced 8 step(s) to server
+2026-03-14 21:25:51,715 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+2026-03-14 21:25:58,181 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] press_buttons {"buttons": ["A", "A", "A", "A", "A", "A", "A", "A"], "speed": "fast", "reasoning": "Advance Mom's introductory dialogue...
+2026-03-14 21:26:01,024 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+2026-03-14 21:26:06,224 - __main__ - INFO - Agent running (pid=2080341, elapsed=45s)
+2026-03-14 21:26:06,226 - utils.agent_infrastructure.cli_agent_backends - INFO - Codex session: appending 3 step(s)
+2026-03-14 21:26:06,230 - utils.agent_infrastructure.cli_agent_backends - INFO - Synced 11 step(s) to server
+2026-03-14 21:26:06,324 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] press_buttons {"buttons": ["A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A"], "speed": "fast", "reasoning": "Advance through...
+2026-03-14 21:26:07,733 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+2026-03-14 21:26:12,813 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] navigate_to {"x": 5, "y": 8, "variance": "low", "reason": "Enter the house after the arrival cutscene to continue story progression"...
+🔄 Checkpoint loading enabled by default - will restore LLM metrics from cumulative_metrics.json if available
+Starting Fixed Simple Pokemon Emerald Server
+📁 Run data directory: run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX
+📁 Legacy run directory (deprecated): .pokeagent_cache/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX
+Server mode - headless operation, display handled by client
+OCR dialogue detection disabled
+Press Ctrl+C to stop
+AntiCheat tracker initialized for submission logging
+Emulator initialized successfully!
+🚫 All dialogue detection disabled (--no-ocr flag)
+Loaded state from: Emerald-GBAdvance/splits/01_tutorial/01_tutorial.state
+📂 Loaded milestones from: Emerald-GBAdvance/splits/01_tutorial/01_tutorial_milestones.json
+Map buffer already initialized at 0x02032318
+GAME_RUNNING milestone marked after state load - initial logging deferred
+🌐 FastAPI server running:
+   Local: http://localhost:8228
+   Network: http://128.112.50.79:8228
+📺 Stream interface: http://128.112.50.79:8228/stream
+Available endpoints:
+  /status - Server status
+  /screenshot - Current screenshot
+  /action - Take action (POST)
+  /state - Comprehensive game state (visual + memory data)
+  /agent - Agent thinking status
+  /milestones - Current milestones achieved
+  /recent_actions - Recently pressed buttons
+  /debug/memory - Debug memory reading (basic)
+  /debug/memory/comprehensive - Comprehensive memory diagnostics
+  /debug/milestones - Debug milestone tracking system
+  /debug/reset_milestones - Reset all milestones (POST)
+  /debug/test_milestone_operations - Test milestone save/load (POST)
+  /stop - Stop server
+Starting headless game loop...
+📊 Server FPS: 63.0 (target: 80), Queue: 0 actions
+📊 Server FPS: 65.7 (target: 80), Queue: 0 actions
+📊 Server FPS: 65.6 (target: 80), Queue: 0 actions
+📡 Server received actions: ['RIGHT']
+📋 Action queue before extend: []
+📋 Action queue after extend: 1 actions
+🎮 Server processing action: RIGHT [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 1
+📊 Server FPS: 63.2 (target: 80), Queue: 0 actions
+📡 Server received actions: ['RIGHT']
+📋 Action queue before extend: []
+📋 Action queue after extend: 1 actions
+🎮 Server processing action: RIGHT [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 2
+🎯 Milestone detected: LITTLEROOT_TOWN
+📊 Server FPS: 54.4 (target: 80), Queue: 0 actions
+📊 Server FPS: 56.8 (target: 80), Queue: 0 actions
+📡 Server received actions: ['UP', 'RIGHT', 'UP']
+📋 Action queue before extend: []
+📋 Action queue after extend: 3 actions
+🎮 Server processing action: UP [normal], Queue remaining: 2 actions (~0.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 3
+🎮 Server processing action: RIGHT [normal], Queue remaining: 1 actions (~0.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 4
+🎮 Server processing action: UP [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 5
+📊 Server FPS: 51.0 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A']
+📋 Action queue before extend: []
+📋 Action queue after extend: 1 actions
+🎮 Server processing action: A [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 6
+📊 Server FPS: 53.5 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A', 'A', 'A', 'A', 'A', 'A', 'A', 'A']
+📋 Action queue before extend: []
+📋 Action queue after extend: 8 actions
+🎮 Server processing action: A [normal], Queue remaining: 7 actions (~1.6s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 7
+🎮 Server processing action: A [normal], Queue remaining: 6 actions (~1.4s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 8
+🎮 Server processing action: A [normal], Queue remaining: 5 actions (~1.1s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 9
+🎮 Server processing action: A [normal], Queue remaining: 4 actions (~0.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 10
+🎮 Server processing action: A [normal], Queue remaining: 3 actions (~0.7s)
+📊 Server FPS: 50.9 (target: 80), Queue: 3 actions
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 11
+🎮 Server processing action: A [normal], Queue remaining: 2 actions (~0.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 12
+🎮 Server processing action: A [normal], Queue remaining: 1 actions (~0.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 13
+🎮 Server processing action: A [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 14
+📊 Server FPS: 51.7 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A']
+📋 Action queue before extend: []
+📋 Action queue after extend: 12 actions
+🎮 Server processing action: A [normal], Queue remaining: 11 actions (~2.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 15
+🎮 Server processing action: A [normal], Queue remaining: 10 actions (~2.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 16
+🎮 Server processing action: A [normal], Queue remaining: 9 actions (~2.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 17
+🎮 Server processing action: A [normal], Queue remaining: 8 actions (~1.8s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 18
+🎮 Server processing action: A [normal], Queue remaining: 7 actions (~1.6s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 19
+🎮 Server processing action: A [normal], Queue remaining: 6 actions (~1.4s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 20
+🎮 Server processing action: A [normal], Queue remaining: 5 actions (~1.1s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 21
+🎮 Server processing action: A [normal], Queue remaining: 4 actions (~0.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 22
+🎮 Server processing action: A [normal], Queue remaining: 3 actions (~0.7s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 23
+📊 Server FPS: 49.2 (target: 80), Queue: 3 actions
+🎮 Server processing action: A [normal], Queue remaining: 2 actions (~0.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 24
+🎮 Server processing action: A [normal], Queue remaining: 1 actions (~0.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 25
+🎮 Server processing action: A [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 26
+📡 Server received actions: ['DOWN', 'RIGHT', 'UP', 'UP', 'LEFT', 'LEFT', 'DOWN', 'LEFT', 'LEFT']
+📋 Action queue before extend: []
+📋 Action queue after extend: 9 actions
+🎮 Server processing action: DOWN [normal], Queue remaining: 8 actions (~1.8s)
+🎯 Milestone detected: PLAYER_HOUSE_ENTERED
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 27
+🎮 Server processing action: RIGHT [normal], Queue remaining: 7 actions (~1.6s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 28
+🎮 Server processing action: UP [normal], Queue remaining: 6 actions (~1.4s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 29
+🎮 Server processing action: UP [normal], Queue remaining: 5 actions (~1.1s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 30
+2026-03-14 21:26:14,528 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+2026-03-14 21:26:18,616 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] press_buttons {"buttons": ["A", "A", "A", "A", "A", "A", "A", "A", "A", "A"], "speed": "fast", "reasoning": "Advance the indoor moving...
+2026-03-14 21:26:20,402 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+2026-03-14 21:26:21,273 - __main__ - INFO - Agent running (pid=2080341, elapsed=60s)
+2026-03-14 21:26:21,278 - utils.agent_infrastructure.cli_agent_backends - INFO - Codex session: appending 6 step(s)
+2026-03-14 21:26:21,283 - utils.agent_infrastructure.cli_agent_backends - INFO - Synced 17 step(s) to server
+2026-03-14 21:26:25,414 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] press_buttons {"buttons": ["A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A", "A"], "speed": "fast", "reasoning": "Advan...
+WARNING:pokemon_env.memory_reader:No Pokemon found in party
+2026-03-14 21:26:27,183 - utils.agent_infrastructure.cli_agent_backends - INFO - [codex:mcp_tool_call] get_game_state {}
+Exception ignored in: <function Popen.__del__ at 0x7f6a681713f0>
+Traceback (most recent call last):
+  File "/data3/tu8435/miniconda3/envs/pokeagent/lib/python3.10/subprocess.py", line 1072, in __del__
+    _warn("subprocess %s is still running" % self.pid,
+KeyboardInterrupt: 
+2026-03-14 21:26:29,207 - utils.data_persistence.backup_manager - INFO - 📦 Creating backup: 20260314_212629_termination_user_interrupt.zip
+🎮 Server processing action: LEFT [normal], Queue remaining: 4 actions (~0.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 31
+🎮 Server processing action: LEFT [normal], Queue remaining: 3 actions (~0.7s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 32
+📊 Server FPS: 54.3 (target: 80), Queue: 3 actions
+🎮 Server processing action: DOWN [normal], Queue remaining: 2 actions (~0.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 33
+🎮 Server processing action: LEFT [normal], Queue remaining: 1 actions (~0.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 34
+🎮 Server processing action: LEFT [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 35
+📡 Server received actions: ['A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A']
+📋 Action queue before extend: []
+📋 Action queue after extend: 10 actions
+🎮 Server processing action: A [normal], Queue remaining: 9 actions (~2.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 36
+🎮 Server processing action: A [normal], Queue remaining: 8 actions (~1.8s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 37
+🎮 Server processing action: A [normal], Queue remaining: 7 actions (~1.6s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 38
+🎮 Server processing action: A [normal], Queue remaining: 6 actions (~1.4s)
+📊 Server FPS: 56.8 (target: 80), Queue: 6 actions
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 39
+🎮 Server processing action: A [normal], Queue remaining: 5 actions (~1.1s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 40
+🎮 Server processing action: A [normal], Queue remaining: 4 actions (~0.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 41
+🎮 Server processing action: A [normal], Queue remaining: 3 actions (~0.7s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 42
+🎮 Server processing action: A [normal], Queue remaining: 2 actions (~0.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 43
+🎮 Server processing action: A [normal], Queue remaining: 1 actions (~0.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 44
+🎮 Server processing action: A [normal], Queue remaining: 0 actions (~0.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 45
+📊 Server FPS: 56.3 (target: 80), Queue: 0 actions
+📡 Server received actions: ['A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A']
+📋 Action queue before extend: []
+📋 Action queue after extend: 14 actions
+🎮 Server processing action: A [normal], Queue remaining: 13 actions (~2.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 46
+🎮 Server processing action: A [normal], Queue remaining: 12 actions (~2.7s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 47
+🎮 Server processing action: A [normal], Queue remaining: 11 actions (~2.5s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 48
+🎮 Server processing action: A [normal], Queue remaining: 10 actions (~2.2s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 49
+🎮 Server processing action: A [normal], Queue remaining: 9 actions (~2.0s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 50
+🎮 Server processing action: A [normal], Queue remaining: 8 actions (~1.8s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 51
+🎮 Server processing action: A [normal], Queue remaining: 7 actions (~1.6s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 52
+🎮 Server processing action: A [normal], Queue remaining: 6 actions (~1.4s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 53
+🎮 Server processing action: A [normal], Queue remaining: 5 actions (~1.1s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 54
+🎮 Server processing action: A [normal], Queue remaining: 4 actions (~0.9s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 55
+🎮 Server processing action: A [normal], Queue remaining: 3 actions (~0.7s)
+✅ Action completed: step_count will increment
+📈 Step count incremented to: 56
+
+Received signal 2, shutting down gracefully...
+📦 Finalizing run data...
+✅ Run data finalized: run_data/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX
+Server stopped
+2026-03-14 21:26:29,264 - utils.data_persistence.backup_manager - WARNING - Backup skipped 4 path(s) due to permission errors (container-created files)
+2026-03-14 21:26:29,264 - utils.data_persistence.backup_manager - INFO - ✅ Backup created: backups/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/20260314_212629_termination_user_interrupt.zip (0.23 MB)
+
+
+🛑 Shutdown requested by user
+📦 Termination backup: backups/20260314_212514_CLI_TEST_UTILS_REFACTOR_CODEX/20260314_212629_termination_user_interrupt.zip
+📡 Stopping server process...
+🖼️  Stopping frame server...
+🌐 Stopping MCP SSE server...
+👋 Goodbye!
