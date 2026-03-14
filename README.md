@@ -221,8 +221,22 @@ python run.py --load-checkpoint
 **run_cli.py** (external CLI agents via MCP): Starts the game server and MCP server; the external agent (e.g., Claude Code) connects via MCP and uses tools to play.
 
 ```bash
+# Default (OAuth: claude auth login or codex login)
 python run_cli.py --backend claude --directive path/to/directive.txt
+
+# OpenRouter (no interactive login; requires OPENROUTER_API_KEY)
+export OPENROUTER_API_KEY=sk-...
+python run_cli.py --backend claude --api-gateway openrouter --directive path/to/directive.txt
+
+# Gemini (always uses GEMINI_API_KEY)
+python run_cli.py --backend gemini --directive path/to/directive.txt
 ```
+
+| Backend | Auth (default) | Auth (--api-gateway openrouter) |
+|---------|----------------|----------------------------------|
+| claude  | `claude auth login` | `OPENROUTER_API_KEY` |
+| codex   | `codex login`       | `OPENROUTER_API_KEY` |
+| gemini  | `GEMINI_API_KEY`   | (unchanged) |
 
 ### Containerized CLI Agent (Recommended)
 
@@ -234,10 +248,7 @@ For security and isolation, it is recommended to run the Claude Code agent in a 
    ```bash
    npm install -g @anthropic-ai/claude-code
    ```
-3. **Authentication**: Authenticate with Anthropic on your host machine. The container will mount these credentials.
-   ```bash
-   claude auth login
-   ```
+3. **Authentication**: Either (a) run `claude auth login` on the host (OAuth, default), or (b) set `OPENROUTER_API_KEY` and use `--api-gateway openrouter` (no interactive login).
 
 **1. Build the Container Image**
 Use the `--build` flag with `run_cli.py` to automatically build the image with your user's UID/GID. This ensures files created by the agent are owned by you (not root).
@@ -303,6 +314,11 @@ run.py:
   --headless, --agent-auto, --manual
   --record, --scaffold (pokeagent|autonomous_cli|react|claudeplays|geminiplays|vision_only)
   --no-ocr (disable OCR dialogue detection)
+
+run_cli.py:
+  --backend (claude|gemini|codex), --api-gateway (login|openrouter, default: login)
+  --directive PATH, --login, --containerized, --build
+  --port INT, --load-state PATH, --termination-condition, --termination-threshold
 ```
 
 ## Customizing Agent Behavior (Prompt Editing Guide)

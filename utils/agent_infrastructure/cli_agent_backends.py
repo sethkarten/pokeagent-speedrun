@@ -350,6 +350,11 @@ class ClaudeCodeBackend(CliAgentBackend):
         """Seed container agent memory with host Claude auth files."""
         import shutil
 
+        use_openrouter = getattr(self, "api_gateway", "login") == "openrouter" and os.environ.get("OPENROUTER_API_KEY")
+        if use_openrouter:
+            print("   Using OPENROUTER_API_KEY; skipping host OAuth credential copy so container uses API key.")
+            return
+
         host_claude_dir = Path.home() / ".claude"
         host_claude_json = Path.home() / ".claude.json"
         if not host_claude_dir.exists() and not host_claude_json.exists():
@@ -461,15 +466,20 @@ class ClaudeCodeBackend(CliAgentBackend):
                 "-e", f"CLAUDE_CONFIG_DIR={self.AGENT_MEMORY_PATH}",
             ]
 
-            # Pass through OpenRouter/Anthropic env vars if present to support custom auth
-            for env_var in [
-                "ANTHROPIC_API_KEY",
-                "ANTHROPIC_BASE_URL",
-                "ANTHROPIC_AUTH_TOKEN",
-                "OPENROUTER_API_KEY",
-            ]:
-                if os.environ.get(env_var):
-                    docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
+            use_openrouter = getattr(self, "api_gateway", "login") == "openrouter"
+            openrouter_key = os.environ.get("OPENROUTER_API_KEY") if use_openrouter else None
+            if openrouter_key:
+                # OpenRouter: inject required vars for Claude Code (ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN)
+                docker_cmd.extend([
+                    "-e", "ANTHROPIC_BASE_URL=https://openrouter.ai/api",
+                    "-e", f"ANTHROPIC_AUTH_TOKEN={openrouter_key}",
+                    "-e", "ANTHROPIC_API_KEY=",
+                ])
+            else:
+                # Direct Anthropic: pass through env vars if user set them
+                for env_var in ["ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN"]:
+                    if os.environ.get(env_var):
+                        docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
 
             docker_cmd.append(self.container_image)
             docker_cmd.extend(claude_cmd)
@@ -1212,11 +1222,15 @@ class CodexCliBackend(CliAgentBackend):
         """Seed container with host Codex auth (credentials, config) if present."""
         import shutil
 
+        use_openrouter = getattr(self, "api_gateway", "login") == "openrouter"
+        if use_openrouter:
+            print("   Using OPENROUTER_API_KEY; skipping host credential copy so container uses API key.")
+            return
+
         host_codex = Path.home() / ".codex"
         if not host_codex.exists():
-            if not os.environ.get("OPENROUTER_API_KEY"):
-                print("⚠️  Host ~/.codex not found and OPENROUTER_API_KEY not set.")
-                print("   Configure OpenRouter in config.toml or set OPENROUTER_API_KEY.")
+            print("⚠️  Host ~/.codex not found.")
+            print("   Use --api-gateway openrouter (with OPENROUTER_API_KEY) or run 'codex login' for ChatGPT auth.")
             return
 
         # Copy auth-related files; avoid overwriting our MCP config
@@ -1262,7 +1276,7 @@ url = "{mcp_url}"
 '''
 
         openrouter_block = ""
-        if os.environ.get("OPENROUTER_API_KEY"):
+        if getattr(self, "api_gateway", "login") == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
             openrouter_block = '''
 # OpenRouter (uses OPENROUTER_API_KEY from environment)
 model_provider = "openrouter"
@@ -1364,9 +1378,13 @@ env_key = "OPENROUTER_API_KEY"
                 "-e", f"CODEX_HOME={self.AGENT_MEMORY_PATH}",
             ]
 
-            for env_var in ["OPENROUTER_API_KEY", "OPENAI_API_KEY"]:
-                if os.environ.get(env_var):
-                    docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
+            use_openrouter = getattr(self, "api_gateway", "login") == "openrouter"
+            if use_openrouter and os.environ.get("OPENROUTER_API_KEY"):
+                docker_cmd.extend(["-e", f"OPENROUTER_API_KEY={os.environ['OPENROUTER_API_KEY']}"])
+            else:
+                for env_var in ["OPENROUTER_API_KEY", "OPENAI_API_KEY"]:
+                    if os.environ.get(env_var):
+                        docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
 
             docker_cmd.append(self.container_image)
 
@@ -1603,8 +1621,8 @@ env_key = "OPENROUTER_API_KEY"
 
     def run_login(self) -> bool:
         """Run codex login if needed; no-op when using OpenRouter API key."""
-        if os.environ.get("OPENROUTER_API_KEY"):
-            print("\nℹ️  Codex can use OPENROUTER_API_KEY. No interactive login required.")
+        if getattr(self, "api_gateway", "login") == "openrouter":
+            print("\nℹ️  Using --api-gateway openrouter. No interactive login required.")
             return True
         print("\n🔐 Running 'codex login' (interactive)...")
         try:

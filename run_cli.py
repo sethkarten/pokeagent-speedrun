@@ -97,11 +97,15 @@ def _cleanup_cli_session(session: CliSession | None, log_file=None):
 
 def preflight_cli(args) -> bool:
     """Validate CLI availability and show actionable setup errors."""
-    if args.cli_type == "claude":
+    if args.api_gateway == "openrouter" and args.backend in ("claude", "codex"):
+        if not os.environ.get("OPENROUTER_API_KEY"):
+            print("❌ --api-gateway openrouter requires OPENROUTER_API_KEY to be set.")
+            return False
+    if args.backend == "claude":
         return _preflight_claude()
-    if args.cli_type == "gemini":
+    if args.backend == "gemini":
         return _preflight_gemini()
-    if args.cli_type == "codex":
+    if args.backend == "codex":
         return _preflight_codex()
     return True
 
@@ -860,6 +864,8 @@ def main():
     )
     parser.add_argument("--backend", type=str, default="claude", choices=["claude", "gemini", "codex"],
                        help="Backend to use for the CLI agent (default: claude)")
+    parser.add_argument("--api-gateway", type=str, default="login", choices=["login", "openrouter"],
+                       help="Auth gateway: 'login' (OAuth/subscription, default) or 'openrouter' (requires OPENROUTER_API_KEY)")
     parser.add_argument("--login", action="store_true",
                        help="Run backend-specific auth login before starting (e.g. 'claude auth login')")
     parser.add_argument("--directive", type=str,
@@ -902,7 +908,7 @@ def main():
 
     from utils.data_persistence.run_data_manager import initialize_run_data_manager
 
-    run_manager = initialize_run_data_manager(run_name=args.run_name or f"cli_{args.cli_type}")
+    run_manager = initialize_run_data_manager(run_name=args.run_name or f"cli_{args.backend}")
     run_id = run_manager.run_id
     print(f"📁 Run data directory: {run_manager.get_run_directory()}")
 
@@ -917,7 +923,7 @@ def main():
         sys_argv=sys.argv,
         additional_info={
             "entry_point": "run_cli.py",
-            "cli_type": args.cli_type,
+            "backend": args.backend,
             "termination_condition": args.termination_condition,
             "termination_threshold": args.termination_threshold,
         },
@@ -926,7 +932,8 @@ def main():
     if not preflight_cli(args):
         return 1
 
-    backend = get_backend(args.cli_type)
+    backend = get_backend(args.backend)
+    backend.api_gateway = args.api_gateway
 
     if args.login:
         if not backend.run_login():
