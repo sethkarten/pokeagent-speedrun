@@ -53,9 +53,9 @@ The design follows the structure documented in `System-Design/architecture/`:
 - **Clients**:
   - **run.py**: Starts the server as a subprocess, then runs an in-repo agent client (pygame display optional). The client polls `/state`, runs the selected agent scaffold (VLM + logic), and submits actions via `POST /action`.
   - **run_cli.py**: For external CLI agents (e.g., Claude Code). Spawns the game server and an MCP server (`server/cli/pokemon_mcp_server.py`) that translates MCP tool calls into HTTP requests to the game server. The external agent talks to the MCP server over stdio.
-- **VLM layer** (`utils/vlm_backends.py`): `VLM` facade over multiple backends (OpenAI, Anthropic, OpenRouter, Google Gemini, local HuggingFace, etc.). All backends implement `VLMBackend`; the facade handles tool-format conversion per provider.
+- **VLM layer** (`utils/agent_infrastructure/vlm_backends.py`): `VLM` facade over multiple backends (OpenAI, Anthropic, OpenRouter, Google Gemini, local HuggingFace, etc.). All backends implement `VLMBackend`; the facade handles tool-format conversion per provider.
 - **Persistence**: Runtime cache in `.pokeagent_cache/{run_id}/` (checkpoint state, LLM history, `cumulative_metrics.json`, milestones, maps, knowledge base). Backups in `backups/{run_id}/`. Analysis data in `run_data/{run_id}/` (prompt_evolution, end_state, agent_logs). See `System-Design/architecture/data_persistence/persistence.md`.
-- **Metrics**: `LLMLogger` in `utils/llm_logger.py` records LLM interactions and aggregates tokens, cost, and actions into `cumulative_metrics.json`. Step-, milestone-, and objective-level granularity. For external CLI agents (`run_cli`), metrics are derived from JSONL polling and synced via `POST /sync_llm_metrics`. See `System-Design/architecture/metrics/tracking.md`.
+- **Metrics**: `LLMLogger` in `utils/data_persistence/llm_logger.py` records LLM interactions and aggregates tokens, cost, and actions into `cumulative_metrics.json`. Step-, milestone-, and objective-level granularity. For external CLI agents (`run_cli`), metrics are derived from JSONL polling and synced via `POST /sync_llm_metrics`. See `System-Design/architecture/metrics/tracking.md`.
 - **Game infrastructure**: `pokemon_env/emulator.py` (EmeraldEmulator), `pokemon_env/memory_reader.py` (PokemonEmeraldReader), Porymap-based map data. See `System-Design/architecture/pokemon_infrastructure/emerald_data.md`.
 
 For deeper detail and known deviations (e.g., monolithic server, polling-based state), see the markdown files under `System-Design/architecture/`.
@@ -103,13 +103,14 @@ pokeagent-speedrun/
 │   ├── objectives/           # Direct objectives, types, categorization
 │   └── prompts/              # Canonical prompt assets and path helpers
 ├── utils/
-│   ├── vlm_backends.py       # VLM facade and backends (OpenAI, Gemini, etc.)
-│   ├── state_formatter.py   # Game state formatting for LLM
-│   ├── llm_logger.py        # LLM interaction logging and cumulative metrics
-│   ├── run_data_manager.py  # Cache paths, run_data layout
-│   ├── backup_manager.py    # Checkpoint backups
-│   ├── cli_agent_backends.py # CLI agent backends (e.g., Claude Code)
-│   ├── anticheat.py, ocr_dialogue.py, map_formatter.py, map_stitcher.py, ...
+│   ├── mapping/              # ascii_map_loader, map_formatter, map_stitcher, map_stitcher_singleton,
+│   │                          # pathfinding, pokeemerald_parser, porymap_json_builder, porymap_state
+│   ├── data_persistence/     # backup_manager, run_data_manager, llm_logger
+│   ├── agent_infrastructure/ # cli_agent_backends, vlm_backends
+│   ├── metric_tracking/      # session readers (claude, gemini, codex), server_metrics
+│   ├── state_formatter.py    # Facade; re-exports from utils.mapping.porymap_state
+│   ├── knowledge_base.py     # Shared by claude_plays and server
+│   ├── anticheat.py, coordinate_overlay.py, error_handler.py, json_utils.py, ocr_dialogue.py
 │   └── ...
 ├── pokemon_env/
 │   ├── emulator.py           # EmeraldEmulator (mGBA, input, frame advance)
@@ -328,7 +329,7 @@ Edit the prompts in those files and restart the agent. Use `--debug-state` for d
 
 ## Fair Use and Modification Guidelines
 
-**Allowed:** Changing agent behavior (prompts, planning, memory), adding or changing VLM backends in `utils/vlm_backends.py`, improving logging, tests, docs, performance, UI, and utilities.
+**Allowed:** Changing agent behavior (prompts, planning, memory), adding or changing VLM backends in `utils/agent_infrastructure/vlm_backends.py`, improving logging, tests, docs, performance, UI, and utilities.
 
 **Not allowed (for competitive submissions):** Modifying `pokemon_env/memory_reader.py` or memory-reading logic, changing how game state is extracted, altering emulator core or anti-cheat, or manipulating game memory outside normal button input.
 

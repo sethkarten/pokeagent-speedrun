@@ -22,7 +22,7 @@ The system follows a headless server architecture where the game logic and emula
 ### MCP Protocol (Model Context Protocol)
 - **Purpose**: Enables standard CLI agents (like Anthropic's Claude Code or other MCP-compliant tools) to interact with the game server.
 - **Implementation**:
-  - `run_cli.py` acts as the MCP client/host.
+  - `run_cli.py` acts as the MCP client/host. Backend selection: `--backend {claude,gemini,codex}`.
   - `server/cli/pokemon_mcp_server.py` acts as a thin proxy layer.
   - **Proxy Pattern**: The MCP server does not contain game logic. It translates MCP tool calls into HTTP POST requests to the main game server.
   - **Transport**: Stdio (standard input/output) communication between the agent and the MCP server process.

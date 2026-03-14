@@ -11,12 +11,12 @@ The `PokeAgent` represents a significant evolution from simple reactive agents. 
 ### Composition over Inheritance
 The agent uses a **composition-based architecture** rather than deep inheritance hierarchies.
 - **Agent Class**: `PokeAgent` encapsulates the agent's logic.
-- **VLM Wrapper**: It composes a `VLM` instance (from `utils/vlm_backends.py`) to handle all LLM interactions.
+- **VLM Wrapper**: It composes a `VLM` instance (from `utils/agent_infrastructure/vlm_backends.py`) to handle all LLM interactions.
 - **Tool Adapter**: It uses `MCPToolAdapter` to interface with the game server's MCP endpoints.
 
 ### Key Components
 
-#### VLM Integration (`utils/vlm_backends.py`)
+#### VLM Integration (`utils/agent_infrastructure/vlm_backends.py`)
 - **Facade Pattern**: The `VLM` class acts as a unified facade over multiple backend providers (Google Gemini, Anthropic Claude, OpenAI GPT-4, etc.).
 - **Backend Abstraction**: All backends inherit from the `VLMBackend` abstract base class, ensuring a consistent interface (`get_query`, `get_text_query`) regardless of the underlying model.
 - **Tool Format Conversion**: The VLM layer automatically converts tool definitions into the specific format required by the chosen provider (e.g., Gemini's `FunctionDeclaration` vs. OpenAI's `tools` schema).
@@ -31,7 +31,7 @@ The agent uses a **composition-based architecture** rather than deep inheritance
   - Current game state (context).
   - Objective history.
   - Knowledge base summaries.
-- **Prompt Optimization**: Utilizes a `PromptOptimizer` class to refine prompts based on past performance or specific constraints (though implementation details vary).
+- **Prompt Optimization**: Utilizes a `PromptOptimizer` class (in `agents/custom/utils/prompt_optimizer.py`, custom-agent only) to refine prompts based on past performance or specific constraints (though implementation details vary).
 
 ## 2. Agent Loop
 
