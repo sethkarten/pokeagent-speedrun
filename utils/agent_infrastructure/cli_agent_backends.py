@@ -286,7 +286,7 @@ class CliAgentBackend(ABC):
         """Push run_cli's in-memory cumulative metrics to the server (single-writer pattern)."""
         try:
             import requests
-            from utils.llm_logger import get_llm_logger
+            from utils.data_persistence.llm_logger import get_llm_logger
 
             llm_logger = get_llm_logger()
             metrics = llm_logger.get_cumulative_metrics()
@@ -643,7 +643,7 @@ class ClaudeCodeBackend(CliAgentBackend):
         errors are logged as warnings so the agent loop is never interrupted.
         """
         from utils.metric_tracking.claude_jsonl_reader import find_jsonl_files, load_new_usage_entries
-        from utils.llm_logger import get_llm_logger
+        from utils.data_persistence.llm_logger import get_llm_logger
 
         search_path = Path(agent_memory_dir).resolve()
         # Fallback to projects/-workspace/ for Claude
@@ -1081,7 +1081,7 @@ class GeminiCliBackend(CliAgentBackend):
     ) -> tuple[set, int]:
         """Poll Gemini session JSON files for new gemini messages and append steps."""
         from utils.metric_tracking.gemini_session_reader import load_new_usage_entries
-        from utils.llm_logger import get_llm_logger
+        from utils.data_persistence.llm_logger import get_llm_logger
 
         search_path = Path(agent_memory_dir).resolve()
         if not search_path.is_dir():
@@ -1537,7 +1537,7 @@ env_key = "OPENROUTER_API_KEY"
     ) -> tuple[set, int]:
         """Poll Codex session JSONL files and append new entries as steps."""
         from utils.metric_tracking.codex_session_reader import load_new_usage_entries
-        from utils.llm_logger import get_llm_logger
+        from utils.data_persistence.llm_logger import get_llm_logger
 
         search_path = Path(agent_memory_dir).resolve()
         if not search_path.is_dir():

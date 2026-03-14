@@ -6,7 +6,7 @@ consistent map data across the application.
 """
 
 import logging
-from utils.map_stitcher import MapStitcher
+from utils.mapping.map_stitcher import MapStitcher
 
 logger = logging.getLogger(__name__)
 

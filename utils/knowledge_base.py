@@ -59,7 +59,7 @@ class KnowledgeBase:
             cache_dir: Directory for storing knowledge base file. If None, uses run-specific cache.
         """
         if cache_dir is None:
-            from utils.run_data_manager import get_cache_directory
+            from utils.data_persistence.run_data_manager import get_cache_directory
             cache_dir = str(get_cache_directory())
         
         self.cache_dir = cache_dir

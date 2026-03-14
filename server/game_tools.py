@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from utils.json_utils import serialize_for_json
-from utils.pathfinding import Pathfinder
+from utils.mapping.pathfinding import Pathfinder
 from utils.knowledge_base import get_knowledge_base
 
 logger = logging.getLogger(__name__)
@@ -40,9 +40,9 @@ def load_porymap_for_pathfinding(state: dict) -> tuple:
         return coord_offset, state
 
     try:
-        from utils.porymap_json_builder import build_json_map_for_llm
+        from utils.mapping.porymap_json_builder import build_json_map_for_llm
         from utils.state_formatter import ROM_TO_PORYMAP_MAP
-        from utils.ascii_map_loader import get_effective_map_name, get_override
+        from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
 
         badge_count = 0
         badges = state.get("game", {}).get("badges", [])
@@ -203,8 +203,8 @@ def navigate_to_direct(
         coord_offset = None
         if location_name and location_name not in ("Unknown", "TITLE_SEQUENCE"):
             try:
-                from utils.porymap_json_builder import build_json_map_for_llm
-                from utils.ascii_map_loader import get_effective_map_name, get_override
+                from utils.mapping.porymap_json_builder import build_json_map_for_llm
+                from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
                 from utils.state_formatter import ROM_TO_PORYMAP_MAP
 
                 badge_count = 0

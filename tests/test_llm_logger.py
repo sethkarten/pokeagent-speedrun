@@ -14,7 +14,7 @@ sys_path = Path(__file__).parent.parent
 if str(sys_path) not in sys.path:
     sys.path.insert(0, str(sys_path))
 
-from utils.llm_logger import LLMLogger
+from utils.data_persistence.llm_logger import LLMLogger
 
 
 class TestCumulativeMetricsPersistence:
@@ -24,7 +24,7 @@ class TestCumulativeMetricsPersistence:
         with tempfile.TemporaryDirectory() as tmpdir:
             metrics_file = Path(tmpdir) / "cumulative_metrics.json"
             assert not metrics_file.exists()
-            with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
                 logger = LLMLogger(log_dir=tmpdir, session_id="test_session")
             result = logger.load_cumulative_metrics(str(metrics_file))
             assert result is False
@@ -33,7 +33,7 @@ class TestCumulativeMetricsPersistence:
     def test_save_and_load_cumulative_metrics_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             metrics_file = Path(tmpdir) / "cumulative_metrics.json"
-            with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
                 logger = LLMLogger(log_dir=tmpdir, session_id="test_session")
             logger.cumulative_metrics["total_tokens"] = 12345
             logger.cumulative_metrics["total_cost"] = 0.5
@@ -60,7 +60,7 @@ class TestCheckpointNoCumulativeMetrics:
             log_dir.mkdir()
             (log_dir / "llm_log_test.jsonl").write_text("")
             metrics_file = Path(tmpdir) / "cumulative_metrics.json"
-            with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
                 logger = LLMLogger(log_dir=str(log_dir), session_id="test")
             logger.cumulative_metrics["total_tokens"] = 999
             checkpoint_file = Path(tmpdir) / "checkpoint_llm.txt"
@@ -78,7 +78,7 @@ class TestCheckpointNoCumulativeMetrics:
             log_file = log_dir / "llm_log_test.jsonl"
             log_file.write_text("")
             metrics_file = Path(tmpdir) / "cumulative_metrics.json"
-            with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
                 logger = LLMLogger(log_dir=str(log_dir), session_id="test")
             assert logger.cumulative_metrics["total_tokens"] == 0
             # Create checkpoint with old format (had cumulative_metrics) - we ignore it
@@ -109,7 +109,7 @@ class TestStepsNoTruncation:
                     return metrics_file
                 return Path(tmpdir) / relative_path
 
-            with patch("utils.run_data_manager.get_cache_path", side_effect=_get_cache_path):
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", side_effect=_get_cache_path):
                 logger = LLMLogger(log_dir=str(log_dir), session_id="test")
                 # Simulate 1001 log_interaction calls with step_number
                 for i in range(1001):
@@ -137,7 +137,7 @@ class TestBackupRestoreWithoutMetricsFile:
             (log_dir / "llm_log_test.jsonl").write_text("")
             metrics_path = Path(tmpdir) / "cumulative_metrics.json"
             assert not metrics_path.exists()
-            with patch("utils.run_data_manager.get_cache_path", return_value=metrics_path):
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_path):
                 logger = LLMLogger(log_dir=str(log_dir), session_id="test")
                 result = logger.load_cumulative_metrics(str(metrics_path))
             assert result is False

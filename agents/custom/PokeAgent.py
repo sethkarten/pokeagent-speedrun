@@ -29,13 +29,13 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Local imports
-from utils.agent_helpers import update_server_metrics
-from utils.llm_logger import get_llm_logger
-from utils.vlm_backends import VLM
-from utils.run_data_manager import get_run_data_manager
-from utils.prompt_optimizer import create_prompt_optimizer
-from utils.run_data_manager import get_run_data_manager
-from utils.run_data_manager import initialize_run_data_manager
+from utils.metric_tracking.server_metrics import update_server_metrics
+from utils.data_persistence.llm_logger import get_llm_logger
+from utils.agent_infrastructure.vlm_backends import VLM
+from utils.data_persistence.run_data_manager import get_run_data_manager
+from agents.custom.utils.prompt_optimizer import create_prompt_optimizer
+from utils.data_persistence.run_data_manager import get_run_data_manager
+from utils.data_persistence.run_data_manager import initialize_run_data_manager
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,

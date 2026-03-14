@@ -11,7 +11,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.cli_agent_backends import (
+from utils.agent_infrastructure.cli_agent_backends import (
     CliSessionMetrics,
     GeminiCliBackend,
     get_backend,
@@ -535,11 +535,11 @@ class TestGeminiLogCliInteraction:
 
         mock_logger = MagicMock()
         monkeypatch.setattr(
-            "utils.cli_agent_backends.GeminiCliBackend._sync_metrics_to_server",
+            "utils.agent_infrastructure.cli_agent_backends.GeminiCliBackend._sync_metrics_to_server",
             lambda *a, **kw: None,
         )
 
-        with patch("utils.llm_logger.get_llm_logger", return_value=mock_logger):
+        with patch("utils.data_persistence.llm_logger.get_llm_logger", return_value=mock_logger):
             backend = GeminiCliBackend()
             hashes, last_step = backend.log_cli_interaction(
                 tmp_path, set(), -1, server_url="http://localhost:8000"

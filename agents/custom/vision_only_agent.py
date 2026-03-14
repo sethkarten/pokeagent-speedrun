@@ -32,9 +32,9 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 
 # Local imports
-from utils.agent_helpers import update_server_metrics
-from utils.llm_logger import get_llm_logger
-from utils.vlm_backends import VLM
+from utils.metric_tracking.server_metrics import update_server_metrics
+from utils.data_persistence.llm_logger import get_llm_logger
+from utils.agent_infrastructure.vlm_backends import VLM
 from agents.prompts.paths import POKEAGENT_PROMPT_PATH, resolve_repo_path
 
 # Configure logging

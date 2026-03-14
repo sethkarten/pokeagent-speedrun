@@ -182,7 +182,7 @@ class RunDataManager:
 
         # Save metadata into cumulative_metrics.json
         try:
-            from utils.llm_logger import get_llm_logger
+            from utils.data_persistence.llm_logger import get_llm_logger
 
             llm_logger = get_llm_logger()
             if llm_logger:
@@ -376,7 +376,7 @@ class RunDataManager:
             maps: Path to maps file
             knowledge_base: Path to knowledge_base.json
         """
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         
         game_state_dir = self.run_dir / "end_state" / "game_state"
         
@@ -411,7 +411,7 @@ class RunDataManager:
         Args:
             map_stitcher_file: Path to map_stitcher_data.json
         """
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         if map_stitcher_file is None:
             map_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
         
@@ -426,7 +426,7 @@ class RunDataManager:
         Args:
             submission_log: Path to submission.log. If None, looks in run-specific cache
         """
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         if submission_log is None:
             # Check common locations
             possible_paths = [
@@ -449,7 +449,7 @@ class RunDataManager:
         Args:
             knowledge_base_file: Path to knowledge_base.json. If None, looks in run-specific cache
         """
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         if knowledge_base_file is None:
             knowledge_base_file = str(get_cache_path("knowledge_base.json"))
         
@@ -467,7 +467,7 @@ class RunDataManager:
         Args:
             frame_cache_file: Path to frame_cache.json. If None, looks in run-specific cache
         """
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         if frame_cache_file is None:
             frame_cache_file = str(get_cache_path("frame_cache.json"))
         
@@ -517,7 +517,7 @@ class RunDataManager:
         if end_time is None:
             end_time = datetime.now()
         try:
-            from utils.llm_logger import get_llm_logger
+            from utils.data_persistence.llm_logger import get_llm_logger
 
             llm_logger = get_llm_logger()
             if llm_logger:

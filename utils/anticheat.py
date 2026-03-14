@@ -56,7 +56,7 @@ class AntiCheatTracker:
         
         # Only add handler if none exists
         if not self.submission_logger.handlers:
-            from utils.run_data_manager import get_cache_path
+            from utils.data_persistence.run_data_manager import get_cache_path
             submission_log_path = str(get_cache_path("submission.log"))
             submission_handler = logging.FileHandler(submission_log_path, mode='a')
             submission_handler.setLevel(logging.INFO)  # Explicitly set handler level
@@ -365,7 +365,7 @@ class AntiCheatTracker:
         self.start_time = time.time()  # Store start time for total runtime calculation
         
         # Clear the file first by writing directly
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         submission_log_path = str(get_cache_path("submission.log"))
         with open(submission_log_path, 'w') as f:
             f.write("")
