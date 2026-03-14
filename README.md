@@ -238,9 +238,9 @@ python run_cli.py --backend gemini --directive path/to/directive.txt
 | codex   | `codex login`       | `OPENROUTER_API_KEY` |
 | gemini  | `GEMINI_API_KEY`   | (unchanged) |
 
-### Containerized CLI Agent (Recommended)
+### CLI Agent (Containerized)
 
-For security and isolation, it is recommended to run the Claude Code agent in a Docker container. This prevents the agent from modifying files outside the game workspace or accessing your local network.
+CLI agents run in Docker containers for security and isolation. This prevents the agent from modifying files outside the game workspace or accessing your local network.
 
 **Prerequisites:**
 1. **Docker**: Ensure Docker Desktop or Docker Engine is installed and running.
@@ -254,7 +254,7 @@ For security and isolation, it is recommended to run the Claude Code agent in a 
 Use the `--build` flag with `run_cli.py` to automatically build the image with your user's UID/GID. This ensures files created by the agent are owned by you (not root).
 
 ```bash
-python run_cli.py --backend claude --containerized --build --directive agents/prompts/cli-agent-directives/pokemon_directive.md
+python run_cli.py --backend claude --build --directive agents/prompts/cli-agent-directives/pokemon_directive.md
 ```
 
 *Manual Build (Alternative):*
@@ -270,7 +270,7 @@ docker build \
 **2. Run the Agent**
 After building once, you can run without `--build`:
 ```bash
-python run_cli.py --backend claude --containerized --directive agents/prompts/cli-agent-directives/pokemon_directive.md
+python run_cli.py --backend claude --directive agents/prompts/cli-agent-directives/pokemon_directive.md
 ```
 
 **How it works:**
@@ -317,7 +317,7 @@ run.py:
 
 run_cli.py:
   --backend (claude|gemini|codex), --api-gateway (login|openrouter, default: login)
-  --directive PATH, --login, --containerized, --build
+  --directive PATH, --login, --build
   --port INT, --load-state PATH, --termination-condition, --termination-threshold
 ```
 

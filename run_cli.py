@@ -526,19 +526,18 @@ def _start_services(args, run_manager) -> Services | None:
     server_url = f"http://localhost:{args.port}"
 
     mcp_process = None
-    if args.containerized:
-        if args.mcp_sse_port is None:
-            args.mcp_sse_port = args.port + 2
-        print(f"\n🐳 Containerized mode enabled (MCP SSE port {args.mcp_sse_port})")
-        project_root_for_mcp = str(Path(__file__).resolve().parent)
-        log_dir = Path(run_manager.get_run_directory()) / "agent_logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        mcp_log = log_dir / "mcp_server.log"
-        mcp_process = start_mcp_sse_server(
-            server_url, args.mcp_sse_port, project_root_for_mcp, log_path=mcp_log
-        )
-        if not mcp_process:
-            return None
+    if args.mcp_sse_port is None:
+        args.mcp_sse_port = args.port + 2
+    print(f"\n🐳 Containerized mode (MCP SSE port {args.mcp_sse_port})")
+    project_root_for_mcp = str(Path(__file__).resolve().parent)
+    log_dir = Path(run_manager.get_run_directory()) / "agent_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    mcp_log = log_dir / "mcp_server.log"
+    mcp_process = start_mcp_sse_server(
+        server_url, args.mcp_sse_port, project_root_for_mcp, log_path=mcp_log
+    )
+    if not mcp_process:
+        return None
 
     return Services(
         server=server_process,
@@ -713,8 +712,7 @@ def _run_agent_loop(
 
     logger.info("CLI agent working_dir=%s project_root=%s", working_dir, project_root)
 
-    if args.containerized:
-        print(f"   MCP: bridge network, host.docker.internal:{args.mcp_sse_port}")
+    print(f"   MCP: bridge network, host.docker.internal:{args.mcp_sse_port}")
 
     cli_session: CliSession | None = None
     cli_log_file = None
@@ -749,11 +747,11 @@ def _run_agent_loop(
             dangerously_skip_permissions=args.dangerously_skip_permissions,
             log_file=cli_log_file,
             metrics=session_metrics,
-            containerized=args.containerized,
+            containerized=True,
             session_number=iteration,
             resume_session_id=last_session_id,
             thinking_effort=args.agent_thinking_effort,
-            mcp_sse_port=args.mcp_sse_port if args.containerized else None,
+            mcp_sse_port=args.mcp_sse_port,
             run_id=run_id,
             agent_memory_dir=str(agent_memory_dir),
         )
@@ -891,12 +889,10 @@ def main():
     parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence")
     parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for direct objectives")
     parser.add_argument("--run-name", type=str, default=None, help="Optional name for the run directory")
-    parser.add_argument("--containerized", action="store_true", default=False,
-                       help="Run CLI agent in containerized environment")
     parser.add_argument("--build", action="store_true",
-                       help="Build the container image before running (when --containerized)")
+                       help="Build the container image before running")
     parser.add_argument("--mcp-sse-port", type=int, default=None,
-                       help="Port for MCP SSE server when containerized (default: game_port + 2)")
+                       help="Port for MCP SSE server (default: game_port + 2)")
     parser.add_argument("--agent-thinking-effort", type=str, choices=["low", "medium", "high"],
                        help="Thinking effort level for CLI agent (low/medium/high)")
 
@@ -953,12 +949,11 @@ def main():
     agent_memory_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n💾 Agent memory directory: {agent_memory_dir}")
 
-    if args.containerized and args.build:
+    if args.build:
         if not _build_container_image(backend):
             return 1
 
-    if args.containerized:
-        backend.seed_agent_auth(agent_memory_dir)
+    backend.seed_agent_auth(agent_memory_dir)
 
     termination_reason: str | None = None
     cli_session: CliSession | None = None
