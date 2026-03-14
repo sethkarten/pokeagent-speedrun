@@ -626,7 +626,7 @@ def launch_cli_agent(
     if directive_path:
         print(f"📜 Loaded directive from: {directive_path}")
     print(f"🤖 Launching {backend.name} CLI agent...")
-    print(f"   Command: {' '.join(cmd)}")
+    # Note: do not print the command here so as to not expose API Key
     print(f"   Working directory: {working_dir}")
     print(f"   MCP Server: {server_url}")
 
