@@ -448,7 +448,7 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Lavender Town",
-        navigation_hint="Always navigate to the next reachable warp point whose dest_map is not LAST_MAP (a ladder to B1F or back to 1F). If no path is found to a warp, try a different one. Rock Tunnel has 4 ladders on 1F connecting to 4 ladders on B1F. After returning to 1F's south section, take the south exit to Route 10. Walk south to Lavender Town and heal.",
+        navigation_hint="Rock Tunnel path: On 1F, head east from the entrance to the ladder in the NE corner. On B1F, go southwest then west then northwest to the ladder in the NW corner. Back on 1F, head south past trainers to the exit in the south. Exit leads to Route 10 south — walk south to Lavender Town and heal. Battle with trainers and wild encounters on the way for team building.",
         completion_condition="reached_lavender_town",
         priority=1
     ),
