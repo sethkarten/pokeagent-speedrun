@@ -263,7 +263,8 @@ def main() -> int:
     multimodal_counter = 0
 
     def _capture_usage_snapshot(snapshot: dict[str, Any], session_id: str, model_name: str) -> None:
-        usage_state["api_call_index"] += 1
+        api_call_index = usage_state["api_call_index"]  # index of the call we're capturing
+        usage_state["api_call_index"] += 1  # advance for next call
         usage_state["prompt_tokens"] += int(snapshot.get("prompt_tokens", 0) or 0)
         usage_state["completion_tokens"] += int(snapshot.get("completion_tokens", 0) or 0)
         usage_state["total_tokens"] += int(snapshot.get("total_tokens", 0) or 0)
@@ -275,7 +276,7 @@ def main() -> int:
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "session_id": session_id,
-                "api_call_index": usage_state["api_call_index"],
+                "api_call_index": api_call_index,
                 "model": model_name,
                 "prompt_tokens": int(snapshot.get("prompt_tokens", 0) or 0),
                 "completion_tokens": int(snapshot.get("completion_tokens", 0) or 0),

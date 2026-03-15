@@ -224,6 +224,9 @@ python run_cli.py --backend claude --api-gateway openrouter --directive path/to/
 
 # Gemini (always uses GEMINI_API_KEY)
 python run_cli.py --backend gemini --directive path/to/directive.txt
+
+# Hermes (NousResearch; uses OPENROUTER_API_KEY or HERMES_* env)
+python run_cli.py --backend hermes --api-gateway openrouter --directive path/to/directive.txt
 ```
 
 | Backend | Auth (default) | Auth (--api-gateway openrouter) |
@@ -231,6 +234,7 @@ python run_cli.py --backend gemini --directive path/to/directive.txt
 | claude  | `claude auth login` | `OPENROUTER_API_KEY` |
 | codex   | `codex login`       | `OPENROUTER_API_KEY` |
 | gemini  | `GEMINI_API_KEY`   | (unchanged) |
+| hermes  | `HERMES_*` env vars | `OPENROUTER_API_KEY` |
 
 ### CLI Agent (Containerized)
 
@@ -310,7 +314,7 @@ run.py:
   --no-ocr (disable OCR dialogue detection)
 
 run_cli.py:
-  --backend (claude|gemini|codex), --api-gateway (login|openrouter, default: login)
+  --backend (claude|gemini|codex|hermes), --api-gateway (login|openrouter, default: login)
   --directive PATH, --login, --build
   --port INT, --load-state PATH, --termination-condition, --termination-threshold
 ```
