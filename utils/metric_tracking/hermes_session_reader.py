@@ -27,7 +27,10 @@ def _parse_timestamp(ts: Any) -> datetime | None:
         return datetime.fromtimestamp(float(ts), tz=timezone.utc)
     if isinstance(ts, str):
         try:
-            return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt
         except ValueError:
             return None
     return None
@@ -249,5 +252,5 @@ def load_new_usage_entries(
             "assistant_index": assistant_index,
         }
 
-    new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+    new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=timezone.utc)))
     return new_entries, updated_hashes, next_state

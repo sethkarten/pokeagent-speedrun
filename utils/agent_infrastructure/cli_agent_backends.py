@@ -20,7 +20,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -692,7 +692,7 @@ class ClaudeCodeBackend(CliAgentBackend):
 
         logger.info("JSONL poll: appending %d step(s) from %s", len(new_entries), target_path)
 
-        new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
+        new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=timezone.utc)))
 
         llm_logger = get_llm_logger()
         # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
@@ -1107,7 +1107,7 @@ class GeminiCliBackend(CliAgentBackend):
             return updated_hashes, last_cli_step
 
         logger.info("Gemini session: appending %d step(s)", len(new_entries))
-        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=timezone.utc)))
 
         llm_logger = get_llm_logger()
         # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
@@ -1571,7 +1571,7 @@ env_key = "OPENROUTER_API_KEY"
             return updated_hashes, last_cli_step
 
         logger.info("Codex session: appending %d step(s)", len(new_entries))
-        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=timezone.utc)))
 
         llm_logger = get_llm_logger()
         # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
@@ -1861,6 +1861,7 @@ class HermesCliBackend(CliAgentBackend):
 
             agent_memory_path = Path(agent_memory_dir).resolve()
             project_root_path = Path(project_root).resolve()
+            debug_dir_path = project_root_path / ".cursor"
             # Use Streamable HTTP (/mcp) - Hermes MCP client sends POST; /sse expects GET and returns 405
             mcp_url = f"http://host.docker.internal:{mcp_sse_port}/mcp"
             self._ensure_hermes_config(agent_memory_path, mcp_url=mcp_url)
@@ -1895,6 +1896,8 @@ class HermesCliBackend(CliAgentBackend):
                 f"{working_dir_abs}:{self.WORKSPACE_PATH}",
                 "-v",
                 f"{project_root_path}:{self.PROJECT_ROOT_PATH}:ro",
+                "-v",
+                f"{debug_dir_path}:{debug_dir_path}",
                 "-w",
                 self.WORKSPACE_PATH,
                 "-e",
@@ -1917,6 +1920,9 @@ class HermesCliBackend(CliAgentBackend):
                 "HERMES_PROVIDER",
                 "HERMES_BASE_URL",
                 "HERMES_API_KEY_ENV",
+                "HERMES_DISABLE_MULTIMODAL",
+                "HERMES_API_TIMEOUT",
+                "HERMES_VISION_TIMEOUT",
             ]
             for env_var in passthrough_envs:
                 if os.environ.get(env_var):
@@ -2046,7 +2052,7 @@ class HermesCliBackend(CliAgentBackend):
         if not new_entries:
             return updated_hashes, last_cli_step
 
-        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=timezone.utc)))
         llm_logger = get_llm_logger()
         steps = llm_logger.cumulative_metrics.get("steps", [])
         prev_ts: float | None = steps[-1]["timestamp"] if steps else None

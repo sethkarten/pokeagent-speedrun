@@ -90,6 +90,34 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
+# #region agent log
+def _debug_log(
+    log_path: Path,
+    hypothesis_id: str,
+    location: str,
+    message: str,
+    data: dict[str, Any] | None = None,
+    run_id: str = "",
+) -> None:
+    import time as _t
+    try:
+        payload = {
+            "sessionId": "b377a9",
+            "id": f"log_{int(_t.time()*1000)}",
+            "timestamp": int(_t.time() * 1000),
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data or {},
+        }
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+# #endregion
+
+
 def _coerce_mapping(value: Any) -> dict[str, Any]:
     if value is None:
         return {}
@@ -202,6 +230,8 @@ def main() -> int:
 
     session_db = SessionDB(hermes_home / "state.db")
     usage_events_path = hermes_home / "usage_events.jsonl"
+    debug_log_path = Path("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-b377a9.log")
+    _disable_multimodal = os.environ.get("HERMES_DISABLE_MULTIMODAL", "").lower() in ("1", "true", "yes")
     conversation_history: list[dict[str, Any]] | None = None
     if resume_session_id:
         try:
@@ -257,80 +287,189 @@ def main() -> int:
         )
 
     def _patch_mcp_image_bridge() -> None:
-        nonlocal multimodal_counter
         import tools.mcp_tool as mcp_tool
 
-        if getattr(mcp_tool, "_pokeagent_image_patch", False):
-            return
+        # #region agent log
+        _debug_log(
+            debug_log_path,
+            "H1",
+            "hermes_wrapper.py:_patch_mcp_image_bridge",
+            "mcp_tool handler names",
+            {"has_make_tool_handler": hasattr(mcp_tool, "_make_tool_handler"), "has_make_call_tool_handler": hasattr(mcp_tool, "_make_call_tool_handler")},
+        )
+        # #endregion
 
-        def _patched_make_call_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
-            def _handler(args: dict, **kwargs) -> str:
-                with mcp_tool._lock:
-                    server = mcp_tool._servers.get(server_name)
-                if not server or not server.session:
-                    return json.dumps({"error": f"MCP server '{server_name}' is not connected"})
+    def _build_multimodal_registry_handler(server_name: str, tool_name: str, tool_timeout: float):
+        import tools.mcp_tool as mcp_tool
 
-                async def _call() -> str:
-                    nonlocal multimodal_counter
-                    result = await server.session.call_tool(tool_name, arguments=args)
-                    if result.isError:
-                        error_text = ""
-                        for block in (result.content or []):
-                            if hasattr(block, "text"):
-                                error_text += block.text
-                        return json.dumps(
-                            {
-                                "error": mcp_tool._sanitize_error(
-                                    error_text or "MCP tool returned an error"
-                                )
-                            }
-                        )
+        def _handler(args: dict, **kwargs) -> str:
+            nonlocal multimodal_counter
 
-                    text_parts: list[str] = []
-                    multimodal_parts: list[dict[str, Any]] = []
-                    image_count = 0
+            # #region agent log
+            _debug_log(
+                debug_log_path,
+                "H1",
+                "hermes_wrapper.py:_build_multimodal_registry_handler",
+                "patched_handler_invoked",
+                {"tool_name": tool_name},
+            )
+            _mcp_start = time.time()
+            # #endregion
+
+            with mcp_tool._lock:
+                server = mcp_tool._servers.get(server_name)
+            if not server or not server.session:
+                return json.dumps({"error": f"MCP server '{server_name}' is not connected"})
+
+            async def _call() -> str:
+                nonlocal multimodal_counter
+                result = await server.session.call_tool(tool_name, arguments=args)
+                if result.isError:
+                    error_text = ""
                     for block in (result.content or []):
-                        if hasattr(block, "text") and block.text:
-                            text_parts.append(block.text)
-                            multimodal_parts.append({"type": "text", "text": block.text})
-                        elif hasattr(block, "data") and hasattr(block, "mimeType"):
-                            image_count += 1
-                            multimodal_parts.append(
-                                {
-                                    "type": "image_url",
-                                    "image_url": {"url": f"data:{block.mimeType};base64,{block.data}"},
-                                }
-                            )
-
-                    payload: dict[str, Any] = {"result": "\n".join(text_parts) if text_parts else ""}
-                    if image_count:
-                        multimodal_counter += 1
-                        ref = f"{server_name}:{tool_name}:{multimodal_counter}"
-                        multimodal_store[ref] = {
-                            "parts": multimodal_parts,
-                            "tool_name": tool_name,
-                            "image_count": image_count,
-                        }
-                        payload["_pokeagent_multimodal_ref"] = ref
-                        payload["_pokeagent_tool_name"] = tool_name
-                        payload["_pokeagent_image_count"] = image_count
-                    return json.dumps(payload, ensure_ascii=False)
-
-                try:
-                    return mcp_tool._run_on_mcp_loop(_call(), timeout=tool_timeout)
-                except Exception as exc:
+                        if hasattr(block, "text"):
+                            error_text += block.text
                     return json.dumps(
                         {
                             "error": mcp_tool._sanitize_error(
-                                f"MCP call failed: {type(exc).__name__}: {exc}"
+                                error_text or "MCP tool returned an error"
                             )
                         }
                     )
 
-            return _handler
+                text_parts: list[str] = []
+                multimodal_parts: list[dict[str, Any]] = []
+                image_count = 0
+                block_types: list[str] = []
+                for block in (result.content or []):
+                    if hasattr(block, "text") and block.text:
+                        text_parts.append(block.text)
+                        multimodal_parts.append({"type": "text", "text": block.text})
+                        block_types.append("text")
+                    elif hasattr(block, "data") and hasattr(block, "mimeType"):
+                        image_count += 1
+                        multimodal_parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{block.mimeType};base64,{block.data}"},
+                            }
+                        )
+                        block_types.append("image_data")
+                    elif hasattr(block, "blob") and hasattr(block, "mimeType"):
+                        image_count += 1
+                        blob_data = getattr(block, "blob")
+                        if isinstance(blob_data, bytes):
+                            import base64
 
-        mcp_tool._make_call_tool_handler = _patched_make_call_tool_handler
-        mcp_tool._pokeagent_image_patch = True
+                            encoded = base64.b64encode(blob_data).decode("ascii")
+                        else:
+                            encoded = str(blob_data)
+                        multimodal_parts.append(
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{block.mimeType};base64,{encoded}"},
+                            }
+                        )
+                        block_types.append("image_blob")
+                    else:
+                        block_types.append(
+                            f"{type(block).__name__}(has_data={hasattr(block,'data')},has_blob={hasattr(block,'blob')},has_mimeType={hasattr(block,'mimeType')})"
+                        )
+
+                # #region agent log
+                _debug_log(
+                    debug_log_path,
+                    "H2",
+                    "hermes_wrapper.py:_build_multimodal_registry_handler",
+                    "tool_result_blocks",
+                    {"tool_name": tool_name, "block_types": block_types, "image_count": image_count, "block_count": len(result.content or [])},
+                )
+                # #endregion
+
+                payload: dict[str, Any] = {"result": "\n".join(text_parts) if text_parts else ""}
+                if image_count:
+                    multimodal_counter += 1
+                    ref = f"{server_name}:{tool_name}:{multimodal_counter}"
+                    if tool_name == "get_game_state":
+                        to_evict = [k for k in multimodal_store if k.startswith(f"{server_name}:get_game_state:")]
+                        for k in to_evict:
+                            del multimodal_store[k]
+                    multimodal_store[ref] = {
+                        "parts": multimodal_parts,
+                        "tool_name": tool_name,
+                        "image_count": image_count,
+                    }
+                    payload["_pokeagent_multimodal_ref"] = ref
+                    payload["_pokeagent_tool_name"] = tool_name
+                    payload["_pokeagent_image_count"] = image_count
+                return json.dumps(payload, ensure_ascii=False)
+
+            try:
+                # #region agent log
+                _debug_log(
+                    debug_log_path,
+                    "H4",
+                    "hermes_wrapper.py:_build_multimodal_registry_handler",
+                    "mcp_call_start",
+                    {"tool_name": tool_name},
+                )
+                # #endregion
+                out = mcp_tool._run_on_mcp_loop(_call(), timeout=tool_timeout)
+                # #region agent log
+                _debug_log(
+                    debug_log_path,
+                    "H4",
+                    "hermes_wrapper.py:_build_multimodal_registry_handler",
+                    "mcp_call_done",
+                    {"tool_name": tool_name, "duration_s": round(time.time() - _mcp_start, 2)},
+                )
+                # #endregion
+                return out
+            except Exception as exc:
+                return json.dumps(
+                    {
+                        "error": mcp_tool._sanitize_error(
+                            f"MCP call failed: {type(exc).__name__}: {exc}"
+                        )
+                    }
+                )
+
+        return _handler
+
+    def _patch_registered_mcp_handlers(agent: Any) -> None:
+        if _disable_multimodal:
+            return
+        from tools.registry import registry
+
+        patched_tools: list[str] = []
+        for tool in agent.tools or []:
+            function = tool.get("function", {}) if isinstance(tool, dict) else {}
+            registered_name = function.get("name")
+            if not isinstance(registered_name, str):
+                continue
+            prefix = "mcp_pokemon_emerald_"
+            if not registered_name.startswith(prefix):
+                continue
+            entry = registry._tools.get(registered_name)
+            if entry is None:
+                continue
+            raw_tool_name = registered_name[len(prefix) :]
+            entry.handler = _build_multimodal_registry_handler(
+                "pokemon-emerald",
+                raw_tool_name,
+                120.0,
+            )
+            patched_tools.append(registered_name)
+
+        # #region agent log
+        _debug_log(
+            debug_log_path,
+            "H1",
+            "hermes_wrapper.py:_patch_registered_mcp_handlers",
+            "patched_registry_handlers",
+            {"count": len(patched_tools), "tools": patched_tools},
+        )
+        # #endregion
 
     def _patch_agent_runtime() -> None:
         original_create_client = AIAgent._create_openai_client
@@ -341,9 +480,100 @@ def main() -> int:
             if getattr(client, "_pokeagent_usage_wrapped", False):
                 return client
 
+            _VISION_TIMEOUT = float(os.environ.get("HERMES_VISION_TIMEOUT", "10"))
+
             def _wrap_create(call):
+                def _count_images(msgs):
+                    payload_bytes = 0
+                    image_count = 0
+                    if isinstance(msgs, (list, tuple)):
+                        for m in msgs:
+                            if not isinstance(m, dict):
+                                continue
+                            c = m.get("content")
+                            if isinstance(c, str):
+                                payload_bytes += len(c)
+                            elif isinstance(c, list):
+                                for p in c:
+                                    if isinstance(p, dict) and p.get("type") == "image_url":
+                                        image_count += 1
+                                        url = (p.get("image_url") or {}).get("url") or ""
+                                        payload_bytes += len(url)
+                                    elif isinstance(p, dict) and p.get("type") == "text":
+                                        payload_bytes += len(str(p.get("text", "")))
+                    return image_count, payload_bytes
+
+                def _strip_vision_messages(msgs):
+                    """Remove synthetic user messages that carry image_url parts."""
+                    if not isinstance(msgs, (list, tuple)):
+                        return msgs
+                    stripped = []
+                    for m in msgs:
+                        if not isinstance(m, dict):
+                            stripped.append(m)
+                            continue
+                        c = m.get("content")
+                        if (
+                            m.get("role") == "user"
+                            and isinstance(c, list)
+                            and any(isinstance(p, dict) and p.get("type") == "image_url" for p in c)
+                        ):
+                            continue
+                        stripped.append(m)
+                    return stripped
+
                 def _wrapped(*call_args, **call_kwargs):
-                    response = call(*call_args, **call_kwargs)
+                    _api_start = time.time()
+                    _api_idx = usage_state.get("api_call_index", 0) + 1
+                    usage_state["api_call_index"] = _api_idx
+                    msgs = call_kwargs.get("messages") or (call_args[0] if call_args else None)
+                    msg_count = len(msgs) if isinstance(msgs, (list, tuple)) else 0
+                    image_count, payload_bytes = _count_images(msgs)
+                    _debug_log(
+                        debug_log_path,
+                        "H7",
+                        "hermes_wrapper.py:_wrap_create",
+                        "api_call_start",
+                        {"api_call_index": _api_idx, "msg_count": msg_count, "payload_bytes": payload_bytes, "image_count": image_count},
+                    )
+
+                    original_timeout = call_kwargs.get("timeout")
+                    if image_count > 0 and _VISION_TIMEOUT > 0:
+                        call_kwargs["timeout"] = _VISION_TIMEOUT
+
+                    try:
+                        response = call(*call_args, **call_kwargs)
+                    except Exception as vision_exc:
+                        exc_name = type(vision_exc).__name__.lower()
+                        is_timeout = "timeout" in exc_name or "timeout" in str(vision_exc).lower()
+                        if image_count > 0 and is_timeout:
+                            _debug_log(
+                                debug_log_path,
+                                "H9",
+                                "hermes_wrapper.py:_wrap_create",
+                                "vision_timeout_fallback",
+                                {"api_call_index": _api_idx, "timeout_s": _VISION_TIMEOUT, "image_count": image_count},
+                            )
+                            stripped = _strip_vision_messages(msgs)
+                            if "messages" in call_kwargs:
+                                call_kwargs["messages"] = stripped
+                            elif call_args:
+                                call_args = (stripped, *call_args[1:])
+                            if original_timeout is not None:
+                                call_kwargs["timeout"] = original_timeout
+                            else:
+                                call_kwargs.pop("timeout", None)
+                            response = call(*call_args, **call_kwargs)
+                        else:
+                            raise
+
+                    _debug_log(
+                        debug_log_path,
+                        "H5",
+                        "hermes_wrapper.py:_wrap_create",
+                        "api_call_done",
+                        {"api_call_index": _api_idx, "duration_s": round(time.time() - _api_start, 2)},
+                    )
                     snapshot = _extract_usage_snapshot(response)
                     usage_map = snapshot.get("_usage_map") or {}
                     if usage_map:
@@ -400,7 +630,16 @@ def main() -> int:
                     continue
 
                 ref = parsed.get("_pokeagent_multimodal_ref")
-                stored = multimodal_store.get(ref) if isinstance(ref, str) else None
+                stored = None if _disable_multimodal else (multimodal_store.get(ref) if isinstance(ref, str) else None)
+                # #region agent log
+                _debug_log(
+                    debug_log_path,
+                    "H3",
+                    "hermes_wrapper.py:_patched_build_api_kwargs",
+                    "build_api_kwargs_tool_msg",
+                    {"has_ref": ref is not None, "ref": ref, "stored_found": stored is not None, "multimodal_disabled": _disable_multimodal},
+                )
+                # #endregion
                 if not stored:
                     transformed.append(msg)
                     continue
@@ -416,6 +655,15 @@ def main() -> int:
                     for part in stored.get("parts", [])
                     if isinstance(part, dict) and part.get("type") == "image_url"
                 ]
+                # #region agent log
+                _debug_log(
+                    debug_log_path,
+                    "H3",
+                    "hermes_wrapper.py:_patched_build_api_kwargs",
+                    "multimodal_inject",
+                    {"image_parts_count": len(image_parts), "tool_name": tool_name},
+                )
+                # #endregion
                 if image_parts:
                     transformed.append(
                         {
@@ -480,6 +728,7 @@ def main() -> int:
             reasoning_callback=reasoning_callback,
             pass_session_id=True,
         )
+        _patch_registered_mcp_handlers(agent)
 
         _emit(
             {
