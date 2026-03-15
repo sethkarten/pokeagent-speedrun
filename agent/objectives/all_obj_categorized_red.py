@@ -404,7 +404,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Vermilion Gym",
-        navigation_hint="Lt. Surge: Voltorb Lv 21 (SonicBoom), Pikachu Lv 18 (ThunderShock, Quick Attack), Raichu Lv 24 (ThunderShock, Mega Punch). Ground-types are completely immune to Electric — Diglett from Diglett's Cave is perfect. Reward: $2448, Thunder Badge, TM24 Thunderbolt.",
+        navigation_hint="The trash can puzzle is already solved — walk straight to Lt. Surge. His team: Voltorb Lv 21, Pikachu Lv 18, Raichu Lv 24. Use Ground-types (Diglett/Dugtrio) for full Electric immunity.",
         completion_condition="thunder_badge_obtained",
         priority=1
     ),
