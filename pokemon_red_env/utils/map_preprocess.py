@@ -896,7 +896,7 @@ def main():
                     cell_char = '#'
 
                 if is_cut:
-                    cell_char = '#'
+                    cell_char = 't'
                 elif is_counter:
                     cell_char = 'C'
 

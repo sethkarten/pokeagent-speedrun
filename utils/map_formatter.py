@@ -299,6 +299,8 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         return "↓"  # One-way slide down
     elif "BRIDGE" in behavior_name:
         return "&"  # Bridge tiles are walkable
+    elif "CUT_TREE" in behavior_name:
+        return "t"  # Cuttable tree (blocked until player uses HM Cut)
     elif "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
         return "#"  # Blocked
     elif "WALL" in behavior_name:

@@ -162,12 +162,13 @@ class Pathfinder:
                 logger.info(f"🚪 Unblocked warp at {warp_pos} (was blocked)")
             # IMPORTANT: Also unblock the tile ABOVE the warp (in case warp was moved down from a D/S tile)
             # This handles the case where porymap_json_builder adjusted the warp position down by 1
-            above_pos = (warp_pos[0], warp_pos[1] - 1)
-            if above_pos[1] >= 0:  # Check it's not out of bounds
-                was_above_blocked = above_pos in blocked
-                blocked.discard(above_pos)
-                if was_above_blocked:
-                    logger.info(f"🚪 Unblocked position above warp: {above_pos} (warp at {warp_pos}, was blocked)")
+            if os.environ.get("GAME_TYPE", "emerald").upper() == "EMERALD":
+                above_pos = (warp_pos[0], warp_pos[1] - 1)
+                if above_pos[1] >= 0:  # Check it's not out of bounds
+                    was_above_blocked = above_pos in blocked
+                    blocked.discard(above_pos)
+                    if was_above_blocked:
+                        logger.info(f"🚪 Unblocked position above warp: {above_pos} (warp at {warp_pos}, was blocked)")
 
         # SAFEGUARD: Explicitly unblock all 'D' (door) and 'S' (stairs) tiles in the grid
         if "grid" in map_data and map_data.get("type") == "porymap":
@@ -439,7 +440,7 @@ class Pathfinder:
                 player_in_water = start_row[start_pos[0]] == "W"
         
         game_type = os.environ.get("GAME_TYPE", "emerald")
-        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "="}  # "!": sign (blocked); "?": hidden item (walkable)
+        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "=", "t"}  # "!": sign (blocked); "?": hidden item (walkable); "t": cuttable tree
         block_symbols = red_block_symbols if game_type.upper() == "RED" else {"#", "X"}
 
         for y, row in enumerate(grid):
