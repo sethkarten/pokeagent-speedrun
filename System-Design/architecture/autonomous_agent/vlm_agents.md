@@ -1,10 +1,10 @@
 # Autonomous Agent Architecture (VLM-based)
 
-This document describes the architecture of the custom autonomous agents in the repository, specifically focusing on `PokeAgent` (`agents/custom/PokeAgent.py`) and its integration with Vision-Language Models (VLMs).
+This document describes the architecture of the autonomous agents in the repository, specifically focusing on `PokeAgent` (`agents/PokeAgent.py`) and its integration with Vision-Language Models (VLMs).
 
 ## Overview
 
-The `PokeAgent` represents a significant evolution from simple reactive agents. It is designed to operate autonomously by formulating its own objectives, maintaining a persistent knowledge base, and utilizing a wide range of tools to interact with the game environment. **Entry path**: `pokeagent`, `autonomous_cli`, and `vision_only` are selected in `run.py` via `start_custom_agent()` and do not go through the unified `agents.Agent` in `agents/__init__.py`; `react`, `claudeplays`, and `geminiplays` still use `server/client.py` and `agents.Agent`.
+The `PokeAgent` is designed to operate autonomously by formulating its own objectives, maintaining a persistent knowledge base, and utilizing a wide range of tools to interact with the game environment. **Entry path**: `pokeagent`, `autonomous_cli`, and `vision_only` are selected in `run.py` via `start_custom_agent()`.
 
 ## 1. Core Architecture
 
@@ -31,7 +31,7 @@ The agent uses a **composition-based architecture** rather than deep inheritance
   - Current game state (context).
   - Objective history.
   - Knowledge base summaries.
-- **Prompt Optimization**: Utilizes a `PromptOptimizer` class (in `agents/custom/utils/prompt_optimizer.py`, custom-agent only) to refine prompts based on past performance or specific constraints (though implementation details vary).
+- **Prompt Optimization**: Utilizes a `PromptOptimizer` class (in `agents/utils/prompt_optimizer.py`) to refine prompts based on past performance or specific constraints (though implementation details vary).
 
 ## 2. Agent Loop
 

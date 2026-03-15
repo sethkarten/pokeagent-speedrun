@@ -71,7 +71,7 @@ For deeper detail and known deviations (e.g., monolithic server, polling-based s
 - **Map system**: Porymap integration, NPC display, movement preview, portal tracking
 - **Web interface**: Real-time stream at `http://localhost:8000/stream`
 - **Video recording**: Optional MP4 recording of gameplay
-- **Customizable prompts**: Edit `agents/simple/system_prompt.py` and prompt assets under `agents/prompts/`.
+- **Customizable prompts**: Edit prompt assets under `agents/prompts/`.
 
 ## Directory Structure
 
@@ -83,23 +83,17 @@ pokeagent-speedrun/
 ├── run_cli.py                # Entry for external CLI agents (MCP); spawns server + MCP proxy
 ├── server/
 │   ├── app.py                # FastAPI game server (emulator, /state, /action, /mcp/*, etc.)
-│   ├── client.py             # In-repo client used by run.py for react/claudeplays only (agent loop, optional pygame)
 │   ├── agent_thinking.txt    # Runtime file (gitignored); server writes latest thinking for UI
 │   ├── frame_server.py       # Frame streaming
 │   ├── stream.html           # Web UI for streaming
 │   └── cli/
 │       └── pokemon_mcp_server.py   # MCP proxy: stdio ↔ HTTP to game server
 ├── agents/
-│   ├── __init__.py           # Agent factory (scaffold selection)
-│   ├── custom/
-│   │   ├── PokeAgent.py      # Main benchmark agent
-│   │   ├── vision_only_agent.py
-│   │   └── puzzle_solver.py
-│   ├── simple/
-│   │   ├── system_prompt.py  # Shared system prompt for ReAct
-│   │   ├── react.py          # ReAct agent
-│   │   ├── claude_plays.py
-│   │   └── gemini_plays.py
+│   ├── __init__.py           # Package exports (PokeAgent, VisionOnlyAgent)
+│   ├── PokeAgent.py          # Main benchmark agent
+│   ├── vision_only_agent.py
+│   ├── puzzle_solver.py
+│   ├── utils/                # prompt_optimizer, etc.
 │   ├── objectives/           # Direct objectives, types, categorization
 │   └── prompts/              # Canonical prompt assets and path helpers
 ├── utils/
@@ -109,7 +103,7 @@ pokeagent-speedrun/
 │   ├── agent_infrastructure/ # cli_agent_backends, vlm_backends
 │   ├── metric_tracking/      # session readers (claude, gemini, codex), server_metrics
 │   ├── state_formatter.py    # Facade; re-exports from utils.mapping.porymap_state
-│   ├── knowledge_base.py     # Shared by claude_plays and server
+│   ├── knowledge_base.py     # Shared by agents and server
 │   ├── anticheat.py, coordinate_overlay.py, error_handler.py, json_utils.py, ocr_dialogue.py
 │   └── ...
 ├── pokemon_env/
@@ -323,10 +317,9 @@ run_cli.py:
 
 ## Customizing Agent Behavior (Prompt Editing Guide)
 
-- **System prompt**: `agents/simple/system_prompt.py` — shared role and behavior for the lightweight ReAct agent.
 - **Prompt files**: `agents/prompts/` holds `pokeagent-directives/` and `cli-agent-directives/`; paths are repo-root-relative.
-- **Main benchmark agent**: `agents/custom/PokeAgent.py`.
-- **Vision-only variant**: `agents/custom/vision_only_agent.py`.
+- **Main benchmark agent**: `agents/PokeAgent.py`.
+- **Vision-only variant**: `agents/vision_only_agent.py`.
 
 Edit the prompts in those files and restart the agent. Use `--debug-state` for detailed state in logs. For Nuzlocke-style behavior, change the system prompt and action/memory logic accordingly.
 
