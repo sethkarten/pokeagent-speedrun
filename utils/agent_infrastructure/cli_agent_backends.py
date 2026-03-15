@@ -652,7 +652,7 @@ class ClaudeCodeBackend(CliAgentBackend):
         Returns updated (processed_hashes, last_cli_step).  Never raises -- all
         errors are logged as warnings so the agent loop is never interrupted.
         """
-        from utils.metric_tracking.claude_jsonl_reader import find_jsonl_files, load_new_usage_entries
+        from utils.metric_tracking.claude_session_reader import find_jsonl_files, load_new_usage_entries
         from utils.data_persistence.llm_logger import get_llm_logger
 
         search_path = Path(agent_memory_dir).resolve()
