@@ -357,7 +357,7 @@ class TestHermesCliBackendBuildLaunchCmd:
             project_root=str(Path(__file__).resolve().parent.parent),
         )
         cmd_str = " ".join(cmd)
-        assert "utils.agent_infrastructure.hermes_wrapper" in cmd_str
+        assert "hermes_wrapper.py" in cmd_str
         assert "--directive-path" in cmd_str
         assert env["POKEMON_SERVER_URL"] == "http://localhost:8000"
         assert "Play Pokemon." in bootstrap
@@ -402,10 +402,27 @@ class TestHermesCliBackendStreamEvent:
         backend = HermesCliBackend()
         metrics = CliSessionMetrics()
         backend.handle_stream_event(
-            {"type": "tool_use", "tool_name": "get_game_state", "arguments": {}},
+            {"type": "tool_use", "tool_name": "mcp_pokemon_emerald_get_game_state", "arguments": {}},
             metrics,
         )
         assert metrics.tool_use_count == 1
+
+    def test_tool_use_posts_short_name_without_reasoning(self):
+        backend = HermesCliBackend()
+        posted = []
+
+        def capture_post(server_url, thinking_text, duration_sec=0.0, interaction_type="hermes"):
+            posted.append({"thinking_text": thinking_text})
+
+        backend._post_thinking = capture_post
+        backend.handle_stream_event(
+            {"type": "tool_use", "tool_name": "mcp_pokemon_emerald_get_game_state", "arguments": {}},
+            CliSessionMetrics(),
+            server_url="http://test",
+        )
+
+        assert len(posted) == 1
+        assert posted[0]["thinking_text"] == "[get_game_state]"
 
     def test_result_updates_metrics(self):
         backend = HermesCliBackend()

@@ -1674,6 +1674,13 @@ class HermesCliBackend(CliAgentBackend):
             or "missing api key" in lowered
         )
 
+    @staticmethod
+    def _normalize_tool_name(name: str) -> str:
+        for prefix in ("mcp_pokemon_emerald_", "mcp__pokemon-emerald__"):
+            if name.startswith(prefix):
+                return name[len(prefix) :]
+        return name.split("__")[-1] if "__" in name else name
+
     def seed_agent_auth(self, agent_memory_dir: Path) -> None:
         """Seed run-local Hermes home from the user's ~/.hermes directory when present."""
         import shutil
@@ -1683,7 +1690,10 @@ class HermesCliBackend(CliAgentBackend):
             print("ℹ️  Host ~/.hermes not found; Hermes will rely on environment variables/config generated for this run.")
             return
 
+        skipped_names = {"audio_cache", "hermes-agent", "image_cache", "logs", "sessions", "state.db"}
         for child in host_hermes_dir.iterdir():
+            if child.name in skipped_names:
+                continue
             target = agent_memory_dir / child.name
             try:
                 if child.is_dir():
@@ -1796,7 +1806,7 @@ class HermesCliBackend(CliAgentBackend):
                     "--api-key-env",
                     "OPENROUTER_API_KEY",
                     "--model",
-                    os.environ.get("HERMES_MODEL", "anthropic/claude-sonnet-4.5"),
+                    os.environ.get("HERMES_MODEL", "google/gemini-3-flash-preview"),
                 ]
             )
         else:
@@ -1978,12 +1988,13 @@ class HermesCliBackend(CliAgentBackend):
                 args = {}
             reasoning = args.get("reasoning") or args.get("reason") or ""
             tool_name = event.get("tool_name") or event.get("name") or "tool"
-            short_name = tool_name.split("__")[-1] if "__" in tool_name else tool_name
-            if reasoning and server_url:
+            short_name = self._normalize_tool_name(tool_name)
+            if server_url:
                 duration = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+                thinking_text = f"[{short_name}] {reasoning}".strip() if reasoning else f"[{short_name}]"
                 self._post_thinking(
                     server_url,
-                    f"[{short_name}] {reasoning}",
+                    thinking_text,
                     duration,
                     interaction_type=self.name,
                 )

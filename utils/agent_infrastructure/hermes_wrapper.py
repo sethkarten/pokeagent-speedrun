@@ -22,7 +22,9 @@ import signal
 import sys
 import time
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 
@@ -73,6 +75,74 @@ def _extract_tool_reasoning(arguments: dict[str, Any]) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _normalize_tool_name(name: str) -> str:
+    for prefix in ("mcp_pokemon_emerald_", "mcp__pokemon-emerald__"):
+        if name.startswith(prefix):
+            return name[len(prefix) :]
+    return name.split("__")[-1] if "__" in name else name
+
+
+def _append_jsonl(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def _coerce_mapping(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        dumped = value.model_dump()
+        return dumped if isinstance(dumped, dict) else {}
+    if hasattr(value, "__dict__"):
+        return {
+            key: val
+            for key, val in vars(value).items()
+            if not key.startswith("_")
+        }
+    return {}
+
+
+def _to_namespace(value: Any) -> Any:
+    if isinstance(value, dict):
+        return SimpleNamespace(**{key: _to_namespace(val) for key, val in value.items()})
+    if isinstance(value, list):
+        return [_to_namespace(item) for item in value]
+    return value
+
+
+def _extract_usage_snapshot(response: Any) -> dict[str, Any]:
+    response_map = _coerce_mapping(response)
+    usage_map = _coerce_mapping(getattr(response, "usage", None))
+    if not usage_map and isinstance(response_map.get("usage"), dict):
+        usage_map = response_map["usage"]
+
+    prompt_details = _coerce_mapping(usage_map.get("prompt_tokens_details"))
+    prompt_tokens = int(usage_map.get("prompt_tokens", 0) or usage_map.get("input_tokens", 0) or 0)
+    completion_tokens = int(usage_map.get("completion_tokens", 0) or usage_map.get("output_tokens", 0) or 0)
+    total_tokens = int(usage_map.get("total_tokens", 0) or (prompt_tokens + completion_tokens))
+    cached_tokens = int(prompt_details.get("cached_tokens", 0) or usage_map.get("cache_read_input_tokens", 0) or 0)
+    cache_write_tokens = int(prompt_details.get("cache_write_tokens", 0) or usage_map.get("cache_creation_input_tokens", 0) or 0)
+    total_cost_usd = float(
+        response_map.get("total_cost_usd", 0.0)
+        or response_map.get("cost", 0.0)
+        or usage_map.get("cost_usd", 0.0)
+        or usage_map.get("cost", 0.0)
+        or 0.0
+    )
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "cached_tokens": cached_tokens,
+        "cache_write_tokens": cache_write_tokens,
+        "total_cost_usd": total_cost_usd,
+        "_usage_map": usage_map,
+    }
 
 
 def main() -> int:
@@ -131,6 +201,7 @@ def main() -> int:
     resume_session_id = args.resume_session_id.strip() or None
 
     session_db = SessionDB(hermes_home / "state.db")
+    usage_events_path = hermes_home / "usage_events.jsonl"
     conversation_history: list[dict[str, Any]] | None = None
     if resume_session_id:
         try:
@@ -138,7 +209,7 @@ def main() -> int:
         except Exception:
             conversation_history = None
 
-    model = args.model.strip() or os.environ.get("HERMES_MODEL", "").strip() or "anthropic/claude-sonnet-4.5"
+    model = args.model.strip() or os.environ.get("HERMES_MODEL", "").strip() or "google/gemini-3-flash-preview"
     provider = args.provider.strip() or os.environ.get("HERMES_PROVIDER", "").strip() or None
     base_url = args.base_url.strip() or os.environ.get("HERMES_BASE_URL", "").strip() or None
     api_key = None
@@ -148,17 +219,242 @@ def main() -> int:
 
     tool_event_counter = 0
     start_time = time.time()
+    usage_state = {
+        "last_snapshot": None,
+        "api_call_index": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cached_tokens": 0,
+        "cache_write_tokens": 0,
+        "total_cost_usd": 0.0,
+    }
+    multimodal_store: dict[str, dict[str, Any]] = {}
+    multimodal_counter = 0
+
+    def _capture_usage_snapshot(snapshot: dict[str, Any], session_id: str, model_name: str) -> None:
+        usage_state["api_call_index"] += 1
+        usage_state["prompt_tokens"] += int(snapshot.get("prompt_tokens", 0) or 0)
+        usage_state["completion_tokens"] += int(snapshot.get("completion_tokens", 0) or 0)
+        usage_state["total_tokens"] += int(snapshot.get("total_tokens", 0) or 0)
+        usage_state["cached_tokens"] += int(snapshot.get("cached_tokens", 0) or 0)
+        usage_state["cache_write_tokens"] += int(snapshot.get("cache_write_tokens", 0) or 0)
+        usage_state["total_cost_usd"] += float(snapshot.get("total_cost_usd", 0.0) or 0.0)
+        _append_jsonl(
+            usage_events_path,
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "session_id": session_id,
+                "api_call_index": usage_state["api_call_index"],
+                "model": model_name,
+                "prompt_tokens": int(snapshot.get("prompt_tokens", 0) or 0),
+                "completion_tokens": int(snapshot.get("completion_tokens", 0) or 0),
+                "total_tokens": int(snapshot.get("total_tokens", 0) or 0),
+                "cached_tokens": int(snapshot.get("cached_tokens", 0) or 0),
+                "cache_write_tokens": int(snapshot.get("cache_write_tokens", 0) or 0),
+                "total_cost_usd": float(snapshot.get("total_cost_usd", 0.0) or 0.0),
+            },
+        )
+
+    def _patch_mcp_image_bridge() -> None:
+        nonlocal multimodal_counter
+        import tools.mcp_tool as mcp_tool
+
+        if getattr(mcp_tool, "_pokeagent_image_patch", False):
+            return
+
+        def _patched_make_call_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
+            def _handler(args: dict, **kwargs) -> str:
+                with mcp_tool._lock:
+                    server = mcp_tool._servers.get(server_name)
+                if not server or not server.session:
+                    return json.dumps({"error": f"MCP server '{server_name}' is not connected"})
+
+                async def _call() -> str:
+                    nonlocal multimodal_counter
+                    result = await server.session.call_tool(tool_name, arguments=args)
+                    if result.isError:
+                        error_text = ""
+                        for block in (result.content or []):
+                            if hasattr(block, "text"):
+                                error_text += block.text
+                        return json.dumps(
+                            {
+                                "error": mcp_tool._sanitize_error(
+                                    error_text or "MCP tool returned an error"
+                                )
+                            }
+                        )
+
+                    text_parts: list[str] = []
+                    multimodal_parts: list[dict[str, Any]] = []
+                    image_count = 0
+                    for block in (result.content or []):
+                        if hasattr(block, "text") and block.text:
+                            text_parts.append(block.text)
+                            multimodal_parts.append({"type": "text", "text": block.text})
+                        elif hasattr(block, "data") and hasattr(block, "mimeType"):
+                            image_count += 1
+                            multimodal_parts.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:{block.mimeType};base64,{block.data}"},
+                                }
+                            )
+
+                    payload: dict[str, Any] = {"result": "\n".join(text_parts) if text_parts else ""}
+                    if image_count:
+                        multimodal_counter += 1
+                        ref = f"{server_name}:{tool_name}:{multimodal_counter}"
+                        multimodal_store[ref] = {
+                            "parts": multimodal_parts,
+                            "tool_name": tool_name,
+                            "image_count": image_count,
+                        }
+                        payload["_pokeagent_multimodal_ref"] = ref
+                        payload["_pokeagent_tool_name"] = tool_name
+                        payload["_pokeagent_image_count"] = image_count
+                    return json.dumps(payload, ensure_ascii=False)
+
+                try:
+                    return mcp_tool._run_on_mcp_loop(_call(), timeout=tool_timeout)
+                except Exception as exc:
+                    return json.dumps(
+                        {
+                            "error": mcp_tool._sanitize_error(
+                                f"MCP call failed: {type(exc).__name__}: {exc}"
+                            )
+                        }
+                    )
+
+            return _handler
+
+        mcp_tool._make_call_tool_handler = _patched_make_call_tool_handler
+        mcp_tool._pokeagent_image_patch = True
+
+    def _patch_agent_runtime() -> None:
+        original_create_client = AIAgent._create_openai_client
+        original_build_assistant_message = AIAgent._build_assistant_message
+        original_build_api_kwargs = AIAgent._build_api_kwargs
+
+        def _wrap_openai_client(client: Any) -> Any:
+            if getattr(client, "_pokeagent_usage_wrapped", False):
+                return client
+
+            def _wrap_create(call):
+                def _wrapped(*call_args, **call_kwargs):
+                    response = call(*call_args, **call_kwargs)
+                    snapshot = _extract_usage_snapshot(response)
+                    usage_map = snapshot.get("_usage_map") or {}
+                    if usage_map:
+                        try:
+                            response.usage = _to_namespace(usage_map)
+                        except Exception:
+                            pass
+                    usage_state["last_snapshot"] = {
+                        key: value
+                        for key, value in snapshot.items()
+                        if not key.startswith("_")
+                    }
+                    return response
+
+                return _wrapped
+
+            try:
+                client.chat.completions.create = _wrap_create(client.chat.completions.create)
+            except Exception:
+                pass
+            try:
+                client.responses.create = _wrap_create(client.responses.create)
+            except Exception:
+                pass
+            client._pokeagent_usage_wrapped = True
+            return client
+
+        def _patched_create_openai_client(self, *client_args, **client_kwargs):
+            client = original_create_client(self, *client_args, **client_kwargs)
+            return _wrap_openai_client(client)
+
+        def _patched_build_assistant_message(self, assistant_message, finish_reason: str):
+            message = original_build_assistant_message(self, assistant_message, finish_reason)
+            snapshot = usage_state.pop("last_snapshot", None)
+            if snapshot is not None:
+                _capture_usage_snapshot(snapshot, self.session_id, self.model)
+            return message
+
+        def _patched_build_api_kwargs(self, api_messages: list[dict[str, Any]]) -> dict:
+            transformed: list[dict[str, Any]] = []
+            for msg in api_messages:
+                if not isinstance(msg, dict) or msg.get("role") != "tool" or not isinstance(msg.get("content"), str):
+                    transformed.append(msg)
+                    continue
+
+                try:
+                    parsed = json.loads(msg["content"])
+                except json.JSONDecodeError:
+                    transformed.append(msg)
+                    continue
+
+                if not isinstance(parsed, dict):
+                    transformed.append(msg)
+                    continue
+
+                ref = parsed.get("_pokeagent_multimodal_ref")
+                stored = multimodal_store.get(ref) if isinstance(ref, str) else None
+                if not stored:
+                    transformed.append(msg)
+                    continue
+
+                tool_text = parsed.get("result", "")
+                tool_name = parsed.get("_pokeagent_tool_name") or stored.get("tool_name") or "tool"
+                tool_msg = dict(msg)
+                tool_msg["content"] = json.dumps({"result": tool_text}, ensure_ascii=False)
+                transformed.append(tool_msg)
+
+                image_parts = [
+                    part
+                    for part in stored.get("parts", [])
+                    if isinstance(part, dict) and part.get("type") == "image_url"
+                ]
+                if image_parts:
+                    transformed.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        f"Visual observation from the previous `{_normalize_tool_name(str(tool_name))}` "
+                                        "tool result. Use the attached image when reasoning about the current game state. "
+                                        "The tool result text is already in the preceding tool message."
+                                    ),
+                                },
+                                *image_parts,
+                            ],
+                        }
+                    )
+
+            return original_build_api_kwargs(self, transformed)
+
+        AIAgent._create_openai_client = _patched_create_openai_client
+        AIAgent._build_assistant_message = _patched_build_assistant_message
+        AIAgent._build_api_kwargs = _patched_build_api_kwargs
+
+    _patch_mcp_image_bridge()
+    _patch_agent_runtime()
 
     def tool_progress_callback(tool_name: str, _preview: str, arguments: dict[str, Any]) -> None:
         nonlocal tool_event_counter
         tool_event_counter += 1
         normalized_args = arguments if isinstance(arguments, dict) else {}
+        normalized_name = _normalize_tool_name(tool_name)
         _emit(
             {
                 "type": "tool_use",
                 "tool_use_id": f"{resume_session_id or 'session'}-tool-{tool_event_counter}",
-                "name": tool_name,
-                "tool_name": tool_name,
+                "name": normalized_name,
+                "tool_name": normalized_name,
+                "raw_tool_name": tool_name,
                 "input": normalized_args,
                 "arguments": normalized_args,
                 "parameters": normalized_args,
@@ -214,16 +510,18 @@ def main() -> int:
                 "session_id": agent.session_id,
                 "model": agent.model,
                 "content": result.get("final_response") if isinstance(result, dict) else None,
-                "num_turns": int(getattr(agent, "session_api_calls", 0) or 0),
+                "num_turns": int(usage_state["api_call_index"] or getattr(agent, "session_api_calls", 0) or 0),
                 "duration_ms": duration_ms,
                 "duration_api_ms": 0,
-                "total_cost_usd": 0.0,
+                "total_cost_usd": float(usage_state["total_cost_usd"] or 0.0),
                 "is_error": bool(result.get("failed")) if isinstance(result, dict) else False,
                 "error": result.get("error", "") if isinstance(result, dict) else "",
                 "usage": {
-                    "input_tokens": int(getattr(agent, "session_prompt_tokens", 0) or 0),
-                    "output_tokens": int(getattr(agent, "session_completion_tokens", 0) or 0),
-                    "total_tokens": int(getattr(agent, "session_total_tokens", 0) or 0),
+                    "input_tokens": int(usage_state["prompt_tokens"] or getattr(agent, "session_prompt_tokens", 0) or 0),
+                    "output_tokens": int(usage_state["completion_tokens"] or getattr(agent, "session_completion_tokens", 0) or 0),
+                    "total_tokens": int(usage_state["total_tokens"] or getattr(agent, "session_total_tokens", 0) or 0),
+                    "cached_tokens": int(usage_state["cached_tokens"] or 0),
+                    "cache_write_tokens": int(usage_state["cache_write_tokens"] or 0),
                 },
             }
         )

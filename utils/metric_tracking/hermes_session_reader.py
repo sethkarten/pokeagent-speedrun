@@ -1,62 +1,24 @@
 """
-Reader for Hermes session state stored in ~/.hermes/state.db.
+Reader for Hermes session state stored in ~/.hermes/sessions/*.json.
 
-Hermes persists durable session metadata in SQLite rather than JSONL. We poll
-the state database in read-only mode, compute deltas from the last observed
-session totals, and translate them into append_cli_step-compatible entries.
+Hermes persists a continuously updated session JSON log for each run. We treat
+those logs as the source of truth for assistant turns and tool calls, then join
+them with wrapper-written usage events to produce append_cli_step-compatible
+entries for cumulative metrics.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import sqlite3
-import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 STATE_DB_NAME = "state.db"
-
-
-def _connect_readonly(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(
-        f"file:{db_path}?mode=ro",
-        uri=True,
-        check_same_thread=False,
-        timeout=2.0,
-    )
-    conn.row_factory = sqlite3.Row
-    try:
-        conn.execute("PRAGMA journal_mode=WAL")
-    except sqlite3.OperationalError:
-        # Read-only handles may reject journal changes on some platforms.
-        pass
-    return conn
-
-
-def _with_retries(db_path: Path, fn, retries: int = 5, base_sleep: float = 0.05):
-    last_exc: Exception | None = None
-    for attempt in range(retries):
-        conn: sqlite3.Connection | None = None
-        try:
-            conn = _connect_readonly(db_path)
-            return fn(conn)
-        except sqlite3.OperationalError as exc:
-            last_exc = exc
-            message = str(exc).lower()
-            if "locked" not in message and "busy" not in message:
-                raise
-            time.sleep(base_sleep * (2 ** attempt))
-        finally:
-            if conn is not None:
-                conn.close()
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError("read-only Hermes DB query failed without exception")
-
+USAGE_EVENTS_NAME = "usage_events.jsonl"
 
 def _parse_timestamp(ts: Any) -> datetime | None:
     if ts is None:
@@ -69,6 +31,15 @@ def _parse_timestamp(ts: Any) -> datetime | None:
         except ValueError:
             return None
     return None
+
+
+def _normalize_tool_name(name: Any) -> str | None:
+    if not isinstance(name, str) or not name:
+        return None
+    for prefix in ("mcp_pokemon_emerald_", "mcp__pokemon-emerald__"):
+        if name.startswith(prefix):
+            return name[len(prefix) :]
+    return name.split("__")[-1] if "__" in name else name
 
 
 def _normalize_tool_calls(raw: Any) -> list[dict[str, Any]]:
@@ -88,6 +59,10 @@ def _normalize_tool_calls(raw: Any) -> list[dict[str, Any]]:
             continue
         name = item.get("name")
         arguments = item.get("arguments")
+        function = item.get("function")
+        if isinstance(function, dict):
+            name = function.get("name", name)
+            arguments = function.get("arguments", arguments)
         if isinstance(arguments, str):
             try:
                 arguments = json.loads(arguments)
@@ -95,8 +70,9 @@ def _normalize_tool_calls(raw: Any) -> list[dict[str, Any]]:
                 arguments = {}
         if not isinstance(arguments, dict):
             arguments = {}
-        if isinstance(name, str) and name:
-            normalized.append({"name": name, "args": arguments})
+        normalized_name = _normalize_tool_name(name)
+        if normalized_name:
+            normalized.append({"name": normalized_name, "args": arguments})
     return normalized
 
 
@@ -107,26 +83,84 @@ def find_session_logs(data_path: Path) -> list[Path]:
     return sorted(logs_dir.glob("session_*.json"), key=lambda p: p.stat().st_mtime)
 
 
-def get_latest_session_id(data_path: Path) -> str | None:
-    db_path = Path(data_path).resolve() / STATE_DB_NAME
-    if db_path.exists():
-        try:
-            row = _with_retries(
-                db_path,
-                lambda conn: conn.execute(
-                    """
-                    SELECT id
-                    FROM sessions
-                    ORDER BY COALESCE(ended_at, started_at) DESC, started_at DESC
-                    LIMIT 1
-                    """
-                ).fetchone(),
-            )
-            if row and row["id"]:
-                return str(row["id"])
-        except Exception as exc:
-            logger.warning("Could not read latest Hermes session id: %s", exc)
+def _coerce_mapping(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "model_dump"):
+        dumped = value.model_dump()
+        return dumped if isinstance(dumped, dict) else {}
+    return {}
 
+
+def _extract_usage_tokens(raw: dict[str, Any]) -> dict[str, Any]:
+    prompt = int(raw.get("prompt_tokens", 0) or raw.get("input_tokens", 0) or 0)
+    completion = int(raw.get("completion_tokens", 0) or raw.get("output_tokens", 0) or 0)
+    total = int(raw.get("total_tokens", 0) or (prompt + completion))
+    prompt_details = _coerce_mapping(raw.get("prompt_tokens_details"))
+    cached = int(
+        raw.get("cached_tokens", 0)
+        or prompt_details.get("cached_tokens", 0)
+        or raw.get("cache_read_input_tokens", 0)
+        or 0
+    )
+    cache_write = int(
+        raw.get("cache_write_tokens", 0)
+        or prompt_details.get("cache_write_tokens", 0)
+        or raw.get("cache_creation_input_tokens", 0)
+        or 0
+    )
+    cost = float(raw.get("cost_usd", 0.0) or raw.get("cost", 0.0) or raw.get("total_cost_usd", 0.0) or 0.0)
+    return {
+        "prompt": prompt,
+        "completion": completion,
+        "cached": cached,
+        "cache_write": cache_write,
+        "total": total,
+        "cost": cost,
+    }
+
+
+def _load_usage_events(data_path: Path) -> dict[str, dict[int, dict[str, Any]]]:
+    usage_path = Path(data_path).resolve() / USAGE_EVENTS_NAME
+    if not usage_path.exists():
+        return {}
+
+    events_by_session: dict[str, dict[int, dict[str, Any]]] = {}
+    try:
+        lines = usage_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        logger.warning("Could not read Hermes usage events %s: %s", usage_path, exc)
+        return {}
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            raw = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(raw, dict):
+            continue
+
+        session_id = raw.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            continue
+        api_call_index = int(raw.get("api_call_index", 0) or 0)
+        if api_call_index <= 0:
+            continue
+
+        event = {
+            "timestamp": _parse_timestamp(raw.get("timestamp")),
+            "tokens": _extract_usage_tokens(raw),
+        }
+        events_by_session.setdefault(session_id, {})[api_call_index] = event
+    return events_by_session
+
+
+def get_latest_session_id(data_path: Path) -> str | None:
     logs = find_session_logs(data_path)
     if not logs:
         return None
@@ -141,109 +175,79 @@ def load_new_usage_entries(
     last_seen_totals: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], set[str], dict[str, dict[str, Any]]]:
     """
-    Load new Hermes usage deltas from state.db.
-
-    Because Hermes stores cumulative token counters on the `sessions` table, we
-    derive a delta step each time those cumulative counts advance.
+    Load new Hermes usage entries from session JSON plus wrapper usage events.
     """
-
-    db_path = Path(data_path).resolve() / STATE_DB_NAME
-    if not db_path.exists():
-        return [], set(processed_hashes), dict(last_seen_totals or {})
-
+    root = Path(data_path).resolve()
     previous_state = dict(last_seen_totals or {})
     updated_hashes = set(processed_hashes)
-
-    def _query(conn: sqlite3.Connection):
-        session_rows = conn.execute(
-            """
-            SELECT id, model, started_at, ended_at, tool_call_count, input_tokens, output_tokens
-            FROM sessions
-            ORDER BY started_at ASC
-            """
-        ).fetchall()
-
-        messages_by_session: dict[str, list[sqlite3.Row]] = {}
-        for row in session_rows:
-            sid = row["id"]
-            message_rows = conn.execute(
-                """
-                SELECT id, timestamp, tool_calls
-                FROM messages
-                WHERE session_id = ?
-                ORDER BY id ASC
-                """,
-                (sid,),
-            ).fetchall()
-            messages_by_session[sid] = message_rows
-        return session_rows, messages_by_session
-
-    session_rows, messages_by_session = _with_retries(db_path, _query)
-
+    usage_events = _load_usage_events(root)
+    next_state: dict[str, dict[str, Any]] = dict(previous_state)
     new_entries: list[dict[str, Any]] = []
-    next_state: dict[str, dict[str, Any]] = {}
-    for row in session_rows:
-        session_id = str(row["id"])
-        messages = messages_by_session.get(session_id, [])
-        previous = previous_state.get(
-            session_id,
-            {
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "last_message_id": 0,
-                "tool_call_count": 0,
-            },
-        )
 
-        current_input = int(row["input_tokens"] or 0)
-        current_output = int(row["output_tokens"] or 0)
-        last_message_id = max((int(msg["id"]) for msg in messages), default=0)
+    for log_path in find_session_logs(root):
+        try:
+            payload = json.loads(log_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Could not read Hermes session log %s: %s", log_path, exc)
+            continue
 
-        delta_input = max(current_input - int(previous.get("input_tokens", 0) or 0), 0)
-        delta_output = max(current_output - int(previous.get("output_tokens", 0) or 0), 0)
-        new_messages = [
-            msg
-            for msg in messages
-            if int(msg["id"]) > int(previous.get("last_message_id", 0) or 0)
-        ]
+        session_id = payload.get("session_id")
+        if not isinstance(session_id, str) or not session_id:
+            stem = log_path.stem
+            session_id = stem[len("session_") :] if stem.startswith("session_") else stem
 
-        tool_calls: list[dict[str, Any]] = []
-        latest_ts = _parse_timestamp(row["ended_at"]) or _parse_timestamp(row["started_at"])
-        for msg in new_messages:
-            parsed = _normalize_tool_calls(msg["tool_calls"])
-            if parsed:
-                tool_calls.extend(parsed)
-            msg_ts = _parse_timestamp(msg["timestamp"])
-            if msg_ts is not None:
-                latest_ts = msg_ts
+        messages = payload.get("messages")
+        if not isinstance(messages, list):
+            continue
 
-        snapshot_hash = (
-            f"session:{session_id}:input:{current_input}:output:{current_output}:"
-            f"messages:{last_message_id}:tools:{int(row['tool_call_count'] or 0)}"
-        )
-        if snapshot_hash not in updated_hashes and (delta_input > 0 or delta_output > 0 or tool_calls):
-            entry = {
-                "_tokens": {
-                    "prompt": delta_input,
-                    "completion": delta_output,
+        session_state = dict(next_state.get(session_id, {}))
+        last_assistant_index = int(session_state.get("assistant_index", 0) or 0)
+        session_start = _parse_timestamp(payload.get("session_start")) or datetime.now(timezone.utc)
+        model = payload.get("model") or "hermes-agent"
+        session_usage = usage_events.get(session_id, {})
+
+        assistant_index = 0
+        for message in messages:
+            if not isinstance(message, dict) or message.get("role") != "assistant":
+                continue
+
+            assistant_index += 1
+            if assistant_index <= last_assistant_index:
+                continue
+
+            tool_calls = _normalize_tool_calls(message.get("tool_calls"))
+            usage_event = session_usage.get(assistant_index, {})
+            tokens = usage_event.get(
+                "tokens",
+                {
+                    "prompt": 0,
+                    "completion": 0,
                     "cached": 0,
                     "cache_write": 0,
-                    "total": delta_input + delta_output,
+                    "total": 0,
                     "cost": 0.0,
                 },
-                "_tool_calls": tool_calls,
-                "_parsed_timestamp": latest_ts,
-                "_model": row["model"] or "hermes-agent",
-                "_session_id": session_id,
-            }
-            new_entries.append(entry)
+            )
+            parsed_ts = usage_event.get("timestamp") or (session_start + timedelta(milliseconds=assistant_index))
+
+            snapshot_hash = f"json:{session_id}:assistant:{assistant_index}"
+            if snapshot_hash in updated_hashes:
+                continue
+
+            new_entries.append(
+                {
+                    "_tokens": tokens,
+                    "_tool_calls": tool_calls,
+                    "_parsed_timestamp": parsed_ts,
+                    "_model": model,
+                    "_session_id": session_id,
+                }
+            )
             updated_hashes.add(snapshot_hash)
 
         next_state[session_id] = {
-            "input_tokens": current_input,
-            "output_tokens": current_output,
-            "last_message_id": last_message_id,
-            "tool_call_count": int(row["tool_call_count"] or 0),
+            "assistant_index": assistant_index,
         }
 
+    new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
     return new_entries, updated_hashes, next_state
