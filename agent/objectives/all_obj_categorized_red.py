@@ -1024,15 +1024,8 @@ BATTLING_OBJECTIVES = [
         description="Train your entire team to Lv 22+ before battling Lt. Surge",
         action_type="battle",
         category="battling",
-        target_location="S.S. Anne",
-        navigation_hint=(
-            "Lt. Surge's Raichu is Lv 24. Target Lv 22+ for EVERY party member. Fight all "
-            "trainers on S.S. Anne before the ship leaves — 12+ trainers with good EXP. "
-            "Route 11 trainers (Gamblers, Youngsters, Engineers) also help. In wild encounters, "
-            "always lead with your lowest-level Pokémon first so they gain full EXP; swap to "
-            "a stronger mon to close the fight. Diglett/Dugtrio (Ground) is immune to all "
-            "Electric moves and should be in your party against Surge."
-        ),
+        target_location="Route 11",
+        navigation_hint="Lt. Surge's Raichu is Lv 24. Fight Route 11 trainers (10 trainers, Lv 18-21) and grind in Diglett's Cave (Diglett Lv 15-22). Lead with your weakest Pokémon for full EXP.",
         completion_condition="team_level_22_surge",
         priority=1,
         prerequisite_story_objective="vermilion_029"
