@@ -34,12 +34,12 @@ Session readers and server metrics:
 ## Top-level utils/ (shared)
 
 - **state_formatter.py**: Facade; re-exports mapping helpers and formats game state for LLMs.
-- **knowledge_base.py**: Shared by `agents/simple/claude_plays.py` and `server/game_tools.py`; not moved to agents/custom.
+- **knowledge_base.py**: Shared by agents and `server/game_tools.py`.
 - **coordinate_overlay.py**, **anticheat.py**, **error_handler.py**, **json_utils.py**, **ocr_dialogue.py**: remain at top-level.
 
-## agents/custom/utils/
+## agents/utils/
 
-Custom-agent-only helpers:
+Agent helpers:
 
 - **prompt_optimizer.py**: Used by PokeAgent for prompt optimization; moved from `utils/`.
 
