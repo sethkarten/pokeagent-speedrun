@@ -1,5 +1,5 @@
 """
-Minimal reader for Claude Code JSONL session logs.
+Reader for Claude Code session JSONL files (analogous to gemini_session_reader, codex_session_reader).
 
 Reimplements only the token extraction and deduplication logic needed to record
 per-API-call usage into cumulative_metrics.json.  Inspired by (but not dependent on)

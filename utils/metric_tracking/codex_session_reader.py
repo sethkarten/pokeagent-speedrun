@@ -1,5 +1,5 @@
 """
-Reader for Codex CLI session JSONL files (analogous to claude_jsonl_reader, gemini_session_reader).
+Reader for Codex CLI session JSONL files (analogous to claude_session_reader, gemini_session_reader).
 
 Reads session files under agent_memory_dir/sessions/ (Codex stores under ~/.codex/sessions/).
 Supports:
