@@ -362,7 +362,7 @@
   "grid": [
     "##########",
     "##########",
-    "CC?C?C?CCC",
+    "CC!C!C!CCC",
     "..........",
     "..........",
     "..........",
@@ -509,8 +509,8 @@
       ],
       [
         21,
-        0,
-        0,
+        1,
+        1,
         0
       ],
       [
@@ -521,8 +521,8 @@
       ],
       [
         21,
-        0,
-        0,
+        1,
+        1,
         0
       ],
       [
@@ -533,8 +533,8 @@
       ],
       [
         21,
-        0,
-        0,
+        1,
+        1,
         0
       ],
       [
@@ -886,19 +886,19 @@
       "x": 2,
       "y": 2,
       "text_id": "GAMECORNERPRIZEROOM_PRIZE_VENDOR_1",
-      "symbol": "?"
+      "symbol": "!"
     },
     {
       "x": 4,
       "y": 2,
       "text_id": "GAMECORNERPRIZEROOM_PRIZE_VENDOR_2",
-      "symbol": "?"
+      "symbol": "!"
     },
     {
       "x": 6,
       "y": 2,
       "text_id": "GAMECORNERPRIZEROOM_PRIZE_VENDOR_3",
-      "symbol": "?"
+      "symbol": "!"
     }
   ],
   "hidden_objects": [],
