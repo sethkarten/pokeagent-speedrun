@@ -261,9 +261,9 @@ def classify_sign(text_id: str) -> str:
         return "^"
     if "TRASH" in upper:                                            # trash can
         return "U"
-    if "_SIGN" in upper:                                           # road signpost (non-walkable)
+    if "_SIGN" in upper or "TIPS" in upper:                         # road signpost (non-walkable)
         return "!"
-    return "?"                                                      # generic sign / uncategorized bg_event
+    return "!"                                                      # uncategorized bg_event/sign
 
 
 def parse_ledge_tiles_asm(ledge_tiles_asm_path):
