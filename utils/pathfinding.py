@@ -137,6 +137,7 @@ class Pathfinder:
 
         # Get current location for debugging
         location_name = game_state.get("player", {}).get("location", "Unknown")
+        game_type = os.environ.get("GAME_TYPE", "emerald").upper()
 
         # Get blocked positions (walls, NPCs, water, etc.)
         # CRITICAL: Exclude start position - player is there so it must be walkable
@@ -152,17 +153,25 @@ class Pathfinder:
                     logger.info(f"🚫 Pathfinding: Manually blocked {coord}")
 
         # Get warp positions and ensure they're walkable (doors/stairs)
-
         warps = self._get_warp_positions(game_state, map_data)
         logger.debug(f"Found {len(warps)} warp positions: {list(warps)[:10]}")  # Show first 10
         for warp_pos in warps:
+            if game_type == "RED":
+                # Red: only unblock the goal warp. Stepping on any other door/stair
+                # tile warps the player into an undesired building.
+                if warp_pos == goal:
+                    was_blocked = warp_pos in blocked
+                    blocked.discard(warp_pos)
+                    if was_blocked:
+                        logger.info(f"🚪 Unblocked goal warp at {warp_pos}")
+                continue
+            # Emerald: unblock all warps (original behavior)
             was_blocked = warp_pos in blocked
             blocked.discard(warp_pos)  # Warps are always walkable
             if was_blocked:
                 logger.info(f"🚪 Unblocked warp at {warp_pos} (was blocked)")
-            # IMPORTANT: Also unblock the tile ABOVE the warp (in case warp was moved down from a D/S tile)
-            # This handles the case where porymap_json_builder adjusted the warp position down by 1
-            if os.environ.get("GAME_TYPE", "emerald").upper() == "EMERALD":
+            # Emerald-only: unblock tile ABOVE warp (porymap_json_builder shifts warp coords down by 1)
+            if game_type == "EMERALD":
                 above_pos = (warp_pos[0], warp_pos[1] - 1)
                 if above_pos[1] >= 0:  # Check it's not out of bounds
                     was_above_blocked = above_pos in blocked
@@ -171,7 +180,8 @@ class Pathfinder:
                         logger.info(f"🚪 Unblocked position above warp: {above_pos} (warp at {warp_pos}, was blocked)")
 
         # SAFEGUARD: Explicitly unblock all 'D' (door) and 'S' (stairs) tiles in the grid
-        if "grid" in map_data and map_data.get("type") == "porymap":
+        # Red: skip — D/S are intentionally blocked (stepping on them warps the player)
+        if game_type != "RED" and "grid" in map_data and map_data.get("type") == "porymap":
             grid = map_data["grid"]
             doors_and_stairs = []
             for y, row in enumerate(grid):
@@ -184,6 +194,20 @@ class Pathfinder:
                         doors_and_stairs.append(pos)
             if doors_and_stairs:
                 logger.debug(f"Explicitly unblocked {len(doors_and_stairs)} door/stairs tiles: {doors_and_stairs[:5]}")
+
+        # Red: unblock cuttable trees ('t') adjacent to the player (they can use Cut)
+        if game_type == "RED" and "grid" in map_data:
+            grid = map_data["grid"]
+            for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                adj_pos = (start[0] + dx, start[1] + dy)
+                ax, ay = adj_pos
+                if 0 <= ay < len(grid) and isinstance(grid[ay], (list, str)):
+                    row = grid[ay]
+                    if 0 <= ax < len(row) and row[ax] == "t":
+                        was_blocked = adj_pos in blocked
+                        blocked.discard(adj_pos)
+                        if was_blocked:
+                            logger.info(f"🌳 Unblocked cuttable tree at {adj_pos} (adjacent to player at {start})")
 
         # Ensure start is never blocked
         blocked.discard(start)
@@ -440,7 +464,7 @@ class Pathfinder:
                 player_in_water = start_row[start_pos[0]] == "W"
         
         game_type = os.environ.get("GAME_TYPE", "emerald")
-        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "=", "t"}  # "!": sign (blocked); "?": hidden item (walkable); "t": cuttable tree
+        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "=", "t", "D", "S"}  # "!": sign (blocked); "?": hidden item (walkable); "t": cuttable tree; "D"/"S": doors/stairs (warp player out of map)
         block_symbols = red_block_symbols if game_type.upper() == "RED" else {"#", "X"}
 
         for y, row in enumerate(grid):
