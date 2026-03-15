@@ -8,7 +8,7 @@ Unlike the internal Python agents (e.g. `PokeAgent`, `VisionOnlyAgent`) which ru
 
 This architecture allows us to use powerful, proprietary agentic tools (Anthropic's Claude Code, Google's Gemini CLI) which require their own runtime environment, while keeping the game infrastructure secure and stable.
 
-The backend system is polymorphic: `run_cli.py` operates through the `CliAgentBackend` abstract base class (`utils/agent_infrastructure/cli_agent_backends.py`), with concrete implementations `ClaudeCodeBackend`, `GeminiCliBackend`, and `CodexCliBackend`. Backend selection is via `--backend {claude,gemini,codex}`.
+The backend system is polymorphic: `run_cli.py` operates through the `CliAgentBackend` abstract base class (`utils/agent_infrastructure/cli_agent_backends.py`), with concrete implementations `ClaudeCodeBackend`, `GeminiCliBackend`, `CodexCliBackend`, and `HermesCliBackend`. Backend selection is via `--backend {claude,gemini,codex,hermes}`.
 
 ## 1. System Components
 
@@ -52,6 +52,15 @@ Each backend has its own devcontainer under `.devcontainer/`:
 *   **User**: UID/GID matched to host
 *   **Auth**: `--api-gateway login` → `codex login` (ChatGPT OAuth); `--api-gateway openrouter` → `OPENROUTER_API_KEY`
 *   **MCP Config**: `config.toml` in `CODEX_HOME` with model provider and MCP server URL
+
+#### Hermes Agent (`hermes-agent-devcontainer`)
+*   **Image**: `python:3.11-bookworm` + NousResearch `hermes-agent` (from `.devcontainer/hermes-agent/`)
+*   **User**: `hermes-agent` (UID/GID matched to host)
+*   **Auth**: OpenRouter via `OPENROUTER_API_KEY` when `--api-gateway openrouter`; otherwise `HERMES_MODEL`, `HERMES_PROVIDER`, `HERMES_BASE_URL`, `HERMES_API_KEY_ENV`
+*   **MCP Config**: `config.yaml` in `~/.hermes` (injected block with pokemon-emerald SSE URL or command)
+*   **Wrapper**: `hermes_wrapper.py` adapts AIAgent callbacks to JSONL stdout (system, thinking, tool_use, result, error)
+*   **Multimodal**: Patched MCP handlers capture image blocks from `get_game_state` and inject as synthetic user messages. Disable with `HERMES_DISABLE_MULTIMODAL=1`. Vision timeout: `HERMES_VISION_TIMEOUT` (default 10s), fallback to text-only on timeout.
+*   **Env passthrough**: `HERMES_DISABLE_MULTIMODAL`, `HERMES_API_TIMEOUT`, `HERMES_VISION_TIMEOUT`
 
 ## 2. Authentication & API Gateway
 
@@ -114,12 +123,13 @@ Directories are bind-mounted from the Host for persistence:
 |---------|---------------|-----------|----------|
 | Claude  | `~/.claude` | `.pokeagent_cache/{run_id}/claude_memory` | Project history, JSONL logs, credentials |
 | Gemini  | `~/.gemini` | `.pokeagent_cache/{run_id}/gemini_memory` | Session history (tmp/workspace/chats/), settings.json |
+| Hermes  | `~/.hermes` | `.pokeagent_cache/{run_id}/hermes_memory` | sessions/, usage_events.jsonl, config.yaml, state.db |
 | Both    | `/workspace` | `run_data/{run_id}/agent_scratch_space` | Agent working files, directives |
 
 ### Session Persistence for Backup Restore
 
 *   **Location**: `.pokeagent_cache/{run_id}/last_cli_session_id` — written after each session.
-*   **Backend fallback** (`get_resume_session_id()`): Claude looks in `projects/-workspace/*.jsonl`; Gemini looks in `tmp/*/chats/*.json`.
+*   **Backend fallback** (`get_resume_session_id()`): Claude looks in `projects/-workspace/*.jsonl`; Gemini looks in `tmp/*/chats/*.json`; Hermes looks in `sessions/session_*.json`.
 *   **Flow**: On restore, backup extracts to cache, session ID is loaded, and `--resume <session_id>` is passed.
 
 ## 5. Usage Monitoring
@@ -130,6 +140,7 @@ Metric tracking is backend-specific, accessed via the abstract `log_cli_interact
 |---------|--------|--------|-------------|
 | Claude  | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_session_reader.py` | Per API call (dedup by message ID) |
 | Gemini  | Session JSON in `gemini_memory/tmp/workspace/chats/session-*.json` | `utils/metric_tracking/gemini_session_reader.py` | Per message (dedup by message ID) |
+| Hermes  | `hermes_memory/sessions/session_*.json` + `usage_events.jsonl` | `utils/metric_tracking/hermes_session_reader.py` | Per assistant turn; api_call_index aligned with assistant_index for token attribution |
 
 *   **Single-writer**: The server is the only writer of `cumulative_metrics.json`. `run_cli` accumulates in memory and syncs via `POST /sync_llm_metrics`.
 *   **Polling cadence**: Every 15 seconds (heartbeat) and once after each session exits.
@@ -152,3 +163,7 @@ When running the Gemini agent in containerized mode, the following messages may 
 | `The 'metricReader' option is deprecated. Please use 'metricReaders' instead.` | Gemini CLI uses a deprecated OpenTelemetry config key. | None until we control the CLI config; or upgrade `@google/gemini-cli` when a fix is released. |
 | `YOLO mode is enabled. All tool calls will be automatically approved.` | Printed by the CLI when `--yolo` is used; may appear twice (startup). | None. |
 | `MCP server 'pokemon-emerald': HTTP connection failed, attempting SSE fallback...` / `Successfully connected using SSE transport.` | In the container, the agent is configured to use SSE for MCP; the client tries HTTP first, then falls back to SSE. | None; SSE is the intended transport for containerized runs. |
+
+## 8. Known Behaviors (Hermes)
+
+We are **not blocked** on the following behavior. Intermittently, the Hermes agent can produce very long thinking sessions (repetitive hesitation loops) or experience long API latency from the provider. This can cause perceived hangs (e.g. ~400s delays). We are aware of this behavior but continue development without treating it as a blocking bug—it may be provider-side or model behavior.
