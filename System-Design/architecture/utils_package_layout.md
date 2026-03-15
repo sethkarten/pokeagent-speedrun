@@ -28,7 +28,7 @@ Shared agent runtime glue:
 
 Session readers and server metrics:
 
-- Session readers: claude_jsonl_reader, gemini_session_reader, codex_session_reader, gemini_telemetry_reader.
+- Session readers: claude_session_reader, gemini_session_reader, codex_session_reader.
 - **server_metrics**: `update_server_metrics()` (moved from former `utils/agent_helpers.py`). agent_helpers removed.
 
 ## Top-level utils/ (shared)

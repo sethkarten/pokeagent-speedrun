@@ -63,7 +63,7 @@ External CLI agents (run via `run_cli.py`) run in a separate process or containe
 
 | Backend | Source | Reader Module | Dedup Strategy |
 |---------|--------|--------------|----------------|
-| Claude Code | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_jsonl_reader.py` | Best-entry by message ID (highest total tokens) |
+| Claude Code | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_session_reader.py` | Best-entry by message ID (highest total tokens) |
 | Gemini CLI | Session JSON in `gemini_memory/tmp/workspace/chats/session-*.json` | `utils/metric_tracking/gemini_session_reader.py` | Message ID (globally unique) |
 | Codex CLI | Rollout JSONL in `codex_memory/sessions/YYYY/MM/DD/rollout-*.jsonl` | `utils/metric_tracking/codex_session_reader.py` | Session file path + cumulative token total (per rollout) |
 
@@ -122,7 +122,7 @@ These are documented so that future changes to Codex CLI (compaction, multi-agen
 **Incremental Polling Token Undercount (Potential Improvement)**
 - **Issue**: Best-entry dedup only works within a single poll. Claude Code emits a streaming chunk (low/zero `output_tokens`) first, then a final entry with full usage. If poll 1 sees the streaming chunk, we add it and add its hash to `processed_hashes`. When poll 2 sees the final entry (same hash), we skip it. Result: ~5–15% undercount of completion tokens.
 - **Proposed fix**: Support *updates* when a later poll sees a higher-total entry for an already-processed hash. Changes required:
-  1. **Reader** (`claude_jsonl_reader.py`): Replace `processed_hashes: set` with `processed_best: dict[hash, total]`; return `(new_entries, update_entries, new_processed_best)`.
+  1. **Reader** (`claude_session_reader.py`): Replace `processed_hashes: set` with `processed_best: dict[hash, total]`; return `(new_entries, update_entries, new_processed_best)`.
   2. **Caller** (`run_cli.py`): Maintain `hash_to_step_info: dict[hash, (step_number, token_usage)]`; for update entries, call `update_cli_step()` to correct the step and cumulative totals.
   3. **LLM logger** (`llm_logger.py`): Add `update_cli_step(step_number, old_usage, new_usage)` that subtracts old values, adds new values, and updates the step in `steps`.
 

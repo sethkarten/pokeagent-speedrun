@@ -128,7 +128,7 @@ Metric tracking is backend-specific, accessed via the abstract `log_cli_interact
 
 | Backend | Source | Reader | Granularity |
 |---------|--------|--------|-------------|
-| Claude  | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_jsonl_reader.py` | Per API call (dedup by message ID) |
+| Claude  | JSONL files in `claude_memory/projects/-workspace/` | `utils/metric_tracking/claude_session_reader.py` | Per API call (dedup by message ID) |
 | Gemini  | Session JSON in `gemini_memory/tmp/workspace/chats/session-*.json` | `utils/metric_tracking/gemini_session_reader.py` | Per message (dedup by message ID) |
 
 *   **Single-writer**: The server is the only writer of `cumulative_metrics.json`. `run_cli` accumulates in memory and syncs via `POST /sync_llm_metrics`.
