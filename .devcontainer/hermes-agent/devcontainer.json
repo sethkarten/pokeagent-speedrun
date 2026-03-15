@@ -1,0 +1,31 @@
+{
+  "name": "Hermes Agent Container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "runArgs": ["--cap-add=NET_ADMIN", "--security-opt=seccomp=unconfined", "--network=bridge"],
+  "mounts": [
+    "source=${localWorkspaceFolder}/.pokeagent_cache/${localEnv:RUN_DATA_ID}/hermes_memory,target=/home/hermes-agent/.hermes,type=bind",
+    "source=${localWorkspaceFolder}/.pokeagent_cache/${localEnv:RUN_DATA_ID}/agent_scratch_space,target=/workspace,type=bind",
+    "source=${localWorkspaceFolder},target=/opt/pokeagent-src,type=bind,readonly"
+  ],
+  "containerEnv": {
+    "MCP_PORT": "${localEnv:MCP_PORT}",
+    "GAME_SERVER_PORT": "${localEnv:GAME_SERVER_PORT}",
+    "POKEMON_MCP_SERVER_URL": "http://host.docker.internal:${localEnv:MCP_PORT}",
+    "RUN_DATA_ID": "${localEnv:RUN_DATA_ID}",
+    "HERMES_HOME": "/home/hermes-agent/.hermes",
+    "PYTHONPATH": "/opt/pokeagent-src"
+  },
+  "remoteUser": "hermes-agent",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+  "postCreateCommand": "echo '✅ Hermes agent container ready'",
+  "features": {}
+}
