@@ -107,6 +107,8 @@ def preflight_cli(args) -> bool:
         return _preflight_gemini()
     if args.backend == "codex":
         return _preflight_codex()
+    if args.backend == "hermes":
+        return _preflight_hermes()
     return True
 
 
@@ -217,6 +219,37 @@ def _preflight_codex() -> bool:
         print("   For OpenRouter: set OPENROUTER_API_KEY and configure ~/.codex/config.toml")
         print("   Or run 'codex login' for ChatGPT auth.")
 
+    return True
+
+
+def _preflight_hermes() -> bool:
+    """Preflight checks for Hermes CLI.
+
+    Hermes runs inside its own container for normal experiments, so the host CLI
+    is only required when the user explicitly wants to run interactive setup or
+    login flows on the host.
+    """
+    hermes_path = shutil.which("hermes")
+    if not hermes_path:
+        print("ℹ️  Hermes CLI not found on the host PATH.")
+        print("   This is fine for containerized runs because the Docker image installs Hermes.")
+        print("   Install Hermes locally only if you want to use --login / interactive host setup.")
+        return True
+
+    try:
+        result = subprocess.run(
+            ["hermes", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            print("⚠️  Hermes CLI is installed but '--help' returned a non-zero status.")
+            print("   Containerized runs may still work, but host-side login/setup could fail.")
+    except Exception as e:
+        print(f"⚠️  Failed to run 'hermes --help': {e}")
+        print("   Containerized runs may still work because Hermes is installed inside the image.")
     return True
 
 
@@ -860,7 +893,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run external CLI agents (Claude Code, Codex) for Pokemon Emerald experiments"
     )
-    parser.add_argument("--backend", type=str, default="claude", choices=["claude", "gemini", "codex"],
+    parser.add_argument("--backend", type=str, default="claude", choices=["claude", "gemini", "codex", "hermes"],
                        help="Backend to use for the CLI agent (default: claude)")
     parser.add_argument("--api-gateway", type=str, default="login", choices=["login", "openrouter"],
                        help="Auth gateway: 'login' (OAuth/subscription, default) or 'openrouter' (requires OPENROUTER_API_KEY)")
