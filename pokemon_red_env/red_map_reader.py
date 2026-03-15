@@ -347,7 +347,7 @@ class RedMapReader:
           !  sign        ?  hidden item
           ↓  ledge down  ←  ledge left  →  ledge right
           P  PC          T  TV/Machine  B  Bookshelf
-          ^  display     S  Stair/warp
+          ^  display     S  Stair/warp  t  cuttable tree
         """
         map_name = self.read_map_name()
         data = self._load_map_data(map_name)

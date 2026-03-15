@@ -1616,7 +1616,7 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: I=Player .=walkable #=wall ~=grass W=water D=door !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC)")
+    context_parts.append("(Legend: I=Player .=walkable #=wall t=cuttable tree (use HM01 Cut) ~=grass W=water D=door !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC)")
 
     # Compact JSON summary (warp_events, bg_events, objects)
     compact_json = {
@@ -2333,6 +2333,8 @@ def get_movement_preview(state_data):
                     tile_description = 'Hidden item (walkable)'
                 elif tile_symbol == 'O':
                     tile_description = 'Poké Ball (interact from adjacent tile)'
+                elif tile_symbol == 't':
+                    tile_description = 'Cuttable tree (use HM Cut)'
                 else:
                     tile_description = f'Tile ({tile_symbol})'
 
@@ -2365,7 +2367,7 @@ def get_movement_preview(state_data):
                 tile_symbol = format_tile_to_symbol(target_tile)
                 
                 # Determine if movement is blocked by terrain
-                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N']  # Walls, water, and NPCs block movement
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N', 't']  # Walls, water, NPCs, and cuttable trees block movement
                 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
@@ -2437,6 +2439,8 @@ def get_movement_preview(state_data):
                         tile_description = f"Walkable path (ID: {tile_id})"
                     elif tile_symbol == '#':
                         tile_description = f"BLOCKED - Wall/Obstacle (ID: {tile_id}, {behavior_name})"
+                    elif tile_symbol == 't':
+                        tile_description = f"BLOCKED - Cuttable tree (use HM Cut) (ID: {tile_id})"
                     elif tile_symbol == 'W':
                         tile_description = f"BLOCKED - Water (need Surf) (ID: {tile_id})"
                     elif tile_symbol == '~':
