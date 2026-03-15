@@ -345,7 +345,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Route 5 has a Pokémon Day Care and an Underground Path entrance. The Underground Path (Routes 5-6) skips trainer encounters. Exit on Route 6 and continue south to Vermilion City. Heal at the Pokémon Center.",
         completion_condition="reached_vermilion_city",
         priority=1,
-        recommended_battling_objectives=["battle_007", "battle_008"]
+        recommended_battling_objectives=["battle_007", "battle_009"]
     ),
     DirectObjective(
         id="vermilion_030",
@@ -385,7 +385,8 @@ STORY_OBJECTIVES = [
         target_location="S.S. Anne Captain's Room",
         navigation_hint="Go to the bow (front) of the ship and find the Captain's cabin. Talk to the sick Captain — press A to rub his back. He gives you HM01 Cut. Teach Cut to a Pokémon to chop small trees blocking paths.",
         completion_condition="hm01_cut_obtained",
-        priority=1
+        priority=1,
+        recommended_battling_objectives=["battle_008"]
     ),
     DirectObjective(
         id="vermilion_034",
@@ -464,7 +465,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Route 8 goes west from Lavender toward Saffron. The Saffron City gates are blocked — take the Route 7-8 Underground Path to bypass them and emerge on Route 7. Then walk west to Celadon City. Heal at the Pokémon Center.",
         completion_condition="reached_celadon_city",
         priority=1,
-        recommended_battling_objectives=["battle_009", "battle_010"]
+        recommended_battling_objectives=["battle_010", "battle_011"]
     ),
     DirectObjective(
         id="celadon_041",
@@ -569,7 +570,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Mr. Fuji's house is in the south of Lavender Town. He gives you the Poké Flute — a Key Item that wakes sleeping Pokémon. Two Snorlax (Lv 30) block Routes 12 and 16. Use the Flute to wake them and clear the path.",
         completion_condition="poke_flute_obtained",
         priority=1,
-        recommended_battling_objectives=["battle_011", "battle_012"]
+        recommended_battling_objectives=["battle_012", "battle_013"]
     ),
 
     # ============================================================
@@ -584,7 +585,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Saffron City is in the center of Kanto. Give any drink from Celadon Dept. Store vending machines (Fresh Water/Soda Pop/Lemonade) to a thirsty guard, then all guards allow passage. Enter from Routes 5/6/7/8. Saffron has the Silph Co. skyscraper, Saffron Gym, and Fighting Dojo.",
         completion_condition="reached_saffron_city",
         priority=1,
-        recommended_battling_objectives=["battle_013"]
+        recommended_battling_objectives=["battle_014"]
     ),
     DirectObjective(
         id="saffron_052",
@@ -669,7 +670,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Route 17 is the Cycling Road — use your Bicycle to ride downhill fast. Multiple Biker trainers with Fighting/Poison types. Route 18 leads east to Fuchsia City. Enter Fuchsia from the west. Heal at the Pokémon Center.",
         completion_condition="reached_fuchsia_city",
         priority=1,
-        recommended_battling_objectives=["battle_014", "battle_015"]
+        recommended_battling_objectives=["battle_015", "battle_016"]
     ),
     DirectObjective(
         id="fuchsia_060",
@@ -714,7 +715,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Fly to Pallet Town and Surf south (Route 21) to Cinnabar Island. Or Surf west from Fuchsia along Routes 19-20. Wild Tentacool (100%) on water routes. Heal at Cinnabar Pokémon Center on arrival.",
         completion_condition="reached_cinnabar_island",
         priority=1,
-        recommended_battling_objectives=["battle_016", "battle_017"]
+        recommended_battling_objectives=["battle_017", "battle_018"]
     ),
     DirectObjective(
         id="cinnabar_064",
@@ -769,7 +770,7 @@ STORY_OBJECTIVES = [
         navigation_hint="Fly to Viridian City. The Viridian Gym was previously locked — Giovanni is now here. Enter from the south. Multiple trainers with Ground/Rock types inside. Navigate spinner tiles to reach trainers, then Giovanni.",
         completion_condition="entered_viridian_gym",
         priority=1,
-        recommended_battling_objectives=["battle_018", "battle_019"]
+        recommended_battling_objectives=["battle_019", "battle_020"]
     ),
     DirectObjective(
         id="viridian_gym_069",
@@ -828,7 +829,7 @@ STORY_OBJECTIVES = [
         navigation_hint="The Indigo Plateau Poké Mart sells top-tier items. Buy: 20 Full Restores ($60,000), 15 Revives ($22,500), 10 Max Potions, Full Heals, Max Repels. There is NO healing between Elite Four rooms — stock heavily.",
         completion_condition="indigo_plateau_stocked",
         priority=1,
-        recommended_battling_objectives=["battle_020", "battle_021"]
+        recommended_battling_objectives=["battle_021", "battle_022"]
     ),
     DirectObjective(
         id="elite_074",
@@ -1003,6 +1004,23 @@ BATTLING_OBJECTIVES = [
     ),
     DirectObjective(
         id="battle_008",
+        description="Catch a Pokémon that can learn HM01 Cut (Oddish on Route 6) and teach it Cut",
+        action_type="catch",
+        category="battling",
+        target_location="Route 6",
+        navigation_hint=(
+            "You need a Pokémon that knows Cut to chop the tree blocking Vermilion Gym. "
+            "If your starter (Bulbasaur/Charmander) or Paras from Mt. Moon can learn Cut, "
+            "just teach them HM01 directly from the bag. Otherwise, catch an Oddish on Route 6 "
+            "(south of Vermilion, 25% encounter rate, Lv 13-16) — Oddish learns Cut via HM01. "
+            "Open the bag, select HM01 Cut, choose 'USE', and pick the Pokémon to teach it to."
+        ),
+        completion_condition="hm01_cut_taught",
+        priority=1,
+        prerequisite_story_objective="vermilion_033"
+    ),
+    DirectObjective(
+        id="battle_009",
         description="Train your entire team to Lv 22+ before battling Lt. Surge",
         action_type="battle",
         category="battling",
@@ -1022,7 +1040,7 @@ BATTLING_OBJECTIVES = [
 
     # Pre-Erika
     DirectObjective(
-        id="battle_009",
+        id="battle_010",
         description="Train your entire team to Lv 28+ before battling Erika",
         action_type="battle",
         category="battling",
@@ -1039,7 +1057,7 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="celadon_040"
     ),
     DirectObjective(
-        id="battle_010",
+        id="battle_011",
         description="Buy key items at Celadon Department Store (TMs, healing, drinks)",
         action_type="shop",
         category="battling",
@@ -1052,7 +1070,7 @@ BATTLING_OBJECTIVES = [
 
     # Silph Co. area
     DirectObjective(
-        id="battle_011",
+        id="battle_012",
         description="Get Lapras (Lv 15) from the Silph Co. employee on 7F",
         action_type="interact",
         category="battling",
@@ -1063,7 +1081,7 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="saffron_052"
     ),
     DirectObjective(
-        id="battle_012",
+        id="battle_013",
         description="Train your entire team to Lv 40+ before tackling Silph Co. and Saffron Gym",
         action_type="battle",
         category="battling",
@@ -1082,7 +1100,7 @@ BATTLING_OBJECTIVES = [
 
     # Pre-Sabrina
     DirectObjective(
-        id="battle_013",
+        id="battle_014",
         description="Get TM29 Psychic from Mr. Psychic's house in Saffron City",
         action_type="interact",
         category="battling",
@@ -1095,7 +1113,7 @@ BATTLING_OBJECTIVES = [
 
     # Pre-Koga
     DirectObjective(
-        id="battle_014",
+        id="battle_015",
         description="Train your entire team to Lv 40+ and prepare Antidotes/Awakenings before battling Koga",
         action_type="battle",
         category="battling",
@@ -1112,7 +1130,7 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="fuchsia_059"
     ),
     DirectObjective(
-        id="battle_015",
+        id="battle_016",
         description="Catch a Pokémon in the Safari Zone (Chansey, Scyther, or Exeggcute)",
         action_type="catch",
         category="battling",
@@ -1126,7 +1144,7 @@ BATTLING_OBJECTIVES = [
 
     # Pre-Blaine
     DirectObjective(
-        id="battle_016",
+        id="battle_017",
         description="Train your entire team to Lv 42+ before battling Blaine",
         action_type="battle",
         category="battling",
@@ -1143,7 +1161,7 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="cinnabar_063"
     ),
     DirectObjective(
-        id="battle_017",
+        id="battle_018",
         description="Buy Hyper Potions and Revives before the Cinnabar Gym",
         action_type="shop",
         category="battling",
@@ -1156,7 +1174,7 @@ BATTLING_OBJECTIVES = [
 
     # Pre-Giovanni (Viridian Gym)
     DirectObjective(
-        id="battle_018",
+        id="battle_019",
         description="Train your entire team to Lv 45+ before battling Giovanni in Viridian Gym",
         action_type="battle",
         category="battling",
@@ -1173,7 +1191,7 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="viridian_gym_068"
     ),
     DirectObjective(
-        id="battle_019",
+        id="battle_020",
         description="Catch Zapdos at the Power Plant (optional legendary, great for Elite Four)",
         action_type="catch",
         category="battling",
@@ -1187,7 +1205,7 @@ BATTLING_OBJECTIVES = [
 
     # Pre-Elite Four
     DirectObjective(
-        id="battle_020",
+        id="battle_021",
         description="Train your full team to Lv 55+ before entering the Elite Four",
         action_type="battle",
         category="battling",
@@ -1205,7 +1223,7 @@ BATTLING_OBJECTIVES = [
         prerequisite_story_objective="victory_072"
     ),
     DirectObjective(
-        id="battle_021",
+        id="battle_022",
         description="Stock up on 20+ Full Restores, 15+ Revives at Indigo Plateau Poké Mart",
         action_type="shop",
         category="battling",
