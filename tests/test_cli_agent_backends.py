@@ -15,6 +15,7 @@ from utils.agent_infrastructure.cli_agent_backends import (
     ClaudeCodeBackend,
     CodexCliBackend,
     GeminiCliBackend,
+    HermesCliBackend,
     get_backend,
 )
 
@@ -47,7 +48,7 @@ class TestCliSessionMetrics:
 class TestDevcontainerBuildContext:
     """Verify devcontainer_build_context points to an existing directory."""
 
-    @pytest.mark.parametrize("cli_type", ["claude", "gemini", "codex"])
+    @pytest.mark.parametrize("cli_type", ["claude", "gemini", "codex", "hermes"])
     def test_devcontainer_build_context_exists(self, cli_type):
         backend = get_backend(cli_type)
         ctx = backend.devcontainer_build_context
@@ -78,6 +79,11 @@ class TestGetBackend:
     def test_unknown_raises(self):
         with pytest.raises(ValueError, match="Unknown CLI type"):
             get_backend("unknown")
+
+    def test_hermes_returns_hermes_cli_backend(self):
+        backend = get_backend("hermes")
+        assert isinstance(backend, HermesCliBackend)
+        assert backend.name == "HermesCLI"
 
 
 class TestClaudeCodeBackendBuildLaunchCmd:
@@ -337,3 +343,85 @@ class TestCodexCliBackendHandleStreamEvent:
         backend.handle_stream_event(event, metrics)
         assert metrics.is_error is True
         assert "failed" in metrics.error
+
+
+class TestHermesCliBackendBuildLaunchCmd:
+    def test_local_cmd_structure(self, tmp_path):
+        directive = tmp_path / "directive.md"
+        directive.write_text("Play Pokemon.")
+        backend = HermesCliBackend()
+        cmd, env, bootstrap, temp_path = backend.build_launch_cmd(
+            str(directive),
+            "http://localhost:8000",
+            str(tmp_path),
+            project_root=str(Path(__file__).resolve().parent.parent),
+        )
+        cmd_str = " ".join(cmd)
+        assert "utils.agent_infrastructure.hermes_wrapper" in cmd_str
+        assert "--directive-path" in cmd_str
+        assert env["POKEMON_SERVER_URL"] == "http://localhost:8000"
+        assert "Play Pokemon." in bootstrap
+        assert temp_path is None
+
+    def test_containerized_cmd_has_docker(self, tmp_path):
+        directive = tmp_path / "directive.md"
+        directive.write_text("Play Pokemon.")
+        agent_mem = tmp_path / "hermes_memory"
+        agent_mem.mkdir()
+        backend = HermesCliBackend()
+        cmd, env, bootstrap, temp_path = backend.build_launch_cmd(
+            str(directive),
+            "http://localhost:8000",
+            str(tmp_path),
+            containerized=True,
+            project_root=str(Path(__file__).resolve().parent.parent),
+            run_id="test_run",
+            agent_memory_dir=str(agent_mem),
+            mcp_sse_port=8002,
+        )
+        assert cmd[0] == "docker"
+        assert "hermes-agent-devcontainer" in cmd
+        assert any("/opt/pokeagent-src" in part for part in cmd)
+        assert env["POKEMON_SERVER_URL"] == "http://localhost:8000"
+        assert "Play Pokemon." in bootstrap
+        assert temp_path is None
+
+
+class TestHermesCliBackendStreamEvent:
+    def test_system_sets_session_and_model(self):
+        backend = HermesCliBackend()
+        metrics = CliSessionMetrics()
+        backend.handle_stream_event(
+            {"type": "system", "session_id": "sess-1", "model": "anthropic/claude-sonnet-4.5"},
+            metrics,
+        )
+        assert metrics.session_id == "sess-1"
+        assert metrics.model == "anthropic/claude-sonnet-4.5"
+
+    def test_tool_use_increments_count(self):
+        backend = HermesCliBackend()
+        metrics = CliSessionMetrics()
+        backend.handle_stream_event(
+            {"type": "tool_use", "tool_name": "get_game_state", "arguments": {}},
+            metrics,
+        )
+        assert metrics.tool_use_count == 1
+
+    def test_result_updates_metrics(self):
+        backend = HermesCliBackend()
+        metrics = CliSessionMetrics()
+        backend.handle_stream_event(
+            {
+                "type": "result",
+                "session_id": "sess-2",
+                "model": "anthropic/claude-sonnet-4.5",
+                "num_turns": 3,
+                "duration_ms": 5000,
+                "usage": {"input_tokens": 120, "output_tokens": 45},
+            },
+            metrics,
+        )
+        assert metrics.session_id == "sess-2"
+        assert metrics.input_tokens == 120
+        assert metrics.output_tokens == 45
+        assert metrics.num_turns == 3
