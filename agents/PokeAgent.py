@@ -33,7 +33,7 @@ from utils.metric_tracking.server_metrics import update_server_metrics
 from utils.data_persistence.llm_logger import get_llm_logger
 from utils.agent_infrastructure.vlm_backends import VLM
 from utils.data_persistence.run_data_manager import get_run_data_manager
-from agents.custom.utils.prompt_optimizer import create_prompt_optimizer
+from agents.utils.prompt_optimizer import create_prompt_optimizer
 from utils.data_persistence.run_data_manager import get_run_data_manager
 from utils.data_persistence.run_data_manager import initialize_run_data_manager
 from agents.prompts.paths import (
@@ -742,7 +742,7 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                 gym_name = location_match.group(1) if location_match else "Unknown"
 
             # Load gym puzzle knowledge
-            from agents.custom.puzzle_solver import GYM_PUZZLES
+            from agents.puzzle_solver import GYM_PUZZLES
             gym_info = GYM_PUZZLES.get(gym_name, {
                 "type": "unknown",
                 "description": "Unknown gym - no specific puzzle guidance available",

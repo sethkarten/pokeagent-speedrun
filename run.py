@@ -13,8 +13,6 @@ import signal
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from server.client import run_multiprocess_client
-
 CUSTOM_AGENT_CONFIGS = {
     "pokeagent": {
         "name": "PokeAgent",
@@ -23,7 +21,7 @@ CUSTOM_AGENT_CONFIGS = {
             "All MCP tools enabled",
             "Supports autonomous objective creation and prompt optimization",
         ],
-        "module": "agents.custom.PokeAgent",
+        "module": "agents.PokeAgent",
         "class": "PokeAgent",
         "use_backend": True,
         "supports_prompt_optimization": True,
@@ -35,7 +33,7 @@ CUSTOM_AGENT_CONFIGS = {
             "Custom VLM benchmark agent with tool scaffolding",
             "Supports autonomous objective creation and prompt optimization",
         ],
-        "module": "agents.custom.PokeAgent",
+        "module": "agents.PokeAgent",
         "class": "PokeAgent",
         "use_backend": True,
         "supports_prompt_optimization": True,
@@ -47,7 +45,7 @@ CUSTOM_AGENT_CONFIGS = {
             "No map information or pathfinding assistance",
             "Navigates using directional buttons only",
         ],
-        "module": "agents.custom.vision_only_agent",
+        "module": "agents.vision_only_agent",
         "class": "VisionOnlyAgent",
         "use_backend": True,
         "supports_walkthrough": True,
@@ -56,22 +54,14 @@ CUSTOM_AGENT_CONFIGS = {
 }
 
 SCAFFOLD_DESCRIPTIONS = {
-    "react": "ReAct agent (Thought→Action→Observation loop)",
-    "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
-    "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
-    "pokeagent": "PokeAgent (custom VLM benchmark agent)",
+    "pokeagent": "PokeAgent (VLM benchmark agent with tool scaffolding)",
     "autonomous_cli": "PokeAgent (legacy alias)",
     "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",
 }
 
-SUPPORTED_SCAFFOLDS = [
-    "react",
-    "claudeplays",
-    "geminiplays",
-    *CUSTOM_AGENT_CONFIGS.keys(),
-]
+SUPPORTED_SCAFFOLDS = list(CUSTOM_AGENT_CONFIGS.keys())
 
-SERVER_MANAGED_SCAFFOLDS = ["geminiplays", *CUSTOM_AGENT_CONFIGS.keys()]
+SERVER_MANAGED_SCAFFOLDS = list(CUSTOM_AGENT_CONFIGS.keys())
 
 
 def start_server(args, run_id=None):
@@ -249,7 +239,7 @@ def main():
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="pokeagent",
                        choices=SUPPORTED_SCAFFOLDS,
-                       help="Agent scaffold: pokeagent (default), react, claudeplays, geminiplays, autonomous_cli, or vision_only")
+                       help="Agent scaffold: pokeagent (default)/autonomous_cli, or vision_only")
     
     # Operation modes
     parser.add_argument("--headless", action="store_true", 
@@ -411,44 +401,13 @@ def main():
         
         print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream")
 
-        # Check if this is a custom benchmark agent
+        # All supported scaffolds are custom benchmark agents
         if args.scaffold in CUSTOM_AGENT_CONFIGS:
             return start_custom_agent(CUSTOM_AGENT_CONFIGS[args.scaffold], args)
-        elif args.scaffold == "geminiplays":
-            print("\n🖥️  GeminiPlaysAgent Mode - Native Tools with MCP Integration")
-            print("=" * 60)
-            print("✅ Server is running")
-            print("🤖 Starting GeminiPlaysAgent...")
-            print("   Using native function calling with 15 tools")
-            print("   MCP tools: press_buttons, navigate_to, get_game_state")
-            print("   Native tools: goals, memory, self-critique, meta")
-            print("")
-
-            # Import and run GeminiPlaysAgent
-            from agents.simple.gemini_plays import GeminiPlaysAgent
-            from agents import Agent
-            print("📦 GeminiPlaysAgent imported successfully", flush=True)
-
-            print(f"🔧 Creating agent with scaffold=geminiplays", flush=True)
-            agent_wrapper = Agent(args)
-            agent = agent_wrapper.agent_impl  # Get the actual GeminiPlaysAgent instance
-
-            if not isinstance(agent, GeminiPlaysAgent):
-                print(f"❌ Error: Expected GeminiPlaysAgent but got {type(agent)}")
-                return 1
-
-            print("✅ Agent created", flush=True)
-
-            max_steps = args.max_steps if hasattr(args, 'max_steps') else None
-            return agent.run(max_steps=max_steps)
         else:
-            print("\n🚀 Starting client...")
-            print("-" * 60)
-
-            # Run the generic multiprocess client (for ReAct and ClaudePlays agents)
-            success = run_multiprocess_client(server_port=args.port, args=args)
-
-            return 0 if success else 1
+            print(f"❌ Unsupported scaffold: {args.scaffold}")
+            print(f"   Supported: {', '.join(CUSTOM_AGENT_CONFIGS.keys())}")
+            return 1
         
     except KeyboardInterrupt:
         print("\n\n🛑 Shutdown requested by user")

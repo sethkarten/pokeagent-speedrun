@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def test_utils_package_imports():
-    from agents.custom.utils.prompt_optimizer import PromptOptimizer
+    from agents.utils.prompt_optimizer import PromptOptimizer
     from utils.agent_infrastructure.cli_agent_backends import CodexCliBackend, get_backend
     from utils.agent_infrastructure.vlm_backends import VLM
     from utils.data_persistence.llm_logger import LLMLogger

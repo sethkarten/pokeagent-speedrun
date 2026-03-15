@@ -25,8 +25,8 @@ import base64
 import traceback
 
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add project root to path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
