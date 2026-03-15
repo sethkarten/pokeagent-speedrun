@@ -438,17 +438,17 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Rock Tunnel 1F",
-        navigation_hint="Rock Tunnel is dark — use HM05 Flash (get from Oak's aide in Route 2 gate after 10 species caught) to lower wild Pokémon accuracy. Wild: Zubat (55%), Geodude (25%), Machop, Onix. Multiple Hiker trainers. Route: 1F entrance → B1F → south exit on Route 10.",
+        navigation_hint="Rock Tunnel is dark — Flash (HM05) helps but isn't required. Enter from Route 10 north. Wild: Zubat, Geodude, Machop, Onix. Multiple Hiker/Pokemaniac trainers on both floors.",
         completion_condition="entered_rock_tunnel",
         priority=1
     ),
     DirectObjective(
         id="lavender_039",
-        description="Exit Rock Tunnel south and walk to Lavender Town",
+        description="Navigate through Rock Tunnel and exit south to Lavender Town",
         action_type="navigate",
         category="story",
         target_location="Lavender Town",
-        navigation_hint="Exit Rock Tunnel's south gate to Route 10 south. Walk east then south to reach Lavender Town. Heal at the Pokémon Center. To access Pokémon Tower's upper floors you'll need the Silph Scope from Team Rocket Hideout.",
+        navigation_hint="Always navigate to the next reachable warp point whose dest_map is not LAST_MAP (a ladder to B1F or back to 1F). If no path is found to a warp, try a different one. Rock Tunnel has 4 ladders on 1F connecting to 4 ladders on B1F. After returning to 1F's south section, take the south exit to Route 10. Walk south to Lavender Town and heal.",
         completion_condition="reached_lavender_town",
         priority=1
     ),
