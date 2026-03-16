@@ -209,6 +209,20 @@ class TestCodexCliBackendBuildLaunchCmd:
         cmd_str = " ".join(cmd)
         assert "--skip-git-repo-check" in cmd_str
 
+    def test_thinking_effort_adds_config_override(self, tmp_path):
+        directive = tmp_path / "directive.md"
+        directive.write_text("Play Pokemon.")
+        backend = CodexCliBackend()
+        cmd, _, _, _ = backend.build_launch_cmd(
+            str(directive),
+            "http://localhost:8000",
+            str(tmp_path),
+            dangerously_skip_permissions=True,
+            thinking_effort="high",
+        )
+        cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
+        assert "model_reasoning_effort=high" in cmd_str
+
 
 class TestCodexCliBackendGetResumeSessionId:
     def test_empty_dir_returns_none(self, tmp_path):
