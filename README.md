@@ -1,10 +1,10 @@
 # PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald
 
-PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald
+![PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald](layout.png)
 
 ## Custom PokeAgent Harness
 
-Custom PokeAgent Harness
+![Custom PokeAgent Harness](pokeagent_architecture.png)
 
 ## Table of Contents
 
