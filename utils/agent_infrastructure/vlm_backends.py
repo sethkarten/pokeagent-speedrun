@@ -1402,226 +1402,6 @@ class OpenRouterBackend(VLMBackend):
             raise
 
 
-class LocalHuggingFaceBackend(VLMBackend):
-    """Local HuggingFace transformers backend with bitsandbytes optimization"""
-
-    def __init__(self, model_name: str, device: str = "auto", load_in_4bit: bool = False, **kwargs):
-        try:
-            import torch
-            from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
-            from PIL import Image
-        except ImportError as e:
-            raise ImportError(
-                f"Required packages not found. Install with: pip install torch transformers bitsandbytes accelerate. Error: {e}"
-            )
-
-        self.model_name = model_name
-        self.device = device
-        self.torch = torch
-
-        logger.info(f"Loading local VLM model: {model_name}")
-
-        # Configure quantization if requested
-        quantization_config = None
-        if load_in_4bit:
-            quantization_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_quant_type="nf4",
-            )
-            logger.info("Using 4-bit quantization with bitsandbytes")
-
-        # Load processor and model
-        try:
-            self.processor = AutoProcessor.from_pretrained(model_name)
-            self.model = AutoModelForImageTextToText.from_pretrained(
-                model_name,
-                quantization_config=quantization_config,
-                device_map=device if device != "auto" else "auto",
-                torch_dtype=torch.float16 if not load_in_4bit else None,
-                trust_remote_code=True,
-            )
-
-            if device != "auto" and not load_in_4bit:
-                self.model = self.model.to(device)
-
-            logger.info(f"Model loaded successfully on {device}")
-
-        except Exception as e:
-            logger.error(f"Failed to load model {model_name}: {e}")
-            raise
-
-    def _generate_response(self, inputs: Dict[str, Any], text: str, module_name: str) -> str:
-        """Generate response using the local model"""
-        try:
-            start_time = time.time()
-
-            # Log the prompt
-            prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
-            logger.info(f"[{module_name}] LOCAL HF VLM QUERY:")
-            logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
-
-            with self.torch.no_grad():
-                # Ensure all inputs are on the correct device
-                if hasattr(self.model, "device"):
-                    device = self.model.device
-                elif hasattr(self.model, "module") and hasattr(self.model.module, "device"):
-                    device = self.model.module.device
-                else:
-                    device = next(self.model.parameters()).device
-
-                # Move inputs to device if needed
-                inputs_on_device = {}
-                for k, v in inputs.items():
-                    if hasattr(v, "to"):
-                        inputs_on_device[k] = v.to(device)
-                    else:
-                        inputs_on_device[k] = v
-
-                generated_ids = self.model.generate(
-                    **inputs_on_device,
-                    max_new_tokens=1024,
-                    do_sample=True,
-                    temperature=0.7,
-                    pad_token_id=self.processor.tokenizer.eos_token_id,
-                )
-
-                # Decode the response
-                generated_text = self.processor.decode(generated_ids[0], skip_special_tokens=True)
-
-                # Extract only the generated part (remove the prompt)
-                if text in generated_text:
-                    result = generated_text.split(text)[-1].strip()
-                else:
-                    result = generated_text.strip()
-
-            # Log the interaction
-            duration = time.time() - start_time
-            log_llm_interaction(
-                interaction_type=f"local_{module_name}",
-                prompt=text,
-                response=result,
-                duration=duration,
-                metadata={"model": self.model_name, "backend": "local", "has_image": "images" in inputs},
-                model_info={"model": self.model_name, "backend": "local"},
-            )
-
-            # Log the response
-            result_preview = result[:1000] + "..." if len(result) > 1000 else result
-            logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-            logger.info(f"[{module_name}] ---")
-
-            return result
-
-        except Exception as e:
-            logger.error(f"Error generating response: {e}")
-            raise
-
-    def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
-        """Process an image and text prompt using local HuggingFace model"""
-        # Handle both PIL Images and numpy arrays
-        if hasattr(img, "convert"):  # It's a PIL Image
-            image = img
-        elif hasattr(img, "shape"):  # It's a numpy array
-            image = Image.fromarray(img)
-        else:
-            raise ValueError(f"Unsupported image type: {type(img)}")
-
-        # Prepare messages with proper chat template format
-        messages = [{"role": "user", "content": [{"type": "image", "image": image}, {"type": "text", "text": text}]}]
-        formatted_text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=formatted_text, images=image, return_tensors="pt")
-
-        return self._generate_response(inputs, text, module_name)
-
-    def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
-        """Process a text-only prompt using local HuggingFace model"""
-        # For text-only queries, use simple text format without image
-        messages = [{"role": "user", "content": text}]
-        formatted_text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=formatted_text, return_tensors="pt")
-
-        return self._generate_response(inputs, text, module_name)
-
-
-class LegacyOllamaBackend(VLMBackend):
-    """Legacy Ollama backend for backward compatibility"""
-
-    def __init__(self, model_name: str, port: int = 8010, **kwargs):
-        try:
-            from openai import OpenAI
-        except ImportError:
-            raise ImportError("OpenAI package not found. Install with: pip install openai")
-
-        self.model_name = model_name
-        self.port = port
-        self.client = OpenAI(api_key="", base_url=f"http://localhost:{port}/v1")
-
-    @retry_with_exponential_backoff
-    def _call_completion(self, messages):
-        """Calls the completions.create method with exponential backoff."""
-        return self.client.chat.completions.create(model=self.model_name, messages=messages)
-
-    def get_query(self, img: Union[Image.Image, np.ndarray], text: str, module_name: str = "Unknown") -> str:
-        """Process an image and text prompt using legacy Ollama backend"""
-        # Handle both PIL Images and numpy arrays
-        if hasattr(img, "convert"):  # It's a PIL Image
-            image = img
-        elif hasattr(img, "shape"):  # It's a numpy array
-            image = Image.fromarray(img)
-        else:
-            raise ValueError(f"Unsupported image type: {type(img)}")
-
-        buffered = BytesIO()
-        image.save(buffered, format="PNG")
-        image_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-
-        messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": text},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}},
-                ],
-            }
-        ]
-
-        # Log the prompt
-        prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
-        logger.info(f"[{module_name}] OLLAMA VLM IMAGE QUERY:")
-        logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
-
-        response = self._call_completion(messages)
-        result = response.choices[0].message.content
-
-        # Log the response
-        result_preview = result[:1000] + "..." if len(result) > 1000 else result
-        logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-        logger.info(f"[{module_name}] ---")
-
-        return result
-
-    def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
-        """Process a text-only prompt using legacy Ollama backend"""
-        messages = [{"role": "user", "content": [{"type": "text", "text": text}]}]
-
-        # Log the prompt
-        prompt_preview = text[:2000] + "..." if len(text) > 2000 else text
-        logger.info(f"[{module_name}] OLLAMA VLM TEXT QUERY:")
-        logger.info(f"[{module_name}] PROMPT: {prompt_preview}")
-
-        response = self._call_completion(messages)
-        result = response.choices[0].message.content
-
-        # Log the response
-        result_preview = result[:1000] + "..." if len(result) > 1000 else result
-        logger.info(f"[{module_name}] RESPONSE: {result_preview}")
-        logger.info(f"[{module_name}] ---")
-
-        return result
-
-
 class ThreadSafeGenerativeModelWrapper:
     """
     Thread-safe wrapper for GenerativeModel that protects _prediction_client access.
@@ -2883,10 +2663,8 @@ class VLM:
         "openai": OpenAIBackend,
         "anthropic": AnthropicBackend,
         "openrouter": OpenRouterBackend,
-        "local": LocalHuggingFaceBackend,
         "gemini": GeminiBackend,
-        "ollama": LegacyOllamaBackend,  # Legacy support
-        "vertex": VertexBackend,  # Added Vertex backend
+        "vertex": VertexBackend,
     }
 
     def __init__(
@@ -2903,8 +2681,8 @@ class VLM:
 
         Args:
             model_name: Name of the model to use
-            backend: Backend type ('openai', 'anthropic', 'openrouter', 'local', 'gemini', 'ollama', 'vertex')
-            port: Port for Ollama backend (legacy)
+            backend: Backend type ('openai', 'anthropic', 'openrouter', 'gemini', 'vertex')
+            port: Unused; kept for API compatibility
             tools: List of tool declarations for function calling
             system_instruction: System instructions for the model (supported by vertex, gemini)
             **kwargs: Additional arguments passed to backend
@@ -2923,18 +2701,9 @@ class VLM:
 
         # Initialize the appropriate backend
         backend_class = self.BACKENDS[self.backend_type]
-
-        # Pass port parameter for legacy Ollama backend
-        if self.backend_type == "ollama":
-            self.backend = backend_class(model_name, port=port, **kwargs)
-        else:
-            # Pass tools and system_instruction to backends that support function calling
-            if self.backend_type in ["vertex", "gemini", "openai", "anthropic", "openrouter"]:
-                self.backend = backend_class(
-                    model_name, tools=self.tools, system_instruction=self.system_instruction, **kwargs
-                )
-            else:
-                self.backend = backend_class(model_name, **kwargs)
+        self.backend = backend_class(
+            model_name, tools=self.tools, system_instruction=self.system_instruction, **kwargs
+        )
 
         logger.info(f"VLM initialized with {self.backend_type} backend using model: {model_name}")
 
@@ -2949,7 +2718,7 @@ class VLM:
         elif any(x in model_lower for x in ["gemini", "palm"]):
             return "gemini"
         elif any(x in model_lower for x in ["llama", "mistral", "qwen", "phi"]):
-            return "local"
+            return "openrouter"
         else:
             return "openai"
 

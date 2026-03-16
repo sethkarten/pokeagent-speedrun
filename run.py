@@ -234,7 +234,7 @@ def main():
     
     # Agent configuration
     parser.add_argument("--backend", type=str, default="gemini", 
-                       help="VLM backend (openai, gemini, local, openrouter)")
+                       help="VLM backend (openai, gemini, openrouter, anthropic, auto)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="pokeagent",
