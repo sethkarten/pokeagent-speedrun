@@ -503,8 +503,8 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Team Rocket Hideout B1F",
-        navigation_hint="Hideout B1F: pick up Escape Rope. B2F: spinner maze, grab Nugget/Moon Stone/TM07 Horn Drill. B3F: Rare Candy. B4F northwest: a Grunt guards the Lift Key — defeat him and take it. Then go to B4F southeast elevator and use the Lift Key to call it.",
-        completion_condition="lift_key_obtained",
+        navigation_hint="DO NOT use navigate_to on spinner floors (B2F/B3F) — read arrow tiles from the screenshot and step manually. B1F North: grab Escape Rope in western room, stairs down to B2F. B2F: spinner maze — work through to collect Nugget, Moon Stone, TM07 Horn Drill, Super Potion; exit via east stairs up to B1F West. B1F West: battle 2 Grunts, grab Hyper Potion. B2F again: backtrack east through the maze, take NE stairs down to B3F. B3F: go south past Grunt for TM10, then west into second spinner maze; collect Rare Candy, battle Grunt, stairs down to B4F. B4F NW: pick up HP Up and TM02, defeat Grunt for the Lift Key. Climb back up to B2F, navigate the large maze to the SE elevator. Ride elevator down to B4F SE: grab Iron, defeat last 2 Grunts to open the door to Giovanni.",
+        completion_condition="Giovanni_door_opened",
         priority=1
     ),
     DirectObjective(
