@@ -16,11 +16,10 @@
 - [Requirements](#requirements)
 - [Installation](#installation)
   - [1. Clone the Repository](#1-clone-the-repository)
-  - [2. Create Conda Environment (Recommended)](#2-create-conda-environment-recommended)
-  - [3. Install mgba System Library (Required for Python bindings)](#3-install-mgba-system-library-required-for-python-bindings)
-  - [4. Install Compatible libffi in Conda (Important!)](#4-install-compatible-libffi-in-conda-important)
-  - [5. Install Python Dependencies](#5-install-python-dependencies)
-  - [6. Set up Game ROM](#6-set-up-game-rom)
+  - [2. Environment (uv or Conda)](#2-environment-uv-or-conda)
+  - [3. mGBA System Library](#3-mgba-system-library)
+  - [4. Python Dependencies](#4-python-dependencies)
+  - [5. Game ROM](#5-game-rom)
 - [VLM Backend Setup](#vlm-backend-setup)
   - [OpenAI](#-openai-gpt-4v-o3-mini-etc)
   - [OpenRouter](#-openrouter-access-to-many-models)
@@ -68,7 +67,9 @@ For module-level detail, see the README in each area:
 ```
 pokeagent-speedrun/
 ├── README.md
-├── requirements.txt
+├── pyproject.toml            # Project config and dependencies (uv/pip)
+├── uv.lock                   # Locked dependency versions (uv sync uses this)
+├── requirements.txt          # Pip fallback (frozen from env)
 ├── run.py                    # Multiprocess entry: starts server + in-repo agent client
 ├── run_cli.py                # Entry for external CLI agents (MCP); spawns server + MCP proxy
 ├── server/
@@ -131,19 +132,30 @@ cd pokeagent-speedrun
 
 ### 2. Environment (uv or Conda)
 
-**Option A – uv (recommended in repo):**
+**Option A – uv (recommended):**
+
+[uv](https://docs.astral.sh/uv/) uses `pyproject.toml` and `uv.lock` for reproducible installs.
 
 ```bash
+# Install uv (if needed)
 curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create .venv and install dependencies from uv.lock
 uv sync
+
+# Activate the environment (prompt will show (pokeagent-speedrun))
 source .venv/bin/activate
 ```
 
-**Option B – Conda:** Create and use a conda env (e.g. `pokeagent`) and install dependencies from `requirements.txt`. If you use conda, install a compatible `libffi` in the env (e.g. `conda install libffi`) so mGBA Python bindings work.
+To run without activating: `uv run python run.py ...` (uv uses the project venv automatically). For dev tools (pytest, ruff, mypy): `uv sync --group dev`.
+
+**Option B – Conda:**
+
+Create a conda env (e.g. `conda create -n pokeagent python=3.10`), then install a compatible `libffi` in the env (e.g. `conda install libffi`) so the mGBA Python bindings work, and install Python deps: `pip install -r requirements.txt`.
 
 ### 3. mGBA System Library
 
-Required for Python bindings. Example (Ubuntu 20.04):
+Required for the mGBA Python bindings. Example (Ubuntu 20.04):
 
 ```bash
 wget https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-ubuntu64-focal.tar.xz
@@ -155,11 +167,12 @@ macOS (x86_64): `brew install mgba`
 
 ### 4. Python Dependencies
 
-With uv: `uv sync` (or `uv sync --dev` for dev deps). With pip: `pip install -r requirements.txt`.
+- **uv:** Already done in step 2 (`uv sync`). Re-run `uv sync` if `pyproject.toml` or `uv.lock` change.
+- **pip:** `pip install -r requirements.txt` (e.g. inside your conda env).
 
 ### 5. Game ROM
 
-Place your Pokémon Emerald ROM in `Emerald-GBAdvance/rom.gba`. US English SHA-1: `f3ae088181bf583e55daf962a92bb46f4f1d07b7`.
+Place your Pokémon Emerald ROM at `Emerald-GBAdvance/rom.gba`. US English SHA-1: `f3ae088181bf583e55daf962a92bb46f4f1d07b7`.
 
 ## VLM Backend Setup
 
