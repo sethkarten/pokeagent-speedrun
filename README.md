@@ -64,13 +64,13 @@ For deeper detail and known deviations (e.g., monolithic server, polling-based s
 
 - **Multiple VLM backends**: OpenAI, OpenRouter, Google Gemini, Anthropic, local HuggingFace (via `utils/vlm_backends.py`)
 - **Vision-based perception**: VLMs analyze game frames and state
-- **Agent scaffolds**: PokeAgent, vision-only, ReAct, ClaudePlays, GeminiPlays
-- **MCP support**: External CLI agents (e.g., Claude Code) interact via Model Context Protocol
+- **Agent scaffolds**: PokeAgent (with naive prompt-optimization via self-reflection), vision-only, ReAct, ClaudePlays, GeminiPlays
+- **MCP support**: External CLI agents (e.g., Claude Code) interact with the game state via an mcp server proxy (pokemon_mcp_server.py). Their containerization prevents them from directly interacting with the game server as most non-mcp-tool requests are dropped by firewall.
 - **Checkpoints & backups**: Save/resume runs; backups in `backups/`; analysis data in `run_data/`
-- **Metrics & logging**: Per-step and cumulative tokens, cost, actions; LLM logs and session logs
+- **Metrics & logging**: Per-step and cumulative tokens, cost, actions, as well as run initialization settings are found in .pokeagent_cache/{run_id}/cumulative_metrics.json; LLM logs (llm_logs/) and other session logs are also tracked, though cumulative_metrics is the single source of truth.
 - **Map system**: Porymap integration, NPC display, movement preview, portal tracking
 - **Web interface**: Real-time stream at `http://localhost:8000/stream`
-- **Video recording**: Optional MP4 recording of gameplay
+- **Video recording**: Optional MP4 recording of gameplay saved to run_data/(please fill out the rest of the path)
 - **Customizable prompts**: Edit prompt assets under `agents/prompts/`.
 
 ## Directory Structure
