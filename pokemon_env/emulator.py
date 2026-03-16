@@ -51,7 +51,7 @@ class MilestoneTracker:
     
     def __init__(self, filename: str = None):
         # Setup cache directory
-        from utils.run_data_manager import get_cache_directory
+        from utils.data_persistence.run_data_manager import get_cache_directory
         self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
         
@@ -146,7 +146,7 @@ class MilestoneTracker:
             # Log milestone completion to LLM logger for unified metrics
             if agent_step_count is not None:
                 try:
-                    from utils.llm_logger import log_milestone_completion
+                    from utils.data_persistence.llm_logger import log_milestone_completion
                     log_milestone_completion(milestone_id, agent_step_count, timestamp)
                 except Exception as e:
                     logger.debug(f"Could not log milestone to LLM logger: {e}")
@@ -159,7 +159,7 @@ class MilestoneTracker:
                     is_cli_run = os.environ.get("POKEAGENT_CLI_MODE", "") == "1"
                     
                     if is_cli_run:
-                        from utils.backup_manager import create_cache_backup
+                        from utils.data_persistence.backup_manager import create_cache_backup
                         logger.info(f"[milestone-backup] Triggering backup for CLI agent at {milestone_id}")
                         create_cache_backup(
                             objective_id=f"milestone_{milestone_id.lower()}",
@@ -401,7 +401,7 @@ class EmeraldEmulator:
         self._mem_cache = {}
         
         # Setup cache directory
-        from utils.run_data_manager import get_cache_directory
+        from utils.data_persistence.run_data_manager import get_cache_directory
         self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
         
@@ -743,7 +743,7 @@ class EmeraldEmulator:
                 # For manual saves, copy the current map_stitcher.json
                 if base_name.startswith("manual_save"):
                     # Copy the current map_stitcher_data.json from cache to manual_save_map_stitcher.json
-                    from utils.run_data_manager import get_cache_path
+                    from utils.data_persistence.run_data_manager import get_cache_path
                     current_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
                     
                     # Also check for the old location in case it exists
@@ -805,7 +805,7 @@ class EmeraldEmulator:
         import shutil
         
         # Ensure cache directory exists (use run-specific cache)
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         cache_map_stitcher_file = str(get_cache_path("map_stitcher_data.json"))
         
         # Copy map stitcher file to cache

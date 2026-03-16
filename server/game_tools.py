@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from utils.json_utils import serialize_for_json
-from utils.pathfinding import Pathfinder
+from utils.mapping.pathfinding import Pathfinder
 from utils.knowledge_base import get_knowledge_base
 
 logger = logging.getLogger(__name__)
@@ -40,9 +40,9 @@ def load_porymap_for_pathfinding(state: dict) -> tuple:
         return coord_offset, state
 
     try:
-        from utils.porymap_json_builder import build_json_map_for_llm
+        from utils.mapping.porymap_json_builder import build_json_map_for_llm
         from utils.state_formatter import ROM_TO_PORYMAP_MAP
-        from utils.ascii_map_loader import get_effective_map_name, get_override
+        from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
 
         badge_count = 0
         badges = state.get("game", {}).get("badges", [])
@@ -51,7 +51,8 @@ def load_porymap_for_pathfinding(state: dict) -> tuple:
         elif isinstance(badges, int):
             badge_count = badges
 
-        pokeemerald_root = _resolve_pokeemerald_root()
+        from pokemon_env.porymap_paths import get_porymap_root
+        pokeemerald_root = get_porymap_root()
         if not pokeemerald_root:
             return coord_offset, state
 
@@ -104,32 +105,6 @@ def load_porymap_for_pathfinding(state: dict) -> tuple:
     return coord_offset, state
 
 
-def _resolve_pokeemerald_root() -> Optional[Path]:
-    """Find the pokeemerald / porymap_data root directory."""
-    root_env = os.environ.get("POKEEMERALD_ROOT")
-    if root_env:
-        root_path = Path(root_env).resolve()
-        if (root_path / "data" / "maps").exists():
-            return root_path
-
-    # server/ parent -> repo root
-    current_dir = Path(__file__).parent.parent
-    porymap_path = current_dir / "porymap_data"
-    if (porymap_path / "data" / "maps").exists():
-        return porymap_path.resolve()
-
-    for candidate in [
-        current_dir / "pokeemerald",
-        current_dir / "../pokeemerald",
-        current_dir / "../../pokeemerald",
-    ]:
-        resolved = candidate.resolve()
-        if (resolved / "data" / "maps").exists():
-            return resolved
-
-    return None
-
-
 # ---------------------------------------------------------------------------
 # _direct helpers — called by app.py /mcp/* endpoint handlers
 # ---------------------------------------------------------------------------
@@ -164,7 +139,20 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             logger.debug("Using env.get_screenshot() (direct video buffer - may be stale)")
 
         state = env.get_comprehensive_state(screenshot=screenshot)
-        state_text = state_formatter(state, action_history=action_history)
+        try:
+            state_text = state_formatter(state, action_history=action_history)
+        except Exception as formatter_err:
+            logger.exception("State formatter failed; returning fallback text with screenshot preserved")
+            game_state_name = state.get("game", {}).get("game_state") or "unknown"
+            location = state.get("player", {}).get("location") or "Unknown"
+            position = state.get("player", {}).get("position") or {}
+            state_text = (
+                "State text formatter unavailable for this screen.\n"
+                f"Game State: {game_state_name}\n"
+                f"Location: {location}\n"
+                f"Position: X={position.get('x', 'unknown')}, Y={position.get('y', 'unknown')}\n"
+                "Use the attached screenshot as the source of truth for the current UI."
+            )
 
         screenshot_b64 = None
         if screenshot is not None:
@@ -228,8 +216,8 @@ def navigate_to_direct(
         coord_offset = None
         if location_name and location_name not in ("Unknown", "TITLE_SEQUENCE"):
             try:
-                from utils.porymap_json_builder import build_json_map_for_llm
-                from utils.ascii_map_loader import get_effective_map_name, get_override
+                from utils.mapping.porymap_json_builder import build_json_map_for_llm
+                from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
                 from utils.state_formatter import ROM_TO_PORYMAP_MAP
 
                 badge_count = 0
@@ -239,7 +227,8 @@ def navigate_to_direct(
                 elif isinstance(badges, int):
                     badge_count = badges
 
-                pokeemerald_root = _resolve_pokeemerald_root()
+                from pokemon_env.porymap_paths import get_porymap_root
+                pokeemerald_root = get_porymap_root()
 
                 if pokeemerald_root:
                     porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
