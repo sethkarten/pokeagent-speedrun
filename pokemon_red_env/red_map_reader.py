@@ -8,6 +8,7 @@ Returns (tile_id, type_str, collision_int, elevation) tuples compatible with
 map_formatter.is_tile_walkable() and format_map_grid().
 """
 
+import copy
 import json
 import logging
 import os
@@ -53,6 +54,9 @@ class RedMapReader:
         self._map_names: dict = {}   # str(map_id) → map_name
         self._map_cache: dict = {}   # map_name → loaded JSON dict
         self._sprite_name_cache: dict = {}  # map_name → list[str]
+        self._last_map_name: str = ""           # Track map changes for cache invalidation
+        self._npc_position_cache: list = []     # Deep-copied npc_data with live corrections
+        self._hidden_sprites: set = set()       # Indices of removed/hidden NPCs (picture_id=0)
         self._load_map_names()
 
     # ------------------------------------------------------------------
@@ -146,6 +150,25 @@ class RedMapReader:
 
         self._sprite_name_cache[map_name] = names
         return names
+
+    def _ensure_npc_cache(self, map_name: str, npc_data: list) -> list:
+        """Get or initialize NPC position cache for the current map.
+
+        Returns the mutable cache list.  On map change, resets to static
+        npc_data (Gen 1 resets NPC positions when player re-enters a map).
+        """
+        if map_name != self._last_map_name:
+            self._last_map_name = map_name
+            self._npc_position_cache = copy.deepcopy(npc_data)
+            self._hidden_sprites = set()
+            logger.debug(f"NPC cache reset for '{map_name}' ({len(npc_data)} entries)")
+
+        # Guard: re-init if npc_data length changed (data reload edge case)
+        if len(self._npc_position_cache) != len(npc_data):
+            self._npc_position_cache = copy.deepcopy(npc_data)
+            self._hidden_sprites = set()
+
+        return self._npc_position_cache
 
     # ------------------------------------------------------------------
     # Grid symbol classification
@@ -508,67 +531,69 @@ class RedMapReader:
                 "symbol": h.get("symbol", "#"),
             })
 
-        # objects — NPC list from processed map data, filtered by live RAM.
-        # Only item sprites (Poké Balls, Fossils) are filtered via live RAM:
-        # they are permanently removed when the player picks them up.
-        # Regular NPCs are always included from static data — Gen 1 only loads
-        # on-screen sprites, so NPCs off-screen won't be in sprite slots even
-        # though they still exist on the map.
-        objects = []
+        # objects — NPC list with live RAM position correction.
+        # Slot i in RAM maps to npc_data[i-1] (Gen 1 stable ordering,
+        # verified from pokered/home/overworld.asm LoadMapHeader).
         npc_data = data.get("npc_data", [])
+        npc_cache = self._ensure_npc_cache(map_name, npc_data)
+
         try:
             live_sprites = self.read_sprites()
-            live_sprite_positions = {(s["map_x"], s["map_y"]) for s in live_sprites}
         except Exception as e:
-            logger.warning(f"Failed to read NPC data from memory; Using processed map data only. {e}")
-            live_sprites = None
-            live_sprite_positions = None
+            logger.warning(f"Failed to read sprites from RAM; using cached positions. {e}")
+            live_sprites = []
 
-        for s in npc_data:
-            sprite_upper = s.get("sprite", "").upper()
-            is_item_sprite = "POKE_BALL" in sprite_upper or "FOSSIL" in sprite_upper
+        # Slot → live sprite for O(1) lookup
+        live_by_slot: dict = {s["slot"]: s for s in live_sprites}
 
-            # Filter item sprites: only include if still present in live sprite RAM
-            if is_item_sprite and live_sprite_positions is not None:
-                if (s["x"], s["y"]) not in live_sprite_positions:
-                    continue
+        # Phase 1: Update cached positions from live RAM
+        for idx, cached_npc in enumerate(npc_cache):
+            slot = idx + 1  # slot is 1-indexed
+            if slot > 15:
+                break  # Gen 1 hardware limit: 15 NPC sprite slots
 
-            obj_tmp = {
-                "x": s["x"], "y": s["y"], "elevation": 0,
-                "sprite_name": s["sprite"],
-                "movement_type": s["movement"],
-                "facing": s["direction"],
-                "graphics_id": s["text_id"]
-            }
-            objects.append(obj_tmp)
+            if slot in live_by_slot:
+                # Sprite active in RAM — update position + facing
+                live = live_by_slot[slot]
+                old_x, old_y = cached_npc["x"], cached_npc["y"]
+                cached_npc["x"] = live["map_x"]
+                cached_npc["y"] = live["map_y"]
+                cached_npc["_live_facing"] = live["facing"]
+                self._hidden_sprites.discard(idx)  # re-appeared (e.g. ShowObject)
 
-        # Correct WALK NPC positions from live RAM (walking NPCs move at runtime)
-        if live_sprites:
-            # Build sprite_name → live sprite lookup (only unique names)
-            live_name_counts = {}
-            for ls in live_sprites:
-                name = ls["sprite_name"]
-                live_name_counts[name] = live_name_counts.get(name, 0) + 1
-            live_by_name = {
-                ls["sprite_name"]: ls for ls in live_sprites
-                if live_name_counts[ls["sprite_name"]] == 1
-            }
+                if old_x != cached_npc["x"] or old_y != cached_npc["y"]:
+                    logger.debug(
+                        f"NPC {cached_npc['sprite']} (slot {slot}): "
+                        f"({old_x},{old_y})->({cached_npc['x']},{cached_npc['y']})"
+                    )
+            elif idx not in self._hidden_sprites:
+                # Sprite not in read_sprites(). Check picture_id to distinguish
+                # off-screen (picture_id>0, byte+2=0xFF) from removed/hidden
+                # (picture_id=0). Applies to ALL NPCs: items picked up, NPCs
+                # hidden via toggleable objects (e.g. Viridian Old Man).
+                picture_id = self._read_u8(0xC100 + slot * 0x10)
+                if picture_id == 0:
+                    self._hidden_sprites.add(idx)
+                    logger.debug(
+                        f"Sprite {cached_npc['sprite']} (slot {slot}) hidden "
+                        f"(picture_id=0)"
+                    )
 
-            for obj in objects:
-                if obj["movement_type"] != "WALK":
-                    continue
-                sname = obj["sprite_name"]
-                if sname in live_by_name:
-                    live = live_by_name[sname]
-                    old_x, old_y = obj["x"], obj["y"]
-                    obj["x"] = live["map_x"]
-                    obj["y"] = live["map_y"]
-                    obj["facing"] = live["facing"]
-                    if old_x != obj["x"] or old_y != obj["y"]:
-                        logger.debug(
-                            f"Corrected WALK NPC {sname} position: "
-                            f"({old_x},{old_y})->({obj['x']},{obj['y']})"
-                        )
+        # Phase 2: Build objects list from cache (skip hidden/removed sprites)
+        objects = []
+        for idx, cached_npc in enumerate(npc_cache):
+            if idx in self._hidden_sprites:
+                continue
+            facing = cached_npc.get("_live_facing", cached_npc["direction"])
+            objects.append({
+                "x": cached_npc["x"],
+                "y": cached_npc["y"],
+                "elevation": 0,
+                "sprite_name": cached_npc["sprite"],
+                "movement_type": cached_npc["movement"],
+                "facing": facing,
+                "graphics_id": cached_npc["text_id"],
+            })
 
         return {
             "location": map_name,
