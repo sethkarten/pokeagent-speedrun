@@ -483,7 +483,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Celadon Gym",
-        navigation_hint="Celadon Gym is west of the city (tree-filled interior). Erika: Victreebel Lv 29 (Razor Leaf, Acid), Tangela Lv 24 (Constrict, Sleep Powder), Vileplume Lv 29 (Petal Dance, Sleep Powder). Fire, Poison, Flying, Psychic, Ice all work. Watch for Sleep — use Awakening. Reward: $2958, Rainbow Badge, TM21 Mega Drain.",
+        navigation_hint="Celadon Gym is west of the city (tree-filled interior). It is not directly reachable - HM01 Cut required to create the path. Erika: Victreebel Lv 29 (Razor Leaf, Acid), Tangela Lv 24 (Constrict, Sleep Powder), Vileplume Lv 29 (Petal Dance, Sleep Powder). Fire, Poison, Flying, Psychic, Ice all work. Watch for Sleep — use Awakening. Reward: $2958, Rainbow Badge, TM21 Mega Drain.",
         completion_condition="rainbow_badge_obtained",
         priority=1
     ),
@@ -1055,7 +1055,7 @@ BATTLING_OBJECTIVES = [
         action_type="shop",
         category="battling",
         target_location="Celadon City",
-        navigation_hint="Celadon Dept Store (6 floors). Key purchases: Super Potions/Great Balls (1F), useful battle TMs (2F), and X items/Revives (4F). Rooftop vending machine: Fresh Water to the rooftop girl for TM13 Ice Beam. Also keep one extra drink for Saffron gate guards.",
+        navigation_hint="Celadon Dept Store: elevator covers 1F-5F only — take stairs from 5F to reach the Rooftop. Buy Super Potions/Great Balls (2F), Revives/X items (4F). On the Rooftop, buy Fresh Water/Soda Pop/Lemonade from the vending machine and give them to the girl for TM13 Ice Beam, TM48 Rock Slide, TM49 Tri Attack. Keep one extra drink for Saffron gate guards.",
         completion_condition="celadon_shopping_done",
         priority=1,
         prerequisite_story_objective="celadon_040"

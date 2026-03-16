@@ -542,6 +542,34 @@ class RedMapReader:
             }
             objects.append(obj_tmp)
 
+        # Correct WALK NPC positions from live RAM (walking NPCs move at runtime)
+        if live_sprites:
+            # Build sprite_name → live sprite lookup (only unique names)
+            live_name_counts = {}
+            for ls in live_sprites:
+                name = ls["sprite_name"]
+                live_name_counts[name] = live_name_counts.get(name, 0) + 1
+            live_by_name = {
+                ls["sprite_name"]: ls for ls in live_sprites
+                if live_name_counts[ls["sprite_name"]] == 1
+            }
+
+            for obj in objects:
+                if obj["movement_type"] != "WALK":
+                    continue
+                sname = obj["sprite_name"]
+                if sname in live_by_name:
+                    live = live_by_name[sname]
+                    old_x, old_y = obj["x"], obj["y"]
+                    obj["x"] = live["map_x"]
+                    obj["y"] = live["map_y"]
+                    obj["facing"] = live["facing"]
+                    if old_x != obj["x"] or old_y != obj["y"]:
+                        logger.debug(
+                            f"Corrected WALK NPC {sname} position: "
+                            f"({old_x},{old_y})->({obj['x']},{obj['y']})"
+                        )
+
         return {
             "location": map_name,
             "player_position": {"x": player_x, "y": player_y},
