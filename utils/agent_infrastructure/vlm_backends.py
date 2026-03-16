@@ -2713,14 +2713,14 @@ class VLM:
         # Native Anthropic model ids (e.g. claude-sonnet-4-5) have no slash; OpenRouter uses "anthropic/claude-..."
         if model_lower.startswith("claude-") and "/" not in model_name:
             return "anthropic"
-        if any(x in model_lower for x in ["gpt", "o4-mini", "o3", "claude"]):
+        if any(x in model_lower for x in ["gpt", "o5", "o4", "o3", "codex"]):
             return "openai"
         elif any(x in model_lower for x in ["gemini", "palm"]):
             return "gemini"
         elif any(x in model_lower for x in ["llama", "mistral", "qwen", "phi"]):
             return "openrouter"
         else:
-            return "openai"
+            raise Exception(f"Unknown model name: {model_name}. Available: {list(self.BACKENDS.keys())}")
 
     def get_query(
         self,

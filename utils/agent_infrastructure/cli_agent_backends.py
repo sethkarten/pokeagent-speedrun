@@ -832,6 +832,7 @@ class GeminiCliBackend(CliAgentBackend):
         self,
         mcp_config: dict,
         telemetry_outfile: str,
+        thinking_effort: str | None = None,
     ) -> dict:
         """Build a complete Gemini CLI settings.json."""
         settings = {
@@ -847,6 +848,20 @@ class GeminiCliBackend(CliAgentBackend):
                 "outfile": telemetry_outfile,
             },
         }
+        if thinking_effort in ("low", "medium", "high"):
+            level = thinking_effort.upper()
+            budget = {"low": 512, "medium": 2048, "high": 8192}[thinking_effort]
+            settings["modelConfigs"] = {
+                "customOverrides": [
+                    # Specify new overrides as additional gemini models are released
+                    {"model": "gemini-3.1-pro-preview", "generateContentConfig": {"thinkingConfig": {"thinkingLevel": level}}},
+                    {"model": "gemini-3.1-pro-preview-customtools", "generateContentConfig": {"thinkingConfig": {"thinkingLevel": level}}},
+                    {"model": "gemini-3-flash-preview", "generateContentConfig": {"thinkingConfig": {"thinkingLevel": level}}},
+                    {"model": "gemini-3-pro-preview", "generateContentConfig": {"thinkingConfig": {"thinkingLevel": level}}},
+                    {"model": "gemini-2.5-flash", "generateContentConfig": {"thinkingConfig": {"thinkingBudget": budget}}},
+                    {"model": "gemini-2.5-pro", "generateContentConfig": {"thinkingConfig": {"thinkingBudget": budget}}},
+                ],
+            }
         return settings
 
     def _write_gemini_settings(
@@ -854,10 +869,11 @@ class GeminiCliBackend(CliAgentBackend):
         settings_dir: Path,
         mcp_config: dict,
         telemetry_outfile: str,
+        thinking_effort: str | None = None,
     ) -> Path:
         """Write settings.json into the given directory. Returns the path."""
         settings_dir.mkdir(parents=True, exist_ok=True)
-        settings = self._build_settings(mcp_config, telemetry_outfile)
+        settings = self._build_settings(mcp_config, telemetry_outfile, thinking_effort)
         settings_path = settings_dir / "settings.json"
 
         if settings_path.exists():
@@ -910,7 +926,7 @@ class GeminiCliBackend(CliAgentBackend):
             mcp_config = self._build_mcp_config_sse(mcp_sse_port)
             telemetry_outfile = f"{self.AGENT_MEMORY_PATH}/{self.TELEMETRY_FILENAME}"
 
-            self._write_gemini_settings(agent_memory_path, mcp_config, telemetry_outfile)
+            self._write_gemini_settings(agent_memory_path, mcp_config, telemetry_outfile, thinking_effort)
 
             # Also write the directive into the workspace for reference
             self._write_workspace_files(working_dir_abs, bootstrap_content, mcp_config)
@@ -955,7 +971,7 @@ class GeminiCliBackend(CliAgentBackend):
             # Write project-level .gemini/settings.json in the working dir
             gemini_settings_dir = Path(working_dir) / ".gemini"
             telemetry_path = str(gemini_settings_dir / self.TELEMETRY_FILENAME)
-            self._write_gemini_settings(gemini_settings_dir, mcp_config, telemetry_path)
+            self._write_gemini_settings(gemini_settings_dir, mcp_config, telemetry_path, thinking_effort)
 
             gemini_cmd = [
                 "gemini",
@@ -1391,13 +1407,14 @@ env_key = "OPENROUTER_API_KEY"
             # --skip-git-repo-check: required when workspace is not a git repo (e.g. agent_scratch_space)
             # See https://github.com/openai/codex/issues/7522
             skip_git = "--skip-git-repo-check"
+            cfg = f" -c model_reasoning_effort={thinking_effort}" if thinking_effort in ("low", "medium", "high") else ""
             if resume_session_id:
                 if resume_session_id == "--last":
-                    inner = f"codex exec resume --last --json {skip_git}"
+                    inner = f"codex exec resume --last --json {skip_git}{cfg}"
                 else:
-                    inner = f"codex exec resume {shlex.quote(resume_session_id)} --json {skip_git}"
+                    inner = f"codex exec resume {shlex.quote(resume_session_id)} --json {skip_git}{cfg}"
             else:
-                inner = f"cat {self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME} | codex exec --json -C {self.WORKSPACE_PATH} --dangerously-bypass-approvals-and-sandbox {skip_git} -"
+                inner = f"cat {self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME} | codex exec --json -C {self.WORKSPACE_PATH} --dangerously-bypass-approvals-and-sandbox {skip_git}{cfg} -"
 
             shell_cmd = "'" + inner.replace("'", "'\"'\"'") + "'"
             docker_cmd.extend(["sh", "-c", shell_cmd])
@@ -1417,12 +1434,14 @@ env_key = "OPENROUTER_API_KEY"
                 )
                 env["CODEX_HOME"] = str(agent_memory_path)
 
+            codex_cfg = ["-c", f"model_reasoning_effort={thinking_effort}"] if thinking_effort in ("low", "medium", "high") else []
+            cfg_str = f" {' '.join(codex_cfg)}" if codex_cfg else ""
             if resume_session_id:
                 if resume_session_id == "--last":
-                    return (["codex", "exec", "resume", "--last", "--json", "--skip-git-repo-check"], env, bootstrap, None)
-                return (["codex", "exec", "resume", resume_session_id, "--json", "--skip-git-repo-check"], env, bootstrap, None)
+                    return (["codex", "exec", "resume", "--last", "--json", "--skip-git-repo-check"] + codex_cfg, env, bootstrap, None)
+                return (["codex", "exec", "resume", resume_session_id, "--json", "--skip-git-repo-check"] + codex_cfg, env, bootstrap, None)
 
-            cat_cmd = f"cat {shlex.quote(str(directive_file))} | codex exec --json -C {shlex.quote(working_dir)} --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -"
+            cat_cmd = f"cat {shlex.quote(str(directive_file))} | codex exec --json -C {shlex.quote(working_dir)} --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check{cfg_str} -"
             return (["sh", "-c", cat_cmd], env, bootstrap, None)
 
     def _handle_thread_started(

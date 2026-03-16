@@ -25,4 +25,4 @@ Session readers (Claude, Gemini, Codex) that parse JSONL/session files and deriv
 
 - **`knowledge_base.py`** — Shared by agents and server (e.g. `game_tools.py`) for add/search persistent knowledge.
 - **`state_formatter.py`** — Facade over mapping helpers; formats game state for LLMs.
-- **`anticheat.py`**, **`coordinate_overlay.py`**, **`error_handler.py`**, **`json_utils.py`**, **`ocr_dialogue.py`** — Miscellaneous helpers.
+- **`anticheat.py`**, **`error_handler.py`**, **`json_utils.py`**, **`ocr_dialogue.py`** — Miscellaneous helpers.
