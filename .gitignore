@@ -54,9 +54,7 @@ pip-delete-this-directory.txt
 *.manifest
 *.spec
 
-# uv (lockfile optional for apps)
-uv.lock
-
+# uv: uv.lock is tracked for reproducible installs
 # -----------------------------------------------------------------------------
 # Virtual environments
 # -----------------------------------------------------------------------------
