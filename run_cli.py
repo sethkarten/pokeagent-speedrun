@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Entry point for external CLI agent experiments (Claude Code, GPT Codex, etc.).
+Entry point for external CLI agent experiments (Claude Code, Codex CLI, Gemini CLI, etc.).
 
 This script:
 1. Spawns the Pokemon Emerald server with MCP endpoints
-2. Launches an external CLI agent (e.g., claude, codex) as a subprocess
+2. Launches an external CLI agent (e.g., claude, codex, gemini) as a subprocess
 3. Monitors termination conditions (e.g., gym badge count) and terminates when met
 
 The CLI agent interacts with the game via MCP tools exposed by the server.
@@ -30,12 +30,13 @@ import requests
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from utils.cli_agent_backends import (
+from utils.agent_infrastructure.cli_agent_backends import (
     CliAgentBackend,
     CliSession,
     CliSessionMetrics,
     get_backend,
 )
+from agents.prompts.paths import CLI_AGENT_DIRECTIVE_PATH
 
 # Configure logging
 logging.basicConfig(
@@ -96,10 +97,16 @@ def _cleanup_cli_session(session: CliSession | None, log_file=None):
 
 def preflight_cli(args) -> bool:
     """Validate CLI availability and show actionable setup errors."""
-    if args.cli_type == "claude":
+    if args.api_gateway == "openrouter" and args.backend in ("claude", "codex"):
+        if not os.environ.get("OPENROUTER_API_KEY"):
+            print("❌ --api-gateway openrouter requires OPENROUTER_API_KEY to be set.")
+            return False
+    if args.backend == "claude":
         return _preflight_claude()
-    if args.cli_type == "gemini":
+    if args.backend == "gemini":
         return _preflight_gemini()
+    if args.backend == "codex":
+        return _preflight_codex()
     return True
 
 
@@ -166,6 +173,49 @@ def _preflight_gemini() -> bool:
     except Exception as e:
         print(f"❌ Failed to run 'gemini --version': {e}")
         return False
+
+    return True
+
+
+def _preflight_codex() -> bool:
+    """Preflight checks for Codex CLI."""
+    codex_path = shutil.which("codex")
+    if not codex_path:
+        print("❌ Codex CLI not found on PATH.")
+        print("   Install: npm install -g @openai/codex")
+        print("   Or: https://github.com/openai/codex/releases")
+        return False
+
+    try:
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            # codex may use different version flag
+            result = subprocess.run(
+                ["codex", "exec", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode != 0:
+                print("❌ Codex CLI is installed but --version/exec failed.")
+                print(f"   stdout: {result.stdout.strip()}")
+                print(f"   stderr: {result.stderr.strip()}")
+                return False
+    except Exception as e:
+        print(f"❌ Failed to run 'codex --version': {e}")
+        return False
+
+    if not os.environ.get("OPENROUTER_API_KEY") and not (Path.home() / ".codex").exists():
+        print("ℹ️  OPENROUTER_API_KEY not set and ~/.codex not found.")
+        print("   For OpenRouter: set OPENROUTER_API_KEY and configure ~/.codex/config.toml")
+        print("   Or run 'codex login' for ChatGPT auth.")
 
     return True
 
@@ -245,7 +295,7 @@ def start_server(args, run_id=None):
         server_cmd.append("--record")
     
     if hasattr(args, 'load_checkpoint') and args.load_checkpoint:
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         checkpoint_state = get_cache_path("checkpoint.state")
         if checkpoint_state.exists():
             server_cmd.extend(["--load-state", str(checkpoint_state)])
@@ -425,7 +475,7 @@ LAST_CLI_SESSION_ID_FILENAME = "last_cli_session_id"
 def _load_last_session_id(backend: CliAgentBackend, agent_memory_dir: Path) -> str | None:
     """Load persisted CLI session ID from cache (for --resume across runs/restores)."""
     try:
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
         if path.exists():
             sid = path.read_text().strip()
@@ -441,7 +491,7 @@ def _load_last_session_id(backend: CliAgentBackend, agent_memory_dir: Path) -> s
 def _write_last_session_id(session_id: str) -> None:
     """Persist CLI session ID to cache (included in backups for restore)."""
     try:
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
         path.write_text(session_id)
         logger.debug("Persisted last_session_id: %s", session_id)
@@ -451,8 +501,8 @@ def _write_last_session_id(session_id: str) -> None:
 
 def _restore_from_backup(backup_path: str) -> bool:
     """Restore cache from backup zip. Returns True if successful."""
-    from utils.backup_manager import restore_cache_from_backup
-    from utils.run_data_manager import get_cache_directory
+    from utils.data_persistence.backup_manager import restore_cache_from_backup
+    from utils.data_persistence.run_data_manager import get_cache_directory
 
     print(f"\n📦 Restoring from backup: {backup_path}")
     success = restore_cache_from_backup(
@@ -476,19 +526,18 @@ def _start_services(args, run_manager) -> Services | None:
     server_url = f"http://localhost:{args.port}"
 
     mcp_process = None
-    if args.containerized:
-        if args.mcp_sse_port is None:
-            args.mcp_sse_port = args.port + 2
-        print(f"\n🐳 Containerized mode enabled (MCP SSE port {args.mcp_sse_port})")
-        project_root_for_mcp = str(Path(__file__).resolve().parent)
-        log_dir = Path(run_manager.get_run_directory()) / "agent_logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
-        mcp_log = log_dir / "mcp_server.log"
-        mcp_process = start_mcp_sse_server(
-            server_url, args.mcp_sse_port, project_root_for_mcp, log_path=mcp_log
-        )
-        if not mcp_process:
-            return None
+    if args.mcp_sse_port is None:
+        args.mcp_sse_port = args.port + 2
+    print(f"\n🐳 Containerized mode (MCP SSE port {args.mcp_sse_port})")
+    project_root_for_mcp = str(Path(__file__).resolve().parent)
+    log_dir = Path(run_manager.get_run_directory()) / "agent_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    mcp_log = log_dir / "mcp_server.log"
+    mcp_process = start_mcp_sse_server(
+        server_url, args.mcp_sse_port, project_root_for_mcp, log_path=mcp_log
+    )
+    if not mcp_process:
+        return None
 
     return Services(
         server=server_process,
@@ -580,7 +629,7 @@ def launch_cli_agent(
     if directive_path:
         print(f"📜 Loaded directive from: {directive_path}")
     print(f"🤖 Launching {backend.name} CLI agent...")
-    print(f"   Command: {' '.join(cmd)}")
+    # Note: do not print the command here so as to not expose API Key
     print(f"   Working directory: {working_dir}")
     print(f"   MCP Server: {server_url}")
 
@@ -622,7 +671,7 @@ def _run_agent_loop(
     backend: CliAgentBackend,
 ) -> tuple[str | None, CliSession | None, object]:
     """Run the agent loop until termination. Returns (termination_reason, last_cli_session, cli_log_file)."""
-    from utils.run_data_manager import get_cache_path
+    from utils.data_persistence.run_data_manager import get_cache_path
 
     run_id = run_manager.run_id
     server_url = services.server_url
@@ -663,8 +712,7 @@ def _run_agent_loop(
 
     logger.info("CLI agent working_dir=%s project_root=%s", working_dir, project_root)
 
-    if args.containerized:
-        print(f"   MCP: bridge network, host.docker.internal:{args.mcp_sse_port}")
+    print(f"   MCP: bridge network, host.docker.internal:{args.mcp_sse_port}")
 
     cli_session: CliSession | None = None
     cli_log_file = None
@@ -676,7 +724,7 @@ def _run_agent_loop(
 
     # JSONL step tracking – persists across agent session restarts within one run
     processed_hashes: set[str] = set()
-    from utils.llm_logger import get_llm_logger as _get_llm_logger
+    from utils.data_persistence.llm_logger import get_llm_logger as _get_llm_logger
     _existing_steps = _get_llm_logger().cumulative_metrics.get("steps", [])
     last_cli_step: int = max((s["step"] for s in _existing_steps), default=-1)
     del _existing_steps, _get_llm_logger
@@ -696,14 +744,14 @@ def _run_agent_loop(
             directive_path=args.directive,
             working_dir=working_dir,
             project_root=project_root,
-            dangerously_skip_permissions=args.dangerously_skip_permissions,
+            dangerously_skip_permissions=True,
             log_file=cli_log_file,
             metrics=session_metrics,
-            containerized=args.containerized,
+            containerized=True,
             session_number=iteration,
             resume_session_id=last_session_id,
             thinking_effort=args.agent_thinking_effort,
-            mcp_sse_port=args.mcp_sse_port if args.containerized else None,
+            mcp_sse_port=args.mcp_sse_port,
             run_id=run_id,
             agent_memory_dir=str(agent_memory_dir),
         )
@@ -812,12 +860,14 @@ def main():
     parser = argparse.ArgumentParser(
         description="Run external CLI agents (Claude Code, Codex) for Pokemon Emerald experiments"
     )
-    parser.add_argument("--cli-type", type=str, default="claude", choices=["claude", "gemini", "codex"],
-                       help="Type of CLI agent to launch (default: claude)")
+    parser.add_argument("--backend", type=str, default="claude", choices=["claude", "gemini", "codex"],
+                       help="Backend to use for the CLI agent (default: claude)")
+    parser.add_argument("--api-gateway", type=str, default="login", choices=["login", "openrouter"],
+                       help="Auth gateway: 'login' (OAuth/subscription, default) or 'openrouter' (requires OPENROUTER_API_KEY)")
     parser.add_argument("--login", action="store_true",
                        help="Run backend-specific auth login before starting (e.g. 'claude auth login')")
     parser.add_argument("--directive", type=str,
-                       default="agent/prompts/cli_directives/pokemon_directive.md",
+                       default=CLI_AGENT_DIRECTIVE_PATH,
                        help="Path to system prompt/directive file for CLI agent")
     parser.add_argument("--port", type=int, default=8000, help="Port for the game server (default: 8000)")
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
@@ -832,19 +882,15 @@ def main():
                        help="Seconds between termination condition polls (default: 10)")
     parser.add_argument("--graceful-timeout", type=int, default=30,
                        help="Graceful shutdown timeout in seconds before force kill (default: 30)")
-    parser.add_argument("--dangerously-skip-permissions", action=argparse.BooleanOptionalAction, default=True,
-                       help="Run Claude in YOLO mode (default: enabled).")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", default=True, help="Disable OCR dialogue detection")
     parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence")
     parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for direct objectives")
     parser.add_argument("--run-name", type=str, default=None, help="Optional name for the run directory")
-    parser.add_argument("--containerized", action="store_true", default=False,
-                       help="Run CLI agent in containerized environment")
     parser.add_argument("--build", action="store_true",
-                       help="Build the container image before running (when --containerized)")
+                       help="Build the container image before running")
     parser.add_argument("--mcp-sse-port", type=int, default=None,
-                       help="Port for MCP SSE server when containerized (default: game_port + 2)")
+                       help="Port for MCP SSE server (default: game_port + 2)")
     parser.add_argument("--agent-thinking-effort", type=str, choices=["low", "medium", "high"],
                        help="Thinking effort level for CLI agent (low/medium/high)")
 
@@ -854,9 +900,9 @@ def main():
     print("🎮 Pokemon Emerald - External CLI Agent Experiment")
     print("=" * 60)
 
-    from utils.run_data_manager import initialize_run_data_manager
+    from utils.data_persistence.run_data_manager import initialize_run_data_manager
 
-    run_manager = initialize_run_data_manager(run_name=args.run_name or f"cli_{args.cli_type}")
+    run_manager = initialize_run_data_manager(run_name=args.run_name or f"cli_{args.backend}")
     run_id = run_manager.run_id
     print(f"📁 Run data directory: {run_manager.get_run_directory()}")
 
@@ -871,7 +917,7 @@ def main():
         sys_argv=sys.argv,
         additional_info={
             "entry_point": "run_cli.py",
-            "cli_type": args.cli_type,
+            "backend": args.backend,
             "termination_condition": args.termination_condition,
             "termination_threshold": args.termination_threshold,
         },
@@ -880,7 +926,8 @@ def main():
     if not preflight_cli(args):
         return 1
 
-    backend = get_backend(args.cli_type)
+    backend = get_backend(args.backend)
+    backend.api_gateway = args.api_gateway
 
     if args.login:
         if not backend.run_login():
@@ -895,17 +942,16 @@ def main():
         print("❌ Failed to start services, exiting...")
         return 1
 
-    from utils.run_data_manager import get_cache_path
+    from utils.data_persistence.run_data_manager import get_cache_path
     agent_memory_dir = get_cache_path(backend.agent_memory_subdir)
     agent_memory_dir.mkdir(parents=True, exist_ok=True)
     print(f"\n💾 Agent memory directory: {agent_memory_dir}")
 
-    if args.containerized and args.build:
+    if args.build:
         if not _build_container_image(backend):
             return 1
 
-    if args.containerized:
-        backend.seed_agent_auth(agent_memory_dir)
+    backend.seed_agent_auth(agent_memory_dir)
 
     termination_reason: str | None = None
     cli_session: CliSession | None = None
@@ -939,7 +985,7 @@ def main():
         return 0
     finally:
         try: # Always backup on termination
-            from utils.backup_manager import create_cli_agent_termination_backup
+            from utils.data_persistence.backup_manager import create_cli_agent_termination_backup
             backup_path = create_cli_agent_termination_backup(run_id, termination_reason)
             if backup_path:
                 print(f"📦 Termination backup: {backup_path}")

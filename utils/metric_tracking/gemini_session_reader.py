@@ -1,5 +1,5 @@
 """
-Reader for Gemini CLI session JSON files (analogous to claude_jsonl_reader).
+Reader for Gemini CLI session JSON files (analogous to claude_session_reader).
 
 Reads session-*.json from tmp/workspace/chats/ under the agent memory directory.
 Each gemini message has tokens and toolCalls; we extract these for cumulative_metrics.
