@@ -292,10 +292,10 @@ class TestGeminiCostCalculationSubsetStyle:
     def test_gemini_subset_cost_uses_uncached_plus_cached_rates(self, tmp_path):
         """Gemini: prompt=total input, cached=subset. Cost = uncached*prompt_rate + cached*cached_rate."""
         from unittest.mock import patch
-        from utils.llm_logger import LLMLogger
+        from utils.data_persistence.llm_logger import LLMLogger
 
         metrics_file = tmp_path / "cumulative_metrics.json"
-        with patch("utils.run_data_manager.get_cache_path", return_value=metrics_file):
+        with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
             ll = LLMLogger(log_dir=str(tmp_path), session_id="cost_test")
 
         # Real Gemini step shape: prompt=12630 (total input), cached=7703 (subset), completion=10
