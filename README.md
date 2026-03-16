@@ -3,8 +3,6 @@
 ![PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald](layout.png)
 
 
-An AI agent that plays Pokémon Emerald using vision-language models to perceive the game environment, plan actions, and execute gameplay strategies. This is a **starter kit** designed to be easily customizable for different VLMs and agent behaviors.
-
 ## Custom PokeAgent Harness
 ![Custom PokeAgent Harness](pokeagent_architecture.png)
 
@@ -39,7 +37,7 @@ An AI agent that plays Pokémon Emerald using vision-language models to perceive
 
 ## Overview
 
-This project implements an AI agent capable of playing Pokémon Emerald on a Game Boy Advance emulator. `PokeAgent` uses a vision-language model (VLM) to analyze game frames, understand the current game state, and make intelligent decisions to progress through the game via a series of MCP tools that we expose.
+This project implements an AI agent capable of playing Pokémon Emerald on a Game Boy Advance emulator. `PokeAgent` uses a vision-language model (VLM) to analyze game frames, understand the current game state, and make intelligent decisions to progress through the game via a series of MCP tools that we expose. `PokeAgent` is designed to be easily customizable for different VLMs and agent behaviors.
 
 
 ## Architecture
@@ -119,7 +117,7 @@ pokeagent-speedrun/
 
 - Python 3.10–3.11
 - Pokémon Emerald ROM (not included; obtain legally)
-- One of the supported VLM backends (see VLM Backend Setup)
+- An API key for access to of the supported VLM backends (see VLM Backend Setup)
 - mGBA system library for Python bindings
 
 ## Installation
