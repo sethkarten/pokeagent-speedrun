@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Entry point for external CLI agent experiments (Claude Code, GPT Codex, etc.).
+Entry point for external CLI agent experiments (Claude Code, Codex CLI, Gemini CLI, etc.).
 
 This script:
 1. Spawns the Pokemon Emerald server with MCP endpoints
-2. Launches an external CLI agent (e.g., claude, codex) as a subprocess
+2. Launches an external CLI agent (e.g., claude, codex, gemini) as a subprocess
 3. Monitors termination conditions (e.g., gym badge count) and terminates when met
 
 The CLI agent interacts with the game via MCP tools exposed by the server.
@@ -744,7 +744,7 @@ def _run_agent_loop(
             directive_path=args.directive,
             working_dir=working_dir,
             project_root=project_root,
-            dangerously_skip_permissions=args.dangerously_skip_permissions,
+            dangerously_skip_permissions=True,
             log_file=cli_log_file,
             metrics=session_metrics,
             containerized=True,
@@ -882,8 +882,6 @@ def main():
                        help="Seconds between termination condition polls (default: 10)")
     parser.add_argument("--graceful-timeout", type=int, default=30,
                        help="Graceful shutdown timeout in seconds before force kill (default: 30)")
-    parser.add_argument("--dangerously-skip-permissions", action=argparse.BooleanOptionalAction, default=True,
-                       help="Run Claude in YOLO mode (default: enabled).")
     parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
     parser.add_argument("--no-ocr", action="store_true", default=True, help="Disable OCR dialogue detection")
     parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence")
