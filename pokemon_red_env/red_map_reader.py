@@ -57,6 +57,7 @@ class RedMapReader:
         self._last_map_name: str = ""           # Track map changes for cache invalidation
         self._npc_position_cache: list = []     # Deep-copied npc_data with live corrections
         self._hidden_sprites: set = set()       # Indices of removed/hidden NPCs (picture_id=0)
+        self._picked_up_items: set = set()      # Indices of picked-up items (POKE_BALL/FOSSIL)
         self._load_map_names()
 
     # ------------------------------------------------------------------
@@ -161,12 +162,14 @@ class RedMapReader:
             self._last_map_name = map_name
             self._npc_position_cache = copy.deepcopy(npc_data)
             self._hidden_sprites = set()
+            self._picked_up_items = set()
             logger.debug(f"NPC cache reset for '{map_name}' ({len(npc_data)} entries)")
 
         # Guard: re-init if npc_data length changed (data reload edge case)
         if len(self._npc_position_cache) != len(npc_data):
             self._npc_position_cache = copy.deepcopy(npc_data)
             self._hidden_sprites = set()
+            self._picked_up_items = set()
 
         return self._npc_position_cache
 
@@ -579,10 +582,35 @@ class RedMapReader:
                         f"(picture_id=0)"
                     )
 
+        # Phase 1.5: Detect item pickups via proximity.
+        # Gen 1 hides picked-up items via byte+2=0xFF (not picture_id=0),
+        # so _hidden_sprites won't catch them. If an item sprite is not in
+        # live RAM AND the player is within Manhattan distance 4, mark it
+        # as picked up. Once marked, it stays excluded for this map visit.
+        for idx, cached_npc in enumerate(npc_cache):
+            slot = idx + 1
+            if slot > 15:
+                break
+            if idx in self._picked_up_items:
+                continue
+            sprite_upper = cached_npc.get("sprite", "").upper()
+            is_item = "POKE_BALL" in sprite_upper or "FOSSIL" in sprite_upper
+            if is_item and slot not in live_by_slot:
+                dx = abs(cached_npc["x"] - player_x)
+                dy = abs(cached_npc["y"] - player_y)
+                if dx + dy <= 4:
+                    self._picked_up_items.add(idx)
+                    logger.debug(
+                        f"Item {cached_npc['sprite']} (slot {slot}) picked up "
+                        f"(player dist={dx+dy}, not in live RAM)"
+                    )
+
         # Phase 2: Build objects list from cache (skip hidden/removed sprites)
         objects = []
         for idx, cached_npc in enumerate(npc_cache):
             if idx in self._hidden_sprites:
+                continue
+            if idx in self._picked_up_items:
                 continue
             facing = cached_npc.get("_live_facing", cached_npc["direction"])
             objects.append({
