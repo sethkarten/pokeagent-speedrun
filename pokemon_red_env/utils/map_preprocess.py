@@ -171,6 +171,66 @@ MAP_OVERRIDES: Dict[str, List[str]] = {
     "##....................................##",
     "########################################",
     "########################################"
+  ],
+  "RocketHideoutB3F": [
+    "##############################",
+    "##############################",
+    "##############################",
+    "##############################",
+    "##############################",
+    "#########....................#",
+    "#########................D...#",
+    "#########....................#",
+    "####################.#.......#",
+    "#########............#####...#",
+    "#############..#####.#.......#",
+    "#########...←.→......#.......#",
+    "##########.#.###.↓####.......#",
+    "#########.→.....↑.####..######",
+    "#########.##.#.#..##.#.......#",
+    "#########.##.#→......#.......#",
+    "#########....→.→..↑###.......#",
+    "#########.##→.↑.##.###.....?.#",
+    "#########..→...↓##.D.#.......#",
+    "#########.→...↑.##...#########",
+    "############↑##.###..#########",
+    "#########....#..##....########",
+    "#########.......##....########",
+    "#########.....####....########",
+    "#############.###......#######",
+    "#########..............#######",
+    "#########..............#######",
+    "##############################"
+  ],
+  "RocketHideoutB2F": [
+    "##############################",
+    "##############################",
+    "##############################",
+    "##############################",
+    "##############################",
+    "##############################",
+    "##############################",
+    "#.....#...........#....#.....#",
+    "#.###.#.#.#.#.#..##..D.##..D.#",
+    "#...←...←.←.←.#####....##....#",
+    "###..#####↑#.↓...←.....##....#",
+    "#.#.→......#↑....←.....##....#",
+    "#.#.##.#↑#.#.→.###.....##....#",
+    "#....###.#.#↑..#.......##....#",
+    "####.→...↓.↓####↑##..........#",
+    "#...→...↑.↑.##...##..........#",
+    "#.##↑###...→.→.↓↑#############",
+    "#....#####→.→.↑..##..........#",
+    "#.###...#..↓.←..↑##..........#",
+    "#...←...←.↑..←##.##....#DD####",
+    "#.##.#.#.#.....#.......#######",
+    "#.#....#.#####.#.......#######",
+    "#..#↑#↑#.↓...←.#..#..D.#######",
+    "#..#.#.#↑....←.#..#....#######",
+    "#..#.#↑#...#####.##....#######",
+    "#......###→......##....#######",
+    "#...###############....#######",
+    "##############################"
   ]
 }
 
@@ -186,7 +246,7 @@ _GRID_SYMBOL_TO_BEHAVIOR: Dict[str, "RedMetatileBehavior"] = {
     "↓":  RedMetatileBehavior.JUMP_SOUTH,       # ledge — jump southward
     "←":  RedMetatileBehavior.JUMP_WEST,        # ledge — jump westward
     "→":  RedMetatileBehavior.JUMP_EAST,        # ledge — jump eastward
-    "↑":  RedMetatileBehavior.NORMAL,           # up-ledge treated as walkable (rare)
+    "↑":  RedMetatileBehavior.JUMP_NORTH,       # ledge — jump northward
     "&":  RedMetatileBehavior.NORMAL,           # generic walkable overlay
     "#":  RedMetatileBehavior.IMPASSABLE,       # wall / blocked
     "C":  RedMetatileBehavior.COUNTER,          # counter / desk
@@ -195,7 +255,7 @@ _GRID_SYMBOL_TO_BEHAVIOR: Dict[str, "RedMetatileBehavior"] = {
     "B":  RedMetatileBehavior.BOOKSHELF,        # hidden bookshelf event
     "^":  RedMetatileBehavior.BLUEPRINT,        # hidden poster/painting event
     "U":  RedMetatileBehavior.TRASH_CAN,        # hidden trash-can event
-    "?":  RedMetatileBehavior.NORMAL,            # hidden item / uncategorized bg_event (walkable)
+    "?":  RedMetatileBehavior.NORMAL,           # hidden item / uncategorized bg_event (walkable)
     "!":  RedMetatileBehavior.IMPASSABLE,       # road sign / signpost (blocked)
     "=":  RedMetatileBehavior.IMPASSABLE,       # bench (no Emerald equivalent)
     # Note: "O" (Poké Ball) is an overlay-only symbol — never placed in the static grid.
@@ -1064,6 +1124,7 @@ def main():
             "↓": RedMetatileBehavior.JUMP_SOUTH,
             "←": RedMetatileBehavior.JUMP_WEST,
             "→": RedMetatileBehavior.JUMP_EAST,
+            "↑": RedMetatileBehavior.JUMP_NORTH,
         }
         for cy in range(coll_map_h):
             for cx in range(coll_map_w):

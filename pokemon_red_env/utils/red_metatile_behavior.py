@@ -44,6 +44,7 @@ class RedMetatileBehavior(IntEnum):
     DEEP_WATER        = 18   # Water tile; Surf HM required        [Emerald DEEP_WATER=18]
     JUMP_EAST         = 56   # One-way ledge: jump eastward        [Emerald JUMP_EAST=56]
     JUMP_WEST         = 57   # One-way ledge: jump westward        [Emerald JUMP_WEST=57]
+    JUMP_NORTH        = 58   # One-way ledge: jump northward        [Emerald JUMP_NORTH=58]
     JUMP_SOUTH        = 59   # One-way ledge: jump southward       [Emerald JUMP_SOUTH=59]
     NON_ANIMATED_DOOR = 96   # Building door; door_tile_ids.asm    [Emerald NON_ANIMATED_DOOR=96]
     LADDER            = 97   # Interior warp/stair; warp_tile_ids.asm [Emerald LADDER=97]
@@ -92,6 +93,7 @@ BEHAVIOR_COLLISION: dict[RedMetatileBehavior, int] = {
     RedMetatileBehavior.BOOKSHELF:          1,  # bookshelf blocks player
     RedMetatileBehavior.JUMP_EAST:          0,  # ledge: entered, then forced east
     RedMetatileBehavior.JUMP_WEST:          0,  # ledge: entered, then forced west
+    RedMetatileBehavior.JUMP_NORTH:         0,  # ledge: entered, then forced north
     RedMetatileBehavior.JUMP_SOUTH:         0,  # ledge: entered, then forced south
     RedMetatileBehavior.SPINNER:            0,  # walkable, spins player facing
     RedMetatileBehavior.POKE_BALL:          1,  # pokéball sprite blocks movement (interact from adjacent tile)
