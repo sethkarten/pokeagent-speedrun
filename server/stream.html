@@ -55,7 +55,7 @@
         
         .game-panel {
             width: 895px;
-            height: 890px;
+            height: 950px;
             display: flex;
             flex-direction: column;
             background-color: #1a1a1a;
@@ -67,7 +67,7 @@
         
         .frame-container {
             width: 895px;
-            height: 890px;
+            height: 597px;
             margin: 0 auto;
             position: relative;
             background-color: #000000;
@@ -76,16 +76,16 @@
             box-sizing: border-box;
             padding: 0;
             overflow: hidden;
-            /* Game frame: 972px total - 140px milestones - 150px actions = 682px */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* GBA aspect ratio 3:2 (240x160) - 895/597 = 1.5:1 */
         }
-        
+
         .frame {
-            position: absolute;
-            top: 0;
-            left: 0;
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: fill;
             image-rendering: pixelated;
         }
         
@@ -202,10 +202,184 @@
         .milestone-name.older {
             color: #999;
         }
-        
+
+        /* 3-column categorized objectives layout */
+        .objectives-3col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            height: 140px;
+        }
+
+        .objective-column {
+            border: 1px solid #666;
+            background-color: #0a0a0a;
+            padding: 8px;
+            overflow-y: auto;
+        }
+
+        .objective-column::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .objective-column::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+
+        .objective-column::-webkit-scrollbar-thumb {
+            background: #666;
+            border-radius: 2px;
+        }
+
+        .objective-column.story {
+            border-color: #33ff33;
+        }
+
+        .objective-column.battling {
+            border-color: #ff6177;
+        }
+
+        .objective-column.dynamics {
+            border-color: #33ffff;
+        }
+
+        .objective-column-header {
+            font-size: 11px;
+            font-weight: bold;
+            margin-bottom: 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #666;
+        }
+
+        .objective-column.story .objective-column-header {
+            color: #33ff33;
+        }
+
+        .objective-column.battling .objective-column-header {
+            color: #ff6177;
+        }
+
+        .objective-column.dynamics .objective-column-header {
+            color: #33ffff;
+        }
+
+        .objective-entry {
+            font-size: 10px;
+            margin: 4px 0;
+            padding: 3px 4px;
+            border-left: 2px solid #666;
+            padding-left: 6px;
+            word-wrap: break-word;
+            white-space: normal;
+            line-height: 1.3;
+        }
+
+        .objective-entry.current {
+            font-weight: bold;
+            border-left-color: #ffa500;
+            background-color: rgba(255, 165, 0, 0.1);
+        }
+
+        .objective-entry.completed {
+            color: #888;
+        }
+
+        .objective-id {
+            color: #666;
+            font-size: 9px;
+            margin-right: 4px;
+        }
+
+        /* Party section container */
+        .party-box-section {
+            padding-left: 15px;
+        }
+
+        /* Horizontal party layout */
+        .party-horizontal {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            padding: 8px;
+            background-color: #0a0a0a;
+            border: 1px solid #33ff33;
+            min-height: 120px;
+        }
+
+        .party-box {
+            background-color: #1a1a1a;
+            border: 1px solid #666;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .party-box.active {
+            border-color: #33ff33;
+            box-shadow: 0 0 5px #33ff33;
+        }
+
+        .party-sprite {
+            width: 64px;
+            height: 64px;
+            background-color: #1a1a1a;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 2px;
+            image-rendering: pixelated;
+        }
+
+        .party-sprite img {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+            object-fit: contain;
+            /* Remove backgrounds - screen mode works well for dark UI */
+            filter: brightness(1.1) contrast(1.1);
+        }
+
+        .party-box .pokemon-name {
+            font-size: 11px;
+            font-weight: bold;
+            color: #ff6177;
+            text-align: center;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .party-box .pokemon-level {
+            font-size: 10px;
+            color: #33ff33;
+        }
+
+        .party-box .pokemon-hp {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            width: 100%;
+            font-size: 9px;
+        }
+
+        .party-box .hp-bar {
+            width: 100%;
+            height: 6px;
+        }
+
+        .party-box .hp-text {
+            font-size: 8px;
+            color: #999;
+            text-align: center;
+        }
+
         .brain-panel {
-            width: 1080px;
-            height: 972px;
+            width: 995px;
+            height: 950px;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -220,8 +394,8 @@
             box-sizing: border-box;
         }
         
-        .brain-section:nth-child(1) { height: 400px; } /* Agent Thinking */
-        .brain-section:nth-child(2) { height: 520px; } /* Party Status */
+        .brain-section:nth-child(1) { height: 650px; } /* Agent Thinking */
+        .brain-section:nth-child(2) { height: 270px; } /* Map + Party Combined */
         
         .section-title {
             color: #ff6177;
@@ -231,7 +405,7 @@
         }
         
         .agent-thinking {
-            height: 340px;
+            height: 590px;
             line-height: 1.6;
             overflow-y: auto;
             padding: 5px;
@@ -242,6 +416,49 @@
             word-wrap: break-word;
             white-space: normal;
             text-align: left;
+            position: relative;
+            z-index: 15;
+        }
+
+        .combined-container {
+            display: flex;
+            gap: 10px;
+            height: 210px;
+        }
+
+        .map-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .party-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .subsection-title {
+            color: #ff6177;
+            margin-bottom: 5px;
+            font-weight: bold;
+            text-shadow: 0 0 5px #ff6177;
+            font-size: 12px;
+        }
+
+        .map-visualization {
+            flex: 1;
+            line-height: 1.2;
+            overflow-y: auto;
+            padding: 5px;
+            background-color: #0a0a0a;
+            border: 1px solid #33ff33;
+            font-family: 'VT323', monospace;
+            font-size: 12px;
+            white-space: pre;
+            overflow-x: auto;
+            position: relative;
+            z-index: 15;
         }
 
         .llm-entry {
@@ -341,11 +558,13 @@
         }
         
         .game-state {
+            flex: 1;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            height: 460px;
             overflow-y: auto;
+            position: relative;
+            z-index: 15;
         }
 
         .party-pokemon {
@@ -425,35 +644,17 @@
         
 
 
-        /* CRT effect */
-        .crt-lines {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
-            background-size: 100% 4px;
-            pointer-events: none;
-            z-index: 10;
-        }
-
-        .crt-flicker {
-            display: none; /* Disabled for performance */
-        }
-    </style>
+</style>
 </head>
 <body>
-    <div class="crt-lines"></div>
-    <div class="crt-flicker"></div>
     <div class="header">
         <div class="header-logo">PokeAgent Challenge //</div>
         <div class="header-title">PROTOCOL_EMERALD // AGENT = PLAYER</div>
         <div style="flex: 1;"></div>
         <div id="metrics-display" style="color: #33ff33; margin-right: 20px; font-size: 14px;">
-            <span id="cost-metric">Cost: $0.00</span> | 
-            <span id="tokens-metric">0 tokens</span> | 
-            <span id="actions-metric">Actions: 0</span> | 
+            <span id="cost-metric">Cost: $0.00</span> |
+            <span id="tokens-metric">0 tokens</span> |
+            <span id="actions-metric">Actions: 0</span> |
             <span id="time-metric">Time: 00:00:00</span>
         </div>
         <div style="width: 10px; height: 10px; background-color: #33ff33; border-radius: 50%; box-shadow: 0 0 10px #33ff33;"></div>
@@ -481,10 +682,10 @@
                 </div>
             </div>
             
-            <div class="action-section">
-                <div class="section-title"># ACTION_QUEUE</div>
-                <div id="action-queue" class="action-queue">
-                    <!-- Recent button presses will appear here -->
+            <div class="party-box-section">
+                <div class="section-title"># PARTY</div>
+                <div id="party-horizontal" class="party-horizontal">
+                    <!-- Pokemon party will appear here -->
                 </div>
             </div>
         </div>
@@ -494,94 +695,95 @@
                 <div class="section-title"># AGENT_THINKING</div>
                 <div id="agent-thinking" class="agent-thinking">INITIALIZING AGENT...</div>
             </div>
-            
+
             <div class="brain-section">
-                <div class="section-title">◑ PARTY_STATUS</div>
-                <div id="party-status" class="game-state">
-                    <div class="party-pokemon">
-                        <div class="pokemon-header">
-                            <span class="pokemon-name">LOADING...</span>
-                            <span class="pokemon-level">Lv.??</span>
-                        </div>
-                        <div class="pokemon-hp">
-                            <span>HP:</span>
-                            <div class="hp-bar">
-                                <div class="hp-fill" style="width: 0%"></div>
+                <div class="section-title">◈ MAP & ACTIONS</div>
+                <div class="combined-container">
+                    <div class="map-section">
+                        <div class="subsection-title">MAP</div>
+                        <div id="map-visualization" class="map-visualization">LOADING MAP...</div>
                     </div>
-                            <span>--/--</span>
+                    <div class="party-section">
+                        <div class="subsection-title">ACTION QUEUE</div>
+                        <div id="action-queue" class="action-queue">
+                            <!-- Action queue buttons will appear here -->
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
+
     <script>
         let isConnected = false;
-        let frameUpdateInterval;
-        
+        let frameWebSocket = null;
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 10;
+
         // Detect server address dynamically
-        const serverUrl = `http://${window.location.hostname}:${window.location.port || '8000'}`;
-        const frameServerUrl = `http://${window.location.hostname}:8001`; // Separate frame server
+        const serverPort = window.location.port || '8000';
+
+        const serverUrl = `http://${window.location.hostname}:${serverPort}`;
+        // WebSocket URL (use ws:// instead of http://)
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const frameWebSocketUrl = `${wsProtocol}//${window.location.hostname}:${serverPort}/ws/frames`;
+
         console.log(`Using server URL: ${serverUrl}`);
-        console.log(`Using frame server URL: ${frameServerUrl}`);
-        
-        // Poll for frame updates using FastAPI with robust error handling
-        let consecutiveErrors = 0;
-        let pollInterval = 25; // Start with 25ms (40 FPS) - better match for 120 FPS emulator
-        const maxInterval = 200; // Max 200ms for faster recovery
-        const maxConsecutiveErrors = 5;
-        
-        async function pollFrameUpdate() {
+        console.log(`Using WebSocket URL: ${frameWebSocketUrl}`);
+
+        // WebSocket frame streaming (REAL-TIME PUSH - no polling!)
+        function connectFrameWebSocket() {
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
-                
-                const response = await fetch(`${frameServerUrl}/frame`, {
-                    signal: controller.signal,
-                    method: 'GET',
-                    cache: 'no-cache'
-                });
-                clearTimeout(timeoutId);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.frame) {
-                        document.getElementById('frame').src = `data:image/png;base64,${data.frame}`;
+                frameWebSocket = new WebSocket(frameWebSocketUrl);
+
+                frameWebSocket.onopen = function() {
+                    console.log('🚀 WebSocket connected for frame streaming');
+                    isConnected = true;
+                    reconnectAttempts = 0;
+                    document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#33ff33';
+
+                    // Send periodic ping to keep connection alive
+                    setInterval(() => {
+                        if (frameWebSocket.readyState === WebSocket.OPEN) {
+                            frameWebSocket.send('ping');
+                        }
+                    }, 30000); // Ping every 30 seconds
+                };
+
+                frameWebSocket.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.frame_data) {
+                            document.getElementById('frame').src = `data:image/png;base64,${data.frame_data}`;
+                        }
+                    } catch (error) {
+                        console.error('Error parsing frame data:', error);
                     }
-                    
-                    // Reset error tracking on success
-                    consecutiveErrors = 0;
-                    pollInterval = 25; // Reset to fast polling (40 FPS)
-                    
-                    if (!isConnected) {
-                        isConnected = true;
-                        console.log('FastAPI connected');
-                        document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#33ff33';
-                    }
-                } else {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-            } catch (error) {
-                consecutiveErrors++;
-                
-                // Exponential backoff for polling interval
-                if (consecutiveErrors > 2) {
-                    pollInterval = Math.min(pollInterval * 1.5, maxInterval);
-                    clearInterval(frameUpdateInterval);
-                    frameUpdateInterval = setInterval(pollFrameUpdate, pollInterval);
-                }
-                
-                if (isConnected || consecutiveErrors === 1) {
+                };
+
+                frameWebSocket.onerror = function(error) {
+                    console.error('WebSocket error:', error);
                     isConnected = false;
-                    console.log(`FastAPI disconnected (${consecutiveErrors} errors): ${error.message}`);
                     document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
-                }
-                
-                // Log only every 5th consecutive error to avoid spam
-                if (consecutiveErrors % 5 === 0) {
-                    console.warn(`${consecutiveErrors} consecutive connection errors, polling every ${pollInterval}ms`);
-                }
+                };
+
+                frameWebSocket.onclose = function() {
+                    console.log('WebSocket disconnected');
+                    isConnected = false;
+                    document.querySelector('.header div[style*="background-color"]').style.backgroundColor = '#ff6177';
+
+                    // Attempt to reconnect with exponential backoff
+                    if (reconnectAttempts < maxReconnectAttempts) {
+                        reconnectAttempts++;
+                        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30 seconds
+                        console.log(`Reconnecting in ${delay/1000}s (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`);
+                        setTimeout(connectFrameWebSocket, delay);
+                    } else {
+                        console.error('Max reconnection attempts reached. Please refresh the page.');
+                    }
+                };
+            } catch (error) {
+                console.error('Failed to create WebSocket:', error);
             }
         }
         
@@ -596,76 +798,82 @@
         // Track session start time for continuous timer
         let sessionStartTime = null;
         let savedRunTime = 0;
-        
+        let lastMetricsUpdate = null;
+
         // Function to update metrics display
         async function updateMetrics() {
             try {
                 const response = await fetch(`${serverUrl}/metrics`);
                 if (response.ok) {
                     const metrics = await response.json();
-                    
-                    // Update cost display
+
                     const cost = metrics.total_cost || 0;
                     document.getElementById('cost-metric').textContent = `Cost: $${cost.toFixed(4)}`;
-                    
-                    // Update tokens display
                     const tokens = metrics.total_tokens || 0;
                     document.getElementById('tokens-metric').textContent = `${tokens.toLocaleString()} tokens`;
-                    
-                    // Update actions display
                     const actions = metrics.total_actions || 0;
                     document.getElementById('actions-metric').textContent = `Actions: ${actions.toLocaleString()}`;
-                    
-                    // Handle start time - detect fresh start if metrics are all zero
-                    const isNewSession = metrics.total_llm_calls === 0 && metrics.total_actions === 0 && metrics.total_cost === 0;
-                    
-                    if (isNewSession) {
-                        // Fresh start - reset timer and force immediate update
-                        sessionStartTime = null;
-                        savedRunTime = 0;
-                        console.log('Detected fresh session - resetting timer');
-                        
-                        // Force an immediate metrics update in case server cache is stale
-                        setTimeout(() => {
-                            updateMetrics();
-                        }, 500);
-                    } else if (metrics.start_time && !sessionStartTime) {
-                        // Restore from checkpoint or first metrics update
-                        sessionStartTime = metrics.start_time * 1000; // Convert to milliseconds
+
+                    // Initialize time tracking on first load
+                    if (!sessionStartTime) {
+                        // Get the cumulative run time from server
                         savedRunTime = metrics.total_run_time || 0;
-                        console.log('Initialized timer from metrics:', {
-                            startTime: metrics.start_time,
-                            savedRunTime: savedRunTime
+                        // Start the local timer from now
+                        sessionStartTime = Date.now();
+
+                        console.log('Initialized cumulative metrics from server:', {
+                            totalCost: metrics.total_cost,
+                            totalTokens: metrics.total_tokens,
+                            totalActions: metrics.total_actions,
+                            savedRunTime: savedRunTime,
+                            formattedTime: formatTime(savedRunTime)
                         });
+                    } else {
+                        // On subsequent updates, sync with server's total_run_time
+                        // Only sync if there's a significant change (>5 seconds difference)
+                        // This means the agent actually ran and updated the time
+                        const serverRunTime = metrics.total_run_time || 0;
+                        const currentLocalTime = savedRunTime + Math.floor((Date.now() - sessionStartTime) / 1000);
+                        const timeDiff = Math.abs(serverRunTime - currentLocalTime);
+
+                        if (timeDiff > 5) {
+                            // Significant difference - server updated, sync with it
+                            console.log(`Syncing time: server=${serverRunTime}s, local=${currentLocalTime}s, diff=${timeDiff}s`);
+                            savedRunTime = serverRunTime;
+                            sessionStartTime = Date.now();
+                        }
                     }
                 }
             } catch (error) {
                 console.error('Error fetching metrics:', error);
             }
         }
-        
-        // Function to update time continuously
+
+        // Function to update time continuously (ticks up locally)
         function updateTime() {
             if (sessionStartTime) {
                 const currentTime = Date.now();
-                const elapsedSeconds = Math.floor((currentTime - sessionStartTime) / 1000) + savedRunTime;
-                document.getElementById('time-metric').textContent = `Time: ${formatTime(elapsedSeconds)}`;
+                const elapsedSinceUpdate = Math.floor((currentTime - sessionStartTime) / 1000);
+                const totalSeconds = savedRunTime + elapsedSinceUpdate;
+                document.getElementById('time-metric').textContent = `Time: ${formatTime(totalSeconds)}`;
             } else {
                 // No session started yet - show 00:00:00
                 document.getElementById('time-metric').textContent = `Time: 00:00:00`;
             }
         }
         
-        // Poll for metrics updates - reduced frequency for better performance  
-        setInterval(updateMetrics, 2000);  // Update metrics every 2 seconds (reduced from 1s)
-        setInterval(updateTime, 500);  // Update timer every 500ms (reduced from 100ms) 
+        // Poll for metrics updates - reduced frequency for better performance
+        console.log('[Stream] Starting polling intervals...');
+        setInterval(() => {
+            console.log('[Stream] Polling metrics...');
+            updateMetrics();
+        }, 2000);  // Update metrics every 2 seconds
+        setInterval(updateTime, 500);  // Update timer every 500ms
         updateMetrics();  // Initial metrics load
-        
-        // Start polling every 25ms (40 FPS) to better match 120 FPS emulator
-        frameUpdateInterval = setInterval(pollFrameUpdate, 25);
-        
-        // Initial connection attempt
-        pollFrameUpdate();
+        console.log('[Stream] Initial metrics loaded');
+
+        // Connect to WebSocket for real-time frame streaming (no polling needed!)
+        connectFrameWebSocket();
 
         // Streaming agent thinking using Server-Sent Events
         let streamingSource = null;
@@ -720,34 +928,51 @@
                     
                     // Add to container
                     agentThinkingDiv.appendChild(messageDiv);
-                    
-                    // Stream the response text word by word
-                    const messageElement = messageDiv.querySelector('.llm-message');
-                    const responseText = data.response || '';
-                    
-                    // Split text into words while preserving whitespace and punctuation
-                    const words = responseText.split(/(\s+)/).filter(w => w.length > 0);
-                    let wordIndex = 0;
-                    
-                    function typeWord() {
-                        if (wordIndex < words.length) {
-                            messageElement.textContent += words[wordIndex];
-                            wordIndex++;
-                            // Auto-scroll as text appears
-                            agentThinkingDiv.scrollTop = agentThinkingDiv.scrollHeight;
-                            
-                            // Faster typing for better performance (reduced delay)
-                            const delay = words[wordIndex - 1].trim() === '' ? 2 : 10; // 2ms for spaces, 10ms for words (faster)
-                            setTimeout(typeWord, delay);
-                        } else {
-                            // Message complete
-                            messageDiv.classList.remove('streaming');
-                            messageDiv.classList.add('complete');
-                            console.log('Message complete for step:', data.step);
+
+                    // Limit DOM size - keep only last 20 messages for performance
+                    const maxMessages = 20;
+                    const messages = agentThinkingDiv.querySelectorAll('.llm-entry');
+                    if (messages.length > maxMessages) {
+                        // Remove oldest messages
+                        const toRemove = messages.length - maxMessages;
+                        for (let i = 0; i < toRemove; i++) {
+                            messages[i].remove();
                         }
                     }
-                    
-                    typeWord();
+
+                    // Display response text with smooth streaming (optimized for performance)
+                    const messageElement = messageDiv.querySelector('.llm-message');
+                    const responseText = data.response || '';
+
+                    // Streaming animation that batches updates to avoid FPS drops
+                    let charIndex = 0;
+                    const charsPerFrame = 5; // Show 5 characters per frame for smooth streaming
+                    const frameDelay = 16; // ~60 FPS (16ms per frame)
+
+                    function streamChunk() {
+                        if (charIndex < responseText.length) {
+                            // Add multiple characters at once (batched update)
+                            const nextChunk = responseText.substring(charIndex, charIndex + charsPerFrame);
+                            messageElement.textContent += nextChunk;
+                            charIndex += charsPerFrame;
+
+                            // Use requestAnimationFrame for smooth, FPS-friendly updates
+                            requestAnimationFrame(() => {
+                                // Only scroll every few frames to reduce layout thrashing
+                                if (charIndex % (charsPerFrame * 3) === 0) {
+                                    agentThinkingDiv.scrollTop = agentThinkingDiv.scrollHeight;
+                                }
+                                setTimeout(streamChunk, frameDelay);
+                            });
+                        } else {
+                            // Message complete - final scroll
+                            agentThinkingDiv.scrollTop = agentThinkingDiv.scrollHeight;
+                            messageDiv.classList.remove('streaming');
+                            messageDiv.classList.add('complete');
+                        }
+                    }
+
+                    streamChunk();
                     
                 } catch (error) {
                     console.error('Error parsing streaming data:', error);
@@ -869,8 +1094,8 @@
             }
         }
 
-        // Function to fetch and update milestones
-        async function updateMilestones() {
+        // Function to fetch and update objectives (categorized mode)
+        async function updateObjectives() {
             try {
                 const response = await fetch(`${serverUrl}/milestones`);
                 if (!response.ok) {
@@ -879,61 +1104,186 @@
                 const data = await response.json();
                 
                 console.log('Milestone data received:', data); // Debug log
-                
-                // Update progress bar and count (show recent out of completed)
-                const recentCount = Math.min(data.completed, 8);
-                document.getElementById('milestone-count').textContent = `${recentCount}/${data.completed} RECENT`;
-                document.getElementById('milestone-progress-fill').style.width = `${data.progress * 100}%`;
-                
+
                 // Update milestone list - GET ELEMENT FIRST!
                 const milestonesList = document.getElementById('milestones-list');
                 milestonesList.innerHTML = '';
-                
-                // Filter and show only recent completed milestones (max 8)
-                if (data.milestones && data.milestones.length > 0) {
-                    // Get only completed milestones, sorted by timestamp (most recent first)
-                    const completedMilestones = data.milestones
-                        .filter(milestone => milestone.completed)
-                        .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                        .slice(0, 8); // Show max 8 recent milestones
-                    
-                    if (completedMilestones.length > 0) {
-                        completedMilestones.forEach((milestone, index) => {
+
+                // Check if we're in categorized mode
+                if (data.objectives && data.objectives.mode === 'categorized') {
+                    // Update progress bar for categorized mode
+                    const storyStatus = data.objectives.categorized_status?.story;
+                    if (storyStatus) {
+                        document.getElementById('milestone-count').textContent = `STORY ${storyStatus.current_index + 1}/${storyStatus.total}`;
+                        document.getElementById('milestone-progress-fill').style.width = `${(storyStatus.current_index / storyStatus.total) * 100}%`;
+                    }
+                    // NEW: 3-column categorized layout
+                    const container = document.createElement('div');
+                    container.className = 'objectives-3col';
+
+                    // Helper function to create a column
+                    function createColumn(categoryName, objectives, status) {
+                        const column = document.createElement('div');
+                        column.className = `objective-column ${categoryName.toLowerCase()}`;
+
+                        const header = document.createElement('div');
+                        header.className = 'objective-column-header';
+                        const prefix = categoryName === 'Story' ? '[STORY]' : categoryName === 'Battling' ? '[BATTLE]' : '[DYNAMIC]';
+                        header.textContent = prefix;
+                        if (status) {
+                            header.textContent += ` ${status.current_index + 1}/${status.total}`;
+                        }
+                        column.appendChild(header);
+
+                        if (objectives && objectives.length > 0) {
+                            objectives.slice(0, 6).forEach(obj => {  // Max 6 entries per column
+                                const entry = document.createElement('div');
+                                entry.className = 'objective-entry';
+                                if (obj.current) {
+                                    entry.classList.add('current');
+                                } else if (obj.completed) {
+                                    entry.classList.add('completed');
+                                }
+
+                                const id = document.createElement('span');
+                                id.className = 'objective-id';
+                                id.textContent = obj.id;
+
+                                const desc = document.createElement('span');
+                                desc.textContent = obj.description; // Show full description
+
+                                entry.appendChild(id);
+                                entry.appendChild(desc);
+
+                                if (obj.completed) {
+                                    const check = document.createElement('span');
+                                    check.style.color = '#666';
+                                    check.style.marginLeft = '4px';
+                                    check.textContent = '[OK]';
+                                    entry.appendChild(check);
+                                }
+
+                                column.appendChild(entry);
+                            });
+                        } else {
+                            const empty = document.createElement('div');
+                            empty.style.color = '#666';
+                            empty.style.fontStyle = 'italic';
+                            empty.style.fontSize = '9px';
+                            empty.style.marginTop = '8px';
+                            empty.textContent = 'No objectives';
+                            column.appendChild(empty);
+                        }
+
+                        return column;
+                    }
+
+                    // Create 3 columns
+                    container.appendChild(createColumn('Story', data.objectives.story, data.objectives.categorized_status?.story));
+                    container.appendChild(createColumn('Battling', data.objectives.battling, data.objectives.categorized_status?.battling));
+                    container.appendChild(createColumn('Dynamics', data.objectives.dynamics, data.objectives.categorized_status?.dynamics));
+
+                    milestonesList.appendChild(container);
+
+                } else {
+                    // LEGACY MODE: Display objectives and milestones the old way
+
+                    // Update progress bar for legacy mode
+                    const recentCount = Math.min(data.completed, 8);
+                    document.getElementById('milestone-count').textContent = `${recentCount}/${data.completed} RECENT`;
+                    document.getElementById('milestone-progress-fill').style.width = `${data.progress * 100}%`;
+
+                    if (data.objectives && data.objectives.current) {
+                        // Display current objective first if available
+                        const currentObj = data.objectives.current;
+                        const item = document.createElement('div');
+                        item.className = 'milestone-item';
+                        item.style.borderLeft = '2px solid #ffa500';
+                        item.style.paddingLeft = '5px';
+                        item.style.marginBottom = '10px';
+
+                        // Truncate long descriptions
+                        const desc = currentObj.description.length > 50 ?
+                            currentObj.description.substring(0, 50) + '...' :
+                            currentObj.description;
+
+                        item.innerHTML = `
+                            <span class="milestone-category progress">NOW</span>
+                            <span class="milestone-name newest">${desc}</span>
+                            <span style="color: #ffa500;">[${currentObj.index + 1}/${data.objectives.total_in_sequence}]</span>
+                        `;
+                        milestonesList.appendChild(item);
+                    }
+
+                    // Display recently completed objectives
+                    if (data.objectives && data.objectives.recently_completed && data.objectives.recently_completed.length > 0) {
+                        data.objectives.recently_completed.reverse().forEach((obj, index) => {
                             const item = document.createElement('div');
                             item.className = 'milestone-item';
-                            
-                            const categoryClass = milestone.category || 'basic';
-                            const categoryDisplay = categoryClass.toUpperCase().substring(0, 4);
-                            
-                            // Add age indicator for visual feedback
-                            const ageClass = index === 0 ? 'newest' : index < 3 ? 'recent' : 'older';
-                            
+
+                            // Truncate long descriptions
+                            const desc = obj.description.length > 50 ?
+                                obj.description.substring(0, 50) + '...' :
+                                obj.description;
+
+                            const ageClass = index === 0 ? 'recent' : 'older';
+
                             item.innerHTML = `
-                                <span class="milestone-category ${categoryClass}">${categoryDisplay}</span>
-                                <span class="milestone-name ${ageClass}">${milestone.name}</span>
+                                <span class="milestone-category progress">OBJ</span>
+                                <span class="milestone-name ${ageClass}">${desc}</span>
                                 <span class="milestone-check">[OK]</span>
                             `;
                             milestonesList.appendChild(item);
                         });
-                    } else {
-                        // Show message if no completed milestones yet
-                        const noCompleted = document.createElement('div');
-                        noCompleted.style.color = '#666';
-                        noCompleted.style.fontStyle = 'italic';
-                        noCompleted.style.textAlign = 'center';
-                        noCompleted.textContent = 'NO_MILESTONES_COMPLETED';
-                        milestonesList.appendChild(noCompleted);
                     }
-                } else {
-                    // Show message if no milestones
-                    const noMilestones = document.createElement('div');
-                    noMilestones.style.color = '#666';
-                    noMilestones.style.fontStyle = 'italic';
-                    noMilestones.textContent = 'NO_MILESTONES_LOADED';
-                    milestonesList.appendChild(noMilestones);
-                }
-                
-                // Add debug info if available - AFTER milestones
+
+                    // Filter and show only recent completed milestones (max 4 to leave room for objectives)
+                    if (data.milestones && data.milestones.length > 0) {
+                        // Get only completed milestones, sorted by timestamp (most recent first)
+                        const completedMilestones = data.milestones
+                            .filter(milestone => milestone.completed)
+                            .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                            .slice(0, 4); // Show max 4 recent milestones (reduced from 8 to make room for objectives)
+
+                        if (completedMilestones.length > 0) {
+                            completedMilestones.forEach((milestone, index) => {
+                                const item = document.createElement('div');
+                                item.className = 'milestone-item';
+
+                                const categoryClass = milestone.category || 'basic';
+                                const categoryDisplay = categoryClass.toUpperCase().substring(0, 4);
+
+                                // Add age indicator for visual feedback
+                                const ageClass = index === 0 ? 'newest' : index < 2 ? 'recent' : 'older';
+
+                                item.innerHTML = `
+                                    <span class="milestone-category ${categoryClass}">${categoryDisplay}</span>
+                                    <span class="milestone-name ${ageClass}">${milestone.name}</span>
+                                    <span class="milestone-check">[OK]</span>
+                                `;
+                                milestonesList.appendChild(item);
+                            });
+                        } else if (!data.objectives || !data.objectives.current) {
+                            // Show message if no completed milestones and no current objective
+                            const noCompleted = document.createElement('div');
+                            noCompleted.style.color = '#666';
+                            noCompleted.style.fontStyle = 'italic';
+                            noCompleted.style.textAlign = 'center';
+                            noCompleted.textContent = 'NO_MILESTONES_COMPLETED';
+                            milestonesList.appendChild(noCompleted);
+                        }
+                    } else if (!data.objectives || !data.objectives.current) {
+                        // Show message if no milestones and no current objective
+                        const noMilestones = document.createElement('div');
+                        noMilestones.style.color = '#666';
+                        noMilestones.style.fontStyle = 'italic';
+                        noMilestones.textContent = 'NO_MILESTONES_LOADED';
+                        milestonesList.appendChild(noMilestones);
+                    }
+
+                } // End of legacy mode block
+
+                // Add debug info if available - AFTER milestones/objectives
                 if (data.current_location || data.badges !== undefined) {
                     const debugInfo = document.createElement('div');
                     debugInfo.style.fontSize = '10px';
@@ -983,92 +1333,77 @@
             try {
                 const response = await fetch(`${serverUrl}/state`);
                 const data = await response.json();
-                
-                const partyContainer = document.getElementById('party-status');
+
+                const partyContainer = document.getElementById('party-horizontal');
                 partyContainer.innerHTML = '';
-                
+
                 if (data.player && data.player.party && data.player.party.length > 0) {
-                    data.player.party.forEach(pokemon => {
+                    data.player.party.forEach((pokemon, index) => {
                         if (pokemon && pokemon.species_name && pokemon.species_name.trim() !== '') {
                             const pokemonDiv = document.createElement('div');
-                            pokemonDiv.className = 'party-pokemon';
-                            
-                            const hpPercent = pokemon.current_hp && pokemon.max_hp ? 
+                            pokemonDiv.className = 'party-box';
+                            if (index === 0) pokemonDiv.classList.add('active');
+
+                            // Check if it's an egg
+                            const isEgg = pokemon.is_egg || false;
+
+                            const hpPercent = pokemon.current_hp && pokemon.max_hp ?
                                 (pokemon.current_hp / pokemon.max_hp) * 100 : 0;
-                            
+
                             let hpClass = 'hp-fill';
                             if (hpPercent < 25) hpClass += ' critical';
                             else if (hpPercent < 50) hpClass += ' low';
-                            
-                            let movesHtml = '';
-                            if (pokemon.moves && pokemon.moves.length > 0) {
-                                const validMoves = pokemon.moves.filter((moveName, index) => {
-                                    if (!moveName) return false;
-                                    const cleanName = moveName.toString().trim().toLowerCase();
-                                    return cleanName !== '' && 
-                                           cleanName !== '(none)' && 
-                                           cleanName !== 'none' && 
-                                           cleanName !== 'null' &&
-                                           cleanName !== 'undefined';
-                                });
-                                
-                                if (validMoves.length > 0) {
-                                    movesHtml = '<div class="pokemon-moves">';
-                                    pokemon.moves.forEach((moveName, index) => {
-                                        if (moveName) {
-                                            const cleanName = moveName.toString().trim().toLowerCase();
-                                            if (cleanName !== '' && 
-                                                cleanName !== '(none)' && 
-                                                cleanName !== 'none' && 
-                                                cleanName !== 'null' &&
-                                                cleanName !== 'undefined') {
-                                                const currentPp = pokemon.move_pp && pokemon.move_pp[index] !== undefined ? pokemon.move_pp[index] : '?';
-                                                movesHtml += `<div class="move-item">
-                                                    <span class="move-name">${moveName.toUpperCase()}</span>
-                                                    <span>${currentPp} PP</span>
-                                                </div>`;
-                                            }
-                                        }
-                                    });
-                                    movesHtml += '</div>';
-                                }
-                            }
-                            
-                            const displayName = (pokemon.nickname && pokemon.nickname.trim() !== '') ? 
+
+                            // Display "EGG" for eggs, otherwise use nickname or species name
+                            const displayName = isEgg ? 'EGG' :
+                                (pokemon.nickname && pokemon.nickname.trim() !== '') ?
                                 pokemon.nickname.toUpperCase() : pokemon.species_name.toUpperCase();
-                            
+
+                            // Use egg sprite for eggs, otherwise use regular Pokemon sprites
+                            const spriteUrl = isEgg ?
+                                'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/egg.png' :
+                                (pokemon.species_name ?
+                                `https://play.pokemonshowdown.com/sprites/ani/${pokemon.species_name.toLowerCase().replace(/[^a-z0-9]/g, '')}.gif` : '');
+
+                            // Fallback to PokeAPI static Emerald sprites (use species_id = National Dex)
+                            const fallbackSpriteUrl = isEgg ?
+                                'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items/egg.png' :
+                                (pokemon.species_id ?
+                                `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pokemon.species_id}.png` : '');
+
+                            const level = isEgg ? '??' : (pokemon.level || '??');
+
                             pokemonDiv.innerHTML = `
-                                <div class="pokemon-header">
-                                    <span class="pokemon-name">${displayName}</span>
-                                    <span class="pokemon-level">Lv.${pokemon.level || '??'}</span>
+                                <div class="party-sprite">
+                                    ${spriteUrl ? `<img src="${spriteUrl}" onerror="this.src='${fallbackSpriteUrl}'" alt="${displayName}">` : '<span style="color: #666;">?</span>'}
                                 </div>
+                                <span class="pokemon-name">${displayName}</span>
+                                <span class="pokemon-level">Lv.${level}</span>
                                 <div class="pokemon-hp">
-                                    <span>HP:</span>
                                     <div class="hp-bar">
                                         <div class="${hpClass}" style="width: ${hpPercent}%"></div>
                                     </div>
-                                    <span>${pokemon.current_hp || '??'}/${pokemon.max_hp || '??'}</span>
+                                    <div class="hp-text">${pokemon.current_hp || '??'}/${pokemon.max_hp || '??'}</div>
                                 </div>
-                                ${movesHtml}
                             `;
-                            
+
                             partyContainer.appendChild(pokemonDiv);
                         }
                     });
                 } else {
                     // Fallback if no party data
                     partyContainer.innerHTML = `
-                        <div class="party-pokemon">
-                            <div class="pokemon-header">
-                                <span class="pokemon-name">NO_PARTY_DATA</span>
-                                <span class="pokemon-level">Lv.--</span>
+                        <div class="party-box">
+                            <div class="party-sprite">
+                                <span style="color: #666;">?</span>
                             </div>
+                            <span class="pokemon-name">NO_PARTY_DATA</span>
+                            <span class="pokemon-level">Lv.--</span>
                             <div class="pokemon-hp">
-                                <span>HP:</span>
                                 <div class="hp-bar">
                                     <div class="hp-fill" style="width: 0%"></div>
                                 </div>
-                                <span>--/--</span>
+                                <div class="hp-text">--/--</div>
                             </div>
                         </div>
                     `;
@@ -1079,8 +1414,44 @@
             }
         }
 
-        // Frame updates are already handled by pollFrameUpdate()
-        // No need for updateScreenshot()
+        // Function to fetch and update map visualization
+        async function updateMapVisualization() {
+            try {
+                // Add cache busting to ensure fresh data
+                const response = await fetch(`${serverUrl}/state?t=${Date.now()}`);
+                const data = await response.json();
+
+                const mapContainer = document.getElementById('map-visualization');
+
+                if (data.map && data.map.visual_map) {
+                    // Filter out rows that only contain numbers, minus, space, #, and N
+                    let lines = data.map.visual_map.split('\n');
+                    lines = lines.filter(line => {
+                        const cleanLine = line.trim();
+                        if (cleanLine === '') return false; // Skip empty lines
+
+                        // Skip rows that only contain: numbers, minus, space, #, and N
+                        const onlyBoringChars = /^[\d\-\s#N]+$/.test(cleanLine);
+                        return !onlyBoringChars;
+                    });
+
+                    if (lines.length > 0) {
+                        mapContainer.textContent = lines.join('\n');
+                    } else {
+                        mapContainer.textContent = 'NO_MAP_DATA';
+                    }
+                } else {
+                    mapContainer.textContent = 'NO_MAP_DATA';
+                }
+
+            } catch (error) {
+                console.error('Error fetching map visualization:', error);
+                document.getElementById('map-visualization').textContent = 'ERROR_LOADING_MAP';
+            }
+        }
+
+        // Frame updates are now handled by WebSocket (real-time push)
+        // No polling needed!
 
         // Initialize streaming for agent thinking
         initializeAgentStreaming();
@@ -1089,17 +1460,19 @@
         setInterval(() => {
             updateRecentActions();
             updatePartyStatus();
+            updateMapVisualization();
         }, 2000); // Update every 2 seconds (reduced from 1s)
 
-        // Less frequent updates for milestones  
+        // Poll objectives every 10 seconds
         setInterval(() => {
-            updateMilestones();
-        }, 10000); // Update every 10 seconds (reduced from 5s)
+            updateObjectives();
+        }, 10000);
 
         // Call the update functions initially (except agent thinking which streams)
         updateRecentActions();
-        updateMilestones();
+        updateObjectives(); // Update objectives display
         updatePartyStatus();
+        updateMapVisualization();
     </script>
 </body>
 </html>

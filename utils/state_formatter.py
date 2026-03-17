@@ -10,12 +10,19 @@ import json
 import logging
 import numpy as np
 from PIL import Image
-from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol
+from utils.mapping.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol
 import base64
 import io
 import os, sys
+from typing import Optional, List, Tuple
 from pokemon_env.enums import MetatileBehavior
 from utils import state_formatter as sf
+from utils.mapping.porymap_state import (
+    ROM_TO_PORYMAP_MAP,
+    _format_porymap_info,
+    _get_pokeemerald_root,
+    _get_porymap_map_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +36,9 @@ MAP_STITCHER_INSTANCE = None  # Reference to the MapStitcher instance
 def _get_location_connections_from_cache():
     """Read location connections from MapStitcher's cache file"""
     try:
-        cache_file = '.pokeagent_cache/map_stitcher_data.json'
-        if os.path.exists(cache_file):
+        from utils.data_persistence.run_data_manager import get_cache_path
+        cache_file = get_cache_path("map_stitcher_data.json")
+        if cache_file.exists():
             with open(cache_file, 'r') as f:
                 data = json.load(f)
                 return data.get('location_connections', {})
@@ -162,7 +170,7 @@ def detect_dialogue_on_frame(screenshot_base64=None, frame_array=None):
         logger.warning(f"Failed to detect dialogue on frame: {e}")
         return {'has_dialogue': False, 'confidence': 0.0, 'reason': f'error: {e}'}
 
-def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True):
+def format_state(state_data, format_type="summary", include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Format comprehensive state data into readable text.
     
@@ -171,6 +179,8 @@ def format_state(state_data, format_type="summary", include_debug_info=False, in
         format_type (str): "summary" for one-line summary, "detailed" for multi-line LLM format
         include_debug_info (bool): Whether to include extra debug information (for detailed format)
         include_npcs (bool): Whether to include NPC information in the state
+        include_movement_preview (bool): Whether to include movement preview (for detailed format)
+        action_history (list): Optional list of recent actions with start/end positions
     
     Returns:
         str: Formatted state text
@@ -178,11 +188,11 @@ def format_state(state_data, format_type="summary", include_debug_info=False, in
     if format_type == "summary":
         return _format_state_summary(state_data)
     elif format_type == "detailed":
-        return _format_state_detailed(state_data, include_debug_info, include_npcs)
+        return _format_state_detailed(state_data, include_debug_info, include_npcs, include_movement_preview, action_history)
     else:
         raise ValueError(f"Unknown format_type: {format_type}. Use 'summary' or 'detailed'")
 
-def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True):
+def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Format comprehensive state data into a readable context for the VLM.
     
@@ -190,11 +200,13 @@ def format_state_for_llm(state_data, include_debug_info=False, include_npcs=True
         state_data (dict): The comprehensive state from /state endpoint
         include_debug_info (bool): Whether to include extra debug information
         include_npcs (bool): Whether to include NPC information in the state
+        include_movement_preview (bool): Whether to include movement preview (deprecated for pathfinding agents)
+        action_history (list): Optional list of recent actions with start/end positions
     
     Returns:
         str: Formatted state context for LLM prompts
     """
-    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs)
+    return format_state(state_data, format_type="detailed", include_debug_info=include_debug_info, include_npcs=include_npcs, include_movement_preview=include_movement_preview, action_history=action_history)
 
 def format_state_summary(state_data):
     """
@@ -314,11 +326,17 @@ def _format_state_summary(state_data):
     
     return " | ".join(summary_parts) if summary_parts else "No state data"
 
-def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True):
+def _format_state_detailed(state_data, include_debug_info=False, include_npcs=True, include_movement_preview=True, action_history=None):
     """
     Internal function to create detailed multi-line state format for LLM prompts.
     """
     context_parts = []
+    
+    # Add action history at the beginning if available
+    if action_history:
+        action_history_text = format_action_history(action_history)
+        context_parts.append(action_history_text)
+        context_parts.append("")  # Add blank line for spacing
     
     # Check both player and game sections for data
     player_data = state_data.get('player', {})
@@ -328,7 +346,11 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
     is_in_battle = game_data.get('is_in_battle', False) or game_data.get('in_battle', False)
     
     if is_in_battle:
-        # BATTLE MODE: Focus on battle-relevant information
+        # Remove heavy overworld map data while in battle to reduce prompt size
+        map_info = state_data.get('map') if isinstance(state_data, dict) else None
+        if isinstance(map_info, dict):
+            map_info.pop('porymap', None)
+         # BATTLE MODE: Focus on battle-relevant information
         context_parts.append("=== BATTLE MODE ===")
         context_parts.append("Currently in battle - map and dialogue information hidden")
         
@@ -484,12 +506,21 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         party_context = _format_party_info(player_data, game_data)
         context_parts.extend(party_context)
 
-        # Map/Location information with traversability (NOT shown in battle)
-        map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
-        context_parts.extend(map_context)
+        # Menu-like UI screens (e.g. naming/gender selection) can have incomplete map data.
+        # Preserve the screenshot-driven state but skip heavy map formatting unless we're in
+        # an overworld-style state where map traversal context is actually useful.
+        game_state_name = game_data.get('game_state')
+        if game_state_name in {'overworld', 'dialog'}:
+            map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
+            context_parts.extend(map_context)
+        elif game_state_name:
+            context_parts.append("\n=== LOCATION & MAP INFO ===")
+            if player_location:
+                context_parts.append(f"Current Location: {player_location}")
+            context_parts.append(f"Map details hidden while in {game_state_name} UI")
 
         # Game state information (including dialogue if not in battle)
-        game_context = _format_game_state(game_data, state_data)
+        game_context = _format_game_state(game_data, state_data, include_movement_preview)
         context_parts.extend(game_context)
     
     # Debug information if requested (shown in both modes)
@@ -585,11 +616,18 @@ def _format_party_info(player_data, game_data):
             context_parts.append(f"Pokemon Party ({party_size} pokemon):")
             for i, pokemon in enumerate(pokemon_list[:6]):
                 if pokemon:
-                    species = pokemon.get('species_name', pokemon.get('species', 'Unknown'))
-                    level = pokemon.get('level', '?')
+                    # Check if it's an egg
+                    is_egg = pokemon.get('is_egg', False)
+                    if is_egg:
+                        species = "Egg"
+                        level = "?"
+                        status = "Egg"
+                    else:
+                        species = pokemon.get('species_name', pokemon.get('species', 'Unknown'))
+                        level = pokemon.get('level', '?')
+                        status = pokemon.get('status', 'Normal')
                     hp = pokemon.get('current_hp', '?')
                     max_hp = pokemon.get('max_hp', '?')
-                    status = pokemon.get('status', 'Normal')
                     context_parts.append(f"  {i+1}. {species} (Lv.{level}) HP: {hp}/{max_hp} Status: {status}")
         else:
             context_parts.append("No Pokemon in party")
@@ -604,6 +642,15 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     
     if not map_info:
         return context_parts
+    
+    # Ensure map_info is actually part of state (not a copy)
+    # This ensures porymap data we store persists in the state
+    if full_state_data and 'map' not in full_state_data:
+        full_state_data['map'] = map_info
+    elif full_state_data and full_state_data.get('map') is not map_info:
+        # If map_info is a different object, merge our changes back
+        full_state_data['map'].update(map_info)
+        map_info = full_state_data['map']
     
     # Get location name from player data
     location_name = None
@@ -625,94 +672,70 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
     if location_name:
         context_parts.append(f"Current Location: {location_name}")
     
-    # Also add current map if different
-    if 'current_map' in map_info and map_info['current_map'] != location_name:
-        context_parts.append(f"Current Map: {map_info['current_map']}")
-    
-    # Get player coordinates
+    # Get player coordinates from ROM (read via memory_reader.read_coordinates())
+    # This is the actual player position from the game, not from MapStitcher
     player_coords = None
-    player_coords_dict = map_info.get('player_coords', {})
-    if isinstance(player_coords_dict, dict) and player_coords_dict.get('x') is not None:
-        player_coords = (player_coords_dict.get('x', 0), player_coords_dict.get('y', 0))
-    elif player_coords_dict and not isinstance(player_coords_dict, dict):
-        player_coords = player_coords_dict
-    elif player_data and 'position' in player_data:
+    rom_player_coords = None
+    if player_data and 'position' in player_data:
         pos = player_data['position']
-        player_coords = (pos.get('x', 0), pos.get('y', 0))
+        if pos:
+            rom_player_coords = (pos.get('x', 0), pos.get('y', 0))
+            player_coords = rom_player_coords  # May be adjusted below if using override map
     
-    # Get MapStitcher instance - prefer the one from memory_reader if available
-    # This ensures we use the instance that has the actual map data
-    map_stitcher = map_info.get('_map_stitcher_instance') if map_info else None
-    if not map_stitcher:
-        map_stitcher = _get_map_stitcher_instance()
+    # Get badge count for game-state-aware map selection (e.g., Petalburg Gym lobby)
+    badge_count = 0
+    if full_state_data:
+        game_data = full_state_data.get('game', {})
+        badges = game_data.get('badges', [])
+        if isinstance(badges, list):
+            badge_count = len(badges)
+        elif isinstance(badges, int):
+            badge_count = badges
     
-    # Get NPCs if available
-    npcs = []
-    if include_npcs and 'object_events' in map_info:
-        npcs = map_info.get('object_events', [])
+    # Check for coordinate offset if using an override map
+    # This translates ROM coordinates to the local override map coordinate space
+    from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
+    porymap_map_name = _get_porymap_map_name(location_name)
+    coord_offset = None
+    if porymap_map_name:
+        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
+        override = get_override(effective_map_name)
+        if override and ('offset_x' in override or 'offset_y' in override):
+            offset_x = override.get('offset_x', 0)
+            offset_y = override.get('offset_y', 0)
+            coord_offset = (offset_x, offset_y)
+            if rom_player_coords:
+                # Translate ROM coordinates to local map coordinates
+                player_coords = (rom_player_coords[0] - offset_x, rom_player_coords[1] - offset_y)
     
-    # Get connections from current area
-    connections = []
-    if map_info.get('stitched_map_info'):
-        current_area = map_info['stitched_map_info'].get('current_area', {})
-        connections = current_area.get('connections', [])
+    # Display player position (translated if using override map)
+    if player_coords:
+        context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
     
-    # Check for pre-generated visual map first (from memory_reader)
-    if map_info.get('visual_map'):
-        # Use the pre-generated map visualization
-        context_parts.append(map_info['visual_map'])
-    elif location_name:
-        # Generate map display using MapStitcher
-            # print( Attempting to generate map for location: '{location_name}'")
-            # print( MapStitcher exists: {map_stitcher is not None}")
-        if map_stitcher:
-            # print( MapStitcher has {len(map_stitcher.map_areas)} areas")
-            for map_id in list(map_stitcher.map_areas.keys())[:3]:
-                area = map_stitcher.map_areas[map_id]
-                # print(   Area {map_id}: '{area.location_name}'")
-        
-        map_lines = map_stitcher.generate_location_map_display(
-            location_name=location_name,
-            player_pos=player_coords,
-            npcs=npcs,
-            connections=connections
-        )
-        
-        if map_lines:
-            # print( Generated {len(map_lines)} map lines from MapStitcher")
-            context_parts.extend(map_lines)
-            # Add exploration statistics
-            location_grid = map_stitcher.get_location_grid(location_name)
-            if location_grid:
-                total_tiles = len(location_grid)
-                context_parts.append("")
-                context_parts.append(f"Total explored: {total_tiles} tiles")
-        else:
-            # print( MapStitcher returned empty, falling back to memory tiles")
-            # Fallback if MapStitcher doesn't have data for this location - use memory tiles
-            pass
-            if 'tiles' in map_info and map_info['tiles']:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} (from memory) ---")
-                _add_local_map_fallback(context_parts, map_info, include_npcs)
-            else:
-                context_parts.append(f"\n--- MAP: {location_name.upper()} ---")
-                context_parts.append("No map data available")
-    else:
-        # No location name - use local map fallback
-        context_parts.append("\n--- LOCAL MAP (Location unknown) ---")
-        if 'tiles' in map_info and map_info['tiles']:
-            _add_local_map_fallback(context_parts, map_info, include_npcs)
-    
-    # NPC information removed - unreliable detection with incorrect positions
-    
-    # Add stitched map information if available
-    stitched_info = _format_stitched_map_info(map_info)
-    if stitched_info:
-        context_parts.extend(stitched_info)
+    # Add porymap ground truth data (JSON and ASCII map)
+    porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count)
+    if isinstance(porymap_result, tuple):
+        porymap_info, porymap_data = porymap_result
+        if porymap_info:
+            context_parts.extend(porymap_info)
+            # Store porymap data in map_info for pathfinding (don't add to context text)
+            if 'porymap' not in map_info:
+                map_info['porymap'] = {}
+            map_info['porymap']['grid'] = porymap_data.get('grid')
+            map_info['porymap']['objects'] = porymap_data.get('objects', [])
+            map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
+            map_info['porymap']['raw_tiles'] = porymap_data.get('raw_tiles')  # Include raw tiles with elevation
+
+            # Debug: Verify the grid was stored
+            stored_grid = map_info['porymap'].get('grid')
+            if stored_grid:
+                logger.debug(f"Stored elevation-filtered porymap grid: {len(stored_grid)}x{len(stored_grid[0]) if stored_grid else 0}")
+    elif porymap_result:
+        context_parts.extend(porymap_result)
     
     return context_parts
 
-def _add_local_map_fallback(context_parts, map_info, include_npcs):
+def _add_local_map_fallback(context_parts, map_info, include_npcs, location_name=None):
     """Helper function to add local map display as fallback"""
     if 'tiles' in map_info and map_info['tiles']:
         raw_tiles = map_info['tiles']
@@ -728,11 +751,11 @@ def _add_local_map_fallback(context_parts, map_info, include_npcs):
             npcs = map_info.get('object_events', [])
         
         # Use unified LLM formatter for consistency with NPCs if available
-        map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords)
+        map_display = format_map_for_llm(raw_tiles, facing, npcs, player_coords, location_name)
         context_parts.append(map_display)
         
         # Add dynamic legend based on symbols in the map
-        grid = format_map_grid(raw_tiles, facing, npcs, player_coords)
+        grid = format_map_grid(raw_tiles, facing, npcs, player_coords, location_name=location_name)
         legend = generate_dynamic_legend(grid)
         context_parts.append(f"\n{legend}")
 
@@ -748,7 +771,7 @@ def _format_world_map_display(stitched_data, full_state_data=None):
 
 def _get_map_stitcher_instance():
     """Get the MapStitcher instance - always reload from cache for multiprocess compatibility"""
-    from utils.map_stitcher import MapStitcher
+    from utils.mapping.map_stitcher import MapStitcher
     # Always create fresh instance to read latest cache
     # This is needed because server and client run in different processes
     return MapStitcher()
@@ -1088,7 +1111,7 @@ def _format_stitched_map_info(map_info):
     # Old world map knowledge system removed - replaced by location-based maps with portal coordinates
     return context_parts
 
-def _format_game_state(game_data, state_data=None):
+def _format_game_state(game_data, state_data=None, include_movement_preview=True):
     """Format game state information (for non-battle mode)."""
     context_parts = []
     
@@ -1133,7 +1156,8 @@ def _format_game_state(game_data, state_data=None):
         context_parts.append("Be creative and have fun with the naming!")
     
     # Add movement preview for overworld navigation (but not during title sequence)
-    if (state_data and not is_in_battle and 
+    # Can be disabled for agents using pathfinding utility
+    if (include_movement_preview and state_data and not is_in_battle and 
         game_data.get('game_state') == 'overworld' and 
         player_location != 'TITLE_SEQUENCE'):
         movement_preview = format_movement_preview_for_llm(state_data)
@@ -1232,12 +1256,23 @@ def get_movement_preview(state_data):
     current_y = int(player_position['y'])
     
     # Get map and tile data
+    # IMPORTANT: Use the elevation-filtered porymap grid if available, not raw memory tiles
     map_info = state_data.get('map', {})
-    raw_tiles = map_info.get('tiles', [])
-    
-    if not raw_tiles:
+
+    # Try to use porymap grid first (elevation-filtered and more accurate)
+    porymap = map_info.get('porymap', {})
+    porymap_grid = porymap.get('grid')
+    raw_tiles_for_elevation = porymap.get('raw_tiles') if porymap else None
+
+    # Fallback to memory-read tiles if porymap not available
+    raw_tiles = map_info.get('tiles') or []
+
+    if not raw_tiles and not porymap_grid:
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
+    
+    # Get NPCs from map info
+    npcs = map_info.get('object_events', [])
     
     directions = {
         'UP': (0, -1),
@@ -1273,23 +1308,93 @@ def get_movement_preview(state_data):
             'new_coords': (new_world_x, new_world_y),
             'blocked': True,
             'tile_symbol': '#',
-            'tile_description': 'BLOCKED - Out of bounds'
+            'tile_description': 'BLOCKED - Out of bounds',
+            'npc_at_position': None,
+            'npc_info': None
         }
         
+        # Check if there's an NPC at the target position
+        npc_at_position = None
+        for npc in npcs:
+            npc_x = npc.get('current_x', npc.get('x', 0))
+            npc_y = npc.get('current_y', npc.get('y', 0))
+            if npc_x == new_world_x and npc_y == new_world_y:
+                npc_at_position = npc
+                break
+        
         # Check if the target position is within the grid bounds
-        if (0 <= grid_y < len(raw_tiles) and 
+        # Use porymap grid if available (elevation-aware), otherwise fall back to raw tiles
+        if porymap_grid and 0 <= new_world_y < len(porymap_grid) and 0 <= new_world_x < len(porymap_grid[new_world_y] if porymap_grid[new_world_y] else []):
+            # Use porymap grid (already filtered by elevation)
+            try:
+                tile_symbol = porymap_grid[new_world_y][new_world_x]
+                target_tile = None  # Don't have the raw tile data when using porymap grid
+
+                # Determine if movement is blocked by terrain (using porymap symbols)
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'X']  # Walls, water, out of bounds
+
+                # Check if movement is blocked by NPC
+                is_blocked_by_npc = False
+                if npc_at_position and npc_at_position.get('is_blocking', True):
+                    is_blocked_by_npc = True
+
+                # Overall blocking status
+                is_blocked = is_blocked_by_terrain or is_blocked_by_npc
+
+                # Set tile description based on symbol
+                if tile_symbol == 'D':
+                    tile_description = 'Door/Exit'
+                elif tile_symbol == 'S':
+                    tile_description = 'Stairs/Warp'
+                elif tile_symbol == '.':
+                    tile_description = 'Walkable'
+                elif tile_symbol == '~':
+                    tile_description = 'Grass'
+                elif tile_symbol == '#':
+                    tile_description = 'Wall'
+                elif tile_symbol == 'W':
+                    tile_description = 'Water'
+                else:
+                    tile_description = f'Tile ({tile_symbol})'
+
+                # Update preview info
+                preview_info['blocked'] = is_blocked
+                preview_info['tile_symbol'] = tile_symbol
+                preview_info['tile_description'] = tile_description
+                preview_info['npc_at_position'] = npc_at_position is not None
+                if npc_at_position:
+                    preview_info['npc_info'] = {
+                        'graphics_id': npc_at_position.get('graphics_id', 'Unknown'),
+                        'x': npc_at_position.get('x', 0),
+                        'y': npc_at_position.get('y', 0)
+                    }
+
+            except (IndexError, TypeError):
+                tile_symbol = '#'
+                target_tile = None
+                # Keep defaults (blocked=True)
+
+        elif (0 <= grid_y < len(raw_tiles) and
             0 <= grid_x < len(raw_tiles[grid_y]) and
             raw_tiles[grid_y]):
-            
+
             try:
-                # Get the tile at the target position
+                # Get the tile at the target position from memory-read tiles
                 target_tile = raw_tiles[grid_y][grid_x]
-                
+
                 # Get tile symbol and check if walkable
                 tile_symbol = format_tile_to_symbol(target_tile)
                 
-                # Determine if movement is blocked
-                is_blocked = tile_symbol in ['#', 'W']  # Walls and water block movement
+                # Determine if movement is blocked by terrain
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N']  # Walls, water, and NPCs block movement
+                
+                # Check if movement is blocked by NPC
+                is_blocked_by_npc = False
+                if npc_at_position and npc_at_position.get('is_blocking', True):
+                    is_blocked_by_npc = True
+                
+                # Overall blocking status
+                is_blocked = is_blocked_by_terrain or is_blocked_by_npc
                 
                 # SPECIAL CASE: If player is standing on stairs/door, don't block the warp direction
                 # Stairs and doors often require moving in a specific direction to activate
@@ -1300,7 +1405,7 @@ def get_movement_preview(state_data):
                     # tile might normally be considered blocked
                     if tile_symbol in ['#', 'W']:
                         # Override the blocking for navigation tiles but KEEP original symbol
-                        is_blocked = False
+                        is_blocked = is_blocked_by_npc  # Only block if NPC is present
                         # DO NOT change tile_symbol - preserve S, D, #, W, etc.
                 
                 # Special handling for jump ledges - they're only walkable in their direction
@@ -1370,10 +1475,33 @@ def get_movement_preview(state_data):
                 else:
                     tile_description = "Unknown tile"
                 
+                # Add NPC information to description if present
+                npc_info = None
+                if npc_at_position:
+                    npc_name = npc_at_position.get('name', 'Unknown')
+                    npc_type = npc_at_position.get('npc_type', 'npc')
+                    npc_description = npc_at_position.get('description', '')
+                    
+                    # Create NPC info string
+                    npc_info = f"{npc_name} ({npc_type})"
+                    if npc_description:
+                        npc_info += f" - {npc_description}"
+                    
+                    # Update tile description to include NPC info
+                    if is_blocked_by_npc:
+                        if is_blocked_by_terrain:
+                            tile_description += f" + BLOCKED by {npc_info}"
+                        else:
+                            tile_description = f"BLOCKED - {npc_info}"
+                    else:
+                        tile_description += f" + {npc_info} (non-blocking)"
+                
                 preview_info.update({
                     'blocked': is_blocked,
                     'tile_symbol': tile_symbol,
-                    'tile_description': tile_description
+                    'tile_description': tile_description,
+                    'npc_at_position': npc_at_position,
+                    'npc_info': npc_info
                 })
                 
             except (IndexError, TypeError) as e:
@@ -1410,7 +1538,23 @@ def format_movement_preview_for_llm(state_data):
             symbol = info['tile_symbol']
             status = "BLOCKED" if info['blocked'] else "WALKABLE"
             
+            # Special override: if description contains "Stairs" or "Warp", show 'W' instead of any other symbol
+            desc = info.get('tile_description', '')
+            if not info['blocked'] and ('Stairs' in desc or 'Warp' in desc):
+                symbol = 'W'
+            
             lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
+            
+            # Add NPC information if present
+            if info.get('npc_info'):
+                npc_info = info['npc_info']
+                if info['blocked'] and 'BLOCKED by' in info['tile_description']:
+                    lines[-1] += f" - {npc_info}"
+                elif not info['blocked'] and 'non-blocking' in info['tile_description']:
+                    lines[-1] += f" - {npc_info}"
+                else:
+                    lines[-1] += f" - {npc_info}"
+            
             # Add brief description for tiles
             desc = info['tile_description']
             if info['blocked']:
@@ -1421,6 +1565,8 @@ def format_movement_preview_for_llm(state_data):
                     lines[-1] += " - Need Surf to cross"
                 elif 'Wall' in desc or 'Obstacle' in desc:
                     lines[-1] += " - Impassable"
+                elif 'trainer' in desc.lower() or 'npc' in desc.lower():
+                    lines[-1] += " - NPC blocks movement"
             else:
                 # Add brief description for walkable tiles
                 if 'Tall grass' in desc:
@@ -1431,7 +1577,85 @@ def format_movement_preview_for_llm(state_data):
                     lines[-1] += " - Door/Entrance"
                 elif 'Jump ledge' in desc and 'correct direction' in desc:
                     lines[-1] += " - Jump ledge (can jump this way)"
+                elif 'trainer' in desc.lower() or 'npc' in desc.lower():
+                    lines[-1] += " - NPC present (interact with A)"
     
+    return "\n".join(lines)
+
+
+def format_action_history(action_history, max_actions=10):
+    """
+    Format action history with starting and ending positions.
+    
+    Args:
+        action_history: List of action dicts with button, start_pos, end_pos
+        max_actions: Maximum number of recent actions to show
+    
+    Returns:
+        str: Formatted action history text
+    """
+    if not action_history:
+        return "No recent actions"
+    
+    lines = []
+    
+    # Get the most recent completed actions
+    completed_actions = [a for a in action_history if a.get('completed', False)]
+    recent_actions = completed_actions[-max_actions:]
+    
+    if not recent_actions:
+        return "No completed actions yet"
+    
+    lines.append("RECENT ACTION HISTORY:")
+    lines.append("(Shows last {} actions with start → end positions)".format(len(recent_actions)))
+    
+    for i, action in enumerate(recent_actions, 1):
+        button = action.get('button', 'UNKNOWN')
+        start_pos = action.get('start_pos', (None, None, 'Unknown'))
+        end_pos = action.get('end_pos', (None, None, 'Unknown'))
+        
+        start_x, start_y, start_loc = start_pos
+        end_x, end_y, end_loc = end_pos
+        sequence_index = action.get('sequence_index', 0)
+        metadata = action.get('metadata') or {}
+        source = action.get('source')
+
+        # Build base line text
+        if button in ['UP', 'DOWN', 'LEFT', 'RIGHT']:
+            if start_x is not None and end_x is not None:
+                if start_x == end_x and start_y == end_y and start_loc == end_loc:
+                    line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → BLOCKED (stayed at same position)"
+                else:
+                    if start_loc == end_loc:
+                        line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) → ({end_x:3},{end_y:3})"
+                    else:
+                        line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3}) [{start_loc}] → ({end_x:3},{end_y:3}) [{end_loc}]"
+            else:
+                line = f"  {i}. {button:5} (position unavailable)"
+        else:
+            if start_x is not None:
+                line = f"  {i}. {button:5} @ ({start_x:3},{start_y:3})"
+            else:
+                line = f"  {i}. {button:5}"
+
+        # Append contextual metadata (only on first button of a sequence)
+        context_parts = []
+        if sequence_index == 0:
+            if source == 'navigate_to':
+                variance = metadata.get('variance')
+                if variance is not None:
+                    context_parts.append(f"navigate_to variance={variance}")
+            elif source:
+                context_parts.append(str(source))
+            elif metadata:
+                for key, value in metadata.items():
+                    context_parts.append(f"{key}={value}")
+
+        if context_parts:
+            line += " [" + "; ".join(str(part) for part in context_parts) + "]"
+
+        lines.append(line)
+        
     return "\n".join(lines)
 
 

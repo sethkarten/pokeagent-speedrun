@@ -18,6 +18,7 @@ class PokemonData:
     trainer_id: int
     nickname: Optional[str] = None
     experience: Optional[int] = None
+    is_egg: bool = False
     
     @property
     def is_asleep(self) -> bool:

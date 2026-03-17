@@ -11,6 +11,7 @@ from .enums import MetatileBehavior, StatusCondition, Tileset, PokemonType, Poke
 from .types import PokemonData
 from utils.ocr_dialogue import create_ocr_detector
 from utils import state_formatter
+from utils.mapping import map_stitcher_singleton
 
 logger = logging.getLogger(__name__)
 
@@ -193,13 +194,19 @@ class PokemonDataStructure:
 class PokemonEmeraldReader:
     """Systematic memory reader for Pokemon Emerald with proper data structures"""
 
-    def __init__(self, core):
-        """Initialize with a mGBA memory view object"""
+    def __init__(self, core, milestone_tracker=None):
+        """Initialize with a mGBA memory view object
+
+        Args:
+            core: mGBA core instance
+            milestone_tracker: Optional MilestoneTracker instance for checking game progress
+        """
         self.core = core
         self.memory = core.memory
         self.addresses = MemoryAddresses()
         self.pokemon_struct = PokemonDataStructure()
-        
+        self.milestone_tracker = milestone_tracker
+
         # Cache for tileset behaviors
         self._cached_behaviors = None
         self._cached_behaviors_map_key = None
@@ -373,8 +380,8 @@ class PokemonEmeraldReader:
                 logger.info(f"Read player name: '{decoded_name}'")
                 return decoded_name
             
-            logger.warning("Could not read valid player name")
-            return "Player"
+            # logger.warning("Could not read valid player name")
+            return ""
             
         except Exception as e:
             logger.warning(f"Failed to read player name: {e}")
@@ -1027,12 +1034,21 @@ class PokemonEmeraldReader:
     def is_in_title_sequence(self) -> bool:
         """Detect if we're in title sequence/intro before overworld"""
         try:
+            # PRIORITY CHECK: if player has a party, definitely not in title
+            # This must be checked FIRST before player name, as name can sometimes read as null
+            try:
+                party_size = self.read_party_size()
+                if party_size > 0:
+                    return False  # Not in title sequence
+            except:
+                pass
+
             # Check if player name is set - if not, likely in title/intro
             player_name = self.read_player_name()
             if not player_name or player_name.strip() == '':
                 return True
-                
-            
+
+
             # Check if we have valid SaveBlock pointers
             try:
                 saveblock1_ptr = self._read_u32(self.addresses.SAVE_BLOCK1_PTR)
@@ -1055,24 +1071,28 @@ class PokemonEmeraldReader:
             if map_bank > 0x2A:
                 return True
             
-            # Check if game state indicates we haven't started yet
-            # If player has no party Pokemon, we're still in title/intro
-            try:
-                party_size = self.read_party_size()
-                if party_size == 0:
-                    # But make exception for specific early game sequences
-                    # where party is temporarily 0 (like the moving van or Littleroot Town)
-                    map_id = (map_bank << 8) | map_num
-                    # Allow these maps even with no party:
-                    # 0x1928: BATTLE_FRONTIER_RANKING_HALL (moving van)
-                    # 0x0009: LITTLEROOT_TOWN (post-intro, pre-starter)
-                    # 0x0100-0x0104: Littleroot Town buildings (houses and lab)
-                    if map_id in [0x1928, 0x0009] or (0x0100 <= map_id <= 0x0104):
-                        return False  # Not in title sequence, just early game
-                    return True
-            except:
-                pass
-                
+            # Check if game has actually started (moved past title/intro)
+            # Use milestone tracker if available for accurate detection
+            if self.milestone_tracker:
+                # If we've completed intro cutscene, we're definitely in-game
+                if self.milestone_tracker.is_completed("INTRO_CUTSCENE_COMPLETE"):
+                    return False  # Not in title sequence
+                # If we've entered player house, we're in-game
+                if self.milestone_tracker.is_completed("PLAYER_HOUSE_ENTERED"):
+                    return False  # Not in title sequence
+
+            # Fallback: Check map ID to detect early game locations
+            # These maps are only accessible after starting the game
+            map_id = (map_bank << 8) | map_num
+            early_game_maps = [
+                0x1928,  # BATTLE_FRONTIER_RANKING_HALL (moving van intro)
+                0x0009,  # LITTLEROOT_TOWN
+                0x0010,  # ROUTE_101 (Birch rescue, before starter)
+            ]
+            # Also allow Littleroot Town buildings
+            if map_id in early_game_maps or (0x0100 <= map_id <= 0x0104):
+                return False  # Not in title sequence, in early game
+
             return False
             
         except Exception:
@@ -1087,8 +1107,7 @@ class PokemonEmeraldReader:
             map_id = (map_bank << 8) | map_num
             
             # Log the raw map values for debugging location issues
-            if map_id in [0x1200, 0x1100]:  # Mr. Briney's House or Meteor Falls
-                logger.debug(f"Location debug: map_bank=0x{map_bank:02X}, map_num=0x{map_num:02X}, map_id=0x{map_id:04X}")
+            logger.debug(f"Location debug: map_bank=0x{map_bank:02X}, map_num=0x{map_num:02X}, map_id=0x{map_id:04X}")
             
             # Check if we're in title sequence (no valid map data)
             if self.is_in_title_sequence():
@@ -1108,9 +1127,13 @@ class PokemonEmeraldReader:
             
             try:
                 location = MapLocation(map_id)
-                return location.name.replace('_', ' ')
+                location_name = location.name.replace('_', ' ')
+                logger.info(f"Location resolved: map_id=0x{map_id:04X} → {location_name}")
+                return location_name
             except ValueError:
-                return f"Map_{map_bank:02X}_{map_num:02X}"
+                fallback_name = f"Map_{map_bank:02X}_{map_num:02X}"
+                logger.warning(f"Unknown map_id=0x{map_id:04X}, using fallback: {fallback_name}")
+                return fallback_name
         except Exception as e:
             logger.warning(f"Failed to read location: {e}")
             return "Unknown"
@@ -2081,7 +2104,7 @@ class PokemonEmeraldReader:
                     current_width > 1000 or current_height > 1000):
                     
                     # Use unified rate limiter for corruption warnings
-                    self._rate_limited_warning(f"Map buffer corruption detected: dimensions changed from {self._map_width}x{self._map_height} to {current_width}x{current_height}", "map_corruption")
+                    # self._rate_limited_warning(f"Map buffer corruption detected: dimensions changed from {self._map_width}x{self._map_height} to {current_width}x{current_height}", "map_corruption")
                     
                     self._map_buffer_addr = None
                     self._map_width = None
@@ -2089,10 +2112,10 @@ class PokemonEmeraldReader:
                     
                     # Try to recover by re-finding buffer
                     if self._find_map_buffer_addresses():
-                        logger.debug("Recovered from map buffer corruption")
+                        # logger.debug("Recovered from map buffer corruption")
                         map_data = self._read_map_data_internal(radius)
                     else:
-                        logger.error("Failed to recover from map buffer corruption")
+                        # logger.error("Failed to recover from map buffer corruption")
                         return []
             except Exception as e:
                 logger.debug(f"Error checking buffer validity: {e}")
@@ -2526,6 +2549,7 @@ class PokemonEmeraldReader:
                 logger.info(f"Party data: {party}")
                 state["player"]["party"] = [
                     {
+                        "species_id": pokemon.species_id,
                         "species_name": pokemon.species_name,
                         "level": pokemon.level,
                         "current_hp": pokemon.current_hp,
@@ -2681,10 +2705,11 @@ class PokemonEmeraldReader:
                         logger.debug(f"Error getting location connections: {e}")
                 
                 # Generate the map display lines using stored map data, focused on 15x15 agent view
+                # NPCs disabled - unreliable detection with incorrect positions
                 map_lines = self._map_stitcher.generate_location_map_display(
                     location_name=location,
                     player_pos=player_pos,
-                    npcs=state["map"].get("object_events", []),
+                    npcs=None,  # Disabled - unreliable NPC positions
                     connections=connections_with_coords
                 )
                 
@@ -2700,9 +2725,30 @@ class PokemonEmeraldReader:
     def _update_map_stitcher(self, tiles, state):
         """Update the map stitcher with current map data"""
         try:
+            # Check if PLAYER_HOUSE_ENTERED milestone has been reached
+            # First check the milestone tracker if available (handles loaded saves properly)
+            if not hasattr(self, '_player_house_entered'):
+                self._player_house_entered = False
+
+            if not self._player_house_entered:
+                # Check milestone tracker first (works with loaded saves)
+                if self.milestone_tracker and self.milestone_tracker.is_completed("PLAYER_HOUSE_ENTERED"):
+                    self._player_house_entered = True
+                    logger.info("🏠 PLAYER_HOUSE_ENTERED milestone detected via tracker - enabling map stitcher")
+                else:
+                    # Fallback: detect by current location (for fresh games)
+                    location_name = state.get("player", {}).get("location", "")
+                    if any(house in location_name for house in ["Brendans House", "Mays House", "Player House"]):
+                        self._player_house_entered = True
+                        logger.info("🏠 PLAYER_HOUSE_ENTERED milestone detected via location - enabling map stitcher")
+
+            # Don't update map stitcher until player has entered their house
+            if not self._player_house_entered:
+                logger.debug("Map stitcher disabled - waiting for PLAYER_HOUSE_ENTERED milestone")
+                return
+            
             # Get the global shared MapStitcher instance
             if self._map_stitcher is None:
-                from utils import map_stitcher_singleton
                 self._map_stitcher = map_stitcher_singleton.get_instance()
                 logger.info(f"Using shared MapStitcher instance with {len(self._map_stitcher.map_areas)} areas")
                 # Set up callback to save location connections when they change
@@ -2712,7 +2758,7 @@ class PokemonEmeraldReader:
             map_bank = self._read_u8(self.addresses.MAP_BANK)
             map_number = self._read_u8(self.addresses.MAP_NUMBER)
             
-            # Get location name from player location, with fallback to map ID resolution
+            # Location name already retrieved above, but refresh it for accuracy
             location_name = state.get("player", {}).get("location")
             if not location_name or location_name == "Unknown":
                 # Try to resolve from map ID directly
@@ -2993,7 +3039,8 @@ class PokemonEmeraldReader:
         import os
         import shutil
         
-        cache_dir = ".pokeagent_cache"
+        from utils.data_persistence.run_data_manager import get_cache_directory
+        cache_dir = str(get_cache_directory())
         os.makedirs(cache_dir, exist_ok=True)
         cache_map_file = os.path.join(cache_dir, "map_stitcher_data.json")
         
@@ -3019,7 +3066,7 @@ class PokemonEmeraldReader:
         
         # Initialize MapStitcher if not already initialized
         if self._map_stitcher is None:
-            from utils.map_stitcher import MapStitcher
+            from utils.mapping.map_stitcher import MapStitcher
             # print( Initializing MapStitcher with cache file: {map_stitcher_filename}")
             self._map_stitcher = MapStitcher(save_file=map_stitcher_filename)
             # print( MapStitcher initialized, syncing connections...")

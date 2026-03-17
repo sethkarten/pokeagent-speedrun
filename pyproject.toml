@@ -32,6 +32,7 @@ dependencies = [
     "grpcio>=1.48.2",
     "protobuf!=4.24.0,<5.0.0,>=3.19.6",
     "openai==1.90.0",
+    "anthropic>=0.39.0",
     "google-generativeai>=0.3.0",
     "torch>=2.0.0",
     "transformers>=4.36.0",
@@ -40,6 +41,11 @@ dependencies = [
     "sentencepiece>=0.1.99",
     "cffi>=1.6",
     "pytesseract>=0.3.10",
+    "torchvision>=0.23.0",
+    "beautifulsoup4>=4.14.2",
+    "google>=3.0.0",
+    "pip>=25.2",
+    "mcp>=1.18.0",
 ]
 
 [project.optional-dependencies]
@@ -57,8 +63,8 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["agent", "pokemon_env", "utils", "server"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
