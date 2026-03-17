@@ -12,24 +12,24 @@ logger = logging.getLogger(__name__)
 MILESTONES = [
     # Phase 1: Game Initialization
     'GAME_RUNNING', 'PLAYER_NAME_SET', 'INTRO_CUTSCENE_COMPLETE',
-    
+
     # Phase 2: Tutorial & Starting Town
-    'LITTLEROOT_TOWN', 'PLAYER_HOUSE_ENTERED', 'PLAYER_BEDROOM', 
-    'RIVAL_HOUSE', 'RIVAL_BEDROOM',
-    
+    'LITTLEROOT_TOWN', 'PLAYER_HOUSE_ENTERED', 'PLAYER_BEDROOM',
+    'CLOCK_SET', 'RIVAL_HOUSE', 'RIVAL_BEDROOM',
+
     # Phase 3: Professor Birch & Starter
     'ROUTE_101', 'STARTER_CHOSEN', 'BIRCH_LAB_VISITED',
-    
+
     # Phase 4: Rival
     'OLDALE_TOWN', 'ROUTE_103', 'RECEIVED_POKEDEX',
-    
+
     # Phase 5: Route 102 & Petalburg
     'ROUTE_102', 'PETALBURG_CITY', 'DAD_FIRST_MEETING', 'GYM_EXPLANATION',
-    
+
     # Phase 6: Road to Rustboro City
     'ROUTE_104_SOUTH', 'PETALBURG_WOODS', 'TEAM_AQUA_GRUNT_DEFEATED',
     'ROUTE_104_NORTH', 'RUSTBORO_CITY',
-    
+
     # Phase 7: First Gym Challenge
     'RUSTBORO_GYM_ENTERED', 'ROXANNE_DEFEATED', 'FIRST_GYM_COMPLETE'
 ]
@@ -56,7 +56,9 @@ class AntiCheatTracker:
         
         # Only add handler if none exists
         if not self.submission_logger.handlers:
-            submission_handler = logging.FileHandler('submission.log', mode='a')
+            from utils.data_persistence.run_data_manager import get_cache_path
+            submission_log_path = str(get_cache_path("submission.log"))
+            submission_handler = logging.FileHandler(submission_log_path, mode='a')
             submission_handler.setLevel(logging.INFO)  # Explicitly set handler level
             submission_formatter = logging.Formatter('%(message)s')
             submission_handler.setFormatter(submission_formatter)
@@ -363,7 +365,9 @@ class AntiCheatTracker:
         self.start_time = time.time()  # Store start time for total runtime calculation
         
         # Clear the file first by writing directly
-        with open('submission.log', 'w') as f:
+        from utils.data_persistence.run_data_manager import get_cache_path
+        submission_log_path = str(get_cache_path("submission.log"))
+        with open(submission_log_path, 'w') as f:
             f.write("")
         
         self.submission_logger.info("=== POKEMON EMERALD AGENT SUBMISSION LOG ===")
