@@ -83,6 +83,50 @@ NUM_SPECIES = 412
 NUM_DEX_FLAG_BYTES = (NUM_SPECIES + 7) // 8
 
 TOTAL_BOXES_COUNT = 14
+
+# ROM species_id -> species name (pokeemerald include/constants/species.h numbering).
+# Used to derive canonical species name from ROM data; nickname is stored separately.
+ROM_SPECIES_ID_TO_NAME = {
+    277: "Treecko", 278: "Grovyle", 279: "Sceptile",
+    280: "Torchic", 281: "Combusken", 282: "Blaziken",
+    283: "Mudkip", 284: "Marshtomp", 285: "Swampert",
+    286: "Poochyena", 287: "Mightyena", 288: "Zigzagoon", 289: "Linoone",
+    290: "Wurmple", 291: "Silcoon", 292: "Beautifly", 293: "Cascoon", 294: "Dustox",
+    295: "Lotad", 296: "Lombre", 297: "Ludicolo",
+    298: "Seedot", 299: "Nuzleaf", 300: "Shiftry",
+    301: "Nincada", 302: "Ninjask", 303: "Shedinja",
+    304: "Taillow", 305: "Swellow", 306: "Shroomish", 307: "Breloom", 308: "Spinda",
+    309: "Wingull", 310: "Pelipper", 311: "Surskit", 312: "Masquerain",
+    313: "Wailmer", 314: "Wailord", 315: "Skitty", 316: "Delcatty", 317: "Kecleon",
+    318: "Baltoy", 319: "Claydol", 320: "Nosepass", 321: "Torkoal",
+    322: "Sableye", 323: "Barboach", 324: "Whiscash", 325: "Luvdisc",
+    326: "Corphish", 327: "Crawdaunt", 328: "Feebas", 329: "Milotic",
+    330: "Carvanha", 331: "Sharpedo", 332: "Trapinch", 333: "Vibrava", 334: "Flygon",
+    335: "Makuhita", 336: "Hariyama", 337: "Electrike", 338: "Manectric",
+    339: "Numel", 340: "Camerupt", 341: "Spheal", 342: "Sealeo", 343: "Walrein",
+    344: "Cacnea", 345: "Cacturne", 346: "Snorunt", 347: "Glalie",
+    348: "Lunatone", 349: "Solrock", 350: "Azurill", 351: "Spoink", 352: "Grumpig",
+    353: "Plusle", 354: "Minun", 355: "Mawile", 356: "Meditite", 357: "Medicham",
+    358: "Swablu", 359: "Altaria", 360: "Wynaut", 361: "Duskull", 362: "Dusclops",
+    363: "Roselia", 364: "Slakoth", 365: "Vigoroth", 366: "Slaking",
+    367: "Gulpin", 368: "Swalot", 369: "Tropius", 370: "Whismur", 371: "Loudred",
+    372: "Exploud", 373: "Clamperl", 374: "Huntail", 375: "Gorebyss",
+    376: "Absol", 377: "Shuppet", 378: "Banette", 379: "Seviper", 380: "Zangoose",
+    381: "Relicanth", 382: "Aron", 383: "Lairon", 384: "Aggron",
+    385: "Castform", 386: "Volbeat", 387: "Illumise", 388: "Lileep", 389: "Cradily",
+    390: "Anorith", 391: "Armaldo", 392: "Ralts", 393: "Kirlia", 394: "Gardevoir",
+    395: "Bagon", 396: "Shelgon", 397: "Salamence", 398: "Beldum", 399: "Metang",
+    400: "Metagross", 401: "Regirock", 402: "Regice", 403: "Registeel",
+    404: "Kyogre", 405: "Groudon", 406: "Rayquaza", 407: "Latias", 408: "Latios",
+    409: "Jirachi", 410: "Deoxys", 411: "Chimecho",
+}
+
+
+def _species_id_to_name(species_id: int) -> str:
+    """Derive canonical species name from ROM species_id (pokeemerald numbering)."""
+    return ROM_SPECIES_ID_TO_NAME.get(species_id, f"Species_{species_id}")
+
+
 IN_BOX_COUNT = 30
 BOX_NAME_LENGTH = 8
 
@@ -480,10 +524,11 @@ def parse_pokemon(data):
     pokemon = Pokemon._make(struct.unpack("<" + Pokemon_format, data))
     box = parse_box_pokemon(pokemon.box)
     pokemon = pokemon._replace(box=box)
+    species_id = box['substructs'][0]['species']
     # Construct a PokemonData object
     return PokemonData(
-        species_id=box['substructs'][0]['species'],
-        species_name=box['nickname'],
+        species_id=species_id,
+        species_name=_species_id_to_name(species_id),
         current_hp=pokemon.hp,
         max_hp=pokemon.maxHp,
         level=pokemon.level,
@@ -494,7 +539,8 @@ def parse_pokemon(data):
         move_pp=box['substructs'][1]['pp'],
         trainer_id=box['otId'],
         nickname=box['nickname'],
-        experience=box['substructs'][0]['experience']
+        experience=box['substructs'][0]['experience'],
+        is_egg=bool(box['substructs'][3]['isEgg'])
     )
 
 
