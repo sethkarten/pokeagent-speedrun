@@ -11,7 +11,7 @@ Location names use human-readable strings matching in-game map names.
 from .objective_types import DirectObjective
 
 
-# Story objectives (~85 total)
+# Story objectives (~89 total)
 STORY_OBJECTIVES = [
 
     # ============================================================
@@ -499,16 +499,56 @@ STORY_OBJECTIVES = [
     ),
     DirectObjective(
         id="celadon_044",
-        description="Clear Team Rocket Hideout B1F-B3F and find the Lift Key on B4F",
+        description="Navigate Team Rocket Hideout B1F, then B2F, and descend to B3F",
         action_type="navigate",
         category="story",
         target_location="Team Rocket Hideout B1F",
-        navigation_hint="DO NOT use navigate_to on spinner tiles (B2F/B3F) - spinner tiles slide the player in the arrow's direction until hitting a wall or stop tile. Plan the route by backtracking from the destination and reading arrow directions, then press buttons manually. B1F North: grab Escape Rope in western room, stairs down to B2F. B2F: battle with rocket grunt and take NE stairs down to B3F. B3F: south past Grunt for TM10 - enter maze top-left - left spinner - right spinner to the south - go SW for second-from-bottom right spinner - exit the spinner maze to the south - stairs to B4F. B4F NW: pick up HP Up and TM02, defeat Grunt for the Lift Key. Climb back up to B2F, navigate the large maze to the SE elevator (route: go west past the rocket - second-from-the-top left spinner - Moon stone - first right spinner down the moon stone - go east and south to SE-most maze, navigate to the lift from there). Ride elevator down to B4F SE: grab Iron, defeat last 2 Grunts to open the door to Giovanni.",
-        completion_condition="Giovanni_door_opened",
+        navigation_hint="B1F: Grab the Escape Rope in the western room, then take the stairs down to B2F. B2F (first visit): Battle the Rocket Grunt near the entrance. Walk directly to the NE staircase (Staircase 2) that leads down to B3F — do NOT enter the spinner maze on this first visit, the NE stairs are reachable without touching any spinner tiles.",
+        completion_condition="reached_rocket_hideout_b3f",
         priority=1
     ),
     DirectObjective(
         id="celadon_045",
+        description="Navigate B3F: defeat Grunt, collect TM10, solve the spinner maze, and descend to B4F",
+        action_type="navigate",
+        category="story",
+        target_location="Team Rocket Hideout B3F",
+        navigation_hint="Go south past the Rocket Grunt and pick up TM10 Self-Destruct. Then enter the spinner maze from the top-left area. Call the red_puzzle_agent tool with location_name='RocketHideoutB3f' for step-by-step guidance through the maze. General route: left spinner → right spinner to the south → go SW to the second-from-bottom right spinner → exit the spinner maze to the south → take the stairs down to B4F. Do NOT press any buttons while being pushed by a spinner — wait until fully stopped.",
+        completion_condition="reached_rocket_hideout_b4f",
+        priority=1
+    ),
+    DirectObjective(
+        id="celadon_046",
+        description="Pick up the Lift Key and items on B4F northwest area",
+        action_type="navigate",
+        category="story",
+        target_location="Team Rocket Hideout B4F",
+        navigation_hint="You arrive on B4F from the B3F staircase. Navigate to the NW area of B4F. Pick up HP Up and TM02 Razor Wind. Defeat the Rocket Grunt guarding the Lift Key — he drops it. The Lift Key lets you use the elevator on B2F.",
+        completion_condition="lift_key_obtained",
+        priority=1
+    ),
+    DirectObjective(
+        id="celadon_047",
+        description="Climb back to B2F, navigate the spinner maze to the SE Lift, ride it to B4F SE",
+        action_type="navigate",
+        category="story",
+        target_location="Team Rocket Hideout B2F",
+        navigation_hint="Climb the stairs back up from B4F through B3F to B2F. On B2F, you now need to navigate the spinner maze to reach the Lift (elevator) in the SE area. Call the red_puzzle_agent tool with location_name='RocketHideoutB2f' for step-by-step guidance. General route: go west past the Rocket Grunt → second-from-the-top left spinner → Moon Stone area → first right spinner down from Moon Stone → go east and south through the SE portion of the maze → reach the Lift. Use the Lift Key to ride the elevator down to B4F SE.",
+        completion_condition="reached_rocket_hideout_b4f_se",
+        priority=1
+    ),
+    DirectObjective(
+        id="celadon_048",
+        description="Defeat the last 2 Rocket Grunts on B4F SE to open the door to Giovanni",
+        action_type="battle",
+        category="story",
+        target_location="Team Rocket Hideout B4F",
+        navigation_hint="You arrive at B4F SE via the Lift. Grab the Iron item nearby. Defeat the last 2 Rocket Grunts — this opens the locked door leading to Giovanni's room.",
+        completion_condition="Giovanni_door_opened",
+        priority=1
+    ),
+    DirectObjective(
+        id="celadon_049",
         description="Ride the elevator to Giovanni and defeat the Team Rocket boss to get the Silph Scope",
         action_type="battle",
         category="story",
@@ -522,7 +562,7 @@ STORY_OBJECTIVES = [
     # PHASE 9: POKÉMON TOWER (LAVENDER TOWN)
     # ============================================================
     DirectObjective(
-        id="pokemontower_046",
+        id="pokemontower_050",
         description="Return to Lavender Town and enter Pokémon Tower",
         action_type="navigate",
         category="story",
@@ -532,7 +572,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_047",
+        id="pokemontower_051",
         description="Battle rival Blue on Pokémon Tower 2F (fifth rival battle)",
         action_type="battle",
         category="story",
@@ -542,7 +582,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_048",
+        id="pokemontower_052",
         description="Climb Pokémon Tower floors 3-6, battling Channelers",
         action_type="battle",
         category="story",
@@ -552,7 +592,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_049",
+        id="pokemontower_053",
         description="Reach Pokémon Tower 7F, free Mr. Fuji from Team Rocket",
         action_type="battle",
         category="story",
@@ -562,7 +602,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="pokemontower_050",
+        id="pokemontower_054",
         description="Receive the Poké Flute from Mr. Fuji in his house",
         action_type="interact",
         category="story",
@@ -577,7 +617,7 @@ STORY_OBJECTIVES = [
     # PHASE 10: SAFFRON CITY & SILPH CO.
     # ============================================================
     DirectObjective(
-        id="saffron_051",
+        id="saffron_055",
         description="Enter Saffron City after giving a drink to the gate guards",
         action_type="navigate",
         category="story",
@@ -588,7 +628,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_014"]
     ),
     DirectObjective(
-        id="saffron_052",
+        id="saffron_056",
         description="Enter Silph Co. and find the Card Key on 5F",
         action_type="navigate",
         category="story",
@@ -598,7 +638,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_053",
+        id="saffron_057",
         description="Battle rival Blue on Silph Co. 7F (sixth rival battle)",
         action_type="battle",
         category="story",
@@ -608,7 +648,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_054",
+        id="saffron_058",
         description="Battle Giovanni on Silph Co. 11F and receive the Master Ball from the president",
         action_type="battle",
         category="story",
@@ -618,7 +658,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_055",
+        id="saffron_059",
         description="Challenge the Fighting Dojo west of Silph Co. and win a Pokémon",
         action_type="battle",
         category="story",
@@ -628,7 +668,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="saffron_056",
+        id="saffron_060",
         description="Battle Gym Leader Sabrina in Saffron Gym for the Marsh Badge",
         action_type="battle",
         category="story",
@@ -642,7 +682,7 @@ STORY_OBJECTIVES = [
     # PHASE 11: FUCHSIA CITY & SAFARI ZONE
     # ============================================================
     DirectObjective(
-        id="fuchsia_057",
+        id="fuchsia_061",
         description="Wake the Snorlax on Route 16 using the Poké Flute and continue west",
         action_type="interact",
         category="story",
@@ -652,7 +692,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_058",
+        id="fuchsia_062",
         description="Get HM02 Fly from the girl north of the Route 16 gate",
         action_type="interact",
         category="story",
@@ -662,7 +702,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_059",
+        id="fuchsia_063",
         description="Ride the Cycling Road (Routes 16-18) south to reach Fuchsia City",
         action_type="navigate",
         category="story",
@@ -673,7 +713,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_015", "battle_016"]
     ),
     DirectObjective(
-        id="fuchsia_060",
+        id="fuchsia_064",
         description="Enter the Safari Zone and collect the Gold Teeth and HM03 Surf",
         action_type="navigate",
         category="story",
@@ -683,7 +723,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_061",
+        id="fuchsia_065",
         description="Give the Gold Teeth to the Safari Zone Warden to get HM04 Strength",
         action_type="interact",
         category="story",
@@ -693,7 +733,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="fuchsia_062",
+        id="fuchsia_066",
         description="Battle Gym Leader Koga in the Fuchsia Gym for the Soul Badge",
         action_type="battle",
         category="story",
@@ -707,7 +747,7 @@ STORY_OBJECTIVES = [
     # PHASE 12: CINNABAR ISLAND
     # ============================================================
     DirectObjective(
-        id="cinnabar_063",
+        id="cinnabar_067",
         description="Surf south from Pallet Town or Fuchsia City to reach Cinnabar Island",
         action_type="navigate",
         category="story",
@@ -718,7 +758,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_017", "battle_018"]
     ),
     DirectObjective(
-        id="cinnabar_064",
+        id="cinnabar_068",
         description="Explore the Pokémon Mansion and find the Secret Key for Cinnabar Gym",
         action_type="navigate",
         category="story",
@@ -728,7 +768,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cinnabar_065",
+        id="cinnabar_069",
         description="Visit the Cinnabar Lab to revive your fossil from Mt. Moon",
         action_type="interact",
         category="story",
@@ -738,7 +778,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cinnabar_066",
+        id="cinnabar_070",
         description="Use the Secret Key to enter Cinnabar Gym and solve the quiz to reach Blaine",
         action_type="interact",
         category="story",
@@ -748,7 +788,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="cinnabar_067",
+        id="cinnabar_071",
         description="Battle Gym Leader Blaine for the Volcano Badge",
         action_type="battle",
         category="story",
@@ -762,7 +802,7 @@ STORY_OBJECTIVES = [
     # PHASE 13: VIRIDIAN GYM
     # ============================================================
     DirectObjective(
-        id="viridian_gym_068",
+        id="viridian_gym_072",
         description="Fly to Viridian City and enter the now-open Viridian Gym",
         action_type="navigate",
         category="story",
@@ -773,7 +813,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_019", "battle_020"]
     ),
     DirectObjective(
-        id="viridian_gym_069",
+        id="viridian_gym_073",
         description="Battle Gym Leader Giovanni for the Earth Badge (eighth and final badge)",
         action_type="battle",
         category="story",
@@ -787,7 +827,7 @@ STORY_OBJECTIVES = [
     # PHASE 14: VICTORY ROAD
     # ============================================================
     DirectObjective(
-        id="victory_070",
+        id="victory_074",
         description="Walk west to Route 22 and battle rival Blue (seventh rival battle)",
         action_type="battle",
         category="story",
@@ -797,7 +837,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="victory_071",
+        id="victory_075",
         description="Walk north on Route 23 and show all 8 badges to the guards",
         action_type="navigate",
         category="story",
@@ -807,7 +847,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="victory_072",
+        id="victory_076",
         description="Navigate Victory Road floors 1-3 using Strength to solve boulder puzzles",
         action_type="navigate",
         category="story",
@@ -821,7 +861,7 @@ STORY_OBJECTIVES = [
     # PHASE 15: INDIGO PLATEAU & ELITE FOUR
     # ============================================================
     DirectObjective(
-        id="elite_073",
+        id="elite_077",
         description="Arrive at Indigo Plateau and stock up at the Poké Mart",
         action_type="interact",
         category="story",
@@ -832,7 +872,7 @@ STORY_OBJECTIVES = [
         recommended_battling_objectives=["battle_021", "battle_022"]
     ),
     DirectObjective(
-        id="elite_074",
+        id="elite_078",
         description="Battle Elite Four Lorelei (Ice/Water specialist)",
         action_type="battle",
         category="story",
@@ -842,7 +882,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_075",
+        id="elite_079",
         description="Battle Elite Four Bruno (Fighting/Rock specialist)",
         action_type="battle",
         category="story",
@@ -852,7 +892,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_076",
+        id="elite_080",
         description="Battle Elite Four Agatha (Ghost/Poison specialist)",
         action_type="battle",
         category="story",
@@ -862,7 +902,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_077",
+        id="elite_081",
         description="Battle Elite Four Lance (Dragon/Flying specialist)",
         action_type="battle",
         category="story",
@@ -872,7 +912,7 @@ STORY_OBJECTIVES = [
         priority=1
     ),
     DirectObjective(
-        id="elite_078",
+        id="elite_082",
         description="Battle Champion Blue to become the Pokémon League Champion",
         action_type="battle",
         category="story",
@@ -1071,7 +1111,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="An employee on Silph Co. 7F gives you a free Lapras (Lv 15). Lapras learns Ice Beam and Blizzard — devastating for Lance's Dragon types later. Also an excellent Surfer. Don't miss this!",
         completion_condition="lapras_obtained",
         priority=1,
-        prerequisite_story_objective="saffron_052"
+        prerequisite_story_objective="saffron_056"
     ),
     DirectObjective(
         id="battle_013",
@@ -1088,7 +1128,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_40_saffron",
         priority=1,
-        prerequisite_story_objective="pokemontower_050"
+        prerequisite_story_objective="pokemontower_054"
     ),
 
     # Pre-Sabrina
@@ -1101,7 +1141,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Mr. Psychic lives in a house in east Saffron City. He gives you TM29 Psychic for free. Psychic is the strongest Psychic-type move in Gen 1 — teach it to Kadabra, Starmie, Jynx, or similar. Essential for late-game.",
         completion_condition="tm29_psychic_obtained",
         priority=1,
-        prerequisite_story_objective="saffron_051"
+        prerequisite_story_objective="saffron_055"
     ),
 
     # Pre-Koga
@@ -1120,7 +1160,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_40_koga",
         priority=1,
-        prerequisite_story_objective="fuchsia_059"
+        prerequisite_story_objective="fuchsia_063"
     ),
     DirectObjective(
         id="battle_016",
@@ -1132,7 +1172,7 @@ BATTLING_OBJECTIVES = [
         completion_condition="safari_zone_catch",
         priority=2,
         optional=True,
-        prerequisite_story_objective="fuchsia_060"
+        prerequisite_story_objective="fuchsia_064"
     ),
 
     # Pre-Blaine
@@ -1151,7 +1191,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_42_blaine",
         priority=1,
-        prerequisite_story_objective="cinnabar_063"
+        prerequisite_story_objective="cinnabar_067"
     ),
     DirectObjective(
         id="battle_018",
@@ -1162,7 +1202,7 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Cinnabar Island Poké Mart stocks Hyper Potions ($1500) and Revives ($1500). Buy 10 Hyper Potions and 5 Revives before the Pokémon Mansion and Cinnabar Gym. Full Restores are not available until the Elite Four.",
         completion_condition="cinnabar_supplies_bought",
         priority=1,
-        prerequisite_story_objective="cinnabar_063"
+        prerequisite_story_objective="cinnabar_067"
     ),
 
     # Pre-Giovanni (Viridian Gym)
@@ -1181,7 +1221,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_45_giovanni",
         priority=1,
-        prerequisite_story_objective="viridian_gym_068"
+        prerequisite_story_objective="viridian_gym_072"
     ),
     DirectObjective(
         id="battle_020",
@@ -1193,7 +1233,7 @@ BATTLING_OBJECTIVES = [
         completion_condition="zapdos_caught",
         priority=2,
         optional=True,
-        prerequisite_story_objective="viridian_gym_068"
+        prerequisite_story_objective="viridian_gym_072"
     ),
 
     # Pre-Elite Four
@@ -1213,7 +1253,7 @@ BATTLING_OBJECTIVES = [
         ),
         completion_condition="team_level_55_elite4",
         priority=1,
-        prerequisite_story_objective="victory_072"
+        prerequisite_story_objective="victory_076"
     ),
     DirectObjective(
         id="battle_022",
@@ -1224,6 +1264,6 @@ BATTLING_OBJECTIVES = [
         navigation_hint="Indigo Plateau Poké Mart: Full Restore $3000, Revive $1500, Max Potion $2500, Full Heal $600, Ultra Ball $1200, Max Repel $700. Buy: 20 Full Restores ($60k), 15 Revives ($22.5k), 10 Max Potions ($25k), 10 Full Heals ($6k). Spend generously — this is your last chance before the final gauntlet.",
         completion_condition="elite4_supplies_bought",
         priority=1,
-        prerequisite_story_objective="victory_072"
+        prerequisite_story_objective="victory_076"
     ),
 ]

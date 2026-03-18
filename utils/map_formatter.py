@@ -511,7 +511,8 @@ def get_symbol_legend():
         "↘": "Jump Southeast",
         "↙": "Jump Southwest",
         "N": "NPC",
-        "@": "Trainer"
+        "@": "Trainer",
+        "*": "Spinner stop tile"
     }
 
 
