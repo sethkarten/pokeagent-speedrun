@@ -229,6 +229,21 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 - `get_progress_summary()` -> `get_walkthrough(part)` -> `create_direct_objectives(category="story", ...)` is the standard creation flow.
 - Always use `complete_direct_objective(category=..., reasoning=...)` for completion.
 
+## Item Management
+
+**Gen 1 bag holds only 20 unique item slots.** If the bag is full, you cannot pick up new items — key items and TMs will be lost. Manage your inventory proactively:
+
+- **Use consumables when needed** — don't hoard them:
+  - **Potions/Super Potions**: Heal before tough battles or when HP is low
+  - **Antidote**: Use immediately when poisoned (poison drains HP while walking!)
+  - **Awakening**: Use when a Pokémon is asleep in battle
+  - **Parlyz Heal**: Use when a Pokémon is paralyzed (halves Speed)
+  - **Repel/Super Repel**: Use in areas with many wild encounters to save time
+  - **Escape Rope**: Use to quickly leave dungeons instead of backtracking
+- **Toss items you no longer need** — open the bag (START → ITEM), select an item, choose TOSS
+- **Store items in the PC** — use any Pokémon Center PC to deposit items you want to keep but don't need now
+- **Before entering a dungeon with key items**, make sure you have at least 1-2 free bag slots
+
 ## HOW TO DETERMINE YOUR CURRENT WALKTHROUGH PART
 
 **CRITICAL REASONING PROCESS** - Follow these steps EVERY TIME you need to figure out which walkthrough part you're on:

@@ -582,28 +582,36 @@ class RedMapReader:
                         f"(picture_id=0)"
                     )
 
-        # Phase 1.5: Detect item pickups via proximity.
-        # Gen 1 hides picked-up items via byte+2=0xFF (not picture_id=0),
-        # so _hidden_sprites won't catch them. If an item sprite is not in
-        # live RAM AND the player is within Manhattan distance 4, mark it
-        # as picked up. Once marked, it stays excluded for this map visit.
+        # Phase 1.5: Detect disappeared sprites via proximity.
+        # Gen 1 hides sprites (picked-up items, defeated trainers) by
+        # setting byte+2=0xFF rather than picture_id=0, so _hidden_sprites
+        # won't catch them. If ANY sprite is not in live RAM AND the player
+        # is within Manhattan distance 4, mark it as removed. Items go into
+        # _picked_up_items; other NPCs go into _hidden_sprites.
         for idx, cached_npc in enumerate(npc_cache):
             slot = idx + 1
             if slot > 15:
                 break
-            if idx in self._picked_up_items:
+            if idx in self._hidden_sprites or idx in self._picked_up_items:
                 continue
-            sprite_upper = cached_npc.get("sprite", "").upper()
-            is_item = "POKE_BALL" in sprite_upper or "FOSSIL" in sprite_upper
-            if is_item and slot not in live_by_slot:
+            if slot not in live_by_slot:
                 dx = abs(cached_npc["x"] - player_x)
                 dy = abs(cached_npc["y"] - player_y)
                 if dx + dy <= 4:
-                    self._picked_up_items.add(idx)
-                    logger.debug(
-                        f"Item {cached_npc['sprite']} (slot {slot}) picked up "
-                        f"(player dist={dx+dy}, not in live RAM)"
-                    )
+                    sprite_upper = cached_npc.get("sprite", "").upper()
+                    is_item = "POKE_BALL" in sprite_upper or "FOSSIL" in sprite_upper
+                    if is_item:
+                        self._picked_up_items.add(idx)
+                        logger.debug(
+                            f"Item {cached_npc['sprite']} (slot {slot}) picked up "
+                            f"(player dist={dx+dy}, not in live RAM)"
+                        )
+                    else:
+                        self._hidden_sprites.add(idx)
+                        logger.debug(
+                            f"NPC {cached_npc['sprite']} (slot {slot}) disappeared "
+                            f"(player dist={dx+dy}, not in live RAM)"
+                        )
 
         # Phase 2: Build objects list from cache (skip hidden/removed sprites)
         objects = []
