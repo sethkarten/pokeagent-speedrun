@@ -121,6 +121,7 @@ HIDDEN_SYMBOL_TO_BEHAVIOR: dict[str, RedMetatileBehavior] = {
     "!": RedMetatileBehavior.IMPASSABLE,     # Road sign / signpost (non-walkable)
     "=": RedMetatileBehavior.IMPASSABLE,     # Bench events (no Emerald equivalent)
     "#": RedMetatileBehavior.IMPASSABLE,     # HiddenItems, HiddenCoins, Mansion switches, etc.
+    "*": RedMetatileBehavior.NORMAL,         # Spinner stop tile (walkable landing position)
     # Note: "O" (Poké Ball) is an overlay-only symbol — it never appears in the static grid,
     # so it is not listed here. Collision is handled at runtime via npc_data + live RAM.
 }

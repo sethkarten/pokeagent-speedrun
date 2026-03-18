@@ -856,7 +856,7 @@ class Pathfinder:
         # which already handled elevation connectivity. This allows pathfinding through
         # ladders and slopes that connect different elevations.
         # ========================================================================
-        walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&"]
+        walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&", "*"]
         both_walkable = from_symbol in walkable_symbols and dest_symbol in walkable_symbols
 
         # Skip elevation blocking if both tiles are walkable - trust the filtered grid

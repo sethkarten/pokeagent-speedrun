@@ -358,7 +358,27 @@ class AutonomousCLIAgent:
                     "required": ["situation"]
                 }
             },
-            {
+        ]
+
+        # Puzzle agent: game-type conditional
+        _game_type = os.environ.get("GAME_TYPE", "emerald").lower()
+        if _game_type == "red":
+            tools.append({
+                "name": "red_puzzle_agent",
+                "description": "Get expert guidance on solving puzzles in Pokemon Red. Use this when you're in a location with a puzzle (spinner mazes, warp mazes, etc.) and need help understanding the mechanics or finding the solution. Works for puzzle locations like Rocket Hideout, gyms with puzzles, and other tricky areas.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "location_name": {
+                            "type_": "STRING",
+                            "description": "Name of the location you're currently in (e.g., 'RocketHideoutB2f', 'RocketHideoutB3f'). Use the exact location name shown in your game state."
+                        }
+                    },
+                    "required": ["location_name"]
+                }
+            })
+        else:
+            tools.append({
                 "name": "gym_puzzle_agent",
                 "description": "Get expert guidance on solving gym puzzles. Use this when you're in a gym and need help understanding the puzzle mechanics or finding the solution. Provides specific strategies for floor puzzles, ice puzzles, warp mazes, etc. Works for all 8 Pokemon Emerald gyms.",
                 "parameters": {
@@ -371,8 +391,9 @@ class AutonomousCLIAgent:
                     },
                     "required": ["gym_name"]
                 }
-            },
+            })
 
+        tools += [
             # Knowledge Base Tools - NOW ENABLED
             {
                 "name": "add_knowledge",
@@ -517,6 +538,10 @@ class AutonomousCLIAgent:
         # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
         if function_name == "gym_puzzle_agent":
             return self._execute_gym_puzzle_agent(arguments)
+
+        # Special handling for red_puzzle_agent - use agent's own VLM for analysis
+        if function_name == "red_puzzle_agent":
+            return self._execute_red_puzzle_agent(arguments)
 
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -893,6 +918,141 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
+    def _execute_red_puzzle_agent(self, arguments: dict) -> str:
+        """Execute Red puzzle solving using agent's own VLM to analyze puzzle."""
+        try:
+            # Get current game state directly
+            game_state = self.mcp_adapter.call_tool("get_game_state", {})
+            if not game_state.get("success"):
+                return json.dumps({"success": False, "error": "Failed to get game state"})
+
+            state_text = game_state.get("state_text", "")
+
+            # Extract location name from arguments or current location
+            location_name = arguments.get("location_name")
+            if not location_name:
+                import re
+                location_match = re.search(r'Current Location: ([^\n]+)', state_text)
+                location_name = location_match.group(1) if location_match else "Unknown"
+
+            # Load Red puzzle knowledge
+            from agent.red_puzzle_solver import RED_PUZZLES
+            puzzle_info = RED_PUZZLES.get(location_name, {
+                "type": "unknown",
+                "description": "Unknown location - no specific puzzle guidance available",
+                "strategy": "Explore the area carefully and look for patterns in tile arrangements."
+            })
+
+            puzzle_type = puzzle_info.get("type", "unknown")
+            description = puzzle_info.get("description", "")
+            base_strategy = puzzle_info.get("strategy", "")
+
+            # Get action history and function results for context
+            action_history = self._format_action_history()
+            function_results = self._get_function_results_context()
+
+            puzzle_prompt = f"""You are analyzing a Pokemon Red puzzle to help the agent solve it.
+
+LOCATION: {location_name}
+TYPE: {puzzle_type}
+DESCRIPTION: {description}
+
+GENERAL STRATEGY:
+{base_strategy}
+
+RECENT ACTION HISTORY:
+{action_history}
+
+{function_results}
+
+CURRENT GAME STATE:
+{state_text}
+
+Provide your analysis in this format:
+
+**PUZZLE ANALYSIS**:
+[Explain how this specific puzzle works based on the map and your current position]
+
+**WHAT WE'VE TRIED**:
+[Based on the action history above, summarize what approaches have been attempted and what worked/didn't work]
+
+**SPECIFIC SOLUTION STEPS**:
+1. [First concrete action with coordinates if applicable]
+2. [Second action]
+3. [Continue...]
+
+**NAVIGATION TIPS**:
+[Any important details about tile types, warps, or obstacles to watch for]
+
+**IMPORTANT**:
+- Look at the map in the game state. Tiles marked '#' are walls, '.' are walkable, 'D' are doors/warps, 'S' are stairs, '*' are spinner stop tiles, and arrow symbols (←→↑↓) are spinner tiles that push the player in that direction.
+- Review the action history to avoid repeating failed attempts.
+- Learn from previous outputs and function results to refine your strategy.
+- **USE press_buttons() FOR PUZZLE AREAS**: Do NOT use navigate_to() in spinner mazes or puzzle areas - it doesn't work well with forced movement tiles. Instead, use press_buttons() with explicit directional inputs (UP, DOWN, LEFT, RIGHT) to solve puzzles step by step.
+Be specific and actionable. Reference actual coordinates from the map when possible."""
+
+            logger.info(f"🧩 Agent analyzing Red puzzle: {location_name}")
+
+            # Get current frame from game state
+            frame_b64 = game_state.get("screenshot_base64")
+            if not frame_b64:
+                return json.dumps({"success": False, "error": "No frame available in game state"})
+
+            # Convert base64 string to PIL Image for VLM
+            try:
+                frame_bytes = base64.b64decode(frame_b64)
+                frame_image = PILImage.open(io.BytesIO(frame_bytes))
+                logger.info(f"   Screenshot: <{len(frame_bytes)} bytes>")
+            except Exception as e:
+                logger.error(f"Failed to decode screenshot: {e}")
+                return json.dumps({"success": False, "error": f"Failed to decode screenshot: {e}"})
+
+            # Create a separate VLM instance WITHOUT tools to avoid recursive function calling
+            puzzle_vlm = VLM(
+                model_name=self.model,
+                backend=self.backend,
+                tools=None  # No function calling - pure text analysis
+            )
+
+            puzzle_response = puzzle_vlm.get_query(frame_image, puzzle_prompt, "Red_Puzzle_Analysis")
+
+            # Extract text from response
+            puzzle_text = ""
+            if hasattr(puzzle_response, 'candidates') and puzzle_response.candidates:
+                candidate = puzzle_response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    content = candidate.content
+                    if hasattr(content, 'parts'):
+                        text_parts = []
+                        for part in content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                text_parts.append(part.text)
+                            elif hasattr(part, 'function_call'):
+                                logger.warning(f"⚠️ VLM returned function call for puzzle analysis: {part.function_call.name}")
+                        puzzle_text = "\n".join(text_parts)
+            elif isinstance(puzzle_response, str):
+                puzzle_text = puzzle_response
+            elif hasattr(puzzle_response, 'text'):
+                puzzle_text = puzzle_response.text
+
+            if not puzzle_text:
+                logger.error(f"❌ No text extracted from VLM response")
+                logger.error(f"   Response type: {type(puzzle_response)}")
+                return json.dumps({"success": False, "error": "VLM did not return text analysis"}, indent=2)
+
+            logger.info(f"✅ Red puzzle analysis complete ({len(puzzle_text)} chars)")
+
+            return json.dumps({
+                "success": True,
+                "location": location_name,
+                "analysis": puzzle_text
+            }, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in red_puzzle_agent execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
     def _convert_protobuf_value(self, value):
         """Recursively convert a protobuf value to JSON-serializable Python types."""
         # Handle None
@@ -1030,6 +1190,10 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
         if function_name == "gym_puzzle_agent":
             return self._execute_gym_puzzle_agent(arguments)
+
+        # Special handling for red_puzzle_agent - use agent's own VLM for analysis
+        if function_name == "red_puzzle_agent":
+            return self._execute_red_puzzle_agent(arguments)
 
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -1469,6 +1633,19 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                     except Exception as e:
                         logger.debug(f"Could not extract gym_puzzle_agent details: {e}")
                         action_details = "Executed gym_puzzle_agent"
+                elif last_tool_call['name'] == "red_puzzle_agent":
+                    # Extract Red puzzle analysis to include in history
+                    try:
+                        result_data = json_module.loads(last_tool_call['result'])
+                        if result_data.get("success"):
+                            loc = result_data.get("location", "Unknown")
+                            analysis = result_data.get("analysis", "")
+                            action_details = f"red_puzzle_agent({loc})\nAnalysis: {analysis}"
+                        else:
+                            action_details = f"red_puzzle_agent failed: {result_data.get('error', 'Unknown error')}"
+                    except Exception as e:
+                        logger.debug(f"Could not extract red_puzzle_agent details: {e}")
+                        action_details = "Executed red_puzzle_agent"
                 else:
                     action_details = f"Executed {last_tool_call['name']}"
 
