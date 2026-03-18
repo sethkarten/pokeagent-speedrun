@@ -91,6 +91,7 @@ DIRECT_OBJECTIVE: {
    - Where am I? What's happening?
    - What is my current objective?
    - What obstacles or opportunities are present?
+   - **Did I just finish a battle or key interaction?** If so, check if the current objective is now complete — call `add_knowledge()` for rewards/items received, then `complete_direct_objective()`.
 
 2. **PLAN** your next action (provide text response):
    - What should I do next and why?
@@ -99,8 +100,9 @@ DIRECT_OBJECTIVE: {
    - What are the expected outcomes?
 
 3. **EXECUTE** the action (call the appropriate tool):
-   - **REQUIRED**: EVERY step MUST end with either `navigate_to` OR `press_buttons`
-   - You may call other tools first (add_knowledge, search_knowledge), but you MUST end with a control action
+   - Most steps should end with `navigate_to` or `press_buttons` to make game progress
+   - You may call other tools first (add_knowledge, search_knowledge, red_puzzle_agent)
+   - It is OK to end a step with `complete_direct_objective` or `add_knowledge` if the current objective is done — you do NOT need to also press a button
    - Use `press_buttons(['WAIT'])` if you need to observe without moving (e.g., waiting for dialogue)
    - Include your reasoning in the tool's reasoning parameter
 
@@ -112,7 +114,7 @@ ACTION: navigate_to(5, 11, "none", "Enter Oak's Lab")
 ```
 
 **DO NOT:**
-- End a step without calling navigate_to or press_buttons
+- End a step without calling a tool (you must always call at least one tool)
 - Call tools without explaining your thinking first
 - Make multiple movement actions in one step
 
