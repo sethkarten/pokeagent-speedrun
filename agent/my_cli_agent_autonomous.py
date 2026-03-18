@@ -2141,6 +2141,22 @@ Be specific and actionable. Reference actual coordinates from the map when possi
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
 
+        # Generate completion detection hint based on current story objective type
+        completion_hint = ""
+        # In categorized mode, story_obj is a dict; in legacy mode, use direct_objective dict
+        _obj_for_hint = story_obj if objectives_mode == "categorized" and story_obj else None
+        if _obj_for_hint is None and objectives_mode != "categorized":
+            # Legacy: direct_objective may have been a dict before formatting
+            _obj_for_hint = game_state_data.get("direct_objective") if isinstance(game_state_data.get("direct_objective"), dict) else None
+        if _obj_for_hint and isinstance(_obj_for_hint, dict):
+            _action_type = _obj_for_hint.get("action_type", "")
+            if _action_type == "battle":
+                completion_hint = "\n💡 This is a BATTLE objective. After winning the battle, press A/B through ALL dialogue to receive any rewards. Then immediately call add_knowledge() for items/rewards received and complete_direct_objective()."
+            elif _action_type == "navigate":
+                completion_hint = "\n💡 This is a NAVIGATION objective. Check your current location — if you've reached the target, call complete_direct_objective()."
+            elif _action_type == "interact":
+                completion_hint = "\n💡 This is an INTERACTION objective. After the dialogue/interaction ends and you return to normal gameplay, call complete_direct_objective()."
+
         # Build complete prompt by combining base prompt with context
         prompt = f"""# Current Step: {step_count}
 
@@ -2160,7 +2176,7 @@ Be specific and actionable. Reference actual coordinates from the map when possi
 {direct_objective_status}
 
 ⚠️ **CRITICAL**: When you complete the objective, IMMEDIATELY call:
-   complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>")
+   complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>"){completion_hint}
 
 ### CURRENT GAME STATE:
 {state_text}
