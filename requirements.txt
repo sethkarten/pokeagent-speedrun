@@ -1,52 +1,186 @@
-# Note: This project uses uv for dependency management.
-# Run `uv sync` to install dependencies instead of pip.
-# This requirements.txt is kept for backwards compatibility.
+# Frozen from conda env "pokeagent" (pip freeze --exclude-editable).
+# Prefer: uv sync (see pyproject.toml). Install: pip install -r requirements.txt
+#
+# Note on PyTorch / NVIDIA: This file includes torch, torchvision, and nvidia-* CUDA
+# packages. We do not currently support local model backends (e.g. local HuggingFace);
+# these are left in for users who want a matching env or future use. To install without
+# them, comment out or remove the "Optional — PyTorch & NVIDIA CUDA" section below.
 
-flask==3.0.2
-flask-socketio==5.3.6
+# -----------------------------------------------------------------------------
+# Flask / SocketIO (web UI, legacy endpoints)
+# -----------------------------------------------------------------------------
+Flask==3.0.2
+Flask-SocketIO==5.3.6
 python-socketio==5.11.1
 python-engineio==4.9.0
-numpy==1.26.4
+eventlet==0.35.2
+gevent==23.9.1
+gevent-websocket==0.10.1
+Werkzeug==3.1.3
+Jinja2==3.1.6
+MarkupSafe==3.0.2
+itsdangerous==2.2.0
+blinker==1.9.0
+simple-websocket==1.1.0
+greenlet==3.2.4
+
+# -----------------------------------------------------------------------------
+# FastAPI / ASGI server
+# -----------------------------------------------------------------------------
+fastapi==0.116.1
+uvicorn==0.35.0
+starlette==0.47.3
+sse-starlette==3.0.2
+uvloop==0.21.0
+watchfiles==1.1.0
+httptools==0.6.4
+python-multipart==0.0.20
+h11==0.16.0
+anyio==4.10.0
+sniffio==1.3.1
+exceptiongroup==1.3.0
+
+# -----------------------------------------------------------------------------
+# Game / emulator / media
+# -----------------------------------------------------------------------------
+mgba==0.10.2
+pygame==2.6.1
 opencv-python==4.9.0.80
 pillow==10.2.0
-pygame==2.6.1
-requests>=2.32.2  # Updated to resolve conflicts
-python-dotenv==1.0.1
-eventlet==0.35.2  # Required for Flask-SocketIO
-gevent==23.9.1    # Downgraded for Python 3.10 compatibility
-gevent-websocket==0.10.1
+numpy==1.26.4
 
-# FastAPI dependencies for multiprocess setup
-fastapi>=0.104.0
-uvicorn[standard]>=0.24.0
-requests>=2.25.0
-pydantic>=2.0.0
-
-# Game Boy Advance emulator dependencies
-mgba==0.10.2      # For GBA emulation
-
-# Additional dependencies to resolve conflicts
-pyyaml>=5.1       # Required by multiple packages
-xxhash             # Required by datasets and evaluate
-more-itertools     # Required by lm-eval
-pytz>=2020.1      # Required by pandas
-six>=1.14.0       # Required by rouge-score
-colorama           # Required by sacrebleu
-grpcio>=1.48.2    # Required by tensorboard
-protobuf!=4.24.0,<5.0.0,>=3.19.6  # Required by tensorboard 
-
-# VLM Backend Dependencies
+# -----------------------------------------------------------------------------
+# VLM backends (OpenAI, Anthropic, Google, Vertex) & MCP
+# -----------------------------------------------------------------------------
 openai==1.90.0
-google-generativeai>=0.3.0  # Google Gemini API
+anthropic==0.77.0
+google-generativeai==0.8.5
+google-genai==1.53.0
+google-ai-generativelanguage==0.6.15
+google-api-core==2.25.1
+google-api-python-client==2.181.0
+google-auth==2.40.3
+google-auth-httplib2==0.2.0
+google-cloud-aiplatform==1.71.1
+google-cloud-bigquery==3.38.0
+google-cloud-core==2.4.3
+google-cloud-resource-manager==1.15.0
+google-cloud-storage==2.19.0
+google-crc32c==1.7.1
+google-resumable-media==2.7.2
+googleapis-common-protos==1.70.0
+vertexai==1.71.1
+grpcio==1.74.0
+grpcio-status==1.62.3
+grpc-google-iam-v1==0.14.3
+proto-plus==1.26.1
+mcp==1.18.0
+claude-agent-sdk==0.1.37
+httpx==0.28.1
+httpx-sse==0.4.3
+httpcore==1.0.9
+certifi==2025.8.3
+urllib3==2.5.0
+idna==3.10
+dnspython==2.8.0
+distro==1.9.0
+tenacity==9.1.2
+cachetools==5.5.2
+uritemplate==4.2.0
+pyasn1==0.6.1
+pyasn1_modules==0.4.2
+rsa==4.9.1
+httplib2==0.31.0
 
-# Local VLM Dependencies (HuggingFace + bitsandbytes)
-torch>=2.0.0       # PyTorch for local models
-transformers>=4.36.0  # HuggingFace transformers
-bitsandbytes>=0.41.0  # Quantization support
-accelerate>=0.25.0    # Model acceleration
-sentencepiece>=0.1.99  # Tokenization support
-protobuf>=3.20.0      # Protocol buffers
-cffi>=1.6
+# -----------------------------------------------------------------------------
+# Optional — PyTorch & NVIDIA CUDA (local models not supported; remove if not needed)
+# -----------------------------------------------------------------------------
+torch==2.8.0
+torchvision==0.23.0
+triton==3.4.0
+nvidia-cublas-cu12==12.8.4.1
+nvidia-cuda-cupti-cu12==12.8.90
+nvidia-cuda-nvrtc-cu12==12.8.93
+nvidia-cuda-runtime-cu12==12.8.90
+nvidia-cudnn-cu12==9.10.2.21
+nvidia-cufft-cu12==11.3.3.83
+nvidia-cufile-cu12==1.13.1.3
+nvidia-curand-cu12==10.3.9.90
+nvidia-cusolver-cu12==11.7.3.90
+nvidia-cusparse-cu12==12.5.8.93
+nvidia-cusparselt-cu12==0.7.1
+nvidia-nccl-cu12==2.27.3
+nvidia-nvjitlink-cu12==12.8.93
+nvidia-nvtx-cu12==12.8.90
+transformers==4.56.1
+accelerate==1.10.1
+bitsandbytes==0.47.0
+sentencepiece==0.2.1
+huggingface-hub==0.34.4
+safetensors==0.6.2
+tokenizers==0.22.0
+regex==2025.9.1
+tqdm==4.67.1
+filelock==3.19.1
+fsspec==2025.9.0
+mpmath==1.3.0
+sympy==1.14.0
+cffi==2.0.0
+pycparser==2.23
+hf-xet==1.1.10
 
-# OCR Dependencies
-pytesseract>=0.3.10   # OCR for text detection
+# -----------------------------------------------------------------------------
+# OCR
+# -----------------------------------------------------------------------------
+pytesseract==0.3.13
+RapidFuzz==3.14.3
+Levenshtein==0.27.3
+python-Levenshtein==0.27.3
+fuzzywuzzy==0.18.0
+
+# -----------------------------------------------------------------------------
+# Shared / utilities
+# -----------------------------------------------------------------------------
+requests==2.32.5
+pydantic==2.11.9
+pydantic-settings==2.11.0
+pydantic_core==2.33.2
+python-dotenv==1.0.1
+PyYAML==6.0.2
+xxhash==3.5.0
+more-itertools==10.8.0
+pytz==2025.2
+six==1.17.0
+colorama==0.4.6
+beautifulsoup4==4.14.2
+packaging==25.0
+typing_extensions==4.15.0
+annotated-types==0.7.0
+attrs==25.4.0
+jiter==0.10.0
+tomli==2.3.0
+protobuf==4.25.8
+click==8.2.1
+docstring_parser==0.17.0
+jsonschema==4.25.1
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==0.27.1
+shapely==2.1.2
+networkx==3.4.2
+websockets==15.0.1
+wsproto==1.2.0
+Pygments==2.19.2
+pyparsing==3.2.4
+python-dateutil==2.9.0.post0
+soupsieve==2.8
+zope.event==6.0
+zope.interface==8.0
+bidict==0.23.1
+cached-property==2.0.1
+charset-normalizer==3.4.3
+iniconfig==2.3.0
+pluggy==1.6.0
+pytest==9.0.1
+psutil==7.0.0
+typing-inspection==0.4.1
