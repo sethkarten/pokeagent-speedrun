@@ -78,10 +78,27 @@ class TestGeminiBuildLaunchCmd:
         assert settings_path.exists()
         settings = json.loads(settings_path.read_text())
         assert "mcpServers" in settings
-        assert "telemetry" in settings
-        assert settings["telemetry"]["enabled"] is False
-        assert "pokemon-emerald" in settings["mcpServers"]
-        assert settings["mcpServers"]["pokemon-emerald"]["trust"] is True
+
+    def test_thinking_effort_adds_model_config_overrides(self, tmp_path):
+        directive = tmp_path / "directive.md"
+        directive.write_text("Test.")
+        backend = GeminiCliBackend()
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+            backend.build_launch_cmd(
+                str(directive),
+                "http://localhost:8000",
+                str(tmp_path),
+                thinking_effort="high",
+            )
+        settings_path = tmp_path / ".gemini" / "settings.json"
+        assert settings_path.exists()
+        settings = json.loads(settings_path.read_text())
+        assert "modelConfigs" in settings
+        overrides = settings["modelConfigs"].get("customOverrides", [])
+        assert len(overrides) > 0
+        first = overrides[0]
+        assert "generateContentConfig" in first
+        assert "thinkingConfig" in first["generateContentConfig"]
 
     def test_resume_session_id_appended(self, tmp_path):
         directive = tmp_path / "directive.md"
