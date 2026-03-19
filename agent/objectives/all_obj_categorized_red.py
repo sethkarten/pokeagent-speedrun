@@ -643,7 +643,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Silph Co. 7F",
-        navigation_hint="Blue is on 7F northwest near a warp pad. Team: Pidgeot Lv 37, Alakazam Lv 35, Growlithe/Gyarados/Exeggcute Lv 38, and his starter's final evolution (~Lv 40). Use your strongest Pokémon. Reward: $2,600.",
+        navigation_hint="Use the Card Key to open locked doors by walking into them and press A. Shortest route to Blue: take the elevator or stairs down to 3F. Use the Card Key to unlock the door blocking the warp tile in the central room on 3F. Step on that warp tile — it teleports you to the northwest room on 7F. Walk left and Blue will challenge you. Team: Pidgeot Lv 37, Alakazam Lv 35, Growlithe/Gyarados/Exeggcute Lv 38, starter evolution (~Lv 40). The NPC next to Blue gives you a free Lapras after the battle.",
         completion_condition="rival_battle_6_won",
         priority=1
     ),
@@ -653,7 +653,7 @@ STORY_OBJECTIVES = [
         action_type="battle",
         category="story",
         target_location="Silph Co. 11F",
-        navigation_hint="Giovanni (Silph): Nidorino Lv 37, Kangaskhan Lv 35, Rhyhorn Lv 37, Nidoqueen Lv 41. Water, Grass, Ice, Ground effective. After winning, the Silph Co. president gives you the Master Ball — a guaranteed catch of ANY Pokémon. Save it for a legendary or emergency.",
+        navigation_hint="After beating Blue on 7F, step on the warp tile right past him — it teleports you directly to 11F. If you need to heal first, use the bed on 9F (take elevator to 9F, talk to the woman near the bed). On 11F, defeat the last Rocket Grunt then enter the boardroom to face Giovanni. Giovanni: Nidorino Lv 37, Kangaskhan Lv 35, Rhyhorn Lv 37, Nidoqueen Lv 41. Water/Grass/Ice effective. After winning, the president gives you the Master Ball — save it for a legendary.",
         completion_condition="master_ball_obtained",
         priority=1
     ),
