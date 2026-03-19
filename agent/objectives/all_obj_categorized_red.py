@@ -554,7 +554,7 @@ STORY_OBJECTIVES = [
         category="story",
         target_location="Team Rocket Hideout B4F",
         navigation_hint="Giovanni (Rocket Boss): Onix Lv 25, Rhyhorn Lv 24, Kangaskhan Lv 29. Water/Grass/Ice for Rock/Ground. After winning, Giovanni gives you the Silph Scope. The Silph Scope lets you identify Ghost Pokémon in Pokémon Tower.",
-        completion_condition="silph_scope_obtained",
+        completion_condition="Giovanni_defeated",
         priority=1
     ),
 
@@ -588,7 +588,7 @@ STORY_OBJECTIVES = [
         category="story",
         target_location="Pokémon Tower 3F",
         navigation_hint="With the Silph Scope, Ghost Pokémon (Gastly, Haunter) are now identifiable. Channeler trainers use Ghost types. IMPORTANT: Normal and Fighting moves have NO EFFECT on Gastly/Haunter. Use Psychic, Water, Fire, or Ground moves. Awakenings help against Sleep Powder.",
-        completion_condition="pokemon_tower_floors_cleared",
+        completion_condition="reached_pokemon_tower_7f",
         priority=1
     ),
     DirectObjective(
@@ -622,7 +622,7 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Saffron City",
-        navigation_hint="Saffron City is in the center of Kanto. Give any drink from Celadon Dept. Store vending machines (Fresh Water/Soda Pop/Lemonade) to a thirsty guard, then all guards allow passage. Enter from Routes 5/6/7/8. Saffron has the Silph Co. skyscraper, Saffron Gym, and Fighting Dojo.",
+        navigation_hint="From Lavender Town, go west through Route 8 to Celadon City. Go to Celadon Dept. Store — take the elevator or stairs to 5F, then walk to the staircase on 5F to reach the rooftop. Buy a Fresh Water from the vending machine on the rooftop. Then go to any Saffron City gatehouse (the Route 8 gate east of Celadon is closest) and give the drink to the thirsty guard — he shares it with all guards, opening all four gates.",
         completion_condition="reached_saffron_city",
         priority=1,
         recommended_battling_objectives=["battle_014"]
