@@ -224,6 +224,7 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 ## Tool Usage (Concise)
 
 - `press_buttons(buttons, reasoning)` and `navigate_to(x, y, variance, reasoning)` are the primary control tools.
+- `gym_puzzle_agent(gym_name)` — When you are inside a gym puzzle, pass the current gym / map id from game state (e.g. `LAVARIDGE_TOWN_GYM_1F`) for focused puzzle guidance. It does not replace your final control action: still end the step with `navigate_to` or `press_buttons` as usual.
 - `get_progress_summary()` → `get_walkthrough(part)` → `create_direct_objectives(category="story", ...)` is the standard creation flow.
 - Always use `complete_direct_objective(category=..., reasoning=...)` for completion.
 
