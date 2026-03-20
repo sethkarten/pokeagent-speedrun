@@ -32,10 +32,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.metric_tracking.server_metrics import update_server_metrics
 from utils.data_persistence.llm_logger import get_llm_logger
 from utils.agent_infrastructure.vlm_backends import VLM
-from utils.data_persistence.run_data_manager import get_run_data_manager
+from utils.data_persistence.run_data_manager import get_run_data_manager, initialize_run_data_manager
 from agents.utils.prompt_optimizer import create_prompt_optimizer
-from utils.data_persistence.run_data_manager import get_run_data_manager
-from utils.data_persistence.run_data_manager import initialize_run_data_manager
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
@@ -154,9 +152,9 @@ class PokeAgent:
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.optimization_enabled:
-                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Lean: just tools + core objective
+                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Tools + hard constraints
             else:
-                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full: everything included
+                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full single-file prompt
 
         # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
@@ -183,18 +181,19 @@ class PokeAgent:
         # Initialize prompt optimizer if enabled
         self.prompt_optimizer = None
         if self.optimization_enabled:
-            
             run_manager = get_run_data_manager()
-            if run_manager:
-                self.prompt_optimizer = create_prompt_optimizer(
-                    vlm=self.vlm,
-                    run_data_manager=run_manager,
-                    base_prompt_path=POKEAGENT_BASE_PROMPT_PATH
+            if not run_manager:
+                raise RuntimeError(
+                    "enable_prompt_optimization=True requires an initialized run_data_manager "
+                    "(experiment run directory). Use run.py (or equivalent) so run data is set up "
+                    "before starting PokeAgent, or disable prompt optimization."
                 )
-                logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
-            else:
-                logger.warning("⚠️ Prompt optimization requested but run_data_manager not available")
-                self.optimization_enabled = False
+            self.prompt_optimizer = create_prompt_optimizer(
+                vlm=self.vlm,
+                run_data_manager=run_manager,
+                base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
+            )
+            logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
@@ -229,8 +228,8 @@ class PokeAgent:
             else:
                 logger.info(f"📋 No prompt_optimizer attribute found")
         
-        # Otherwise load from file
-        filepath = Path(__file__).resolve().parent.parent / "agent" / "prompts" / "base_prompt.md"
+        # Otherwise load from canonical repo path (e.g. optimization off but code path hit)
+        filepath = resolve_repo_path(POKEAGENT_BASE_PROMPT_PATH)
         if not filepath.exists():
             logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
             return """# Strategic Guidance
@@ -486,6 +485,8 @@ class PokeAgent:
     def _execute_function_call_by_name(self, function_name: str, arguments: dict) -> str:
         """Execute a function by name with given arguments and return result as JSON string."""
 
+        # SUBAGENT FUNCTIONS
+
         # Special handling for reflect tool - use agent's own VLM for analysis
         if function_name == "reflect":
             return self._execute_reflect(arguments)
@@ -494,7 +495,7 @@ class PokeAgent:
         if function_name == "gym_puzzle_agent":
             return self._execute_gym_puzzle_agent(arguments)
 
-        # Call the tool via MCP adapter
+        # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
         return json.dumps(result, indent=2)
@@ -2707,8 +2708,26 @@ def main():
     parser.add_argument(
         "--system-instructions",
         type=str,
-        default=POKEAGENT_PROMPT_PATH,
-        help="System instructions file"
+        default=None,
+        help=(
+            "Repo-relative path to system instructions markdown. "
+            "Omit for automatic selection: POKEAGENT.md by default, or system_prompt.md when "
+            "--enable-prompt-optimization is set (fails at startup if run_data_manager is missing)."
+        ),
+    )
+    parser.add_argument(
+        "--enable-prompt-optimization",
+        action="store_true",
+        help=(
+            "Lean system prompt + optimizable base prompt. Requires initialized run_data_manager "
+            "(e.g. via run.py); otherwise construction raises RuntimeError."
+        ),
+    )
+    parser.add_argument(
+        "--optimization-frequency",
+        type=int,
+        default=10,
+        help="Run prompt optimization every N steps when optimization is enabled.",
     )
     parser.add_argument(
         "--backend",
@@ -2719,13 +2738,18 @@ def main():
 
     args = parser.parse_args()
 
-    agent = PokeAgent(
-        server_url=args.server_url,
-        model=args.model,
-        backend=args.backend,
-        max_steps=args.max_steps,
-        system_instructions_file=args.system_instructions
-    )
+    agent_kwargs = {
+        "server_url": args.server_url,
+        "model": args.model,
+        "backend": args.backend,
+        "max_steps": args.max_steps,
+        "enable_prompt_optimization": args.enable_prompt_optimization,
+        "optimization_frequency": args.optimization_frequency,
+    }
+    if args.system_instructions is not None:
+        agent_kwargs["system_instructions_file"] = args.system_instructions
+
+    agent = PokeAgent(**agent_kwargs)
 
     return agent.run()
 
