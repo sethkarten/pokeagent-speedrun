@@ -155,7 +155,7 @@ class PromptOptimizer:
         if self.system_prompt_content:
             system_prompt_section = f"""
 ## Main Agent's System Prompt (FIXED - Cannot Be Changed):
-The following is the system prompt that the main agent sees at every step. This is FIXED and cannot be modified. It defines the agent's core directive, available tools, and their parameters. You are provided this information so you understand what capabilities the main agent has when editing the base_prompt to improve game progress.
+The main agent receives this as its **system** message every step. You must **not** duplicate it into the base prompt. It only lists **MCP tools** and **hard constraints** (e.g. terminal tool rule, valid buttons, path variance rules). **Strategy, goals, and playstyle** belong in the base prompt you are editing. Use the text below so you know what tools and non-negotiable rules the agent has when improving strategic guidance.
 
 {self.system_prompt_content}
 

@@ -340,13 +340,14 @@ Submission requirements, how to submit, evaluation criteria, and tips for succes
 If you use this codebase in your research, please cite:
 
 ```bibtex
-@inproceedings{karten2025pokeagent,
-  title        = {The PokeAgent Challenge: Competitive and Long-Context Learning at Scale},
-  author       = {Karten, Seth and Grigsby, Jake and Milani, Stephanie and Vodrahalli, Kiran
-                  and Zhang, Amy and Fang, Fei and Zhu, Yuke and Jin, Chi},
-  booktitle    = {NeurIPS Competition Track},
-  year         = {2025},
-  month        = apr,
+@misc{karten2026pokeagentchallengecompetitivelongcontext,
+      title={The PokeAgent Challenge: Competitive and Long-Context Learning at Scale}, 
+      author={Seth Karten and Jake Grigsby and Tersoo Upaa Jr and Junik Bae and Seonghun Hong and Hyunyoung Jeong and Jaeyoon Jung and Kun Kerdthaisong and Gyungbo Kim and Hyeokgi Kim and Yujin Kim and Eunju Kwon and Dongyu Liu and Patrick Mariglia and Sangyeon Park and Benedikt Schink and Xianwei Shi and Anthony Sistilli and Joseph Twin and Arian Urdu and Matin Urdu and Qiao Wang and Ling Wu and Wenli Zhang and Kunsheng Zhou and Stephanie Milani and Kiran Vodrahalli and Amy Zhang and Fei Fang and Yuke Zhu and Chi Jin},
+      year={2026},
+      eprint={2603.15563},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2603.15563}, 
 }
 ```
 
