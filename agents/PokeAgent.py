@@ -32,10 +32,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.metric_tracking.server_metrics import update_server_metrics
 from utils.data_persistence.llm_logger import get_llm_logger
 from utils.agent_infrastructure.vlm_backends import VLM
-from utils.data_persistence.run_data_manager import get_run_data_manager
+from utils.data_persistence.run_data_manager import get_run_data_manager, initialize_run_data_manager
 from agents.utils.prompt_optimizer import create_prompt_optimizer
-from utils.data_persistence.run_data_manager import get_run_data_manager
-from utils.data_persistence.run_data_manager import initialize_run_data_manager
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
@@ -154,9 +152,9 @@ class PokeAgent:
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.optimization_enabled:
-                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Lean: just tools + core objective
+                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Tools + hard constraints
             else:
-                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full: everything included
+                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full single-file prompt
 
         # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
@@ -183,18 +181,19 @@ class PokeAgent:
         # Initialize prompt optimizer if enabled
         self.prompt_optimizer = None
         if self.optimization_enabled:
-            
             run_manager = get_run_data_manager()
-            if run_manager:
-                self.prompt_optimizer = create_prompt_optimizer(
-                    vlm=self.vlm,
-                    run_data_manager=run_manager,
-                    base_prompt_path=POKEAGENT_BASE_PROMPT_PATH
+            if not run_manager:
+                raise RuntimeError(
+                    "enable_prompt_optimization=True requires an initialized run_data_manager "
+                    "(experiment run directory). Use run.py (or equivalent) so run data is set up "
+                    "before starting PokeAgent, or disable prompt optimization."
                 )
-                logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
-            else:
-                logger.warning("⚠️ Prompt optimization requested but run_data_manager not available")
-                self.optimization_enabled = False
+            self.prompt_optimizer = create_prompt_optimizer(
+                vlm=self.vlm,
+                run_data_manager=run_manager,
+                base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
+            )
+            logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
@@ -229,8 +228,8 @@ class PokeAgent:
             else:
                 logger.info(f"📋 No prompt_optimizer attribute found")
         
-        # Otherwise load from file
-        filepath = Path(__file__).resolve().parent.parent / "agent" / "prompts" / "base_prompt.md"
+        # Otherwise load from canonical repo path (e.g. optimization off but code path hit)
+        filepath = resolve_repo_path(POKEAGENT_BASE_PROMPT_PATH)
         if not filepath.exists():
             logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
             return """# Strategic Guidance
@@ -486,6 +485,8 @@ class PokeAgent:
     def _execute_function_call_by_name(self, function_name: str, arguments: dict) -> str:
         """Execute a function by name with given arguments and return result as JSON string."""
 
+        # SUBAGENT FUNCTIONS
+
         # Special handling for reflect tool - use agent's own VLM for analysis
         if function_name == "reflect":
             return self._execute_reflect(arguments)
@@ -494,7 +495,7 @@ class PokeAgent:
         if function_name == "gym_puzzle_agent":
             return self._execute_gym_puzzle_agent(arguments)
 
-        # Call the tool via MCP adapter
+        # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
         return json.dumps(result, indent=2)
@@ -1013,7 +1014,16 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None, player_coords: tuple = None):
+    def _add_to_history(
+        self,
+        prompt: str,
+        response: str,
+        tool_calls: List[Dict] = None,
+        action_details: str = None,
+        player_coords: tuple = None,
+        start_coords: tuple = None,
+        end_coords: tuple = None,
+    ):
         """Add interaction to conversation history - ONLY stores LLM responses and actions."""
         # Strip whitespace from response to save tokens
         response_stripped = response.strip() if response else ""
@@ -1045,9 +1055,20 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             else:
                 entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
 
-        # Store player coordinates if available
+        if tool_calls:
+            entry["tool_calls"] = tool_calls
+
+        # Store explicit step start/end coordinates when available
+        if start_coords:
+            entry["start_coords"] = start_coords
+        if end_coords:
+            entry["end_coords"] = end_coords
+
+        # Backward-compatible coordinate field (treated as end-of-step position)
         if player_coords:
             entry["player_coords"] = player_coords
+        elif end_coords:
+            entry["player_coords"] = end_coords
 
         self.conversation_history.append(entry)
 
@@ -1448,6 +1469,22 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 else:
                     action_details = f"Executed {last_tool_call['name']}"
 
+                # Capture explicit start/end coordinates for short-term memory.
+                start_coords = pre_state.get("player_coords") if pre_state else None
+                end_coords = None
+                last_tool_name = last_tool_call.get("name")
+                if last_tool_name in {"press_buttons", "navigate_to"}:
+                    self._wait_for_actions_complete()
+                try:
+                    final_state_result = self._execute_function_call_by_name("get_game_state", {})
+                    final_state_data = json_module.loads(final_state_result)
+                    if final_state_data.get("success"):
+                        player_pos = final_state_data.get("player_position", {})
+                        if player_pos and "x" in player_pos and "y" in player_pos:
+                            end_coords = (player_pos.get("x"), player_pos.get("y"))
+                except Exception as e:
+                    logger.debug(f"Could not capture post-step coordinates for history: {e}")
+
                 # Store function result for next step's context
                 if tool_calls_made:
                     last_call = tool_calls_made[-1]
@@ -1455,7 +1492,14 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
                 if tool_calls_made:
                     self.llm_logger.add_step_tool_calls(self.step_count, tool_calls_made)
-                self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details)
+                self._add_to_history(
+                    prompt,
+                    full_response,
+                    tool_calls_made,
+                    action_details=action_details,
+                    start_coords=start_coords,
+                    end_coords=end_coords,
+                )
                 
                 # Log trajectory for this step
                 if run_manager and pre_state:
@@ -2383,14 +2427,20 @@ Step {step_count}"""
         recent_entries = self.conversation_history[-10:]
 
         history_lines = []
-        prev_coords = None
         for entry in recent_entries:
             step = entry.get("step", "?")
             llm_response = entry.get("llm_response", "").strip()
+            start_coords = entry.get("start_coords")
+            end_coords = entry.get("end_coords")
             coords = entry.get("player_coords", None)
 
-            start_str = f"({prev_coords[0]},{prev_coords[1]})" if prev_coords else "(?)"
-            end_str = f"({coords[0]},{coords[1]})" if coords else "(?)"
+            if start_coords is None and coords is not None:
+                start_coords = coords
+            if end_coords is None:
+                end_coords = coords
+
+            start_str = f"({start_coords[0]},{start_coords[1]})" if start_coords else "(?)"
+            end_str = f"({end_coords[0]},{end_coords[1]})" if end_coords else "(?)"
 
             history_lines.append(f"[{step}] start={start_str} end={end_str}")
             if llm_response:
@@ -2411,8 +2461,6 @@ Step {step_count}"""
                         except TypeError:
                             history_lines.append(f"      result: {str(result)}")
             history_lines.append("")
-            if coords:
-                prev_coords = coords
 
         return "\n".join(history_lines).strip()
 
@@ -2707,8 +2755,26 @@ def main():
     parser.add_argument(
         "--system-instructions",
         type=str,
-        default=POKEAGENT_PROMPT_PATH,
-        help="System instructions file"
+        default=None,
+        help=(
+            "Repo-relative path to system instructions markdown. "
+            "Omit for automatic selection: POKEAGENT.md by default, or system_prompt.md when "
+            "--enable-prompt-optimization is set (fails at startup if run_data_manager is missing)."
+        ),
+    )
+    parser.add_argument(
+        "--enable-prompt-optimization",
+        action="store_true",
+        help=(
+            "Lean system prompt + optimizable base prompt. Requires initialized run_data_manager "
+            "(e.g. via run.py); otherwise construction raises RuntimeError."
+        ),
+    )
+    parser.add_argument(
+        "--optimization-frequency",
+        type=int,
+        default=10,
+        help="Run prompt optimization every N steps when optimization is enabled.",
     )
     parser.add_argument(
         "--backend",
@@ -2719,13 +2785,18 @@ def main():
 
     args = parser.parse_args()
 
-    agent = PokeAgent(
-        server_url=args.server_url,
-        model=args.model,
-        backend=args.backend,
-        max_steps=args.max_steps,
-        system_instructions_file=args.system_instructions
-    )
+    agent_kwargs = {
+        "server_url": args.server_url,
+        "model": args.model,
+        "backend": args.backend,
+        "max_steps": args.max_steps,
+        "enable_prompt_optimization": args.enable_prompt_optimization,
+        "optimization_frequency": args.optimization_frequency,
+    }
+    if args.system_instructions is not None:
+        agent_kwargs["system_instructions_file"] = args.system_instructions
+
+    agent = PokeAgent(**agent_kwargs)
 
     return agent.run()
 
