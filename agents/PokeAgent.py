@@ -1014,7 +1014,16 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None, player_coords: tuple = None):
+    def _add_to_history(
+        self,
+        prompt: str,
+        response: str,
+        tool_calls: List[Dict] = None,
+        action_details: str = None,
+        player_coords: tuple = None,
+        start_coords: tuple = None,
+        end_coords: tuple = None,
+    ):
         """Add interaction to conversation history - ONLY stores LLM responses and actions."""
         # Strip whitespace from response to save tokens
         response_stripped = response.strip() if response else ""
@@ -1046,9 +1055,20 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             else:
                 entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
 
-        # Store player coordinates if available
+        if tool_calls:
+            entry["tool_calls"] = tool_calls
+
+        # Store explicit step start/end coordinates when available
+        if start_coords:
+            entry["start_coords"] = start_coords
+        if end_coords:
+            entry["end_coords"] = end_coords
+
+        # Backward-compatible coordinate field (treated as end-of-step position)
         if player_coords:
             entry["player_coords"] = player_coords
+        elif end_coords:
+            entry["player_coords"] = end_coords
 
         self.conversation_history.append(entry)
 
@@ -1449,6 +1469,22 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 else:
                     action_details = f"Executed {last_tool_call['name']}"
 
+                # Capture explicit start/end coordinates for short-term memory.
+                start_coords = pre_state.get("player_coords") if pre_state else None
+                end_coords = None
+                last_tool_name = last_tool_call.get("name")
+                if last_tool_name in {"press_buttons", "navigate_to"}:
+                    self._wait_for_actions_complete()
+                try:
+                    final_state_result = self._execute_function_call_by_name("get_game_state", {})
+                    final_state_data = json_module.loads(final_state_result)
+                    if final_state_data.get("success"):
+                        player_pos = final_state_data.get("player_position", {})
+                        if player_pos and "x" in player_pos and "y" in player_pos:
+                            end_coords = (player_pos.get("x"), player_pos.get("y"))
+                except Exception as e:
+                    logger.debug(f"Could not capture post-step coordinates for history: {e}")
+
                 # Store function result for next step's context
                 if tool_calls_made:
                     last_call = tool_calls_made[-1]
@@ -1456,7 +1492,14 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
                 if tool_calls_made:
                     self.llm_logger.add_step_tool_calls(self.step_count, tool_calls_made)
-                self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details)
+                self._add_to_history(
+                    prompt,
+                    full_response,
+                    tool_calls_made,
+                    action_details=action_details,
+                    start_coords=start_coords,
+                    end_coords=end_coords,
+                )
                 
                 # Log trajectory for this step
                 if run_manager and pre_state:
@@ -2384,14 +2427,20 @@ Step {step_count}"""
         recent_entries = self.conversation_history[-10:]
 
         history_lines = []
-        prev_coords = None
         for entry in recent_entries:
             step = entry.get("step", "?")
             llm_response = entry.get("llm_response", "").strip()
+            start_coords = entry.get("start_coords")
+            end_coords = entry.get("end_coords")
             coords = entry.get("player_coords", None)
 
-            start_str = f"({prev_coords[0]},{prev_coords[1]})" if prev_coords else "(?)"
-            end_str = f"({coords[0]},{coords[1]})" if coords else "(?)"
+            if start_coords is None and coords is not None:
+                start_coords = coords
+            if end_coords is None:
+                end_coords = coords
+
+            start_str = f"({start_coords[0]},{start_coords[1]})" if start_coords else "(?)"
+            end_str = f"({end_coords[0]},{end_coords[1]})" if end_coords else "(?)"
 
             history_lines.append(f"[{step}] start={start_str} end={end_str}")
             if llm_response:
@@ -2412,8 +2461,6 @@ Step {step_count}"""
                         except TypeError:
                             history_lines.append(f"      result: {str(result)}")
             history_lines.append("")
-            if coords:
-                prev_coords = coords
 
         return "\n".join(history_lines).strip()
 
