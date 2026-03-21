@@ -19,9 +19,44 @@ When objectives you reach the end of a sequence:
 
 Use `battling` only for team prep and `dynamics` for short-term tasks needed to make progress when you are stuck on the primary story objective.
 
-### Reflection Tool (Optional)
+### Subagents (`reflect`, `verify`, `gym_puzzle_agent`)
 
-`reflect()` is **optional** and should only be used when stuck or looping and no progress is being made. Using this tool means you've clearly hit a roadblock and you need another party to independently review and critique your actions.
+These are **local** tools: they do **not** call the game server for game actions. Each invocation runs a dedicated **tool-less** VLM pass (names like `Subagent_Reflect` / `Subagent_Verify` in logs) with:
+
+- **Current screenshot** (what is on screen *now*)
+- **Current game state text** (from the usual `get_game_state`-style payload)
+- **Progress + knowledge summaries** (via MCP in one batch)
+- **Trajectory window**: last **`last_n_steps`** entries from the trajectory history (default **10**, maximum **25**). This is *not* arbitrary history slices—only a tail window.
+
+They **do not** press buttons or pathfind; you still end every step with `press_buttons` or `navigate_to`.
+
+#### `reflect` — strategic second opinion
+
+**When:** Stuck, looping, objectives feel wrong vs. what you see, or macro strategy is unclear.
+
+**Args:**
+
+- `situation` (required): What you tried, what failed, why you are worried.
+- `last_n_steps` (optional): How many recent trajectory lines to include (capped at 25).
+
+**How to use the answer:** Read **ASSESSMENT** / **ISSUES** / **RECOMMENDATIONS** / **SHOULD_REALIGN**. If it says realign, use `get_walkthrough`, `get_knowledge_summary`, and `create_direct_objectives` rather than forcing the same plan.
+
+#### `verify` — objective completion verdict
+
+**When:** You need to gain alignment on whether the *current* objective satisfied to see if it valid to call `complete_direct_objective` and increment the objective sequence.
+
+**Args:**
+- `reasoning` (required): Your evidence and hypothesis (e.g. “TV segment finished, overworld, no text box”).
+- `category` (optional): In **categorized** mode, which track to judge — `story` (default), `battling`, or `dynamics`.
+- `last_n_steps` (optional): Same trajectory tail as `reflect`.
+
+**Returns (JSON):** `is_complete` (boolean), `confidence` (`low` / `medium` / `high`), `evidence_for`, `evidence_against`, `recommended_next_action`, `reasoning_summary`. **The tool does not complete objectives** — if `is_complete` is true and you agree, **you** call `complete_direct_objective` with solid reasoning.
+
+**How the orchestrator sees it:** Results from the **previous** step (including `verify`) are injected at the top of your next prompt under **📋 RESULTS FROM PREVIOUS STEP:** with the full JSON string. **Read that block** before deciding the next action; cite the verifier’s `is_complete` and evidence when you call `complete_direct_objective`.
+
+#### `gym_puzzle_agent` — gym puzzle helper
+
+**When:** Inside a gym with floor puzzles / ice / warps. Pass `gym_name` from game state (e.g. `LAVARIDGE_TOWN_GYM_1F`).
 
 ### Unreachable Warps
 If the game state marks a warp as "⚠️ UNREACHABLE", do **not** pathfind to it. Look for reachable warps or alternate routes.
@@ -70,6 +105,7 @@ DIRECT_OBJECTIVE: {
 - You have reached the target location (for navigation objectives)
 - You have completed the required interaction (for interaction objectives)
 - You have won the battle (for battle objectives)
+- For ambiguous story beats, consider calling **`verify`** first; if the next step’s **RESULTS FROM PREVIOUS STEP** shows `is_complete: true` with strong evidence, then call `complete_direct_objective` with reasoning that references that verdict
 
 ### Completing Objectives (By Category)
 
@@ -224,6 +260,8 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 ## Tool Usage (Concise)
 
 - `press_buttons(buttons, reasoning)` and `navigate_to(x, y, variance, reasoning)` are the primary control tools.
+- `reflect(situation, last_n_steps?)` — Local critique using trajectory tail + current frame; use when stuck or misaligned.
+- `verify(reasoning, category?, last_n_steps?)` — Local **completion verdict** for the current objective on the chosen category; read **RESULTS FROM PREVIOUS STEP** next turn, then optionally `complete_direct_objective`.
 - `gym_puzzle_agent(gym_name)` — When you are inside a gym puzzle, pass the current gym / map id from game state (e.g. `LAVARIDGE_TOWN_GYM_1F`) for focused puzzle guidance. It does not replace your final control action: still end the step with `navigate_to` or `press_buttons` as usual.
 - `get_progress_summary()` → `get_walkthrough(part)` → `create_direct_objectives(category="story", ...)` is the standard creation flow.
 - Always use `complete_direct_objective(category=..., reasoning=...)` for completion.
