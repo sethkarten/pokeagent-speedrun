@@ -1393,10 +1393,11 @@ class EmeraldEmulator:
                 return False
             elif milestone_id == "RECEIVED_POKEDEX":
                 if game_state:
-                    # Check if we're in Birch's lab AND have completed Route 103
-                    location = game_state.get("player", {}).get("location", "")
-                    return (self.milestone_tracker.is_completed("ROUTE_103") and 
-                            "LITTLEROOT TOWN PROFESSOR BIRCHS LAB" in str(location).upper())
+                    # Use the in-memory has_pokedex flag rather than lab location alone.
+                    # Keep the Route 103 ordering guard so this milestone still fits early-game progression.
+                    progress_context = game_state.get("game", {}).get("progress_context", {})
+                    has_pokedex = bool(progress_context.get("has_pokedex", False))
+                    return self.milestone_tracker.is_completed("ROUTE_103") and has_pokedex
                 return False
             ## Phase 5: Route 102 & Petalburg
             elif milestone_id == "ROUTE_102":
