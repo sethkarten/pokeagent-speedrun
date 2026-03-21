@@ -512,7 +512,8 @@ def get_symbol_legend():
         "↙": "Jump Southwest",
         "N": "NPC",
         "@": "Trainer",
-        "*": "Spinner stop tile"
+        "*": "Spinner stop tile",
+        "G": "Card Key gate (blocked, walk into and press A)",
     }
 
 
@@ -543,7 +544,7 @@ def generate_dynamic_legend(grid):
     # Group symbols by category for better organization
     player_symbols = ["P"]
     terrain_symbols = [".", "#", "W", "~", "?"] 
-    structure_symbols = ["D", "S"]
+    structure_symbols = ["D", "S", "G"]
     jump_symbols = ["J", "↓", "↑", "←", "→", "↗", "↖", "↘", "↙"]
     furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t", "K", "O", "^", "U", "V", "M"]
     npc_symbols = ["N", "@"]

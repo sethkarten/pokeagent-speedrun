@@ -464,7 +464,7 @@ class Pathfinder:
                 player_in_water = start_row[start_pos[0]] == "W"
         
         game_type = os.environ.get("GAME_TYPE", "emerald")
-        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "=", "t", "D", "S"}  # "!": sign (blocked); "?": hidden item (walkable); "t": cuttable tree; "D"/"S": doors/stairs (warp player out of map)
+        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "=", "t", "D", "S", "G"}  # "!": sign (blocked); "?": hidden item (walkable); "t": cuttable tree; "D"/"S": doors/stairs (warp player out of map); "G": Card Key gate
         block_symbols = red_block_symbols if game_type.upper() == "RED" else {"#", "X"}
 
         for y, row in enumerate(grid):

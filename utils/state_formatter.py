@@ -1616,7 +1616,7 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: I=Player .=walkable #=wall t=cuttable tree (use HM01 Cut) ~=grass W=water D=door !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC *=spinner stop)")
+    context_parts.append("(Legend: I=Player .=walkable #=wall t=cuttable tree (use HM01 Cut) ~=grass W=water D=door G=Card Key gate (blocked, walk into and press A) !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC *=spinner stop)")
 
     # Compact JSON summary (warp_events, bg_events, objects)
     compact_json = {
