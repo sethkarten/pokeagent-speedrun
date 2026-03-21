@@ -16,10 +16,10 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
 import numpy as np
 import traceback
-
 import PIL.Image as PILImage
 import io
 import base64
+
 import json as json_module
 
 import google.generativeai.types as genai_types
@@ -34,6 +34,17 @@ from utils.data_persistence.llm_logger import get_llm_logger
 from utils.agent_infrastructure.vlm_backends import VLM
 from utils.data_persistence.run_data_manager import get_run_data_manager, initialize_run_data_manager
 from agents.utils.prompt_optimizer import create_prompt_optimizer
+from agents.subagents import (
+    DEFAULT_TRAJECTORY_WINDOW,
+    GYM_PUZZLES,
+    build_reflect_prompt,
+    build_verify_prompt,
+    clamp_trajectory_window,
+    decode_screenshot_base64,
+    load_subagent_context,
+    parse_verify_response,
+    resolve_verification_target,
+)
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
@@ -71,7 +82,6 @@ class MCPToolAdapter:
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
-                "reflect": "/mcp/reflect",
             }
 
             endpoint = endpoint_map.get(tool_name)
@@ -321,16 +331,43 @@ class PokeAgent:
             },
             {
                 "name": "reflect",
-                "description": "Use this when you feel stuck, uncertain, or suspect your current approach/objectives are wrong. This tool helps you step back, analyze what's happening, and realign your strategy. Call this if: (1) repeating same actions without progress, (2) objectives don't match game state, (3) stuck for multiple steps, (4) unsure what to do next.",
+                "description": "Use this when you feel stuck, uncertain, or suspect your current approach/objectives are wrong. This local subagent reviews the latest trajectory window, current state, and current screenshot to diagnose what should change next.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
                         "situation": {
                             "type_": "STRING",
                             "description": "Describe what you've been trying to do and why you think something might be wrong. Include: recent actions, lack of progress, confusion about objectives, or any observations that seem off."
+                        },
+                        "last_n_steps": {
+                            "type_": "INTEGER",
+                            "description": "Optional. Number of recent trajectory steps to review. Defaults to 10 and is capped at 25."
                         }
                     },
                     "required": ["situation"]
+                }
+            },
+            {
+                "name": "verify",
+                "description": "Use this before completing an objective when you want an explicit verdict on whether the current objective is actually finished. This local subagent checks the current state, current screenshot, and recent trajectory window against the authoritative objective.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Why you want verification right now. Mention the evidence you think might show the objective is complete."
+                        },
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["story", "battling", "dynamics"],
+                            "description": "Optional. In categorized mode, which current objective category to verify. Defaults to story if omitted."
+                        },
+                        "last_n_steps": {
+                            "type_": "INTEGER",
+                            "description": "Optional. Number of recent trajectory steps to review. Defaults to 10 and is capped at 25."
+                        }
+                    },
+                    "required": ["reasoning"]
                 }
             },
             {
@@ -491,6 +528,9 @@ class PokeAgent:
         if function_name == "reflect":
             return self._execute_reflect(arguments)
 
+        if function_name == "verify":
+            return self._execute_verify(arguments)
+
         # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
         if function_name == "gym_puzzle_agent":
             return self._execute_gym_puzzle_agent(arguments)
@@ -501,226 +541,105 @@ class PokeAgent:
         return json.dumps(result, indent=2)
 
     def _execute_reflect(self, arguments: dict) -> str:
-        """Execute reflection using agent's own VLM to analyze situation."""
+        """Execute reflection using a local, tool-less subagent."""
         try:
-            # Get context from server
-            context_result = self.mcp_adapter.call_tool("reflect", arguments)
-
-            if not context_result.get("success"):
-                return json.dumps({"success": False, "error": context_result.get("error", "Failed to get context")})
-
-            context = context_result.get("context", {})
-
-            # Build reflection prompt
-            situation = context.get("situation", "")
-            current_state = context.get("current_state", {})
-            current_obj = context.get("current_objective", {})
-            progress = context.get("progress", {})
-            history = context.get("recent_history", [])
-
-            # Format history for readability
-            history_text = []
-            for h in history:
-                history_text.append(f"Step {h.get('step')}: [{h.get('action')}] {h.get('action_details')}")
-                if h.get('coords'):
-                    history_text.append(f"  Position: {h.get('coords')}")
-                if h.get('thinking'):
-                    history_text.append(f"  Thinking: {h.get('thinking')}")
-
-            history_str = "\n".join(history_text)
-
-            # Format objective - handle both categorized and legacy modes
-            obj_text = "None"
-            obj_mode = current_obj.get("mode", "legacy")
-            
-            if obj_mode == "categorized":
-                # Categorized mode - show all 3 category objectives
-                categories = current_obj.get("categories", {})
-                obj_parts = []
-                
-                # Story objective
-                story_cat = categories.get("story", {})
-                story_obj = story_cat.get("current_objective")
-                if story_obj:
-                    obj_parts.append(f"📖 STORY ({story_cat.get('index', 0) + 1}/{story_cat.get('total', 0)}): {story_obj}")
-                else:
-                    obj_parts.append(f"📖 STORY: None (all {story_cat.get('completed', 0)} completed)")
-                
-                # Battling objective
-                battling_cat = categories.get("battling", {})
-                battling_obj = battling_cat.get("current_objective")
-                if battling_obj:
-                    obj_parts.append(f"⚔️  BATTLING ({battling_cat.get('index', 0) + 1}/{battling_cat.get('total', 0)}): {battling_obj}")
-                else:
-                    obj_parts.append(f"⚔️  BATTLING: None (all {battling_cat.get('completed', 0)} completed)")
-                
-                # Dynamics objective
-                dynamics_cat = categories.get("dynamics", {})
-                dynamics_obj = dynamics_cat.get("current_objective")
-                if dynamics_obj:
-                    obj_parts.append(f"🎯 DYNAMICS ({dynamics_cat.get('index', 0) + 1}/{dynamics_cat.get('total', 0)}): {dynamics_obj}")
-                else:
-                    obj_parts.append(f"🎯 DYNAMICS: None (all {dynamics_cat.get('completed', 0)} completed)")
-                
-                obj_text = "\n".join(obj_parts)
-            else:
-                # Legacy mode - single objective
-                if current_obj.get("objective"):
-                    obj = current_obj["objective"]
-                    if isinstance(obj, dict):
-                        obj_text = obj.get("description", "Unknown")
-                        if obj.get("navigation_hint"):
-                            obj_text += f"\nHint: {obj['navigation_hint']}"
-                    else:
-                        obj_text = str(obj)
-
-            # Include porymap if available
-            porymap_section = ""
-            if current_state.get('porymap_ground_truth'):
-                porymap_section = f"\n\nGROUND TRUTH MAP (PORYMAP):\n{current_state.get('porymap_ground_truth')}\n"
-
-            # Fetch knowledge base summary for context
-            knowledge_section = ""
-            try:
-                knowledge_result = self.mcp_adapter.call_tool("get_knowledge_summary", {"min_importance": 3})
-                if knowledge_result.get("success") and knowledge_result.get("summary"):
-                    knowledge_text = knowledge_result["summary"]
-                    if knowledge_text and knowledge_text.strip():
-                        knowledge_section = f"\n\nKNOWLEDGE BASE (GROUND TRUTH - what agent has actually accomplished):\n⚠️ IMPORTANT: The knowledge base is ALWAYS CORRECT. It represents actual accomplishments.\n   If objectives conflict with knowledge base, the OBJECTIVES are wrong, NOT the knowledge base.\n\n{knowledge_text}\n"
-                        logger.info("📚 Loaded knowledge base for reflection")
-                    else:
-                        knowledge_section = "\n\nKNOWLEDGE BASE: No entries yet (agent hasn't stored any discoveries)\n"
-                        logger.info("📚 Knowledge base is empty")
-            except Exception as e:
-                logger.warning(f"Could not load knowledge base for reflection: {e}")
-                knowledge_section = "\n\nKNOWLEDGE BASE: Error loading knowledge base\n"
-
-            # Format progress based on mode
-            if obj_mode == "categorized":
-                progress_text = f"""- Milestones: {progress.get('milestones_completed', 0)}
-- Story: {progress.get('story', {}).get('completed', 0)}/{progress.get('story', {}).get('total', 0)} completed
-- Battling: {progress.get('battling', {}).get('completed', 0)}/{progress.get('battling', {}).get('total', 0)} completed
-- Dynamics: {progress.get('dynamics', {}).get('completed', 0)}/{progress.get('dynamics', {}).get('total', 0)} completed"""
-            else:
-                progress_text = f"""- Milestones: {progress.get('milestones_completed', 0)}
-- Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence"""
-
-            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald in an attempt to speedrun the game. Provide direct, actionable guidance. 
-Look for mistakes in logic, erroneous decision-making, or bad macro strategy (e.g., puzzles, going the wrong direction, not sufficiently traning and catching pokemon based on game progress).
-
-
-AGENT'S CONCERN:
-{situation}
-
-CURRENT GAME STATE:
-Location: {current_state.get('location')}
-Coordinates: ({current_state.get('coordinates', {}).get('x')}, {current_state.get('coordinates', {}).get('y')})
-{current_state.get('state_text', '')}{porymap_section}{knowledge_section}
-
-CURRENT OBJECTIVE{'S' if obj_mode == 'categorized' else ''}:
-{f"Mode: Categorized (3 parallel tracks)" if obj_mode == "categorized" else f"Sequence: {current_obj.get('sequence')}"}
-{obj_text}
-Status: {'ALL CATEGORIES COMPLETE - needs new objectives' if current_obj.get('is_complete') else 'Active'}
-
-PROGRESS:
-{progress_text}
-
-RECENT ACTIONS (last 20 steps):
-{history_str}
-
-GROUND TRUTH SOURCES (trust these in priority order):
-1. PORYMAP - Map layout, tile walkability (navigation ground truth)
-2. KNOWLEDGE BASE - What agent has actually accomplished (never outdated, always correct)
-3. WALKTHROUGH - Correct sequence of steps for the game (strategic ground truth)
-4. Current objectives - May be WRONG if they conflict with above sources
-
-OBJECTIVE MISMATCH
-- if the agent is stuck it is likely that they pre-emptively completed an objective without actually doing the task!
-
-ANALYZE (use ground truth sources to verify):
-1. Is the agent stuck or repeating actions?
-2. Does the objective match the game state?
-3. Are target coordinates reachable based on porymap?
-4. **CRITICAL**: Does the objective conflict with knowledge base? (If YES, objective is WRONG)
-5. Is the agent trying to do something already accomplished (check knowledge base)?
-6. Has the agent already learned information that makes the current objective obsolete?
-7. Are there signs of confusion?
-8. What should the agent do next?
-
-PROVIDE (in this exact format):
-
-**ASSESSMENT**:
-[2-3 sentences analyzing what's happening. If objectives conflict with knowledge base, state that OBJECTIVES are wrong.]
-
-**ISSUES**:
-[List specific problems: stuck, wrong objective, unreachable coordinates, already completed per knowledge base, etc.]
-⚠️ NEVER say "knowledge base is outdated" - knowledge base is ALWAYS correct. If there's conflict, the objectives are wrong.
-
-**RECOMMENDATIONS**:
-[Numbered list of specific actions to take - reference porymap AND knowledge base if relevant]
-⚠️ IMPORTANT: If the agent is stuck/looping or the objective seems wrong:
-   1. Check if knowledge base shows this task is already done - if YES, the objective may have been prematurely marked completed
-   2. Recommend calling get_knowledge_summary() to review actual accomplishments
-   3. DETERMINE THE CORRECT WALKTHROUGH PART by matching knowledge to milestones:
-      → Part 1: Got starter Pokemon, met Norman at Petalburg
-      → Part 2: Roxanne (Stone Badge - 1st gym)
-      → Part 3: Brawly (Knuckle Badge - 2nd gym)
-      → Part 4: Slateport Museum, Team Aqua
-      → Part 5: Wattson (Dynamo Badge - 3rd gym)
-      → Part 6: Routes 111-114, Fallarbor (NO gym)
-      → Part 7: Flannery (Heat Badge - 4th gym)
-      → Use HIGHEST milestone completed + 1
-      → Example: Knowledge shows "Defeated Roxanne, Stone Badge" → Use Part 3
-   4. Recommend calling get_walkthrough(part=X) with SPECIFIC part number from step 3
-   5. Remind agent to VERIFY: Compare walkthrough to knowledge base before creating objectives
-   6. If walkthrough describes tasks already in knowledge base → Recommend NEXT part number
-   7. Suggest creating new objectives ONLY after finding correct walkthrough part
-
-**SHOULD_REALIGN**: [YES or NO - whether to create new objectives]
-
-Be direct and actionable. Trust the ground truth sources (porymap, walkthrough) over current objectives.
-ALWAYS BE QUESTIONABLE OF RECENT OBJECTIVES. THEY ARE LIKELY TO HAVE NOT ACTUALLY BEEN COMPLETED.
-NEVER dismiss knowledge base as "outdated" -- rather it may be prematurely marked completed. Trust the in-game features and NPC dialogue to learn what is happening.
-If stuck or looping, ALWAYS recommend checking the walkthrough to verify objectives are correct."""
-
-            logger.info("🤔 Agent performing self-reflection using VLM...")
-
-            # Use agent's own VLM for reflection
-            reflection_response = self.vlm.get_text_query(reflection_prompt, "Self_Reflection")
-
-            # Extract text from response (may be GenerateContentResponse object or string)
-            if isinstance(reflection_response, str):
-                reflection_text = reflection_response
-            else:
-                # Extract text from GenerateContentResponse object
-                try:
-                    reflection_text = reflection_response.text
-                except Exception as e:
-                    # Fallback: try to extract from candidates
-                    try:
-                        if hasattr(reflection_response, 'candidates') and reflection_response.candidates:
-                            parts = reflection_response.candidates[0].content.parts
-                            reflection_text = ''.join(part.text for part in parts if hasattr(part, 'text'))
-                        else:
-                            reflection_text = str(reflection_response)
-                    except Exception as e2:
-                        logger.warning(f"Could not extract text from reflection response: {e}, {e2}")
-                        reflection_text = "Reflection completed but could not extract text."
-
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps"))
+            context = load_subagent_context(
+                self.mcp_adapter,
+                get_run_data_manager(),
+                last_n_steps=last_n_steps,
+                include_current_image=True,
+            )
+            prompt = build_reflect_prompt(
+                situation=arguments.get("situation", "Agent requested reflection"),
+                context=context,
+                last_n_steps=last_n_steps,
+            )
+            reflection_text = self._run_local_subagent(
+                prompt=prompt,
+                interaction_name="Subagent_Reflect",
+                current_image=context.get("current_image"),
+            )
             logger.info(f"✅ Self-reflection complete ({len(reflection_text)} chars)")
-
-            return json.dumps({
-                "success": True,
-                "reflection": reflection_text,
-                "context_analyzed": {
-                    "steps_reviewed": len(history),
-                    "location": current_state.get('location'),
-                    "objective_status": current_obj.get('status')
-                }
-            }, indent=2)
-
+            return json.dumps(
+                {
+                    "success": True,
+                    "reflection": reflection_text,
+                    "context_analyzed": {
+                        "steps_reviewed": len(context.get("trajectory_window", [])),
+                        "location": context.get("current_state", {}).get("location"),
+                        "objective_status": context.get("objective_state", {}).get("status"),
+                    },
+                },
+                indent=2,
+            )
         except Exception as e:
             logger.error(f"Error in reflect execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _get_local_subagent_vlm(self):
+        """Lazily create a tool-less VLM for one-step subagents."""
+        if not hasattr(self, "_local_subagent_vlm") or self._local_subagent_vlm is None:
+            self._local_subagent_vlm = VLM(
+                model_name=self.model,
+                backend=self.backend,
+                tools=None,
+            )
+        return self._local_subagent_vlm
+
+    def _run_local_subagent(
+        self,
+        *,
+        prompt: str,
+        interaction_name: str,
+        current_image=None,
+    ) -> str:
+        """Run a one-step subagent with tools disabled and stable metrics naming."""
+        os.environ["LLM_STEP_NUMBER"] = str(self.step_count)
+        subagent_vlm = self._get_local_subagent_vlm()
+        if current_image is not None:
+            response = subagent_vlm.get_query(current_image, prompt, interaction_name)
+        else:
+            response = subagent_vlm.get_text_query(prompt, interaction_name)
+
+        text = self._extract_text_from_response(response)
+        if text:
+            return text
+        raise RuntimeError(f"{interaction_name} did not return text output")
+
+    def _execute_verify(self, arguments: dict) -> str:
+        """Execute objective verification using a local, tool-less subagent."""
+        try:
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps"))
+            context = load_subagent_context(
+                self.mcp_adapter,
+                get_run_data_manager(),
+                last_n_steps=last_n_steps,
+                include_current_image=True,
+            )
+            target = resolve_verification_target(
+                context.get("objective_state", {}),
+                category=arguments.get("category"),
+            )
+            prompt = build_verify_prompt(
+                context=context,
+                target=target,
+                last_n_steps=last_n_steps,
+                reasoning=arguments.get("reasoning", ""),
+            )
+            verify_text = self._run_local_subagent(
+                prompt=prompt,
+                interaction_name="Subagent_Verify",
+                current_image=context.get("current_image"),
+            )
+            verdict = parse_verify_response(verify_text, target=target)
+            verdict["success"] = True
+            verdict["steps_reviewed"] = len(context.get("trajectory_window", []))
+            verdict["location"] = context.get("current_state", {}).get("location")
+            return json.dumps(verdict, indent=2)
+        except Exception as e:
+            logger.error(f"Error in verify execution: {e}")
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
@@ -743,7 +662,6 @@ If stuck or looping, ALWAYS recommend checking the walkthrough to verify objecti
                 gym_name = location_match.group(1) if location_match else "Unknown"
 
             # Load gym puzzle knowledge
-            from agents.puzzle_solver import GYM_PUZZLES
             gym_info = GYM_PUZZLES.get(gym_name, {
                 "type": "unknown",
                 "description": "Unknown gym - no specific puzzle guidance available",
@@ -799,63 +717,15 @@ Provide your analysis in this format:
 Be specific and actionable. Reference actual coordinates from the porymap when possible."""
 
             logger.info(f"🧩 Agent analyzing gym puzzle: {gym_name}")
-
-            # Get current frame from game state
-            frame_b64 = game_state.get("screenshot_base64")
-            if not frame_b64:
+            current_image = decode_screenshot_base64(game_state.get("screenshot_base64"))
+            if current_image is None:
                 return json.dumps({"success": False, "error": "No frame available in game state"})
 
-            # Convert base64 string to PIL Image for VLM
-            try:
-                frame_bytes = base64.b64decode(frame_b64)
-                frame_image = PILImage.open(io.BytesIO(frame_bytes))
-                logger.info(f"   Screenshot: <{len(frame_bytes)} bytes>")
-            except Exception as e:
-                logger.error(f"Failed to decode screenshot: {e}")
-                return json.dumps({"success": False, "error": f"Failed to decode screenshot: {e}"})
-
-            # Use agent's own VLM for puzzle analysis with current frame
-            # IMPORTANT: We need to create a separate VLM instance WITHOUT tools to avoid recursive function calling
-            # The agent's self.vlm has gym_puzzle_agent in its tools, which causes it to try calling the tool
-            # instead of providing text analysis when asked about gym puzzles
-
-            # Create a temporary VLM instance without tools (tools=None)
-            puzzle_vlm = VLM(
-                model_name=self.model,
-                backend=self.backend,
-                tools=None  # No function calling - pure text analysis
+            puzzle_text = self._run_local_subagent(
+                prompt=puzzle_prompt,
+                interaction_name="Gym_Puzzle_Analysis",
+                current_image=current_image,
             )
-
-            puzzle_response = puzzle_vlm.get_query(frame_image, puzzle_prompt, "Gym_Puzzle_Analysis")
-
-            # Extract text from response - same logic as VLM backends use
-            puzzle_text = ""
-            if hasattr(puzzle_response, 'candidates') and puzzle_response.candidates:
-                # Gemini/Vertex response with function calling enabled
-                candidate = puzzle_response.candidates[0]
-                if hasattr(candidate, 'content') and candidate.content:
-                    content = candidate.content
-                    if hasattr(content, 'parts'):
-                        text_parts = []
-                        for part in content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                text_parts.append(part.text)
-                            elif hasattr(part, 'function_call'):
-                                # VLM tried to call a function instead of providing text
-                                logger.warning(f"⚠️ VLM returned function call for puzzle analysis: {part.function_call.name}")
-                                logger.warning(f"   This is unexpected - puzzle analysis should be text-only")
-                        puzzle_text = "\n".join(text_parts)
-            elif isinstance(puzzle_response, str):
-                # Already a string (OpenAI/other backends)
-                puzzle_text = puzzle_response
-            elif hasattr(puzzle_response, 'text'):
-                # Has .text attribute (some backends)
-                puzzle_text = puzzle_response.text
-
-            if not puzzle_text:
-                logger.error(f"❌ No text extracted from VLM response")
-                logger.error(f"   Response type: {type(puzzle_response)}")
-                return json.dumps({"success": False, "error": "VLM did not return text analysis"}, indent=2)
 
             logger.info(f"✅ Gym puzzle analysis complete ({len(puzzle_text)} chars)")
 
@@ -1003,6 +873,9 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         # Special handling for reflect tool - use agent's own VLM
         if function_name == "reflect":
             return self._execute_reflect(arguments)
+
+        if function_name == "verify":
+            return self._execute_verify(arguments)
 
         # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
         if function_name == "gym_puzzle_agent":
@@ -2723,7 +2596,17 @@ Step {step_count}"""
 
         try:
             if hasattr(response, 'text'):
-                return response.text.strip()
+                text = response.text.strip()
+                if text:
+                    return text
+            if hasattr(response, "candidates") and response.candidates:
+                candidate = response.candidates[0]
+                content = getattr(candidate, "content", None)
+                parts = getattr(content, "parts", None) if content else None
+                if parts:
+                    text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
+                    if text_parts:
+                        return "\n".join(text_parts).strip()
             return ""
         except:
             return ""

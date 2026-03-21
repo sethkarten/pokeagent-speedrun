@@ -5,10 +5,10 @@ This package contains the main benchmark agent and its supporting modules.
 ## PokeAgent
 
 - **`PokeAgent.py`** — Main benchmark agent. Uses a VLM to analyze game state and decide actions. Supports direct objectives, a knowledge base, and optional prompt optimization. Selected in `run.py` with `--scaffold pokeagent` or `--scaffold autonomous_cli`.
-- **`puzzle_solver.py`** — Helper logic for puzzle-style situations.
 
 ## Supporting modules
 
+- **`subagents/`** — Helper agents with their own context (given as trajectory information): `reflect`, `verify`, `context`, `trajectory_window`, and **`puzzle_solver.py`** (`GYM_PUZZLES` for `gym_puzzle_agent`).
 - **`prompts/`** — Canonical prompt assets and path helpers (e.g. PokeAgent directives, CLI-agent directives).
 - **`objectives/`** — Direct objectives: types, categorization, and sequences (e.g. story, battling).
 - **`utils/prompt_optimizer.py`** — Optional naive prompt optimization based on recent trajectories (used when `--enable-prompt-optimization` is set).

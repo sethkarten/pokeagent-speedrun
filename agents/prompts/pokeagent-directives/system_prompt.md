@@ -21,11 +21,22 @@ The harness refreshes game context each step; the tools below are what you may *
 
 ### Subagent / analysis (not MCP; executed inside the agent)
 
+These tools run a **separate tool-less VLM call** (logged as e.g. `Subagent_Reflect`, `Subagent_Verify` in metrics). They use your **current screenshot** plus a **text summary of the last N logged trajectories** (default 10, max 25). They do **not** advance the game.
+
 **gym_puzzle_agent**  
 - **Required:** `gym_name` (string) — gym / map identifier from current game state (e.g. `LAVARIDGE_TOWN_GYM_1F`, `MOSSDEEP_CITY_GYM`)
 
 **reflect**  
-- **Required:** `situation` (string)
+- **Required:** `situation` (string) — what feels wrong, what you tried, why you are unsure  
+- **Optional:** `last_n_steps` (integer) — trajectory window size (default 10, capped at 25)
+
+**verify**  
+- **Required:** `reasoning` (string) — why you want a verdict and what evidence you believe shows completion  
+- **Optional:** `category` — `story` | `battling` | `dynamics` (categorized mode only; defaults to `story` if omitted)  
+- **Optional:** `last_n_steps` (integer) — same cap as `reflect`  
+- **Returns:** JSON with `is_complete`, `confidence`, `evidence_for`, `evidence_against`, `recommended_next_action`, `reasoning_summary`. **Does not** mark objectives complete — you still call `complete_direct_objective` when appropriate.
+
+**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `verify` JSON). Use that verdict when deciding whether to call `complete_direct_objective`.
 
 ### Knowledge
 
@@ -59,16 +70,3 @@ The harness refreshes game context each step; the tools below are what you may *
 **get_progress_summary**  
 - *(no parameters)*
 
----
-
-## Hard constraints (non-negotiable)
-
-1. **Terminal control action** — Every step that uses tools **must** end with exactly one of: **`navigate_to`** or **`press_buttons`**. Other tools may be called earlier in the same step; the **last** tool call must be `navigate_to` or `press_buttons`.
-
-2. **Buttons are physical only** — Never pass Pokémon move names (e.g. `TACKLE`) as `buttons` values. Use `A` / `B` / directions to operate menus and battles.
-
-3. **Coordinates** — Never use negative `x` or `y` in `navigate_to`. For warps, path to the warp tile first, then use `press_buttons` to step through if needed.
-
-4. **Path variance** — `navigate_to` `variance`: prefer `none` for normal routing. If repeatedly blocked at the same tile, escalate `low` → `medium` → `high` → `extreme`; after success, move back toward `none` / `low`.
-
-5. **Categorized objectives** — When game state shows categorized objectives, `complete_direct_objective` **must** include the correct `category` for the objective you complete.
