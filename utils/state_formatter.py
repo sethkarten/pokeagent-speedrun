@@ -289,9 +289,13 @@ def _format_state_summary(state_data):
             badge_count = badges
         summary_parts.append(f"Badges: {badge_count}")
     
-    # Items
+    # Items (Gen 1 bag holds max 20 unique item types)
+    items = game_data.get('items')
     item_count = game_data.get('item_count')
-    if item_count is not None:
+    if items and len(items) > 0:
+        item_names = [f"{it['name']}×{it['quantity']}" for it in items[:20]]
+        summary_parts.append(f"Items ({len(items)}): {', '.join(item_names)}")
+    elif item_count is not None:
         summary_parts.append(f"Items: {item_count}")
     
     # Game time
