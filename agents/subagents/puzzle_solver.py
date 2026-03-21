@@ -7,14 +7,11 @@ Similar to the reflect agent, this agent takes the current gym and game state
 and returns step-by-step instructions for solving the puzzle.
 """
 
-from pathlib import Path
-import os
-from typing import Dict, Any, Optional
-import base64
+from typing import Dict, Any
 
 
 # Gym puzzle knowledge base
-GYM_PUZZLES = {
+GYM_PUZZLES: Dict[str, Dict[str, Any]] = {
     "RUSTBORO_CITY_GYM": {
         "type": "trainer_gauntlet",
         "description": "Stone Badge gym - no puzzle, just defeat trainers",
