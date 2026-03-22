@@ -41,21 +41,24 @@ The system uses a **headless server**: the game and emulator run in a server pro
 For module-level detail, see the README in each area:
 
 - **[server/README.md](server/README.md)** — Game server, frame streaming, MCP proxy, ports and endpoints.
-- **[agents/README.md](agents/README.md)** — PokeAgent, prompts, objectives, prompt optimization.
+- **[agents/README.md](agents/README.md)** — PokeAgent, prompts, objectives, prompt optimization, local subagents.
 - **[pokemon_env/README.md](pokemon_env/README.md)** — Emulator, memory reader, Porymap map data.
 - **[utils/README.md](utils/README.md)** — Mapping, persistence, VLM backends, metrics.
+
+Optional maintainer notes: **`System-Design/README.md`** (folder is often gitignored; create locally if missing).
 
 ## Features
 
 - **Multiple VLM backends**: OpenAI, OpenRouter, Google Gemini, Anthropic, (via `utils/vlm_backends.py`)
 - **Vision-based perception**: VLMs analyze game frames and state
-- **Agent scaffolds**: PokeAgent (with naive prompt-optimization via self-reflection), vision-only
-- **MCP support**: External CLI agents (Claude Code/Codex CLI/Gemini CLI) interact with the game state via an mcp server proxy (pokemon_mcp_server.py). Their containerization withi a Docker environment prevents them from directly interacting with the game server as most non-mcp-tool requests are dropped by firewall.
+- **Agent scaffolds**: PokeAgent (optional trajectory-based prompt optimization via `--enable-prompt-optimization`; separate from the in-agent `subagent_reflect` tool), vision-only
+- **PokeAgent local subagents**: `subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, and `subagent_summarize` are one-step local VLM calls; `subagent_battler` is a delegated battle loop that consumes real global steps but returns only a compacted battle summary to the orchestrator. Logged interaction names remain readable (`Subagent_Reflect`, `Subagent_Verify`, `Subagent_Summarize`, `Gym_Puzzle_Analysis`, `Subagent_Battler`). Recent trajectory text comes from `run_data/{run_id}/prompt_evolution/trajectories/trajectories.jsonl` (`RunDataManager.log_trajectory`).
+- **MCP support**: External CLI agents (Claude Code/Codex CLI/Gemini CLI) interact with the game via `pokemon_mcp_server.py`. Containerization limits non-tool HTTP to the game server. The HTTP game server does **not** implement local subagents such as `subagent_reflect`; CLI agents use a reduced MCP surface (see `server/cli/pokemon_mcp_server.py`).
 - **Checkpoints & backups**: Save/resume runs; backups in `backups/`; analysis data in `run_data/`
-- **Metrics & logging**: Per-step and cumulative tokens, cost, actions, as well as run initialization settings are found in .pokeagent_cache/{run_id}/cumulative_metrics.json; LLM logs (llm_logs/) and other session logs are also tracked, though cumulative_metrics is the single source of truth.
+- **Metrics & logging**: Per-step and cumulative tokens, cost, actions, as well as run initialization settings are found in .pokeagent_cache/{run_id}/cumulative_metrics.json; LLM logs (llm_logs/) and other session logs are also tracked, though cumulative_metrics is the single source of truth. One-step local subagents (reflect, verify, summarize, gym puzzle) record a synthetic `tool_calls` row on their step so the interaction name is visible next to token usage (they do not invoke MCP tools).
 - **Map system**: Porymap integration, NPC display, movement preview, portal tracking
 - **Web interface**: Real-time stream at `http://localhost:8000/stream` by default. The port can be manually specified via the --port flag to both run.py and run_cli.py
-- **Video recording**: Optional MP4 recording of gameplay saved to run_data/{run_ud}/end_state/videos/
+- **Video recording**: Optional MP4 recording of gameplay saved to `run_data/{run_id}/end_state/videos/`
 - **Customizable prompts**: Edit prompt assets under `agents/prompts/` to directly steer agent behavior.
 
 ## Directory Structure
@@ -79,7 +82,7 @@ pokeagent-speedrun/
 │   ├── __init__.py           # Package exports (PokeAgent, VisionOnlyAgent)
 │   ├── PokeAgent.py          # Main benchmark agent
 │   ├── vision_only_agent.py
-│   ├── puzzle_solver.py
+│   ├── subagents/            # reflect, verify, summarize, battler, gym_puzzle, verify helpers; utils/ = registry, runtime, context, trajectory_window, puzzle_solver
 │   ├── utils/                # prompt_optimizer, etc.
 │   ├── objectives/           # Direct objectives, types, categorization
 │   └── prompts/              # Canonical prompt assets and path helpers
