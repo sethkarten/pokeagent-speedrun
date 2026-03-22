@@ -57,6 +57,15 @@ from agents.subagents import (
     resolve_gym_name,
     resolve_verification_target,
 )
+from agents.subagents.planner import (
+    PLANNER_HISTORY_CAP,
+    PLANNER_SAFETY_CAP,
+    REPLAN_OBJECTIVES_TOOL_DECLARATION,
+    allowed_planner_tool_names,
+    build_planner_prompt,
+    format_full_objective_sequence,
+    format_planner_history,
+)
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
@@ -399,45 +408,6 @@ class PokeAgent:
                 }
             },
             {
-                "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' for training prep, and 'dynamics' for short-term navigation/cleanup. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "objectives": {
-                            "type_": "ARRAY",
-                            "items": {
-                                "type_": "OBJECT",
-                                "properties": {
-                                    "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
-                                    "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
-                                    "action_type": {
-                                        "type_": "STRING",
-                                        "enum": ["navigate", "interact", "battle", "wait"],
-                                        "description": "Type of action"
-                                    },
-                                    "target_location": {"type_": "STRING", "description": "Target location/map name"},
-                                    "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
-                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
-                                },
-                                "required": ["id", "description", "action_type"]
-                            },
-                            "description": "Array of exactly 3 objectives to create next"
-                        },
-                        "category": {
-                            "type_": "STRING",
-                            "enum": ["dynamics", "story", "battling"],
-                            "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal."
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
-                        }
-                    },
-                    "required": ["objectives", "reasoning"]
-                }
-            },
-            {
                 "name": "get_progress_summary",
                 "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
                 "parameters": {
@@ -496,16 +466,28 @@ class PokeAgent:
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _get_subagent_vlm(self, tool_names: Optional[set[str]] = None):
+    def _get_subagent_vlm(
+        self,
+        tool_names: Optional[set[str]] = None,
+        supplemental_tools: Optional[list[dict]] = None,
+    ):
         """Lazily create cached VLMs for local subagents.
 
         Tool-less subagents (reflect, verify, summarize, gym_puzzle) get a bare
-        VLM without tools or system instructions.  Tool-using subagents (battler)
-        get a VLM with only their allowed tool declarations AND the orchestrator's
-        system instructions so the battler inherits the same behavioural grounding.
+        VLM without tools or system instructions.  Tool-using subagents (battler,
+        planner) get a VLM with only their allowed tool declarations AND the
+        orchestrator's system instructions so they inherit the same behavioural
+        grounding.
+
+        ``supplemental_tools`` allows injecting extra tool declarations that are
+        not part of the orchestrator's own tool set (e.g. ``replan_objectives``
+        which is planner-exclusive).
         """
         normalized = tuple(sorted(tool_names or ()))
-        if not normalized:
+        supp_key = tuple(t["name"] for t in (supplemental_tools or []))
+        cache_key = (normalized, supp_key)
+
+        if not normalized and not supp_key:
             if self._local_subagent_vlm is None:
                 self._local_subagent_vlm = VLM(
                     model_name=self.model,
@@ -514,16 +496,18 @@ class PokeAgent:
                 )
             return self._local_subagent_vlm
 
-        cached = self._subagent_vlm_cache.get(normalized)
+        cached = self._subagent_vlm_cache.get(cache_key)
         if cached is None:
             allowed_tools = [tool for tool in self.tools if tool.get("name") in set(normalized)]
+            if supplemental_tools:
+                allowed_tools.extend(supplemental_tools)
             cached = VLM(
                 model_name=self.model,
                 backend=self.backend,
                 tools=allowed_tools,
                 system_instruction=self.system_instructions,
             )
-            self._subagent_vlm_cache[normalized] = cached
+            self._subagent_vlm_cache[cache_key] = cached
         return cached
 
     def _run_one_step_subagent(
@@ -863,6 +847,183 @@ class PokeAgent:
             or "Resume overworld planning using the compacted battle summary.",
         }
 
+    # ------------------------------------------------------------------
+    # Objectives planner subagent (looping)
+    # ------------------------------------------------------------------
+
+    def _execute_subagent_plan_objectives(self, arguments: dict) -> str:
+        """Delegate objective planning/replanning to the local planner loop."""
+        try:
+            reason = arguments.get("reason", "Orchestrator requested objective planning.")
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps", DEFAULT_SUMMARY_WINDOW))
+
+            handoff = json.loads(
+                self._execute_subagent_summarize(
+                    {
+                        "reasoning": (
+                            "Summarize the recent context for a delegated objective-planning handoff. "
+                            "Emphasize current progress, what objectives have been completed, and "
+                            "any issues the orchestrator is experiencing."
+                        ),
+                        "last_n_steps": max(50, last_n_steps),
+                    }
+                )
+            )
+
+            full_seq_raw = self.mcp_adapter.call_tool("get_full_objective_sequence", {})
+            if isinstance(full_seq_raw, str):
+                cached_sequence = json.loads(full_seq_raw)
+            elif isinstance(full_seq_raw, dict):
+                cached_sequence = full_seq_raw
+            else:
+                cached_sequence = {}
+
+            if not cached_sequence.get("success", True):
+                return json.dumps(
+                    {"success": False, "error": cached_sequence.get("error", "Failed to load objective sequence")},
+                    indent=2,
+                )
+
+            planner_result = self._run_planner_loop(
+                handoff_summary=handoff.get("summary", ""),
+                reason=reason,
+                cached_sequence=cached_sequence,
+            )
+            planner_result["success"] = True
+            return json.dumps(planner_result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in plan_objectives execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _run_planner_loop(
+        self,
+        *,
+        handoff_summary: str,
+        reason: str,
+        cached_sequence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        run_manager = get_run_data_manager()
+        planner_vlm = self._get_subagent_vlm(
+            allowed_planner_tool_names(),
+            supplemental_tools=[REPLAN_OBJECTIVES_TOOL_DECLARATION],
+        )
+
+        planner_history: List[Dict[str, Any]] = []
+        replan_results: List[Dict[str, Any]] = []
+        turns_taken = 0
+        should_return = False
+
+        while turns_taken < PLANNER_SAFETY_CAP and not should_return:
+            current_context = load_subagent_context(
+                self.mcp_adapter,
+                run_manager,
+                last_n_steps=1,
+                include_current_image=True,
+            )
+            current_image = current_context.get("current_image")
+
+            step_number = self.runtime.claim_step(
+                owner="subagent_plan_objectives",
+                interaction_name="Subagent_Plan_Objectives",
+            )
+
+            prompt = build_planner_prompt(
+                reason=reason,
+                objective_sequence=format_full_objective_sequence(cached_sequence),
+                current_state_text=current_context.get("current_state", {}).get("state_text", ""),
+                location=current_context.get("current_state", {}).get("location", "Unknown"),
+                progress=current_context.get("progress", {}),
+                knowledge_summary=current_context.get("knowledge_summary", ""),
+                planner_history=format_planner_history(planner_history[-PLANNER_HISTORY_CAP:]),
+                handoff_summary=handoff_summary,
+                turn_index=turns_taken + 1,
+            )
+
+            if current_image is not None:
+                response = planner_vlm.get_query(current_image, prompt, "Subagent_Plan_Objectives")
+            else:
+                response = planner_vlm.get_text_query(prompt, "Subagent_Plan_Objectives")
+            reasoning_text = self._extract_text_from_response(response)
+
+            tool_calls_made: List[Dict[str, Any]] = []
+            used_tools = self._handle_vlm_function_calls(
+                response,
+                tool_calls_made,
+                0,
+                4,
+                allowed_tool_names=allowed_planner_tool_names(),
+            )
+
+            self.llm_logger.add_step_tool_calls(step_number, tool_calls_made)
+            if run_manager:
+                game_state_result = current_context.get("game_state_result", {})
+                raw_state = game_state_result.get("raw_state", {}) or {}
+                pre_state = run_manager.create_state_snapshot(raw_state) if raw_state else None
+                if pre_state:
+                    self._log_trajectory_for_step(
+                        run_manager=run_manager,
+                        step_num=step_number,
+                        pre_state=pre_state,
+                        prompt=prompt,
+                        reasoning=reasoning_text,
+                        tool_calls=tool_calls_made,
+                        response=reasoning_text,
+                    )
+
+            planner_history.append({
+                "step": turns_taken + 1,
+                "reasoning": reasoning_text,
+                "tool_calls": tool_calls_made,
+            })
+
+            for tc in tool_calls_made:
+                if tc.get("name") == "replan_objectives":
+                    result_raw = tc.get("result", "{}")
+                    try:
+                        result = json.loads(result_raw) if isinstance(result_raw, str) else result_raw
+                    except (json.JSONDecodeError, TypeError):
+                        result = {}
+                    if result.get("success"):
+                        replan_results.append({
+                            "category": tc.get("args", {}).get("category"),
+                            "edits_applied": result.get("edits_applied", []),
+                            "rationale": tc.get("args", {}).get("rationale", ""),
+                            "new_sequence_length": result.get("new_sequence_length"),
+                        })
+                        fresh_seq = self.mcp_adapter.call_tool("get_full_objective_sequence", {})
+                        if isinstance(fresh_seq, str):
+                            try:
+                                cached_sequence = json.loads(fresh_seq)
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                        elif isinstance(fresh_seq, dict):
+                            cached_sequence = fresh_seq
+
+                        if tc.get("args", {}).get("return_to_orchestrator"):
+                            should_return = True
+
+            if not used_tools or not tool_calls_made:
+                logger.warning("Planner produced no executable tool call — breaking loop.")
+                break
+
+            turns_taken += 1
+
+        if turns_taken >= PLANNER_SAFETY_CAP and not should_return:
+            logger.warning("Planner hit the safety turn cap (%d) without returning.", PLANNER_SAFETY_CAP)
+
+        final_rationale = (
+            replan_results[-1]["rationale"] if replan_results else "No changes applied."
+        )
+        return {
+            "changes": replan_results,
+            "turns_taken": turns_taken,
+            "steps_consumed": turns_taken,
+            "rationale": final_rationale,
+            "recommended_next_action": reasoning_text[:500] if reasoning_text else "Resume normal execution.",
+        }
+
     def _convert_protobuf_value(self, value):
         """Recursively convert a protobuf value to JSON-serializable Python types."""
         # Handle None
@@ -1064,9 +1225,9 @@ class PokeAgent:
 
         self.conversation_history.append(entry)
 
-        # Keep only last 10 entries to prevent unbounded growth
-        if len(self.conversation_history) > 10:
-            self.conversation_history = self.conversation_history[-10:]
+        # Keep only last 20 entries to prevent unbounded growth
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
 
         logger.debug(f"✅ History now has {len(self.conversation_history)} entries")
 
@@ -1088,7 +1249,7 @@ class PokeAgent:
 
         lines = [f"\n{'='*70}", "CONVERSATION HISTORY", '='*70]
 
-        for entry in self.conversation_history[-10:]:
+        for entry in self.conversation_history[-20:]:
             try:
                 lines.append(f"\nStep {entry['step']}:")
                 lines.append(f"  Prompt: {entry['prompt'][:100]}...")
@@ -2446,11 +2607,11 @@ Step {step_count}"""
             logger.error(traceback.format_exc())
 
     def _format_action_history(self) -> str:
-        """Format short-term memory (last 10 steps) with full tool details."""
+        """Format short-term memory (last 20 steps) with full tool details."""
         if not self.conversation_history:
             return "No previous actions recorded."
 
-        recent_entries = self.conversation_history[-10:]
+        recent_entries = self.conversation_history[-20:]
 
         history_lines = []
         for entry in recent_entries:

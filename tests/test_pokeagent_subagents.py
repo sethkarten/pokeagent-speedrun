@@ -9,8 +9,14 @@ from unittest.mock import MagicMock, patch
 from PIL import Image
 
 from agents.PokeAgent import PokeAgent
-from agents.subagents.utils.registry import BATTLE_ALLOWED_TOOL_NAMES, build_local_subagent_tool_declarations, get_local_subagent_spec
+from agents.subagents.utils.registry import (
+    BATTLE_ALLOWED_TOOL_NAMES,
+    PLANNER_ALLOWED_TOOL_NAMES,
+    build_local_subagent_tool_declarations,
+    get_local_subagent_spec,
+)
 from agents.subagents.utils.runtime import PokeAgentRuntime
+from agents.subagents.planner import PLANNER_SAFETY_CAP, REPLAN_OBJECTIVES_TOOL_DECLARATION
 from agents.subagents.verify import parse_verify_response
 from utils.data_persistence.llm_logger import LLMLogger
 from utils.data_persistence.run_data_manager import RunDataManager
@@ -171,6 +177,32 @@ def _build_adapter(states=None):
             return {"success": True, "summary": "Saved Birch on Route 101."}
         if name == "press_buttons":
             return {"success": True}
+        if name == "get_full_objective_sequence":
+            return {
+                "success": True,
+                "story": {
+                    "sequence": [
+                        {"index": 0, "id": "s0", "description": "First story", "action_type": "navigate",
+                         "completed": False, "optional": False, "category": "story",
+                         "target_location": None, "navigation_hint": None,
+                         "completion_condition": None, "priority": 1},
+                    ],
+                    "current_index": 0, "total": 1, "completed": 0,
+                },
+                "battling": {"sequence": [], "current_index": 0, "total": 0, "completed": 0},
+                "dynamics": {"sequence": [], "current_index": 0, "total": 0, "completed": 0},
+            }
+        if name == "replan_objectives":
+            return {
+                "success": True,
+                "edits_applied": [{"action": "create", "index": 1, "id": "new_obj"}],
+                "new_sequence_length": 2,
+                "current_index": 0,
+                "return_to_orchestrator": arguments.get("return_to_orchestrator", False),
+                "rationale": arguments.get("rationale", ""),
+            }
+        if name == "get_walkthrough":
+            return {"success": True, "text": "Part 1: Start in Littleroot Town..."}
         raise AssertionError(f"Unexpected tool call: {name}")
 
     adapter.call_tool.side_effect = call_tool
@@ -360,7 +392,7 @@ def test_battler_consumes_global_steps_and_publishes_only_final_summary(tmp_path
             llm_logger_module._llm_logger = LLMLogger(log_dir=str(tmp_path / "logs"), session_id="battler-metrics")
 
         agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
-        battler_key = tuple(sorted(BATTLE_ALLOWED_TOOL_NAMES))
+        battler_key = (tuple(sorted(BATTLE_ALLOWED_TOOL_NAMES)), ())
         agent._subagent_vlm_cache[battler_key] = BattlerVLM()
 
         with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager), patch.object(
@@ -440,7 +472,7 @@ def test_battler_accumulates_inner_turn_history(tmp_path):
             llm_logger_module._llm_logger = LLMLogger(log_dir=str(tmp_path / "logs"), session_id="battler-history")
 
         agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
-        battler_key = tuple(sorted(BATTLE_ALLOWED_TOOL_NAMES))
+        battler_key = (tuple(sorted(BATTLE_ALLOWED_TOOL_NAMES)), ())
         spy_vlm = BattlerVLM()
         agent._subagent_vlm_cache[battler_key] = spy_vlm
 
@@ -464,3 +496,233 @@ def test_battler_accumulates_inner_turn_history(tmp_path):
         assert "press_buttons" in prompts_seen[1]
     finally:
         llm_logger_module._llm_logger = old_logger
+
+
+# ---------------------------------------------------------------------------
+# Planner subagent tests
+# ---------------------------------------------------------------------------
+
+
+class PlannerVLM:
+    """VLM mock that calls replan_objectives with return_to_orchestrator=true on its first turn."""
+
+    def __init__(self, *, replan_succeeds=True, return_on_turn=1):
+        self.calls = 0
+        self.replan_succeeds = replan_succeeds
+        self.return_on_turn = return_on_turn
+
+    def _make_replan_response(self, return_flag):
+        function_call = SimpleNamespace(
+            name="replan_objectives",
+            args={
+                "category": "story",
+                "edits": [{"index": 1, "objective": {"id": "new_obj", "description": "New objective", "action_type": "navigate"}}],
+                "return_to_orchestrator": return_flag,
+                "rationale": "Added a new story objective to continue progression.",
+            },
+        )
+        part = SimpleNamespace(function_call=function_call, text="I will replan story objectives.")
+        candidate = SimpleNamespace(content=SimpleNamespace(parts=[part]), finish_reason=1)
+        return SimpleNamespace(candidates=[candidate], text="I will replan story objectives.")
+
+    def _make_research_response(self):
+        function_call = SimpleNamespace(
+            name="get_walkthrough",
+            args={"part": 1},
+        )
+        part = SimpleNamespace(function_call=function_call, text="Let me check the walkthrough first.")
+        candidate = SimpleNamespace(content=SimpleNamespace(parts=[part]), finish_reason=1)
+        return SimpleNamespace(candidates=[candidate], text="Let me check the walkthrough first.")
+
+    def get_query(self, image, prompt, interaction_name):
+        assert isinstance(image, Image.Image)
+        return self.get_text_query(prompt, interaction_name)
+
+    def get_text_query(self, prompt, interaction_name):
+        self.calls += 1
+        if self.calls >= self.return_on_turn:
+            return self._make_replan_response(return_flag=True)
+        return self._make_research_response()
+
+
+class PlannerNoToolVLM:
+    """VLM mock that returns no tool calls (tests safety break)."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def get_query(self, image, prompt, interaction_name):
+        self.calls += 1
+        return SimpleNamespace(candidates=[], text="I don't know what to do.")
+
+    def get_text_query(self, prompt, interaction_name):
+        return self.get_query(None, prompt, interaction_name)
+
+
+def _planner_cache_key():
+    """Build the cache key that _get_subagent_vlm uses for the planner VLM."""
+    normalized = tuple(sorted(PLANNER_ALLOWED_TOOL_NAMES))
+    supp_key = (REPLAN_OBJECTIVES_TOOL_DECLARATION["name"],)
+    return (normalized, supp_key)
+
+
+def test_planner_consumes_global_steps(tmp_path):
+    """Each planner turn claims a global step; nested summarize claims one too."""
+    metrics_path = tmp_path / "cumulative_metrics.json"
+    old_logger = llm_logger_module._llm_logger
+
+    def _get_cache_path(relative_path):
+        if "cumulative_metrics" in relative_path:
+            return metrics_path
+        return tmp_path / relative_path
+
+    states = [
+        _state_payload(location="Route 101", in_battle=False, state_text="Overworld."),
+    ] * 10
+    adapter = _build_adapter(states=states)
+
+    try:
+        with patch("utils.data_persistence.run_data_manager.get_cache_path", side_effect=_get_cache_path):
+            llm_logger_module._llm_logger = LLMLogger(log_dir=str(tmp_path / "logs"), session_id="planner-steps")
+
+        agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
+        agent._subagent_vlm_cache[_planner_cache_key()] = PlannerVLM(return_on_turn=1)
+
+        initial_step = agent.step_count
+
+        with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+            result = json.loads(agent._execute_subagent_plan_objectives({"reason": "Need new objectives."}))
+
+        assert result["success"] is True
+        assert agent.step_count > initial_step
+    finally:
+        llm_logger_module._llm_logger = old_logger
+
+
+def test_planner_calls_replan_and_exits(tmp_path):
+    """Planner exits when replan_objectives returns success with return_to_orchestrator=true."""
+    states = [_state_payload(location="Route 101", in_battle=False, state_text="Overworld.")] * 10
+    adapter = _build_adapter(states=states)
+    agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
+    agent._subagent_vlm_cache[_planner_cache_key()] = PlannerVLM(return_on_turn=1)
+
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+        result = json.loads(agent._execute_subagent_plan_objectives({"reason": "Need new objectives."}))
+
+    assert result["success"] is True
+    assert len(result["changes"]) >= 1
+    assert result["changes"][0]["category"] == "story"
+    assert result["rationale"]
+    assert result["turns_taken"] >= 1
+
+
+def test_planner_failed_replan_continues_loop(tmp_path):
+    """When replan_objectives fails, the planner should keep looping (not exit)."""
+    states = [_state_payload(location="Route 101", in_battle=False, state_text="Overworld.")] * 20
+    call_count = [0]
+
+    base_adapter = _build_adapter(states=states)
+
+    def failing_then_succeeding_call_tool(name, arguments):
+        if name == "replan_objectives":
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return {"success": False, "error": "Non-contiguous append."}
+            return {
+                "success": True,
+                "edits_applied": [{"action": "create", "index": 1, "id": "fixed"}],
+                "new_sequence_length": 2,
+                "current_index": 0,
+                "return_to_orchestrator": arguments.get("return_to_orchestrator", False),
+                "rationale": arguments.get("rationale", ""),
+            }
+        return base_adapter.call_tool(name, arguments)
+
+    adapter = MagicMock()
+    adapter.call_tool.side_effect = failing_then_succeeding_call_tool
+    agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
+    agent._subagent_vlm_cache[_planner_cache_key()] = PlannerVLM(return_on_turn=1)
+
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+        result = json.loads(agent._execute_subagent_plan_objectives({"reason": "Need objectives."}))
+
+    assert result["success"] is True
+    assert result["turns_taken"] >= 1
+
+
+def test_planner_safety_cap_at_25(tmp_path):
+    """If the planner never calls replan_objectives with return_to_orchestrator, it stops at the safety cap."""
+    states = [_state_payload(location="Route 101", in_battle=False, state_text="Overworld.")] * 200
+
+    class AlwaysResearchVLM:
+        def __init__(self):
+            self.calls = 0
+
+        def get_query(self, image, prompt, interaction_name):
+            self.calls += 1
+            func = SimpleNamespace(name="get_walkthrough", args={"part": 1})
+            part = SimpleNamespace(function_call=func, text="Researching...")
+            candidate = SimpleNamespace(content=SimpleNamespace(parts=[part]), finish_reason=1)
+            return SimpleNamespace(candidates=[candidate], text="Researching...")
+
+        def get_text_query(self, prompt, interaction_name):
+            return self.get_query(None, prompt, interaction_name)
+
+    adapter = _build_adapter(states=states)
+    agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
+    agent._subagent_vlm_cache[_planner_cache_key()] = AlwaysResearchVLM()
+
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+        result = json.loads(agent._execute_subagent_plan_objectives({"reason": "Plan stuff."}))
+
+    assert result["turns_taken"] == PLANNER_SAFETY_CAP
+    assert result["changes"] == []
+
+
+def test_planner_initial_summarization(tmp_path):
+    """The planner must call subagent_summarize before entering its main loop."""
+    states = [_state_payload(location="Route 101", in_battle=False, state_text="Overworld.")] * 10
+    adapter = _build_adapter(states=states)
+    agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
+    agent._subagent_vlm_cache[_planner_cache_key()] = PlannerVLM(return_on_turn=1)
+
+    summarize_called = [False]
+    original_execute = agent._execute_subagent_summarize
+
+    def spy_summarize(args):
+        summarize_called[0] = True
+        return original_execute(args)
+
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager), patch.object(
+        agent, "_execute_subagent_summarize", side_effect=spy_summarize
+    ):
+        result = json.loads(agent._execute_subagent_plan_objectives({"reason": "Planning."}))
+
+    assert summarize_called[0] is True
+    assert result["success"] is True
+
+
+def test_planner_accumulates_history_across_turns(tmp_path):
+    """Subsequent planner turns should see prior tool call history in the prompt."""
+    states = [_state_payload(location="Route 101", in_battle=False, state_text="Overworld.")] * 20
+    adapter = _build_adapter(states=states)
+    agent, run_manager = _make_agent(tmp_path / "agent_run", adapter=adapter)
+
+    planner_vlm = PlannerVLM(return_on_turn=2)
+    agent._subagent_vlm_cache[_planner_cache_key()] = planner_vlm
+
+    prompts_seen: list[str] = []
+    original_get_query = planner_vlm.get_query
+
+    def capturing_get_query(image, prompt, interaction_name):
+        prompts_seen.append(prompt)
+        return original_get_query(image, prompt, interaction_name)
+
+    planner_vlm.get_query = capturing_get_query
+
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+        result = json.loads(agent._execute_subagent_plan_objectives({"reason": "Planning."}))
+
+    assert result["turns_taken"] == 2
+    assert "No previous planning actions" in prompts_seen[0]
+    assert "Planning Turn 1" in prompts_seen[1]
