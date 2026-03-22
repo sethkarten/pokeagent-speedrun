@@ -8,7 +8,8 @@ This package contains the main benchmark agent and its supporting modules.
 
 ## Supporting modules
 
-- **`subagents/`** — Local subagent modules and helpers: registry/runtime, context loading, trajectory windows, `subagent_reflect`, `subagent_verify`, `subagent_summarize`, `subagent_battler`, and gym-puzzle support (`gym_puzzle.py`, `puzzle_solver.py`).
+- **`subagents/`** — Local subagent prompt/runners (`battler.py`, `summarize.py`, `reflect.py`, `verify.py`, `gym_puzzle.py`, …) exposed to the orchestrator as `subagent_*` tools.
+- **`subagents/utils/`** — Shared plumbing: `registry.py`, `runtime.py`, `context.py`, `trajectory_window.py`, `puzzle_solver.py`.
 - **`prompts/`** — Canonical prompt assets and path helpers (e.g. PokeAgent directives, CLI-agent directives).
 - **`objectives/`** — Direct objectives: types, categorization, and sequences (e.g. story, battling).
 - **`utils/prompt_optimizer.py`** — Optional naive prompt optimization based on recent trajectories (used when `--enable-prompt-optimization` is set).
