@@ -2800,16 +2800,13 @@ class DirectObjectiveManager:
         logger.info(f"Loaded part_1_walkthrough_claude_4_5 sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
         
     def load_autonomous_objective_creation_sequence(self, start_index: int = 0, run_dir: Optional[str] = None):
-        """Load a dummy sequence with one objective that prompts the autonomous agent to create new objectives.
-        
-        This sequence is designed for the autonomous CLI agent. It contains a single objective
-        that guides the agent through the autonomous objective creation pipeline:
-        1. Call get_progress_summary() to review accomplishments
-        2. Use get_walkthrough(part=X) to find the next relevant walkthrough part
-        3. Create the next 3 direct objectives using create_direct_objectives()
-        
-        When this objective is completed, the agent will have created new objectives and can
-        proceed with those objectives.
+        """Load a sequence with one objective that triggers the objectives-planning subagent.
+
+        This sequence is designed for autonomous play.  It contains a single
+        story objective that instructs the orchestrator to call
+        ``subagent_plan_objectives`` so the planning agent can create the
+        initial set of objectives based on the walkthrough and current
+        progress.
         
         Args:
             start_index: Index to start from (0 = start from beginning)
@@ -2897,14 +2894,24 @@ class DirectObjectiveManager:
             #     priority=1
             # ),
             DirectObjective(
-                id="autonomous_01_create_next_story_objectives",
-                description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
+                id="autonomous_01_plan_objectives",
+                description=(
+                    "Call subagent_plan_objectives to plan the initial set of objectives. "
+                    "Provide a reason explaining that this is the start of autonomous play "
+                    "and new objectives are needed based on the current progress and walkthrough."
+                ),
                 action_type="create_new_objectives",
                 category="story",
                 target_location=None,
-                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Create new objectives with create_direct_objectives(category=...). In categorized mode, you MUST include a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' only for training prep, and 'dynamics' for short-term navigation/cleanup. Multiple create_direct_objectives calls are allowed. Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), the new objectives will be added to the sequence and the current_index for that category will be incremented to the first new objective.",
+                navigation_hint=(
+                    "Call subagent_plan_objectives(reason='Starting autonomous play — "
+                    "need initial objectives based on current progress and walkthrough.'). "
+                    "The planning subagent will use research tools to determine the next "
+                    "logical objectives and add them to the sequence. Once it returns, "
+                    "complete this objective and proceed with the newly created objectives."
+                ),
                 completion_condition="story_objectives_created",
-                priority=1
+                priority=1,
             ),
 
         ]
@@ -3389,14 +3396,32 @@ class DirectObjectiveManager:
             "dynamics": self._get_current_objective_for_category("dynamics")
         }
 
+    _STORY_EXHAUSTION_FALLBACK = DirectObjective(
+        id="auto_plan_objectives",
+        description=(
+            "The current story sequence is complete. Use subagent_plan_objectives "
+            "to plan future objectives based on your progress and the walkthrough."
+        ),
+        action_type="create_new_objectives",
+        category="story",
+        completion_condition="story_objectives_created",
+    )
+
     def _get_current_objective_for_category(self, category: str) -> Optional[DirectObjective]:
         """Get current objective for a specific category
 
         For battling objectives, filters based on prerequisite_story_objective to ensure
         battling objectives only appear after reaching the required story milestone.
+
+        If the story sequence is exhausted, returns a fallback objective that instructs
+        the orchestrator to invoke the objectives-planning subagent.
         """
         if category == "story":
             if self.story_index < len(self.story_sequence):
+                return self.story_sequence[self.story_index]
+            if self.story_sequence:
+                self.story_sequence.append(self._STORY_EXHAUSTION_FALLBACK)
+                logger.info("📋 Story sequence exhausted — appended planning fallback objective.")
                 return self.story_sequence[self.story_index]
         elif category == "battling":
             # Filter battling objectives by prerequisite
@@ -3660,3 +3685,208 @@ class DirectObjectiveManager:
             logger.info(f"💾 Saved {len(dynamics_data)} dynamics objectives to {filename}")
         except Exception as e:
             logger.warning(f"Failed to save dynamics objectives backup: {e}")
+
+    # ------------------------------------------------------------------
+    # Replanning & full-sequence snapshot (used by subagent_plan_objectives)
+    # ------------------------------------------------------------------
+
+    def _get_index_for_category(self, category: str) -> int:
+        if category == "story":
+            return self.story_index
+        elif category == "battling":
+            return self.battling_index
+        elif category == "dynamics":
+            return self.dynamics_index
+        return 0
+
+    def replan_category(self, category: str, edits: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Apply a batch of index-based edits to a single objective category.
+
+        Each edit is ``{"index": int, "objective": dict | None}``.
+        * Non-null objective at an existing index  -> **modify** (replace).
+        * Non-null objective at a new contiguous index -> **create** (append).
+        * Null / missing objective at an existing index -> **delete** (shift down).
+
+        Returns a structured result dict (never raises for validation errors).
+        """
+        VALID_CATEGORIES = ("story", "battling", "dynamics")
+        MAX_EDITS = 5
+
+        if category not in VALID_CATEGORIES:
+            return {"success": False, "error": f"Invalid category '{category}'. Must be one of {VALID_CATEGORIES}."}
+
+        if not isinstance(edits, list):
+            return {"success": False, "error": "edits must be a list."}
+
+        if len(edits) > MAX_EDITS:
+            return {"success": False, "error": f"Too many edits ({len(edits)}). Maximum is {MAX_EDITS} per call."}
+
+        sequence = self._get_sequence_for_category(category)
+        current_idx = self._get_index_for_category(category)
+
+        for edit in edits:
+            idx = edit.get("index")
+            if idx is None or not isinstance(idx, int):
+                return {"success": False, "error": f"Each edit must have an integer 'index'. Got: {edit}"}
+            if idx < current_idx:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Cannot edit index {idx} in '{category}' — it is before the current "
+                        f"index ({current_idx}). Only current and future objectives may be modified."
+                    ),
+                }
+
+        for edit in edits:
+            obj_data = edit.get("objective")
+            is_delete = obj_data is None or (isinstance(obj_data, dict) and not obj_data)
+            if is_delete and edit["index"] >= len(sequence):
+                return {
+                    "success": False,
+                    "error": f"Cannot delete index {edit['index']} — it does not exist in '{category}'.",
+                }
+
+        append_indices = sorted(
+            e["index"] for e in edits
+            if e["index"] >= len(sequence) and e.get("objective") and (not isinstance(e["objective"], dict) or e["objective"])
+        )
+        if append_indices:
+            expected_start = len(sequence)
+            for i, ai in enumerate(append_indices):
+                if ai != expected_start + i:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Non-contiguous append index {ai} in '{category}'. "
+                            f"Current sequence length is {len(sequence)}; expected next append "
+                            f"index {expected_start + i}."
+                        ),
+                    }
+
+        edits_applied: List[Dict[str, Any]] = []
+        indices_to_delete: List[int] = []
+
+        for edit in sorted(edits, key=lambda e: e["index"]):
+            idx = edit["index"]
+            obj_data = edit.get("objective")
+
+            is_delete = obj_data is None or (isinstance(obj_data, dict) and not obj_data)
+
+            if is_delete:
+                if idx >= len(sequence):
+                    return {"success": False, "error": f"Cannot delete index {idx} — it does not exist in '{category}'."}
+                indices_to_delete.append(idx)
+                edits_applied.append({"action": "delete", "index": idx, "id": sequence[idx].id})
+            elif idx < len(sequence):
+                new_obj = DirectObjective(
+                    id=obj_data.get("id", sequence[idx].id),
+                    description=obj_data.get("description", sequence[idx].description),
+                    action_type=obj_data.get("action_type", sequence[idx].action_type),
+                    category=category,
+                    target_location=obj_data.get("target_location"),
+                    target_coords=obj_data.get("target_coords"),
+                    navigation_hint=obj_data.get("navigation_hint"),
+                    completion_condition=obj_data.get("completion_condition"),
+                    priority=obj_data.get("priority", 1),
+                    optional=obj_data.get("optional", False),
+                    recommended_battling_objectives=obj_data.get("recommended_battling_objectives", []),
+                    prerequisite_story_objective=obj_data.get("prerequisite_story_objective"),
+                )
+                sequence[idx] = new_obj
+                edits_applied.append({"action": "modify", "index": idx, "id": new_obj.id})
+            else:
+                new_obj = DirectObjective(
+                    id=obj_data.get("id", f"{category}_appended_{idx}"),
+                    description=obj_data["description"],
+                    action_type=obj_data.get("action_type", "navigate"),
+                    category=category,
+                    target_location=obj_data.get("target_location"),
+                    target_coords=obj_data.get("target_coords"),
+                    navigation_hint=obj_data.get("navigation_hint"),
+                    completion_condition=obj_data.get("completion_condition"),
+                    priority=obj_data.get("priority", 1),
+                    optional=obj_data.get("optional", False),
+                    recommended_battling_objectives=obj_data.get("recommended_battling_objectives", []),
+                    prerequisite_story_objective=obj_data.get("prerequisite_story_objective"),
+                )
+                sequence.append(new_obj)
+                edits_applied.append({"action": "create", "index": idx, "id": new_obj.id})
+
+        if indices_to_delete:
+            for del_idx in sorted(indices_to_delete, reverse=True):
+                sequence.pop(del_idx)
+            if current_idx >= len(sequence) and len(sequence) > 0:
+                self._set_index_for_category(category, len(sequence) - 1)
+            elif current_idx >= len(sequence):
+                self._set_index_for_category(category, 0)
+
+        new_current = self._get_index_for_category(category)
+        logger.info(
+            f"🔄 Replanned '{category}': {len(edits_applied)} edits applied, "
+            f"sequence length {len(sequence)}, current_index {new_current}"
+        )
+        return {
+            "success": True,
+            "error": None,
+            "edits_applied": edits_applied,
+            "new_sequence_length": len(sequence),
+            "current_index": new_current,
+        }
+
+    def _set_index_for_category(self, category: str, value: int):
+        if category == "story":
+            self.story_index = value
+        elif category == "battling":
+            self.battling_index = value
+        elif category == "dynamics":
+            self.dynamics_index = value
+
+    def get_full_sequence_snapshot(self) -> Dict[str, Any]:
+        """Return the complete objective state across all three categories.
+
+        Used by ``subagent_plan_objectives`` to present the full planning
+        picture at every step.
+        """
+        def _serialize_sequence(seq: List[DirectObjective]) -> List[Dict[str, Any]]:
+            result = []
+            for i, obj in enumerate(seq):
+                entry: Dict[str, Any] = {
+                    "index": i,
+                    "id": obj.id,
+                    "description": obj.description,
+                    "action_type": obj.action_type,
+                    "category": obj.category,
+                    "target_location": obj.target_location,
+                    "navigation_hint": obj.navigation_hint,
+                    "completion_condition": obj.completion_condition,
+                    "completed": obj.completed,
+                    "optional": obj.optional,
+                    "priority": obj.priority,
+                }
+                if obj.recommended_battling_objectives:
+                    entry["recommended_battling_objectives"] = obj.recommended_battling_objectives
+                if obj.prerequisite_story_objective:
+                    entry["prerequisite_story_objective"] = obj.prerequisite_story_objective
+                result.append(entry)
+            return result
+
+        return {
+            "story": {
+                "sequence": _serialize_sequence(self.story_sequence),
+                "current_index": self.story_index,
+                "total": len(self.story_sequence),
+                "completed": sum(1 for o in self.story_sequence if o.completed),
+            },
+            "battling": {
+                "sequence": _serialize_sequence(self.battling_sequence),
+                "current_index": self.battling_index,
+                "total": len(self.battling_sequence),
+                "completed": sum(1 for o in self.battling_sequence if o.completed),
+            },
+            "dynamics": {
+                "sequence": _serialize_sequence(self.dynamics_sequence),
+                "current_index": self.dynamics_index,
+                "total": len(self.dynamics_sequence),
+                "completed": sum(1 for o in self.dynamics_sequence if o.completed),
+            },
+        }

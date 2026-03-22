@@ -3701,6 +3701,72 @@ async def mcp_create_direct_objectives(request: dict):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/mcp/replan_objectives")
+async def mcp_replan_objectives(request: dict):
+    """MCP Tool: Apply index-based edits to a single objective category (used by subagent_plan_objectives)."""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        from agents.objectives import DirectObjectiveManager
+
+        global direct_objectives_manager
+        if direct_objectives_manager is None:
+            return {"success": False, "error": "Objective manager not initialized"}
+
+        if direct_objectives_manager.mode != "categorized":
+            return {"success": False, "error": "replan_objectives requires categorized mode"}
+
+        category = request.get("category")
+        edits = request.get("edits", [])
+        return_to_orchestrator = request.get("return_to_orchestrator", False)
+        rationale = request.get("rationale", "")
+
+        if not category:
+            return {"success": False, "error": "Missing required 'category' parameter"}
+
+        result = direct_objectives_manager.replan_category(category, edits)
+
+        if result.get("success"):
+            _update_objectives_cache()
+            logger.info(
+                f"🔄 replan_objectives({category}): {len(result.get('edits_applied', []))} edits applied. "
+                f"return_to_orchestrator={return_to_orchestrator}"
+            )
+
+        result["return_to_orchestrator"] = return_to_orchestrator
+        result["rationale"] = rationale
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in replan_objectives: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_full_objective_sequence")
+async def mcp_get_full_objective_sequence():
+    """MCP Tool: Return the complete objective state across all categories (used by subagent_plan_objectives)."""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        global direct_objectives_manager
+        if direct_objectives_manager is None:
+            return {"success": False, "error": "Objective manager not initialized"}
+
+        from utils.json_utils import serialize_for_json
+        snapshot = direct_objectives_manager.get_full_sequence_snapshot()
+        return serialize_for_json({"success": True, **snapshot})
+
+    except Exception as e:
+        logger.error(f"Error in get_full_objective_sequence: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/mcp/get_progress_summary")
 async def mcp_get_progress_summary():
     """MCP Tool: Get comprehensive progress summary including milestones, completed objectives, and knowledge"""
