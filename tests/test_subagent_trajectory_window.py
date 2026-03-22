@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from agents.subagents.trajectory_window import MAX_TRAJECTORY_WINDOW, load_recent_trajectories
+from agents.subagents.utils.trajectory_window import MAX_TRAJECTORY_WINDOW, load_recent_trajectories
 
 
 class _RunManagerStub:
@@ -35,12 +35,12 @@ def test_load_recent_trajectories_returns_last_n_preserving_order(tmp_path):
     assert [entry["step"] for entry in loaded] == [6, 7, 8]
 
 
-def test_load_recent_trajectories_caps_window_at_25(tmp_path):
-    _write_trajectories(tmp_path, 30)
+def test_load_recent_trajectories_caps_window_at_50(tmp_path):
+    _write_trajectories(tmp_path, 70)
     loaded = load_recent_trajectories(_RunManagerStub(tmp_path), last_n_steps=999)
     assert len(loaded) == MAX_TRAJECTORY_WINDOW
-    assert loaded[0]["step"] == 6
-    assert loaded[-1]["step"] == 30
+    assert loaded[0]["step"] == 21
+    assert loaded[-1]["step"] == 70
 
 
 def test_load_recent_trajectories_handles_missing_or_empty_files(tmp_path):
