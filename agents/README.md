@@ -8,11 +8,11 @@ This package contains the main benchmark agent and its supporting modules.
 
 ## Supporting modules
 
-- **`subagents/`** — Helper agents with their own context (given as trajectory information): `reflect`, `verify`, `context`, `trajectory_window`, and **`puzzle_solver.py`** (`GYM_PUZZLES` for `gym_puzzle_agent`).
+- **`subagents/`** — Local subagent modules and helpers: registry/runtime, context loading, trajectory windows, `subagent_reflect`, `subagent_verify`, `subagent_summarize`, `subagent_battler`, and gym-puzzle support (`gym_puzzle.py`, `puzzle_solver.py`).
 - **`prompts/`** — Canonical prompt assets and path helpers (e.g. PokeAgent directives, CLI-agent directives).
 - **`objectives/`** — Direct objectives: types, categorization, and sequences (e.g. story, battling).
 - **`utils/prompt_optimizer.py`** — Optional naive prompt optimization based on recent trajectories (used when `--enable-prompt-optimization` is set).
 
 ## Flow
 
-The agent composes a `VLM` instance (from `utils/agent_infrastructure/vlm_backends.py`) and an MCP tool adapter to call the game server. Each step: get state → build prompt (objectives, history, base prompt) → call VLM → execute tool calls (e.g. `press_buttons`, `navigate_to`) → update history and metrics.
+The agent composes a `VLM` instance (from `utils/agent_infrastructure/vlm_backends.py`) and an MCP tool adapter to call the game server. Each orchestrator step: get state → build prompt (objectives, history, base prompt) → call VLM → execute tool calls (e.g. `press_buttons`, `navigate_to`, local `subagent_*` tools) → update history and metrics. Delegated battle turns also consume real global steps, but only the final compacted battle summary is published back into orchestrator-visible memory.
