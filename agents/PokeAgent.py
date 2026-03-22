@@ -16,10 +16,10 @@ from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
 import numpy as np
 import traceback
-
 import PIL.Image as PILImage
 import io
 import base64
+
 import json as json_module
 
 import google.generativeai.types as genai_types
@@ -32,10 +32,31 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.metric_tracking.server_metrics import update_server_metrics
 from utils.data_persistence.llm_logger import get_llm_logger
 from utils.agent_infrastructure.vlm_backends import VLM
-from utils.data_persistence.run_data_manager import get_run_data_manager
+from utils.data_persistence.run_data_manager import get_run_data_manager, initialize_run_data_manager
 from agents.utils.prompt_optimizer import create_prompt_optimizer
-from utils.data_persistence.run_data_manager import get_run_data_manager
-from utils.data_persistence.run_data_manager import initialize_run_data_manager
+from agents.subagents import (
+    DEFAULT_TRAJECTORY_WINDOW,
+    DEFAULT_SUMMARY_WINDOW,
+    PokeAgentRuntime,
+    allowed_battler_tool_names,
+    build_battler_prompt,
+    build_gym_puzzle_prompt,
+    build_local_subagent_tool_declarations,
+    build_reflect_prompt,
+    build_summarize_prompt,
+    build_verify_prompt,
+    clamp_trajectory_window,
+    decode_screenshot_base64,
+    extract_key_events_from_summary,
+    format_battler_history,
+    get_gym_puzzle_info,
+    get_local_subagent_spec,
+    is_local_subagent_tool,
+    load_subagent_context,
+    parse_verify_response,
+    resolve_gym_name,
+    resolve_verification_target,
+)
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
@@ -73,7 +94,6 @@ class MCPToolAdapter:
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
-                "reflect": "/mcp/reflect",
             }
 
             endpoint = endpoint_map.get(tool_name)
@@ -150,13 +170,21 @@ class PokeAgent:
         # Recent function call results to add to next step's context
         # Format: [(function_name, result_json_string, timestamp), ...]
         self.recent_function_results = []
+        self._subagent_vlm_cache: Dict[Tuple[str, ...], Any] = {}
+        self._local_subagent_vlm = None
+        self.runtime = PokeAgentRuntime(
+            initial_step=self.step_count,
+            publish_history=self._add_to_history,
+            publish_function_result=self._store_function_result_for_context,
+            on_step_change=lambda step: setattr(self, "step_count", step),
+        )
 
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.optimization_enabled:
-                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Lean: just tools + core objective
+                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Tools + hard constraints
             else:
-                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full: everything included
+                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full single-file prompt
 
         # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
@@ -183,18 +211,19 @@ class PokeAgent:
         # Initialize prompt optimizer if enabled
         self.prompt_optimizer = None
         if self.optimization_enabled:
-            
             run_manager = get_run_data_manager()
-            if run_manager:
-                self.prompt_optimizer = create_prompt_optimizer(
-                    vlm=self.vlm,
-                    run_data_manager=run_manager,
-                    base_prompt_path=POKEAGENT_BASE_PROMPT_PATH
+            if not run_manager:
+                raise RuntimeError(
+                    "enable_prompt_optimization=True requires an initialized run_data_manager "
+                    "(experiment run directory). Use run.py (or equivalent) so run data is set up "
+                    "before starting PokeAgent, or disable prompt optimization."
                 )
-                logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
-            else:
-                logger.warning("⚠️ Prompt optimization requested but run_data_manager not available")
-                self.optimization_enabled = False
+            self.prompt_optimizer = create_prompt_optimizer(
+                vlm=self.vlm,
+                run_data_manager=run_manager,
+                base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
+            )
+            logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
@@ -229,8 +258,8 @@ class PokeAgent:
             else:
                 logger.info(f"📋 No prompt_optimizer attribute found")
         
-        # Otherwise load from file
-        filepath = Path(__file__).resolve().parent.parent / "agent" / "prompts" / "base_prompt.md"
+        # Otherwise load from canonical repo path (e.g. optimization off but code path hit)
+        filepath = resolve_repo_path(POKEAGENT_BASE_PROMPT_PATH)
         if not filepath.exists():
             logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
             return """# Strategic Guidance
@@ -320,35 +349,6 @@ class PokeAgent:
                     "required": ["reasoning"]
                 }
             },
-            {
-                "name": "reflect",
-                "description": "Use this when you feel stuck, uncertain, or suspect your current approach/objectives are wrong. This tool helps you step back, analyze what's happening, and realign your strategy. Call this if: (1) repeating same actions without progress, (2) objectives don't match game state, (3) stuck for multiple steps, (4) unsure what to do next.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "situation": {
-                            "type_": "STRING",
-                            "description": "Describe what you've been trying to do and why you think something might be wrong. Include: recent actions, lack of progress, confusion about objectives, or any observations that seem off."
-                        }
-                    },
-                    "required": ["situation"]
-                }
-            },
-            {
-                "name": "gym_puzzle_agent",
-                "description": "Get expert guidance on solving gym puzzles. Use this when you're in a gym and need help understanding the puzzle mechanics or finding the solution. Provides specific strategies for floor puzzles, ice puzzles, warp mazes, etc. Works for all 8 Pokemon Emerald gyms.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "gym_name": {
-                            "type_": "STRING",
-                            "description": "Name of the gym you're currently in (e.g., 'LAVARIDGE_TOWN_GYM_1F', 'MOSSDEEP_CITY_GYM'). Look at your current location in the game state."
-                        }
-                    },
-                    "required": ["gym_name"]
-                }
-            },
-
             # Knowledge Base Tools - NOW ENABLED
             {
                 "name": "add_knowledge",
@@ -480,394 +480,388 @@ class PokeAgent:
             },
         ]
 
+        tools.extend(build_local_subagent_tool_declarations())
+
         logger.info(f"✅ Created {len(tools)} tool declarations (ALL TOOLS ENABLED)")
         return tools
 
     def _execute_function_call_by_name(self, function_name: str, arguments: dict) -> str:
         """Execute a function by name with given arguments and return result as JSON string."""
+        if is_local_subagent_tool(function_name):
+            spec = get_local_subagent_spec(function_name)
+            return getattr(self, spec.handler_method)(arguments)
 
-        # Special handling for reflect tool - use agent's own VLM for analysis
-        if function_name == "reflect":
-            return self._execute_reflect(arguments)
-
-        # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
-        if function_name == "gym_puzzle_agent":
-            return self._execute_gym_puzzle_agent(arguments)
-
-        # Call the tool via MCP adapter
+        # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _execute_reflect(self, arguments: dict) -> str:
-        """Execute reflection using agent's own VLM to analyze situation."""
+    def _get_subagent_vlm(self, tool_names: Optional[set[str]] = None):
+        """Lazily create cached VLMs for local subagents.
+
+        Tool-less subagents (reflect, verify, summarize, gym_puzzle) get a bare
+        VLM without tools or system instructions.  Tool-using subagents (battler)
+        get a VLM with only their allowed tool declarations AND the orchestrator's
+        system instructions so the battler inherits the same behavioural grounding.
+        """
+        normalized = tuple(sorted(tool_names or ()))
+        if not normalized:
+            if self._local_subagent_vlm is None:
+                self._local_subagent_vlm = VLM(
+                    model_name=self.model,
+                    backend=self.backend,
+                    tools=None,
+                )
+            return self._local_subagent_vlm
+
+        cached = self._subagent_vlm_cache.get(normalized)
+        if cached is None:
+            allowed_tools = [tool for tool in self.tools if tool.get("name") in set(normalized)]
+            cached = VLM(
+                model_name=self.model,
+                backend=self.backend,
+                tools=allowed_tools,
+                system_instruction=self.system_instructions,
+            )
+            self._subagent_vlm_cache[normalized] = cached
+        return cached
+
+    def _run_one_step_subagent(
+        self,
+        *,
+        prompt: str,
+        interaction_name: str,
+        current_image=None,
+    ) -> tuple[int, str]:
+        """Run a one-step local subagent with its own claimed global step."""
+        step_number = self.runtime.claim_step(owner="subagent", interaction_name=interaction_name)
+        subagent_vlm = self._get_subagent_vlm()
+        if current_image is not None:
+            response = subagent_vlm.get_query(current_image, prompt, interaction_name)
+        else:
+            response = subagent_vlm.get_text_query(prompt, interaction_name)
+
+        # Tag the step in cumulative_metrics so one-step subagent calls are
+        # identifiable (they produce no tool calls, so without this the entry
+        # would appear as an anonymous ghost step).
+        self.llm_logger.add_step_tool_calls(
+            step_number,
+            [{"name": interaction_name, "args": {}}],
+        )
+
+        text = self._extract_text_from_response(response)
+        if text:
+            return step_number, text
+        raise RuntimeError(f"{interaction_name} did not return text output")
+
+    def _extract_recommended_next_action(self, text: str) -> str:
+        for line in (text or "").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("**") and not stripped.startswith("- "):
+                if "RECOMMENDED_NEXT_ACTION" in stripped.upper():
+                    continue
+            if stripped and "RECOMMENDED_NEXT_ACTION" not in stripped.upper():
+                return stripped
+        return ""
+
+    def _execute_subagent_reflect(self, arguments: dict) -> str:
+        """Execute reflection using a local, tool-less subagent."""
         try:
-            # Get context from server
-            context_result = self.mcp_adapter.call_tool("reflect", arguments)
-
-            if not context_result.get("success"):
-                return json.dumps({"success": False, "error": context_result.get("error", "Failed to get context")})
-
-            context = context_result.get("context", {})
-
-            # Build reflection prompt
-            situation = context.get("situation", "")
-            current_state = context.get("current_state", {})
-            current_obj = context.get("current_objective", {})
-            progress = context.get("progress", {})
-            history = context.get("recent_history", [])
-
-            # Format history for readability
-            history_text = []
-            for h in history:
-                history_text.append(f"Step {h.get('step')}: [{h.get('action')}] {h.get('action_details')}")
-                if h.get('coords'):
-                    history_text.append(f"  Position: {h.get('coords')}")
-                if h.get('thinking'):
-                    history_text.append(f"  Thinking: {h.get('thinking')}")
-
-            history_str = "\n".join(history_text)
-
-            # Format objective - handle both categorized and legacy modes
-            obj_text = "None"
-            obj_mode = current_obj.get("mode", "legacy")
-            
-            if obj_mode == "categorized":
-                # Categorized mode - show all 3 category objectives
-                categories = current_obj.get("categories", {})
-                obj_parts = []
-                
-                # Story objective
-                story_cat = categories.get("story", {})
-                story_obj = story_cat.get("current_objective")
-                if story_obj:
-                    obj_parts.append(f"📖 STORY ({story_cat.get('index', 0) + 1}/{story_cat.get('total', 0)}): {story_obj}")
-                else:
-                    obj_parts.append(f"📖 STORY: None (all {story_cat.get('completed', 0)} completed)")
-                
-                # Battling objective
-                battling_cat = categories.get("battling", {})
-                battling_obj = battling_cat.get("current_objective")
-                if battling_obj:
-                    obj_parts.append(f"⚔️  BATTLING ({battling_cat.get('index', 0) + 1}/{battling_cat.get('total', 0)}): {battling_obj}")
-                else:
-                    obj_parts.append(f"⚔️  BATTLING: None (all {battling_cat.get('completed', 0)} completed)")
-                
-                # Dynamics objective
-                dynamics_cat = categories.get("dynamics", {})
-                dynamics_obj = dynamics_cat.get("current_objective")
-                if dynamics_obj:
-                    obj_parts.append(f"🎯 DYNAMICS ({dynamics_cat.get('index', 0) + 1}/{dynamics_cat.get('total', 0)}): {dynamics_obj}")
-                else:
-                    obj_parts.append(f"🎯 DYNAMICS: None (all {dynamics_cat.get('completed', 0)} completed)")
-                
-                obj_text = "\n".join(obj_parts)
-            else:
-                # Legacy mode - single objective
-                if current_obj.get("objective"):
-                    obj = current_obj["objective"]
-                    if isinstance(obj, dict):
-                        obj_text = obj.get("description", "Unknown")
-                        if obj.get("navigation_hint"):
-                            obj_text += f"\nHint: {obj['navigation_hint']}"
-                    else:
-                        obj_text = str(obj)
-
-            # Include porymap if available
-            porymap_section = ""
-            if current_state.get('porymap_ground_truth'):
-                porymap_section = f"\n\nGROUND TRUTH MAP (PORYMAP):\n{current_state.get('porymap_ground_truth')}\n"
-
-            # Fetch knowledge base summary for context
-            knowledge_section = ""
-            try:
-                knowledge_result = self.mcp_adapter.call_tool("get_knowledge_summary", {"min_importance": 3})
-                if knowledge_result.get("success") and knowledge_result.get("summary"):
-                    knowledge_text = knowledge_result["summary"]
-                    if knowledge_text and knowledge_text.strip():
-                        knowledge_section = f"\n\nKNOWLEDGE BASE (GROUND TRUTH - what agent has actually accomplished):\n⚠️ IMPORTANT: The knowledge base is ALWAYS CORRECT. It represents actual accomplishments.\n   If objectives conflict with knowledge base, the OBJECTIVES are wrong, NOT the knowledge base.\n\n{knowledge_text}\n"
-                        logger.info("📚 Loaded knowledge base for reflection")
-                    else:
-                        knowledge_section = "\n\nKNOWLEDGE BASE: No entries yet (agent hasn't stored any discoveries)\n"
-                        logger.info("📚 Knowledge base is empty")
-            except Exception as e:
-                logger.warning(f"Could not load knowledge base for reflection: {e}")
-                knowledge_section = "\n\nKNOWLEDGE BASE: Error loading knowledge base\n"
-
-            # Format progress based on mode
-            if obj_mode == "categorized":
-                progress_text = f"""- Milestones: {progress.get('milestones_completed', 0)}
-- Story: {progress.get('story', {}).get('completed', 0)}/{progress.get('story', {}).get('total', 0)} completed
-- Battling: {progress.get('battling', {}).get('completed', 0)}/{progress.get('battling', {}).get('total', 0)} completed
-- Dynamics: {progress.get('dynamics', {}).get('completed', 0)}/{progress.get('dynamics', {}).get('total', 0)} completed"""
-            else:
-                progress_text = f"""- Milestones: {progress.get('milestones_completed', 0)}
-- Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence"""
-
-            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald in an attempt to speedrun the game. Provide direct, actionable guidance. 
-Look for mistakes in logic, erroneous decision-making, or bad macro strategy (e.g., puzzles, going the wrong direction, not sufficiently traning and catching pokemon based on game progress).
-
-
-AGENT'S CONCERN:
-{situation}
-
-CURRENT GAME STATE:
-Location: {current_state.get('location')}
-Coordinates: ({current_state.get('coordinates', {}).get('x')}, {current_state.get('coordinates', {}).get('y')})
-{current_state.get('state_text', '')}{porymap_section}{knowledge_section}
-
-CURRENT OBJECTIVE{'S' if obj_mode == 'categorized' else ''}:
-{f"Mode: Categorized (3 parallel tracks)" if obj_mode == "categorized" else f"Sequence: {current_obj.get('sequence')}"}
-{obj_text}
-Status: {'ALL CATEGORIES COMPLETE - needs new objectives' if current_obj.get('is_complete') else 'Active'}
-
-PROGRESS:
-{progress_text}
-
-RECENT ACTIONS (last 20 steps):
-{history_str}
-
-GROUND TRUTH SOURCES (trust these in priority order):
-1. PORYMAP - Map layout, tile walkability (navigation ground truth)
-2. KNOWLEDGE BASE - What agent has actually accomplished (never outdated, always correct)
-3. WALKTHROUGH - Correct sequence of steps for the game (strategic ground truth)
-4. Current objectives - May be WRONG if they conflict with above sources
-
-OBJECTIVE MISMATCH
-- if the agent is stuck it is likely that they pre-emptively completed an objective without actually doing the task!
-
-ANALYZE (use ground truth sources to verify):
-1. Is the agent stuck or repeating actions?
-2. Does the objective match the game state?
-3. Are target coordinates reachable based on porymap?
-4. **CRITICAL**: Does the objective conflict with knowledge base? (If YES, objective is WRONG)
-5. Is the agent trying to do something already accomplished (check knowledge base)?
-6. Has the agent already learned information that makes the current objective obsolete?
-7. Are there signs of confusion?
-8. What should the agent do next?
-
-PROVIDE (in this exact format):
-
-**ASSESSMENT**:
-[2-3 sentences analyzing what's happening. If objectives conflict with knowledge base, state that OBJECTIVES are wrong.]
-
-**ISSUES**:
-[List specific problems: stuck, wrong objective, unreachable coordinates, already completed per knowledge base, etc.]
-⚠️ NEVER say "knowledge base is outdated" - knowledge base is ALWAYS correct. If there's conflict, the objectives are wrong.
-
-**RECOMMENDATIONS**:
-[Numbered list of specific actions to take - reference porymap AND knowledge base if relevant]
-⚠️ IMPORTANT: If the agent is stuck/looping or the objective seems wrong:
-   1. Check if knowledge base shows this task is already done - if YES, the objective may have been prematurely marked completed
-   2. Recommend calling get_knowledge_summary() to review actual accomplishments
-   3. DETERMINE THE CORRECT WALKTHROUGH PART by matching knowledge to milestones:
-      → Part 1: Got starter Pokemon, met Norman at Petalburg
-      → Part 2: Roxanne (Stone Badge - 1st gym)
-      → Part 3: Brawly (Knuckle Badge - 2nd gym)
-      → Part 4: Slateport Museum, Team Aqua
-      → Part 5: Wattson (Dynamo Badge - 3rd gym)
-      → Part 6: Routes 111-114, Fallarbor (NO gym)
-      → Part 7: Flannery (Heat Badge - 4th gym)
-      → Use HIGHEST milestone completed + 1
-      → Example: Knowledge shows "Defeated Roxanne, Stone Badge" → Use Part 3
-   4. Recommend calling get_walkthrough(part=X) with SPECIFIC part number from step 3
-   5. Remind agent to VERIFY: Compare walkthrough to knowledge base before creating objectives
-   6. If walkthrough describes tasks already in knowledge base → Recommend NEXT part number
-   7. Suggest creating new objectives ONLY after finding correct walkthrough part
-
-**SHOULD_REALIGN**: [YES or NO - whether to create new objectives]
-
-Be direct and actionable. Trust the ground truth sources (porymap, walkthrough) over current objectives.
-ALWAYS BE QUESTIONABLE OF RECENT OBJECTIVES. THEY ARE LIKELY TO HAVE NOT ACTUALLY BEEN COMPLETED.
-NEVER dismiss knowledge base as "outdated" -- rather it may be prematurely marked completed. Trust the in-game features and NPC dialogue to learn what is happening.
-If stuck or looping, ALWAYS recommend checking the walkthrough to verify objectives are correct."""
-
-            logger.info("🤔 Agent performing self-reflection using VLM...")
-
-            # Use agent's own VLM for reflection
-            reflection_response = self.vlm.get_text_query(reflection_prompt, "Self_Reflection")
-
-            # Extract text from response (may be GenerateContentResponse object or string)
-            if isinstance(reflection_response, str):
-                reflection_text = reflection_response
-            else:
-                # Extract text from GenerateContentResponse object
-                try:
-                    reflection_text = reflection_response.text
-                except Exception as e:
-                    # Fallback: try to extract from candidates
-                    try:
-                        if hasattr(reflection_response, 'candidates') and reflection_response.candidates:
-                            parts = reflection_response.candidates[0].content.parts
-                            reflection_text = ''.join(part.text for part in parts if hasattr(part, 'text'))
-                        else:
-                            reflection_text = str(reflection_response)
-                    except Exception as e2:
-                        logger.warning(f"Could not extract text from reflection response: {e}, {e2}")
-                        reflection_text = "Reflection completed but could not extract text."
-
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps"))
+            context = load_subagent_context(
+                self.mcp_adapter,
+                get_run_data_manager(),
+                last_n_steps=last_n_steps,
+                include_current_image=True,
+            )
+            prompt = build_reflect_prompt(
+                situation=arguments.get("situation", "Agent requested reflection"),
+                context=context,
+                last_n_steps=last_n_steps,
+            )
+            step_number, reflection_text = self._run_one_step_subagent(
+                prompt=prompt,
+                interaction_name="Subagent_Reflect",
+                current_image=context.get("current_image"),
+            )
             logger.info(f"✅ Self-reflection complete ({len(reflection_text)} chars)")
-
-            return json.dumps({
-                "success": True,
-                "reflection": reflection_text,
-                "context_analyzed": {
-                    "steps_reviewed": len(history),
-                    "location": current_state.get('location'),
-                    "objective_status": current_obj.get('status')
-                }
-            }, indent=2)
-
+            return json.dumps(
+                {
+                    "success": True,
+                    "reflection": reflection_text,
+                    "step_number": step_number,
+                    "context_analyzed": {
+                        "steps_reviewed": len(context.get("trajectory_window", [])),
+                        "location": context.get("current_state", {}).get("location"),
+                        "objective_status": context.get("objective_state", {}).get("status"),
+                    },
+                },
+                indent=2,
+            )
         except Exception as e:
             logger.error(f"Error in reflect execution: {e}")
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
-    def _execute_gym_puzzle_agent(self, arguments: dict) -> str:
-        """Execute gym puzzle solving using agent's own VLM to analyze puzzle."""
+    def _execute_subagent_verify(self, arguments: dict) -> str:
+        """Execute objective verification using a local, tool-less subagent."""
         try:
-            # Get current game state directly
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps"))
+            context = load_subagent_context(
+                self.mcp_adapter,
+                get_run_data_manager(),
+                last_n_steps=last_n_steps,
+                include_current_image=True,
+            )
+            target = resolve_verification_target(
+                context.get("objective_state", {}),
+                category=arguments.get("category"),
+            )
+            prompt = build_verify_prompt(
+                context=context,
+                target=target,
+                last_n_steps=last_n_steps,
+                reasoning=arguments.get("reasoning", ""),
+            )
+            step_number, verify_text = self._run_one_step_subagent(
+                prompt=prompt,
+                interaction_name="Subagent_Verify",
+                current_image=context.get("current_image"),
+            )
+            verdict = parse_verify_response(verify_text, target=target)
+            verdict["success"] = True
+            verdict["step_number"] = step_number
+            verdict["steps_reviewed"] = len(context.get("trajectory_window", []))
+            verdict["location"] = context.get("current_state", {}).get("location")
+            return json.dumps(verdict, indent=2)
+        except Exception as e:
+            logger.error(f"Error in verify execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _execute_subagent_gym_puzzle(self, arguments: dict) -> str:
+        """Execute gym puzzle solving using a lightweight local subagent."""
+        try:
             game_state = self.mcp_adapter.call_tool("get_game_state", {})
             if not game_state.get("success"):
                 return json.dumps({"success": False, "error": "Failed to get game state"})
 
             state_text = game_state.get("state_text", "")
-
-            # Extract gym name from arguments or current location
-            gym_name = arguments.get("gym_name")
-            if not gym_name:
-                # Try to extract from state_text
-                import re
-                location_match = re.search(r'Current Location: ([^\n]+)', state_text)
-                gym_name = location_match.group(1) if location_match else "Unknown"
-
-            # Load gym puzzle knowledge
-            from agents.puzzle_solver import GYM_PUZZLES
-            gym_info = GYM_PUZZLES.get(gym_name, {
-                "type": "unknown",
-                "description": "Unknown gym - no specific puzzle guidance available",
-                "strategy": "Navigate through the gym and defeat trainers to reach the gym leader."
-            })
-
-            gym_type = gym_info.get("type", "unknown")
-            description = gym_info.get("description", "")
-            base_strategy = gym_info.get("strategy", "")
-
-            # Get action history and function results for context
-            action_history = self._format_action_history()
-            function_results = self._get_function_results_context()
-
-            puzzle_prompt = f"""You are analyzing a Pokemon Emerald gym puzzle to help the agent solve it.
-
-GYM: {gym_name}
-TYPE: {gym_type}
-DESCRIPTION: {description}
-
-GENERAL STRATEGY:
-{base_strategy}
-
-RECENT ACTION HISTORY:
-{action_history}
-
-{function_results}
-
-CURRENT GAME STATE:
-{state_text}
-
-Provide your analysis in this format:
-
-**PUZZLE ANALYSIS**:
-[Explain how this specific puzzle works based on the map and your current position]
-
-**WHAT WE'VE TRIED**:
-[Based on the action history above, summarize what approaches have been attempted and what worked/didn't work]
-
-**SPECIFIC SOLUTION STEPS**:
-1. [First concrete action with coordinates if applicable]
-2. [Second action]
-3. [Continue...]
-
-**NAVIGATION TIPS**:
-[Any important details about tile types, warps, or obstacles to watch for]
-
-**IMPORTANT**:
-- Look at the porymap ground truth map in the game state. Tiles marked '#' are walls, '.' are walkable, 'D' are doors/warps, 'S' are stairs.
-- Review the action history to avoid repeating failed attempts.
-- Learn from previous outputs and function results to refine your strategy.
-- **USE press_buttons() FOR PUZZLE GYMS**: Do NOT use navigate_to() in puzzle gyms - it doesn't work well with rotating doors, switches, or moving platforms. Instead, use press_buttons() with explicit directional inputs (UP, DOWN, LEFT, RIGHT) to solve puzzles step by step.
-Be specific and actionable. Reference actual coordinates from the porymap when possible."""
-
-            logger.info(f"🧩 Agent analyzing gym puzzle: {gym_name}")
-
-            # Get current frame from game state
-            frame_b64 = game_state.get("screenshot_base64")
-            if not frame_b64:
+            gym_name = resolve_gym_name(arguments, state_text)
+            gym_info = get_gym_puzzle_info(gym_name)
+            current_image = decode_screenshot_base64(game_state.get("screenshot_base64"))
+            if current_image is None:
                 return json.dumps({"success": False, "error": "No frame available in game state"})
 
-            # Convert base64 string to PIL Image for VLM
-            try:
-                frame_bytes = base64.b64decode(frame_b64)
-                frame_image = PILImage.open(io.BytesIO(frame_bytes))
-                logger.info(f"   Screenshot: <{len(frame_bytes)} bytes>")
-            except Exception as e:
-                logger.error(f"Failed to decode screenshot: {e}")
-                return json.dumps({"success": False, "error": f"Failed to decode screenshot: {e}"})
-
-            # Use agent's own VLM for puzzle analysis with current frame
-            # IMPORTANT: We need to create a separate VLM instance WITHOUT tools to avoid recursive function calling
-            # The agent's self.vlm has gym_puzzle_agent in its tools, which causes it to try calling the tool
-            # instead of providing text analysis when asked about gym puzzles
-
-            # Create a temporary VLM instance without tools (tools=None)
-            puzzle_vlm = VLM(
-                model_name=self.model,
-                backend=self.backend,
-                tools=None  # No function calling - pure text analysis
+            step_number, puzzle_text = self._run_one_step_subagent(
+                prompt=build_gym_puzzle_prompt(
+                    gym_name=gym_name,
+                    gym_info=gym_info,
+                    state_text=state_text,
+                    action_history=self._format_action_history(),
+                    function_results=self._get_function_results_context(),
+                ),
+                interaction_name="Gym_Puzzle_Analysis",
+                current_image=current_image,
             )
 
-            puzzle_response = puzzle_vlm.get_query(frame_image, puzzle_prompt, "Gym_Puzzle_Analysis")
-
-            # Extract text from response - same logic as VLM backends use
-            puzzle_text = ""
-            if hasattr(puzzle_response, 'candidates') and puzzle_response.candidates:
-                # Gemini/Vertex response with function calling enabled
-                candidate = puzzle_response.candidates[0]
-                if hasattr(candidate, 'content') and candidate.content:
-                    content = candidate.content
-                    if hasattr(content, 'parts'):
-                        text_parts = []
-                        for part in content.parts:
-                            if hasattr(part, 'text') and part.text:
-                                text_parts.append(part.text)
-                            elif hasattr(part, 'function_call'):
-                                # VLM tried to call a function instead of providing text
-                                logger.warning(f"⚠️ VLM returned function call for puzzle analysis: {part.function_call.name}")
-                                logger.warning(f"   This is unexpected - puzzle analysis should be text-only")
-                        puzzle_text = "\n".join(text_parts)
-            elif isinstance(puzzle_response, str):
-                # Already a string (OpenAI/other backends)
-                puzzle_text = puzzle_response
-            elif hasattr(puzzle_response, 'text'):
-                # Has .text attribute (some backends)
-                puzzle_text = puzzle_response.text
-
-            if not puzzle_text:
-                logger.error(f"❌ No text extracted from VLM response")
-                logger.error(f"   Response type: {type(puzzle_response)}")
-                return json.dumps({"success": False, "error": "VLM did not return text analysis"}, indent=2)
-
             logger.info(f"✅ Gym puzzle analysis complete ({len(puzzle_text)} chars)")
-
-            return json.dumps({
-                "success": True,
-                "gym": gym_name,
-                "analysis": puzzle_text
-            }, indent=2)
-
+            return json.dumps(
+                {
+                    "success": True,
+                    "gym": gym_name,
+                    "analysis": puzzle_text,
+                    "step_number": step_number,
+                },
+                indent=2,
+            )
         except Exception as e:
             logger.error(f"Error in solve_gym_puzzle execution: {e}")
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _execute_subagent_summarize(self, arguments: dict) -> str:
+        """Summarize the latest trajectory window without an extra compaction layer."""
+        try:
+            requested_window = arguments.get("last_n_steps", DEFAULT_SUMMARY_WINDOW)
+            last_n_steps = clamp_trajectory_window(requested_window)
+            context = load_subagent_context(
+                self.mcp_adapter,
+                get_run_data_manager(),
+                last_n_steps=last_n_steps,
+                include_current_image=False,
+            )
+            step_number, summary_text = self._run_one_step_subagent(
+                prompt=build_summarize_prompt(
+                    context=context,
+                    last_n_steps=last_n_steps,
+                    reasoning=arguments.get("reasoning", ""),
+                ),
+                interaction_name="Subagent_Summarize",
+                current_image=None,
+            )
+            return json.dumps(
+                {
+                    "success": True,
+                    "summary": summary_text,
+                    "recommended_next_action": self._extract_recommended_next_action(summary_text),
+                    "steps_reviewed": len(context.get("trajectory_window", [])),
+                    "location": context.get("current_state", {}).get("location"),
+                    "step_number": step_number,
+                },
+                indent=2,
+            )
+        except Exception as e:
+            logger.error(f"Error in summarize execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _execute_subagent_battler(self, arguments: dict) -> str:
+        """Delegate the active battle to a local looping battler."""
+        try:
+            initial_state = self.mcp_adapter.call_tool("get_game_state", {})
+            raw_state = initial_state.get("raw_state", {}) if isinstance(initial_state, dict) else {}
+            is_in_battle = bool(raw_state.get("game", {}).get("is_in_battle") or initial_state.get("is_in_battle"))
+            if not initial_state.get("success"):
+                return json.dumps({"success": False, "error": "Failed to get game state"}, indent=2)
+            if not is_in_battle:
+                return json.dumps(
+                    {
+                        "success": True,
+                        "entered_battle_loop": False,
+                        "battle_resolved": False,
+                        "turns_taken": 0,
+                        "battle_summary": "Delegation skipped because the agent is not currently in battle.",
+                        "key_events": [],
+                        "recommended_next_action": "Continue with the overworld orchestrator.",
+                    },
+                    indent=2,
+                )
+
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps", DEFAULT_SUMMARY_WINDOW))
+            handoff = json.loads(
+                self._execute_subagent_summarize(
+                    {
+                        "reasoning": "Summarize the recent context leading into this battle for a delegated battler handoff.",
+                        "last_n_steps": max(50, last_n_steps),
+                    }
+                )
+            )
+            battle_result = self._run_battler_loop(
+                handoff_summary=handoff.get("summary", ""),
+            )
+            battle_result["success"] = True
+            battle_result["entered_battle_loop"] = True
+            return json.dumps(battle_result, indent=2)
+        except Exception as e:
+            logger.error(f"Error in battler execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _run_battler_loop(self, *, handoff_summary: str) -> Dict[str, Any]:
+        run_manager = get_run_data_manager()
+        battler_vlm = self._get_subagent_vlm(allowed_battler_tool_names())
+        turns_taken = 0
+        key_events: List[str] = []
+        battle_history: List[Dict[str, Any]] = []
+        resolved = False
+        SAFETY_CAP = 200
+
+        while turns_taken < SAFETY_CAP:
+            current_context = load_subagent_context(
+                self.mcp_adapter,
+                run_manager,
+                last_n_steps=1,
+                include_current_image=True,
+            )
+            game_state_result = current_context.get("game_state_result", {})
+            raw_state = game_state_result.get("raw_state", {}) or {}
+            in_battle = bool(
+                raw_state.get("game", {}).get("is_in_battle")
+                or game_state_result.get("is_in_battle")
+            )
+            if not in_battle:
+                resolved = True
+                break
+
+            current_image = current_context.get("current_image")
+            step_number = self.runtime.claim_step(
+                owner="subagent_battler", interaction_name="Subagent_Battler"
+            )
+            prompt = build_battler_prompt(
+                current_state_text=current_context.get("current_state", {}).get("state_text", ""),
+                location=current_context.get("current_state", {}).get("location", "Unknown"),
+                objective_state=current_context.get("objective_state", {}),
+                progress=current_context.get("progress", {}),
+                knowledge_summary=current_context.get("knowledge_summary", ""),
+                handoff_summary=handoff_summary,
+                battle_history=format_battler_history(battle_history),
+                turn_index=turns_taken + 1,
+            )
+
+            if current_image is not None:
+                response = battler_vlm.get_query(current_image, prompt, "Subagent_Battler")
+            else:
+                response = battler_vlm.get_text_query(prompt, "Subagent_Battler")
+            reasoning_text = self._extract_text_from_response(response)
+
+            tool_calls_made: List[Dict[str, Any]] = []
+            used_tools = self._handle_vlm_function_calls(
+                response,
+                tool_calls_made,
+                0,
+                4,
+                allowed_tool_names=allowed_battler_tool_names(),
+            )
+            if not used_tools or not tool_calls_made:
+                key_events.append("Battler produced no executable tool call.")
+                break
+
+            self.llm_logger.add_step_tool_calls(step_number, tool_calls_made)
+            if run_manager:
+                pre_state = run_manager.create_state_snapshot(raw_state) if raw_state else None
+                if pre_state:
+                    self._log_trajectory_for_step(
+                        run_manager=run_manager,
+                        step_num=step_number,
+                        pre_state=pre_state,
+                        prompt=prompt,
+                        reasoning=reasoning_text,
+                        tool_calls=tool_calls_made,
+                        response=reasoning_text,
+                    )
+
+            battle_history.append({
+                "step": turns_taken + 1,
+                "reasoning": reasoning_text,
+                "tool_calls": tool_calls_made,
+            })
+
+            last_call = tool_calls_made[-1]
+            key_events.append(f"Turn {turns_taken + 1}: {last_call['name']}")
+            turns_taken += 1
+
+        if turns_taken >= SAFETY_CAP and not resolved:
+            key_events.append("Battler hit the safety turn cap before returning to the overworld.")
+
+        exit_summary = json.loads(
+            self._execute_subagent_summarize(
+                {
+                    "reasoning": "Compact the completed delegated battle into a concise handoff for the main orchestrator.",
+                    "last_n_steps": 50,
+                }
+            )
+        )
+        summary_text = exit_summary.get("summary", "")
+        key_events.extend(extract_key_events_from_summary(summary_text))
+        return {
+            "battle_resolved": resolved,
+            "turns_taken": turns_taken,
+            "battle_summary": summary_text,
+            "key_events": key_events[:8],
+            "recommended_next_action": exit_summary.get("recommended_next_action")
+            or "Resume overworld planning using the compacted battle summary.",
+        }
 
     def _convert_protobuf_value(self, value):
         """Recursively convert a protobuf value to JSON-serializable Python types."""
@@ -947,10 +941,12 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         logger.debug(f"   ✅ Converted {len(arguments)} arguments")
         return arguments
 
-    def _execute_function_call(self, function_call) -> str:
+    def _execute_function_call(self, function_call, allowed_tool_names: Optional[set[str]] = None) -> str:
         """Execute a function call and return the result as JSON string."""
         function_name = function_call.name
         logger.info(f"🔧 Executing function: {function_name}")
+        if allowed_tool_names is not None and function_name not in allowed_tool_names:
+            raise ValueError(f"Tool {function_name} is not allowed in this context")
 
         # Parse arguments - convert protobuf types to native Python types
         try:
@@ -999,13 +995,9 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             logger.error(f"   Traceback: {traceback.format_exc()}")
             return json.dumps({"success": False, "error": f"Invalid arguments: {e}"})
 
-        # Special handling for reflect tool - use agent's own VLM
-        if function_name == "reflect":
-            return self._execute_reflect(arguments)
-
-        # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
-        if function_name == "gym_puzzle_agent":
-            return self._execute_gym_puzzle_agent(arguments)
+        if is_local_subagent_tool(function_name):
+            spec = get_local_subagent_spec(function_name)
+            return getattr(self, spec.handler_method)(arguments)
 
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -1013,7 +1005,17 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _add_to_history(self, prompt: str, response: str, tool_calls: List[Dict] = None, action_details: str = None, player_coords: tuple = None):
+    def _add_to_history(
+        self,
+        prompt: str,
+        response: str,
+        tool_calls: List[Dict] = None,
+        action_details: str = None,
+        player_coords: tuple = None,
+        start_coords: tuple = None,
+        end_coords: tuple = None,
+        step_number: Optional[int] = None,
+    ):
         """Add interaction to conversation history - ONLY stores LLM responses and actions."""
         # Strip whitespace from response to save tokens
         response_stripped = response.strip() if response else ""
@@ -1024,12 +1026,12 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             return
 
         entry = {
-            "step": self.step_count,
+            "step": step_number if step_number is not None else self.step_count,
             "llm_response": response_stripped,
             "timestamp": time.time()
         }
 
-        logger.debug(f"📝 Storing history entry for step {self.step_count}: {response_stripped[:100]}...")
+        logger.debug(f"📝 Storing history entry for step {entry['step']}: {response_stripped[:100]}...")
 
         # Extract action and action_details from tool_calls
         if tool_calls:
@@ -1045,9 +1047,20 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             else:
                 entry["action_details"] = f"{last_call.get('name', 'unknown')}(...)"
 
-        # Store player coordinates if available
+        if tool_calls:
+            entry["tool_calls"] = tool_calls
+
+        # Store explicit step start/end coordinates when available
+        if start_coords:
+            entry["start_coords"] = start_coords
+        if end_coords:
+            entry["end_coords"] = end_coords
+
+        # Backward-compatible coordinate field (treated as end-of-step position)
         if player_coords:
             entry["player_coords"] = player_coords
+        elif end_coords:
+            entry["player_coords"] = end_coords
 
         self.conversation_history.append(entry)
 
@@ -1137,7 +1150,13 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         except Exception as e:
             logger.debug(f"Could not send thinking to server: {e}")
 
-    def run_step(self, prompt: str, max_tool_calls: int = 5, screenshot_b64: str = None) -> tuple[bool, str]:
+    def run_step(
+        self,
+        prompt: str,
+        max_tool_calls: int = 5,
+        screenshot_b64: str = None,
+        step_number: Optional[int] = None,
+    ) -> tuple[bool, str]:
         """Run a single agent step.
 
         Args:
@@ -1149,15 +1168,14 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             Tuple of (success: bool, response: str)
         """
         try:
-            # Make current step available for per-step metrics logging
-            os.environ["LLM_STEP_NUMBER"] = str(self.step_count)
+            preview_step = step_number if step_number is not None else self.runtime.peek_next_step()
 
             # Capture pre-state for trajectory logging
             run_manager = get_run_data_manager()
             
             # DEBUG: Log run_manager availability
             if not run_manager:
-                logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None - trajectory logging will be skipped")
+                logger.warning(f"🔍 [DEBUG] Step {preview_step}: run_manager is None - trajectory logging will be skipped")
                 # Try to initialize if not available
                 run_id = os.environ.get("RUN_DATA_ID")
                 if run_id:
@@ -1170,7 +1188,7 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 else:
                     logger.warning(f"🔍 [DEBUG] RUN_DATA_ID environment variable not set")
             else:
-                logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager available: {run_manager.run_id}")
+                logger.debug(f"🔍 [DEBUG] Step {preview_step}: run_manager available: {run_manager.run_id}")
             
             pre_state = None
             if run_manager:
@@ -1182,14 +1200,14 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                     if game_state_result.get("success"):
                         raw_state = game_state_result.get("raw_state", {})
                         pre_state = run_manager.create_state_snapshot(raw_state)
-                        logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: pre_state captured: {pre_state.get('location', 'Unknown')}")
+                        logger.debug(f"🔍 [DEBUG] Step {preview_step}: pre_state captured: {pre_state.get('location', 'Unknown')}")
                     else:
-                        logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: get_game_state returned success=False")
+                        logger.warning(f"🔍 [DEBUG] Step {preview_step}: get_game_state returned success=False")
                 except Exception as e:
-                    logger.error(f"🔍 [DEBUG] Step {self.step_count + 1}: Could not capture pre-state: {e}")
+                    logger.error(f"🔍 [DEBUG] Step {preview_step}: Could not capture pre-state: {e}")
                     logger.error(traceback.format_exc())
             else:
-                logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: run_manager is None, skipping pre_state capture")
+                logger.warning(f"🔍 [DEBUG] Step {preview_step}: run_manager is None, skipping pre_state capture")
             
             logger.info(f"📤 Sending prompt to {self.backend}...")
             logger.info(f"   Model: {self.model}")
@@ -1205,6 +1223,7 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             # Track duration
             start_time = time.time()
             vlm_call_start = time.time()
+            claimed_step = None
             try:
 
                 if screenshot_b64:
@@ -1231,6 +1250,11 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                     if self._is_black_frame(image):
                         logger.info("⏳ Black frame detected (likely a transition), waiting for next frame...")
                         return True, "WAIT"
+
+                    claimed_step = self.runtime.claim_step(
+                        owner="orchestrator",
+                        interaction_name="Autonomous_CLI_Agent",
+                    )
 
                     def call_vlm_with_image():
                         return self.vlm.get_query(image, prompt, "Autonomous_CLI_Agent")
@@ -1262,6 +1286,11 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                         finally:
                             executor.shutdown(wait=False)
                 else:
+                    claimed_step = self.runtime.claim_step(
+                        owner="orchestrator",
+                        interaction_name="Autonomous_CLI_Agent",
+                    )
+
                     def call_vlm_with_text():
                         return self.vlm.get_text_query(prompt, "Autonomous_CLI_Agent")
 
@@ -1365,6 +1394,8 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 traceback.print_exc()
                 return False, f"VLM API error ({error_type}) after {vlm_duration:.1f}s: {error_msg[:200]}"
 
+            active_step = claimed_step if claimed_step is not None else preview_step
+
             # Process response - handle function calls
             tool_call_count = 0
 
@@ -1432,37 +1463,64 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                         action_details = f"navigate_to({target_x}, {target_y}, variance={variance}) → Ended at ({final_pos[0]}, {final_pos[1]})"
                     else:
                         action_details = f"navigate_to({target_x}, {target_y}, variance={variance})"
-                elif last_tool_call['name'] == "gym_puzzle_agent":
-                    # Extract gym puzzle analysis to include in history
+                elif last_tool_call['name'] == "subagent_gym_puzzle":
                     try:
                         result_data = json_module.loads(last_tool_call['result'])
                         if result_data.get("success"):
                             gym = result_data.get("gym", "Unknown")
                             analysis = result_data.get("analysis", "")
-                            action_details = f"gym_puzzle_agent({gym})\nAnalysis: {analysis}"
+                            action_details = f"subagent_gym_puzzle({gym})\nAnalysis: {analysis}"
                         else:
-                            action_details = f"gym_puzzle_agent failed: {result_data.get('error', 'Unknown error')}"
+                            action_details = f"subagent_gym_puzzle failed: {result_data.get('error', 'Unknown error')}"
                     except Exception as e:
-                        logger.debug(f"Could not extract gym_puzzle_agent details: {e}")
-                        action_details = "Executed gym_puzzle_agent"
+                        logger.debug(f"Could not extract subagent_gym_puzzle details: {e}")
+                        action_details = "Executed subagent_gym_puzzle"
                 else:
                     action_details = f"Executed {last_tool_call['name']}"
+
+                # Capture explicit start/end coordinates for short-term memory.
+                start_coords = pre_state.get("player_coords") if pre_state else None
+                end_coords = None
+                last_tool_name = last_tool_call.get("name")
+                if last_tool_name in {"press_buttons", "navigate_to"}:
+                    self._wait_for_actions_complete()
+                try:
+                    final_state_result = self._execute_function_call_by_name("get_game_state", {})
+                    final_state_data = json_module.loads(final_state_result)
+                    if final_state_data.get("success"):
+                        player_pos = final_state_data.get("player_position", {})
+                        if player_pos and "x" in player_pos and "y" in player_pos:
+                            end_coords = (player_pos.get("x"), player_pos.get("y"))
+                except Exception as e:
+                    logger.debug(f"Could not capture post-step coordinates for history: {e}")
 
                 # Store function result for next step's context
                 if tool_calls_made:
                     last_call = tool_calls_made[-1]
-                    self._store_function_result_for_context(last_call['name'], last_call['result'])
+                    self.runtime.publish_function_result(
+                        step_number=active_step,
+                        function_name=last_call['name'],
+                        result_json=last_call['result'],
+                    )
 
                 if tool_calls_made:
-                    self.llm_logger.add_step_tool_calls(self.step_count, tool_calls_made)
-                self._add_to_history(prompt, full_response, tool_calls_made, action_details=action_details)
+                    self.llm_logger.add_step_tool_calls(active_step, tool_calls_made)
+                self.runtime.publish_history(
+                    step_number=active_step,
+                    prompt=prompt,
+                    response=full_response,
+                    tool_calls=tool_calls_made,
+                    action_details=action_details,
+                    start_coords=start_coords,
+                    end_coords=end_coords,
+                )
                 
                 # Log trajectory for this step
                 if run_manager and pre_state:
-                    logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: Attempting to log trajectory (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
+                    logger.debug(f"🔍 [DEBUG] Step {active_step}: Attempting to log trajectory (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
                     self._log_trajectory_for_step(
                         run_manager=run_manager,
-                        step_num=self.step_count + 1,  # Use step_count + 1 since we increment after
+                        step_num=active_step,
                         pre_state=pre_state,
                         prompt=prompt,
                         reasoning=tool_reasoning or full_response,
@@ -1470,15 +1528,15 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                         response=full_response
                     )
                 else:
-                    logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
+                    logger.warning(f"🔍 [DEBUG] Step {active_step}: Skipping trajectory logging (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
 
                 # Check if prompt optimization should run
                 if self.optimization_enabled and self.prompt_optimizer:
-                    if self.prompt_optimizer.should_optimize(self.step_count + 1, self.optimization_frequency):
-                        logger.info(f"🔄 Triggering prompt optimization at step {self.step_count + 1}")
+                    if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
+                        logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
                         try:
                             new_base_prompt = self.prompt_optimizer.optimize_prompt(
-                                current_step=self.step_count + 1,
+                                current_step=active_step,
                                 num_trajectory_steps=self.optimization_frequency
                             )
                             logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
@@ -1498,14 +1556,19 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
                 logger.info(f"✅ Step completed in {duration:.2f}s")
 
-                self._add_to_history(prompt, text_content, tool_calls=[])
+                self.runtime.publish_history(
+                    step_number=active_step,
+                    prompt=prompt,
+                    response=text_content,
+                    tool_calls=[],
+                )
                 
                 # Log trajectory for this step (text response, no tool calls)
                 if run_manager and pre_state:
-                    logger.debug(f"🔍 [DEBUG] Step {self.step_count + 1}: Attempting to log trajectory (text response)")
+                    logger.debug(f"🔍 [DEBUG] Step {active_step}: Attempting to log trajectory (text response)")
                     self._log_trajectory_for_step(
                         run_manager=run_manager,
-                        step_num=self.step_count + 1,  # Use step_count + 1 since we increment after
+                        step_num=active_step,
                         pre_state=pre_state,
                         prompt=prompt,
                         reasoning=text_content,
@@ -1513,15 +1576,15 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                         response=text_content
                     )
                 else:
-                    logger.warning(f"🔍 [DEBUG] Step {self.step_count + 1}: Skipping trajectory logging (text response, run_manager={run_manager is not None}, pre_state={pre_state is not None})")
+                    logger.warning(f"🔍 [DEBUG] Step {active_step}: Skipping trajectory logging (text response, run_manager={run_manager is not None}, pre_state={pre_state is not None})")
 
                 # Check if prompt optimization should run
                 if self.optimization_enabled and self.prompt_optimizer:
-                    if self.prompt_optimizer.should_optimize(self.step_count + 1, self.optimization_frequency):
-                        logger.info(f"🔄 Triggering prompt optimization at step {self.step_count + 1}")
+                    if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
+                        logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
                         try:
                             new_base_prompt = self.prompt_optimizer.optimize_prompt(
-                                current_step=self.step_count + 1,
+                                current_step=active_step,
                                 num_trajectory_steps=self.optimization_frequency
                             )
                             logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
@@ -1605,7 +1668,14 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 
         logger.warning(f"⚠️ Timeout waiting for actions to complete after {timeout}s")
 
-    def _log_thinking(self, prompt: str, response: str, duration: float = None, tool_calls: list = None) -> None:
+    def _log_thinking(
+        self,
+        prompt: str,
+        response: str,
+        duration: float = None,
+        tool_calls: list = None,
+        step_number: Optional[int] = None,
+    ) -> None:
         """Log interaction to LLM logger with full tool call history."""
         try:
             self.llm_logger.log_interaction(
@@ -1615,7 +1685,7 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                 duration=duration,
                 metadata={"tool_calls": tool_calls or []},
                 model_info={"model": self.model},
-                step_number=self.step_count  # Pass step number for per-step tracking
+                step_number=step_number if step_number is not None else self.step_count,
             )
             logger.debug("✅ Logged to LLM logger")
         except Exception as e:
@@ -2383,14 +2453,20 @@ Step {step_count}"""
         recent_entries = self.conversation_history[-10:]
 
         history_lines = []
-        prev_coords = None
         for entry in recent_entries:
             step = entry.get("step", "?")
             llm_response = entry.get("llm_response", "").strip()
+            start_coords = entry.get("start_coords")
+            end_coords = entry.get("end_coords")
             coords = entry.get("player_coords", None)
 
-            start_str = f"({prev_coords[0]},{prev_coords[1]})" if prev_coords else "(?)"
-            end_str = f"({coords[0]},{coords[1]})" if coords else "(?)"
+            if start_coords is None and coords is not None:
+                start_coords = coords
+            if end_coords is None:
+                end_coords = coords
+
+            start_str = f"({start_coords[0]},{start_coords[1]})" if start_coords else "(?)"
+            end_str = f"({end_coords[0]},{end_coords[1]})" if end_coords else "(?)"
 
             history_lines.append(f"[{step}] start={start_str} end={end_str}")
             if llm_response:
@@ -2411,8 +2487,6 @@ Step {step_count}"""
                         except TypeError:
                             history_lines.append(f"      result: {str(result)}")
             history_lines.append("")
-            if coords:
-                prev_coords = coords
 
         return "\n".join(history_lines).strip()
 
@@ -2456,8 +2530,10 @@ Step {step_count}"""
                     logger.info(f"\n✅ Reached max steps ({self.max_steps})")
                     break
 
+                next_step = self.runtime.peek_next_step()
+
                 logger.info(f"\n{'='*70}")
-                logger.info(f"🤖 Step {self.step_count + 1}")
+                logger.info(f"🤖 Step {next_step}")
                 context_size = self._calculate_context_size()
                 logger.info(f"📚 History: {len(self.conversation_history)} turns ({context_size:,} chars)")
                 logger.info(f"{'='*70}")
@@ -2474,21 +2550,19 @@ Step {step_count}"""
 
                 # Build prompt (conditional based on optimization mode)
                 if self.optimization_enabled:
-                    prompt = self._build_optimized_prompt(game_state_result, self.step_count)
+                    prompt = self._build_optimized_prompt(game_state_result, next_step)
                 else:
-                    prompt = self._build_structured_prompt(game_state_result, self.step_count)
+                    prompt = self._build_structured_prompt(game_state_result, next_step)
 
                 # Run step
-                success, output = self.run_step(prompt, screenshot_b64=screenshot_b64)
+                success, output = self.run_step(prompt, screenshot_b64=screenshot_b64, step_number=next_step)
 
                 if not success:
                     logger.warning("⚠️ Step failed, waiting 5 seconds before retry...")
                     time.sleep(5)
                     continue
 
-                # Increment step count
-                self.step_count += 1
-                logger.info(f"✅ Step {self.step_count} completed")
+                logger.info(f"✅ Global step counter now {self.step_count}")
 
                 # Update server metrics
                 try:
@@ -2535,7 +2609,14 @@ Step {step_count}"""
         logger.info(self._format_history_for_display())
         return 0
 
-    def _handle_vlm_function_calls(self, response, tool_calls_made, tool_call_count, max_tool_calls):
+    def _handle_vlm_function_calls(
+        self,
+        response,
+        tool_calls_made,
+        tool_call_count,
+        max_tool_calls,
+        allowed_tool_names: Optional[set[str]] = None,
+    ):
         """Handle function calls from VLM backend
 
         Function results are stored and will be included in the next step's context,
@@ -2626,7 +2707,10 @@ Step {step_count}"""
 
                 # Execute the function
                 try:
-                    function_result = self._execute_function_call(function_call)
+                    function_result = self._execute_function_call(
+                        function_call,
+                        allowed_tool_names=allowed_tool_names,
+                    )
                     result_str = str(function_result)
                     logger.info(f"📥 Function result: {result_str[:200]}...")
                 except Exception as e:
@@ -2675,7 +2759,17 @@ Step {step_count}"""
 
         try:
             if hasattr(response, 'text'):
-                return response.text.strip()
+                text = response.text.strip()
+                if text:
+                    return text
+            if hasattr(response, "candidates") and response.candidates:
+                candidate = response.candidates[0]
+                content = getattr(candidate, "content", None)
+                parts = getattr(content, "parts", None) if content else None
+                if parts:
+                    text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
+                    if text_parts:
+                        return "\n".join(text_parts).strip()
             return ""
         except:
             return ""
@@ -2707,8 +2801,26 @@ def main():
     parser.add_argument(
         "--system-instructions",
         type=str,
-        default=POKEAGENT_PROMPT_PATH,
-        help="System instructions file"
+        default=None,
+        help=(
+            "Repo-relative path to system instructions markdown. "
+            "Omit for automatic selection: POKEAGENT.md by default, or system_prompt.md when "
+            "--enable-prompt-optimization is set (fails at startup if run_data_manager is missing)."
+        ),
+    )
+    parser.add_argument(
+        "--enable-prompt-optimization",
+        action="store_true",
+        help=(
+            "Lean system prompt + optimizable base prompt. Requires initialized run_data_manager "
+            "(e.g. via run.py); otherwise construction raises RuntimeError."
+        ),
+    )
+    parser.add_argument(
+        "--optimization-frequency",
+        type=int,
+        default=10,
+        help="Run prompt optimization every N steps when optimization is enabled.",
     )
     parser.add_argument(
         "--backend",
@@ -2719,13 +2831,18 @@ def main():
 
     args = parser.parse_args()
 
-    agent = PokeAgent(
-        server_url=args.server_url,
-        model=args.model,
-        backend=args.backend,
-        max_steps=args.max_steps,
-        system_instructions_file=args.system_instructions
-    )
+    agent_kwargs = {
+        "server_url": args.server_url,
+        "model": args.model,
+        "backend": args.backend,
+        "max_steps": args.max_steps,
+        "enable_prompt_optimization": args.enable_prompt_optimization,
+        "optimization_frequency": args.optimization_frequency,
+    }
+    if args.system_instructions is not None:
+        agent_kwargs["system_instructions_file"] = args.system_instructions
+
+    agent = PokeAgent(**agent_kwargs)
 
     return agent.run()
 
