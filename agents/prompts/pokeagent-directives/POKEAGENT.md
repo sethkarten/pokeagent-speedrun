@@ -19,9 +19,63 @@ When objectives you reach the end of a sequence:
 
 Use `battling` only for team prep and `dynamics` for short-term tasks needed to make progress when you are stuck on the primary story objective.
 
-### Reflection Tool (Optional)
+### Subagents (`subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, `subagent_summarize`, `subagent_battler`)
 
-`reflect()` is **optional** and should only be used when stuck or looping and no progress is being made. Using this tool means you've clearly hit a roadblock and you need another party to independently review and critique your actions.
+These are **local** tools: they do **not** call the game server for overworld actions directly. One-step subagents run dedicated **tool-less** VLM passes (names like `Subagent_Reflect` / `Subagent_Verify` / `Subagent_Summarize` in logs) with:
+
+- **Current screenshot** (what is on screen *now*)
+- **Current game state text** (from the usual `get_game_state`-style payload)
+- **Progress + knowledge summaries** (via MCP in one batch)
+- **Trajectory window**: last **`last_n_steps`** entries from the trajectory history (default **10** for reflect/verify, **25** for summarize, maximum **50**). This is *not* arbitrary history slices—only a tail window.
+
+`subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, and `subagent_summarize` do **not** press buttons or pathfind; you still end the orchestrator step with `press_buttons` or `navigate_to`. `subagent_battler` is the exception: it is a delegated loop that can act during battle, but it returns only a compacted battle summary to the orchestrator.
+
+#### `subagent_reflect` — strategic second opinion
+
+**When:** Stuck, looping, objectives feel wrong vs. what you see, or macro strategy is unclear.
+
+**Args:**
+
+- `situation` (required): What you tried, what failed, why you are worried.
+- `last_n_steps` (optional): How many recent trajectory lines to include (capped at 50).
+
+**How to use the answer:** Read **ASSESSMENT** / **ISSUES** / **RECOMMENDATIONS** / **SHOULD_REALIGN**. If it says realign, use `get_walkthrough`, `get_knowledge_summary`, and `create_direct_objectives` rather than forcing the same plan.
+
+#### `subagent_verify` — objective completion verdict
+
+**When:** You need to gain alignment on whether the *current* objective satisfied to see if it valid to call `complete_direct_objective` and increment the objective sequence.
+
+**Args:**
+- `reasoning` (required): Your evidence and hypothesis (e.g. “TV segment finished, overworld, no text box”).
+- `category` (optional): In **categorized** mode, which track to judge — `story` (default), `battling`, or `dynamics`.
+- `last_n_steps` (optional): Same trajectory tail as `subagent_reflect`.
+
+**Returns (JSON):** `is_complete` (boolean), `confidence` (`low` / `medium` / `high`), `evidence_for`, `evidence_against`, `recommended_next_action`, `reasoning_summary`. **The tool does not complete objectives** — if `is_complete` is true and you agree, **you** call `complete_direct_objective` with solid reasoning.
+
+**How the orchestrator sees it:** Results from the **previous** step (including `subagent_verify`) are injected at the top of your next prompt under **📋 RESULTS FROM PREVIOUS STEP:** with the full JSON string. **Read that block** before deciding the next action; cite the verifier’s `is_complete` and evidence when you call `complete_direct_objective`.
+
+#### `subagent_gym_puzzle` — gym puzzle helper
+
+**When:** Inside a gym with floor puzzles / ice / warps. Pass `gym_name` from game state (e.g. `LAVARIDGE_TOWN_GYM_1F`).
+
+#### `subagent_summarize` — unbiased trajectory handoff
+
+**When:** You want a compact but detailed recap of the last chunk of play, or you need a reusable handoff for future reasoning.
+
+**Args:**
+- `reasoning` (optional): What to emphasize in the summary.
+- `last_n_steps` (optional): Tail-window size, default 25, capped at 50.
+
+**Usage note:** `subagent_reflect` and `subagent_verify` look at the raw trajectory window directly; they do **not** defer to `subagent_summarize`.
+
+#### `subagent_battler` — delegated battle controller
+
+**When:** A battle is active and you want the main orchestrator to hand off battle resolution without polluting short-term memory with every inner turn.
+
+**Behavior:**
+- It uses the same main trajectory stream, so battle turns remain available for later optimization.
+- It does **not** inject every inner battle turn back into your orchestrator-visible memory.
+- It returns one final compacted battle summary under **📋 RESULTS FROM PREVIOUS STEP** after control returns to the overworld. This also propagates for 10 steps within short term memory.
 
 ### Unreachable Warps
 If the game state marks a warp as "⚠️ UNREACHABLE", do **not** pathfind to it. Look for reachable warps or alternate routes.
@@ -70,6 +124,7 @@ DIRECT_OBJECTIVE: {
 - You have reached the target location (for navigation objectives)
 - You have completed the required interaction (for interaction objectives)
 - You have won the battle (for battle objectives)
+- For ambiguous story beats, consider calling **`subagent_verify`** first; if the next step’s **RESULTS FROM PREVIOUS STEP** shows `is_complete: true` with strong evidence, then call `complete_direct_objective` with reasoning that references that verdict
 
 ### Completing Objectives (By Category)
 
@@ -224,7 +279,11 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 ## Tool Usage (Concise)
 
 - `press_buttons(buttons, reasoning)` and `navigate_to(x, y, variance, reasoning)` are the primary control tools.
-- `gym_puzzle_agent(gym_name)` — When you are inside a gym puzzle, pass the current gym / map id from game state (e.g. `LAVARIDGE_TOWN_GYM_1F`) for focused puzzle guidance. It does not replace your final control action: still end the step with `navigate_to` or `press_buttons` as usual.
+- `subagent_reflect(situation, last_n_steps?)` — Local critique using trajectory tail + current frame; use when stuck or misaligned.
+- `subagent_verify(reasoning, category?, last_n_steps?)` — Local **completion verdict** for the current objective on the chosen category; read **RESULTS FROM PREVIOUS STEP** next turn, then optionally `complete_direct_objective`.
+- `subagent_gym_puzzle(gym_name?)` — Lightweight puzzle guidance using current state and the static gym knowledge base.
+- `subagent_summarize(reasoning?, last_n_steps?)` — Detailed unbiased summary over the latest trajectory tail.
+- `subagent_battler(reasoning?)` — Delegated battle loop with restricted tools; returns one compacted battle summary instead of every inner turn.
 - `get_progress_summary()` → `get_walkthrough(part)` → `create_direct_objectives(category="story", ...)` is the standard creation flow.
 - Always use `complete_direct_objective(category=..., reasoning=...)` for completion.
 

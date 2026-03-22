@@ -21,11 +21,30 @@ The harness refreshes game context each step; the tools below are what you may *
 
 ### Subagent / analysis (not MCP; executed inside the agent)
 
-**gym_puzzle_agent**  
-- **Required:** `gym_name` (string) — gym / map identifier from current game state (e.g. `LAVARIDGE_TOWN_GYM_1F`, `MOSSDEEP_CITY_GYM`)
+These tools run as **local subagents** inside PokeAgent. One-step subagents (`subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, `subagent_summarize`) each consume a **separate VLM call / global step** and inspect your **current screenshot** plus the **last N logged trajectories** (default 10 for reflect/verify, cap 50).
 
-**reflect**  
-- **Required:** `situation` (string)
+**`subagent_reflect`**  
+- **Required:** `situation` (string) — what feels wrong, what you tried, why you are unsure  
+- **Optional:** `last_n_steps` (integer) — trajectory tail size (default 10, capped at 50)
+
+**`subagent_verify`**  
+- **Required:** `reasoning` (string) — why you want a verdict and what evidence you believe shows completion  
+- **Optional:** `category` — `story` | `battling` | `dynamics` (categorized mode only; defaults to `story` if omitted)  
+- **Optional:** `last_n_steps` (integer) — same cap as `subagent_reflect`  
+- **Returns:** JSON with `is_complete`, `confidence`, `evidence_for`, `evidence_against`, `recommended_next_action`, `reasoning_summary`. It does **not** mark objectives complete.
+
+**`subagent_gym_puzzle`**  
+- **Optional:** `gym_name` (string) — gym / map identifier from current game state (e.g. `LAVARIDGE_TOWN_GYM_1F`, `MOSSDEEP_CITY_GYM`)
+
+**`subagent_summarize`**  
+- **Optional:** `reasoning` (string) — what to emphasize in the handoff  
+- **Optional:** `last_n_steps` (integer) — default 25, capped at 50
+
+**`subagent_battler`**  
+- **Optional:** `reasoning` (string) — what the delegated battler should prioritize  
+- Loops only while battle is active, consumes **real global steps** for every inner VLM call, logs battle turns into the main trajectory stream, and returns only a **single compacted battle summary** to the orchestrator.
+
+**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON or a compacted `subagent_battler` summary). Use that verdict/summary when deciding whether to call `complete_direct_objective`.
 
 ### Knowledge
 
@@ -59,16 +78,3 @@ The harness refreshes game context each step; the tools below are what you may *
 **get_progress_summary**  
 - *(no parameters)*
 
----
-
-## Hard constraints (non-negotiable)
-
-1. **Terminal control action** — Every step that uses tools **must** end with exactly one of: **`navigate_to`** or **`press_buttons`**. Other tools may be called earlier in the same step; the **last** tool call must be `navigate_to` or `press_buttons`.
-
-2. **Buttons are physical only** — Never pass Pokémon move names (e.g. `TACKLE`) as `buttons` values. Use `A` / `B` / directions to operate menus and battles.
-
-3. **Coordinates** — Never use negative `x` or `y` in `navigate_to`. For warps, path to the warp tile first, then use `press_buttons` to step through if needed.
-
-4. **Path variance** — `navigate_to` `variance`: prefer `none` for normal routing. If repeatedly blocked at the same tile, escalate `low` → `medium` → `high` → `extreme`; after success, move back toward `none` / `low`.
-
-5. **Categorized objectives** — When game state shows categorized objectives, `complete_direct_objective` **must** include the correct `category` for the objective you complete.
