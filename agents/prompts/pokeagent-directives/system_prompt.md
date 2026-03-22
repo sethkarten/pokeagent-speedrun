@@ -21,22 +21,30 @@ The harness refreshes game context each step; the tools below are what you may *
 
 ### Subagent / analysis (not MCP; executed inside the agent)
 
-These tools run a **separate tool-less VLM call** (logged as e.g. `Subagent_Reflect`, `Subagent_Verify` in metrics). They use your **current screenshot** plus a **text summary of the last N logged trajectories** (default 10, max 25). They do **not** advance the game.
+These tools run as **local subagents** inside PokeAgent. One-step subagents (`subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, `subagent_summarize`) each consume a **separate VLM call / global step** and inspect your **current screenshot** plus the **last N logged trajectories** (default 10 for reflect/verify, cap 50).
 
-**gym_puzzle_agent**  
-- **Required:** `gym_name` (string) — gym / map identifier from current game state (e.g. `LAVARIDGE_TOWN_GYM_1F`, `MOSSDEEP_CITY_GYM`)
-
-**reflect**  
+**`subagent_reflect`**  
 - **Required:** `situation` (string) — what feels wrong, what you tried, why you are unsure  
-- **Optional:** `last_n_steps` (integer) — trajectory window size (default 10, capped at 25)
+- **Optional:** `last_n_steps` (integer) — trajectory tail size (default 10, capped at 50)
 
-**verify**  
+**`subagent_verify`**  
 - **Required:** `reasoning` (string) — why you want a verdict and what evidence you believe shows completion  
 - **Optional:** `category` — `story` | `battling` | `dynamics` (categorized mode only; defaults to `story` if omitted)  
-- **Optional:** `last_n_steps` (integer) — same cap as `reflect`  
-- **Returns:** JSON with `is_complete`, `confidence`, `evidence_for`, `evidence_against`, `recommended_next_action`, `reasoning_summary`. **Does not** mark objectives complete — you still call `complete_direct_objective` when appropriate.
+- **Optional:** `last_n_steps` (integer) — same cap as `subagent_reflect`  
+- **Returns:** JSON with `is_complete`, `confidence`, `evidence_for`, `evidence_against`, `recommended_next_action`, `reasoning_summary`. It does **not** mark objectives complete.
 
-**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `verify` JSON). Use that verdict when deciding whether to call `complete_direct_objective`.
+**`subagent_gym_puzzle`**  
+- **Optional:** `gym_name` (string) — gym / map identifier from current game state (e.g. `LAVARIDGE_TOWN_GYM_1F`, `MOSSDEEP_CITY_GYM`)
+
+**`subagent_summarize`**  
+- **Optional:** `reasoning` (string) — what to emphasize in the handoff  
+- **Optional:** `last_n_steps` (integer) — default 25, capped at 50
+
+**`subagent_battler`**  
+- **Optional:** `reasoning` (string) — what the delegated battler should prioritize  
+- Loops only while battle is active, consumes **real global steps** for every inner VLM call, logs battle turns into the main trajectory stream, and returns only a **single compacted battle summary** to the orchestrator.
+
+**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON or a compacted `subagent_battler` summary). Use that verdict/summary when deciding whether to call `complete_direct_objective`.
 
 ### Knowledge
 

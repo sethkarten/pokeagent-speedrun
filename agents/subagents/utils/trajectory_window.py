@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-MAX_TRAJECTORY_WINDOW = 25
+MAX_TRAJECTORY_WINDOW = 50
 DEFAULT_TRAJECTORY_WINDOW = 10
 
 
