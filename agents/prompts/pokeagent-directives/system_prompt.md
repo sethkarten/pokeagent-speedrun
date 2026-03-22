@@ -44,7 +44,12 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 - **Optional:** `reasoning` (string) — what the delegated battler should prioritize  
 - Loops only while battle is active, consumes **real global steps** for every inner VLM call, logs battle turns into the main trajectory stream, and returns only a **single compacted battle summary** to the orchestrator.
 
-**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON or a compacted `subagent_battler` summary). Use that verdict/summary when deciding whether to call `complete_direct_objective`.
+**`subagent_plan_objectives`**  
+- **Required:** `reason` (string) — why planning is needed (stuck, sequence exhausted, replanning required)  
+- **Optional:** `last_n_steps` (integer) — trajectory window for the initial summary (default 25, capped at 50)  
+- Loops with its own short-term memory (up to 25 turns). Has access to research tools (`get_walkthrough`, `search_knowledge`, etc.), other subagents, and a planner-exclusive `replan_objectives` tool. Returns when `return_to_orchestrator` is set on a successful replan.
+
+**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON, a compacted `subagent_battler` summary, or `subagent_plan_objectives` changes). Use that verdict/summary when deciding whether to call `complete_direct_objective`.
 
 ### Knowledge
 
@@ -68,12 +73,6 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 - **Optional:** `source` (string; default bulbapedia)
 
 ### Objectives and progress
-
-**create_direct_objectives**  
-- **Required:** `objectives` (array of objects), `reasoning` (string)  
-- **Optional:** `category` — `dynamics` | `story` | `battling`  
-- **Per objective (required unless noted):** `id` (string), `description` (string), `action_type` (`navigate` | `interact` | `battle` | `wait`)  
-- **Per objective (optional):** `target_location`, `navigation_hint`, `completion_condition` (strings)
 
 **get_progress_summary**  
 - *(no parameters)*

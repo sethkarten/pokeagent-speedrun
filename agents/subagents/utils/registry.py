@@ -26,6 +26,20 @@ BATTLE_ALLOWED_TOOL_NAMES = (
     "lookup_pokemon_info",
 )
 
+PLANNER_ALLOWED_TOOL_NAMES = (
+    "get_progress_summary",
+    "get_walkthrough",
+    "search_knowledge",
+    "get_knowledge_summary",
+    "add_knowledge",
+    "lookup_pokemon_info",
+    "subagent_summarize",
+    "subagent_verify",
+    "subagent_reflect",
+    "subagent_gym_puzzle",
+    "replan_objectives",
+)
+
 
 LOCAL_SUBAGENT_SPECS = (
     LocalSubagentSpec(
@@ -188,6 +202,40 @@ LOCAL_SUBAGENT_SPECS = (
             "required": [],
         },
         allowed_tool_names=BATTLE_ALLOWED_TOOL_NAMES,
+    ),
+    LocalSubagentSpec(
+        tool_name="subagent_plan_objectives",
+        handler_type="looping",
+        interaction_name="Subagent_Plan_Objectives",
+        handler_method="_execute_subagent_plan_objectives",
+        description=(
+            "Delegate objective planning/replanning to a specialized subagent. "
+            "This agent reviews the full objective sequence, uses research tools "
+            "and other subagents, then modifies objectives via replan_objectives. "
+            "Call this when you need new objectives, when you are stuck and believe "
+            "replanning is needed, or when the current objective sequence is exhausted."
+        ),
+        parameters={
+            "type_": "OBJECT",
+            "properties": {
+                "reason": {
+                    "type_": "STRING",
+                    "description": (
+                        "Why planning is needed. Include context about what is stuck, "
+                        "what just changed, or why new objectives are needed."
+                    ),
+                },
+                "last_n_steps": {
+                    "type_": "INTEGER",
+                    "description": (
+                        "Optional. Number of recent trajectory steps for the initial "
+                        "summary. Defaults to 25 and is capped at 50."
+                    ),
+                },
+            },
+            "required": ["reason"],
+        },
+        allowed_tool_names=PLANNER_ALLOWED_TOOL_NAMES,
     ),
 )
 

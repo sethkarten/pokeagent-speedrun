@@ -6,6 +6,7 @@ from .registry import (
     BATTLE_ALLOWED_TOOL_NAMES,
     LOCAL_SUBAGENT_SPECS,
     LocalSubagentSpec,
+    PLANNER_ALLOWED_TOOL_NAMES,
     build_local_subagent_tool_declarations,
     get_local_subagent_spec,
     is_local_subagent_tool,
@@ -34,5 +35,6 @@ __all__ = [
     "LOCAL_SUBAGENT_SPECS",
     "LocalSubagentSpec",
     "MAX_TRAJECTORY_WINDOW",
+    "PLANNER_ALLOWED_TOOL_NAMES",
     "PokeAgentRuntime",
 ]
