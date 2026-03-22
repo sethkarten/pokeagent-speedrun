@@ -34,7 +34,13 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 # Local imports
 from utils.metric_tracking.server_metrics import update_server_metrics
 from utils.data_persistence.llm_logger import get_llm_logger
+from utils.data_persistence.run_data_manager import get_run_data_manager
 from utils.agent_infrastructure.vlm_backends import VLM
+from agents.subagents import (
+    build_reflect_prompt,
+    clamp_trajectory_window,
+    load_subagent_context,
+)
 from agents.prompts.paths import POKEAGENT_PROMPT_PATH, resolve_repo_path
 
 # Configure logging
@@ -93,7 +99,6 @@ class MCPToolAdapter:
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
                 # "get_progress_summary": "/mcp/get_progress_summary",
-                "reflect": "/mcp/reflect",
                 # SLAM tools
                 "save_map": "/mcp/save_map",
                 "load_map": "/mcp/load_map",
@@ -464,128 +469,86 @@ class VisionOnlyAgent:
     def _execute_reflect(self, arguments: dict) -> str:
         """Execute reflection using agent's own VLM to analyze situation."""
         try:
-            # Get context from server
-            context_result = self.mcp_adapter.call_tool("reflect", arguments)
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps"))
+            context = load_subagent_context(
+                self.mcp_adapter,
+                get_run_data_manager(),
+                last_n_steps=last_n_steps,
+                include_current_image=True,
+            )
 
-            if not context_result.get("success"):
-                return json.dumps({"success": False, "error": context_result.get("error", "Failed to get context")})
-
-            context = context_result.get("context", {})
-
-            # Build reflection prompt
-            situation = context.get("situation", "")
             current_state = context.get("current_state", {})
-            current_obj = context.get("current_objective", {})
-            progress = context.get("progress", {})
-            history = context.get("recent_history", [])
-
-            # Format history for readability
-            history_text = []
-            for h in history:
-                history_text.append(f"Step {h.get('step')}: [{h.get('action')}] {h.get('action_details')}")
-                if h.get('thinking'):
-                    history_text.append(f"  Thinking: {h.get('thinking')}")
-
-            history_str = "\n".join(history_text)
-
-            # Format objective
-            obj_text = "None"
-            if current_obj.get("objective"):
-                obj = current_obj["objective"]
-                if isinstance(obj, dict):
-                    obj_text = obj.get("description", "Unknown")
-                    if obj.get("navigation_hint"):
-                        obj_text += f"\nHint: {obj['navigation_hint']}"
-                else:
-                    obj_text = str(obj)
-
-            # Vision-only agent doesn't have porymap, but may have SLAM maps
-            slam_section = ""
             if self.allow_slam:
                 try:
-                    location = current_state.get('location', '')
+                    location = current_state.get("location", "")
                     if location and location != "Unknown":
-                        from pathlib import Path
                         maps_dir = Path(".pokeagent_cache/maps")
                         normalized_location = location.title()
-                        safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (' ', '_', '-')).strip()
-                        safe_name = safe_name.replace(' ', '_')
+                        safe_name = "".join(c for c in normalized_location if c.isalnum() or c in (" ", "_", "-")).strip()
+                        safe_name = safe_name.replace(" ", "_")
                         map_file = maps_dir / f"{safe_name}.txt"
-
                         if map_file.exists():
                             slam_map = map_file.read_text()
-                            slam_section = f"\n\nSLAM MAP (Agent's mental map):\n{slam_map}\n"
+                            current_state["state_text"] = f"{current_state.get('state_text', '')}\n\nSLAM MAP:\n{slam_map}"
                 except Exception as e:
                     logger.warning(f"Could not load SLAM map for reflection: {e}")
 
-            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald (VISION-ONLY mode). Provide direct, actionable guidance.
-
-AGENT'S CONCERN:
-{situation}
-
-CURRENT GAME STATE (Vision-Only):
-Location: {current_state.get('location')}
-{current_state.get('state_text', '')}{slam_section}
-
-CURRENT OBJECTIVE:
-Sequence: {current_obj.get('sequence')}
-Objective: {obj_text}
-Status: {'COMPLETE - needs new objectives' if current_obj.get('is_complete') else 'Active'}
-
-PROGRESS:
-- Milestones: {progress.get('milestones_completed', 0)}
-- Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence
-
-RECENT ACTIONS (last 10 steps):
-{history_str}
-
-ANALYZE (vision-only considerations):
-1. Is the agent stuck or repeating actions?
-2. Does the objective match what's visible in the game?
-3. Are there signs of confusion?
-4. Is the agent making progress toward the objective?
-5. What should the agent do next?
-
-PROVIDE (in this exact format):
-
-**ASSESSMENT**:
-[2-3 sentences analyzing what's happening]
-
-**ISSUES**:
-[List specific problems: stuck, wrong objective, confusion, etc.]
-
-**RECOMMENDATIONS**:
-[Numbered list of specific actions to take]
-
-**SHOULD_REALIGN**: [YES or NO - whether to create new objectives]
-
-Be direct and actionable. Focus on what the agent can see and do."""
+            reflection_prompt = build_reflect_prompt(
+                situation=arguments.get("situation", "Agent requested reflection"),
+                context=context,
+                last_n_steps=last_n_steps,
+            )
 
             logger.info("🤔 Agent performing self-reflection using VLM...")
+            reflection_text = self._run_local_subagent(
+                prompt=reflection_prompt,
+                interaction_name="Subagent_Reflect",
+                current_image=context.get("current_image"),
+            )
 
-            # Use agent's own VLM for reflection
-            reflection_response = self.vlm.get_text_query(reflection_prompt, "Self_Reflection")
+            logger.info(f"✅ Self-reflection complete ({len(reflection_text)} chars)")
 
-            logger.info(f"✅ Self-reflection complete ({len(reflection_response)} chars)")
-
-            return json.dumps({
-                "success": True,
-                "reflection": reflection_response,
-                "context_analyzed": {
-                    "steps_reviewed": len(history),
-                    "location": current_state.get('location'),
-                    "objective_status": current_obj.get('status')
-                }
-            }, indent=2)
+            return json.dumps(
+                {
+                    "success": True,
+                    "reflection": reflection_text,
+                    "context_analyzed": {
+                        "steps_reviewed": len(context.get("trajectory_window", [])),
+                        "location": current_state.get("location"),
+                        "objective_status": context.get("objective_state", {}).get("status"),
+                    },
+                },
+                indent=2,
+            )
 
         except Exception as e:
             logger.error(f"Error in reflect execution: {e}")
             import traceback
             traceback.print_exc()
-            return json.dumps({
-                "success": False,
-                "error": f"Reflection failed: {str(e)}"
-            })
+            return json.dumps({"success": False, "error": f"Reflection failed: {str(e)}"})
+
+    def _get_local_subagent_vlm(self):
+        """Lazily create a tool-less VLM for one-step subagents."""
+        if not hasattr(self, "_local_subagent_vlm") or self._local_subagent_vlm is None:
+            self._local_subagent_vlm = VLM(
+                model_name=self.model,
+                backend=self.backend,
+                tools=None,
+            )
+        return self._local_subagent_vlm
+
+    def _run_local_subagent(self, *, prompt: str, interaction_name: str, current_image=None) -> str:
+        """Run a one-step subagent with tools disabled."""
+        os.environ["LLM_STEP_NUMBER"] = str(self.step_count)
+        subagent_vlm = self._get_local_subagent_vlm()
+        if current_image is not None:
+            response = subagent_vlm.get_query(current_image, prompt, interaction_name)
+        else:
+            response = subagent_vlm.get_text_query(prompt, interaction_name)
+        text = self._extract_text_from_response(response)
+        if text:
+            return text
+        raise RuntimeError(f"{interaction_name} did not return text output")
 
     def _convert_protobuf_args(self, proto_args) -> dict:
         """Convert protobuf arguments to JSON-serializable Python types."""
@@ -1745,7 +1708,17 @@ Step {step_count}"""
 
         try:
             if hasattr(response, 'text'):
-                return response.text.strip()
+                text = response.text.strip()
+                if text:
+                    return text
+            if hasattr(response, "candidates") and response.candidates:
+                candidate = response.candidates[0]
+                content = getattr(candidate, "content", None)
+                parts = getattr(content, "parts", None) if content else None
+                if parts:
+                    text_parts = [part.text for part in parts if hasattr(part, "text") and part.text]
+                    if text_parts:
+                        return "\n".join(text_parts).strip()
             return ""
         except:
             return ""
