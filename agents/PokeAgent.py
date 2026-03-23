@@ -103,6 +103,9 @@ class MCPToolAdapter:
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
+                # Planner subagent (categorized mode) — must match server/app.py routes
+                "get_full_objective_sequence": "/mcp/get_full_objective_sequence",
+                "replan_objectives": "/mcp/replan_objectives",
             }
 
             endpoint = endpoint_map.get(tool_name)
