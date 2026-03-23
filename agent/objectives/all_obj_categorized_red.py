@@ -728,7 +728,7 @@ STORY_OBJECTIVES = [
         action_type="interact",
         category="story",
         target_location="Fuchsia City",
-        navigation_hint="The Safari Zone Warden lives in a house in the south of Fuchsia (near the Pokémon Center). Give him the Gold Teeth. He rewards you with HM04 Strength. Teach Strength to a strong Pokémon — required for pushing boulders in Victory Road.",
+        navigation_hint="The Safari Zone Warden lives in a house in the southeast of Fuchsia City, directly east of the Pokémon Center. Give him the Gold Teeth. He rewards you with HM04 Strength. Teach Strength to a strong Pokémon — required for pushing boulders in Victory Road.",
         completion_condition="hm04_strength_obtained",
         priority=1
     ),
