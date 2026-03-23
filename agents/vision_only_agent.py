@@ -98,6 +98,8 @@ class MCPToolAdapter:
                 "get_walkthrough": "/mcp/get_walkthrough",
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
+                "get_full_objective_sequence": "/mcp/get_full_objective_sequence",
+                "replan_objectives": "/mcp/replan_objectives",
                 # "get_progress_summary": "/mcp/get_progress_summary",
                 # SLAM tools
                 "save_map": "/mcp/save_map",
