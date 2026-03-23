@@ -2014,18 +2014,6 @@ class PokeAgent:
         # Detect if in title sequence
         is_title_sequence = self._is_title_sequence(game_state_data)
 
-        # Extract player coordinates for stuck detection
-        player_position = game_state_data.get("player_position", {})
-        current_coords = None
-        if player_position and "x" in player_position and "y" in player_position:
-            current_coords = (player_position["x"], player_position["y"])
-
-        # Add stuck warning if detected (but not during title sequence)
-        if not is_title_sequence:
-            stuck_warning = self._get_stuck_warning(current_coords)
-            if stuck_warning:
-                state_text = stuck_warning + state_text
-
         # Strip map information during title sequence
         if is_title_sequence:
             state_text = self._strip_map_info(state_text)
@@ -2256,18 +2244,6 @@ Step {step_count}"""
         is_title_sequence = self._is_title_sequence(game_state_data)
         if is_title_sequence:
             logger.info("🎬 Title sequence detected - map information will be hidden")
-
-        # Extract player coordinates for stuck detection
-        player_position = game_state_data.get("player_position", {})
-        current_coords = None
-        if player_position and "x" in player_position and "y" in player_position:
-            current_coords = (player_position["x"], player_position["y"])
-
-        # Add stuck warning if detected
-        if not is_title_sequence:
-            stuck_warning = self._get_stuck_warning(current_coords)
-            if stuck_warning:
-                state_text = stuck_warning + state_text
 
         # Strip map information during title sequence
         if is_title_sequence:
@@ -2520,30 +2496,6 @@ Step {step_count}"""
             logger.warning(f"Error checking for black frame: {e}")
             return False
 
-    def _detect_stuck_pattern(self, current_coords: Optional[Tuple[int, int]]) -> bool:
-        """Detect if agent is stuck (same position for multiple recent steps)"""
-        if not current_coords or len(self.conversation_history) < 3:
-            return False
-
-        recent_positions = []
-        for entry in self.conversation_history[-3:]:
-            coords = entry.get("player_coords")
-            if coords:
-                recent_positions.append(coords)
-
-        if len(recent_positions) >= 3:
-            if all(pos == recent_positions[0] for pos in recent_positions):
-                return True
-
-        return False
-
-    def _get_stuck_warning(self, coords: Optional[Tuple[int, int]]) -> str:
-        """Generate warning text if stuck pattern detected"""
-        if self._detect_stuck_pattern(coords):
-            return "\n⚠️ WARNING: You appear to be stuck at this location. Try a different approach!\n" \
-                   "💡 TIP: If you try an action like RIGHT but coordinates don't change from (X,Y) to (X+1,Y), there's likely an obstacle.\n"
-        return ""
-    
     def _log_trajectory_for_step(self, run_manager, step_num: int, pre_state: dict, 
                                   prompt: str, reasoning: str, tool_calls: list, response: str):
         """Log trajectory for a CLI agent step
