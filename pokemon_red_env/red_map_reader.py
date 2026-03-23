@@ -58,6 +58,7 @@ class RedMapReader:
         self._npc_position_cache: list = []     # Deep-copied npc_data with live corrections
         self._hidden_sprites: set = set()       # Indices of removed/hidden NPCs (picture_id=0)
         self._picked_up_items: set = set()      # Indices of picked-up items (POKE_BALL/FOSSIL)
+        self._cleared_obstacles: set = set()    # {(cx, cy)} cut trees / opened gates this map visit
         self._load_map_names()
 
     # ------------------------------------------------------------------
@@ -163,6 +164,7 @@ class RedMapReader:
             self._npc_position_cache = copy.deepcopy(npc_data)
             self._hidden_sprites = set()
             self._picked_up_items = set()
+            self._cleared_obstacles = set()
             logger.debug(f"NPC cache reset for '{map_name}' ({len(npc_data)} entries)")
 
         # Guard: re-init if npc_data length changed (data reload edge case)
@@ -170,6 +172,7 @@ class RedMapReader:
             self._npc_position_cache = copy.deepcopy(npc_data)
             self._hidden_sprites = set()
             self._picked_up_items = set()
+            self._cleared_obstacles = set()
 
         return self._npc_position_cache
 
@@ -301,6 +304,107 @@ class RedMapReader:
         return start, start + target
 
     # ------------------------------------------------------------------
+    # Dynamic obstacle detection (cut trees / Card Key gates)
+    # ------------------------------------------------------------------
+
+    # Symbols that represent removable obstacles
+    _OBSTACLE_SYMBOLS = frozenset({"t", "G"})
+
+    def _detect_cleared_obstacles(self, grid: list, raw_tile_data: list) -> set:
+        """Detect cut trees ('t') and opened gates ('G') via wTileMap comparison.
+
+        Only checks the 3×3 area around the player (Cut and Card Key both
+        require adjacency).  Before comparing, validates that the player's
+        own tile matches between wTileMap and raw_tile to avoid false
+        positives during screen transitions, menus, or battles.
+
+        Results are accumulated in ``self._cleared_obstacles`` so off-screen
+        removals persist until map re-entry (when Gen 1 respawns them).
+
+        Returns the full set of cleared (cx, cy) positions.
+        """
+        if not grid or not raw_tile_data:
+            return self._cleared_obstacles
+
+        map_h = len(grid)
+        map_w = len(grid[0]) if map_h else 0
+
+        # Read wTileMap (360 bytes = 20 cols × 18 rows)
+        try:
+            tile_map_bytes = bytes(
+                self._read_u8(0xC3A0 + i) for i in range(360)
+            )
+        except Exception:
+            return self._cleared_obstacles
+
+        # Player screen pixel position (sprite slot 0)
+        player_screen_y = self._read_u8(0xC100 + 4)
+        player_screen_x = self._read_u8(0xC100 + 6)
+        player_x, player_y = self.read_player_coords()
+
+        # Player collision cell → screen tile (top-left of 2×2 block).
+        # +4 on Y adjusts from sprite top to collision cell top (Gen 1 offset).
+        player_tile_row = (player_screen_y + 4) // 8
+        player_tile_col = player_screen_x // 8
+
+        # Consistency check: player's own cell must match raw_tile.
+        # If it doesn't, the screen is in a transition/menu/battle — skip.
+        if player_y < len(raw_tile_data) and player_x < len(raw_tile_data[player_y]):
+            expected_player_tile = raw_tile_data[player_y][player_x][0]
+            p_bl_row = player_tile_row + 1
+            p_bl_col = player_tile_col
+            if 0 <= p_bl_row < 18 and 0 <= p_bl_col < 20:
+                actual_player_tile = tile_map_bytes[p_bl_row * 20 + p_bl_col]
+                if actual_player_tile != expected_player_tile:
+                    return self._cleared_obstacles  # screen not in sync
+            else:
+                return self._cleared_obstacles  # player off-screen (edge case)
+        else:
+            return self._cleared_obstacles
+
+        # Only scan the 3×3 area around the player (adjacency requirement)
+        for cy in range(max(0, player_y - 1), min(map_h, player_y + 2)):
+            row_str = grid[cy]
+            for cx in range(max(0, player_x - 1), min(map_w, player_x + 2)):
+                if (cx, cy) in self._cleared_obstacles:
+                    continue  # already known cleared
+                sym = row_str[cx] if cx < len(row_str) else "#"
+                # Only cuttable trees ('t') and Card Key gates ('G')
+                if sym not in self._OBSTACLE_SYMBOLS:
+                    continue
+
+                # Screen tile position (top-left of 2×2 collision cell block)
+                cell_tile_row = player_tile_row + (cy - player_y) * 2
+                cell_tile_col = player_tile_col + (cx - player_x) * 2
+
+                # Use bottom-left tile to match raw_tile convention
+                # (raw_tile stores tile_id_map[2*cy+1][2*cx])
+                bl_row = cell_tile_row + 1
+                bl_col = cell_tile_col
+
+                # Skip if off-screen
+                if bl_row < 0 or bl_row >= 18 or bl_col < 0 or bl_col >= 20:
+                    continue
+
+                actual_tile = tile_map_bytes[bl_row * 20 + bl_col]
+
+                # Expected tile from preprocessed data
+                if cy < len(raw_tile_data) and cx < len(raw_tile_data[cy]):
+                    expected_tile = raw_tile_data[cy][cx][0]
+                else:
+                    continue
+
+                if actual_tile != expected_tile:
+                    self._cleared_obstacles.add((cx, cy))
+                    logger.debug(
+                        f"Obstacle cleared at ({cx},{cy}): "
+                        f"expected tile 0x{expected_tile:02X}, "
+                        f"got 0x{actual_tile:02X} (symbol='{sym}')"
+                    )
+
+        return self._cleared_obstacles
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -327,6 +431,10 @@ class RedMapReader:
         vx_start, vx_end = self._clamp_viewport(player_x, radius, map_w)
         vy_start, vy_end = self._clamp_viewport(player_y, radius, map_h)
 
+        # Detect cleared obstacles (cut trees / opened gates) via screen tiles
+        raw_tile_json = data.get("raw_tile", [])
+        cleared = self._detect_cleared_obstacles(grid, raw_tile_json)
+
         # Build NPC position set from RAM; distinguish Poké Ball sprites from regular NPCs
         npc_positions = set()
         pokeball_positions: set = set()
@@ -349,6 +457,9 @@ class RedMapReader:
             row = []
             for sx in range(vx_start, vx_end):
                 symbol = grid[sy][sx]
+                # Replace cleared obstacles with walkable
+                if (sx, sy) in cleared:
+                    symbol = "."
                 type_str, collision_int = self._classify_grid_symbol(symbol)
 
                 # Overlay sprites from RAM (Poké Balls as 'POKE_BALL', NPCs as 'NPC')
@@ -389,6 +500,10 @@ class RedMapReader:
         vx_start, vx_end = self._clamp_viewport(player_x, radius, map_w)
         vy_start, vy_end = self._clamp_viewport(player_y, radius, map_h)
 
+        # Detect cleared obstacles (cut trees / opened gates) via screen tiles
+        raw_tile_json = data.get("raw_tile", [])
+        cleared = self._detect_cleared_obstacles(grid, raw_tile_json)
+
         # NPC and Poké Ball positions from RAM
         npc_positions = set()
         pokeball_positions: set = set()
@@ -417,6 +532,9 @@ class RedMapReader:
                     line += 'N'
                 else:
                     symbol = grid[sy][sx]
+                    # Replace cleared obstacles with walkable
+                    if (sx, sy) in cleared:
+                        symbol = "."
                     # Use first char for multi-char symbols in compact view
                     if len(symbol) == 1:
                         line += symbol
@@ -462,10 +580,10 @@ class RedMapReader:
         """
         map_name = self.read_map_name()
         data = self._load_map_data(map_name)
-        grid = data.get("grid", [])
+        grid_static = data.get("grid", [])
         player_x, player_y = self.read_player_coords()
 
-        if not grid:
+        if not grid_static:
             return {
                 "location": map_name,
                 "player_position": {"x": player_x, "y": player_y},
@@ -475,8 +593,8 @@ class RedMapReader:
                 "warp_events": [], "bg_events": [], "objects": [],
             }
 
-        map_h = len(grid)
-        map_w = len(grid[0]) if map_h > 0 else 0
+        map_h = len(grid_static)
+        map_w = len(grid_static[0]) if map_h > 0 else 0
 
         # Build raw_tiles from JSON raw_tile field (RedMetatileBehavior ints)
         raw_tile_json = data.get("raw_tile", [])
@@ -490,12 +608,28 @@ class RedMapReader:
                 raw_tiles.append(tile_row)
         else:
             # Fallback for old JSONs without raw_tile (builds from grid symbol strings)
-            for row_s in grid:
+            for row_s in grid_static:
                 tile_row = []
                 for symbol in row_s:
                     type_str, collision_int = self._classify_grid_symbol(symbol)
                     tile_row.append((0, type_str, collision_int, 0))
                 raw_tiles.append(tile_row)
+
+        # Detect and apply cleared obstacles (cut trees / opened gates)
+        cleared = self._detect_cleared_obstacles(grid_static, raw_tile_json)
+        if cleared:
+            # Copy grid (list of strings) to mutable form, apply clears
+            grid = [list(row) for row in grid_static]
+            for cx, cy in cleared:
+                if 0 <= cy < map_h and 0 <= cx < map_w:
+                    grid[cy][cx] = "."
+                    # Also update raw_tiles collision to walkable
+                    if cy < len(raw_tiles) and cx < len(raw_tiles[cy]):
+                        tid, beh, _col, elev = raw_tiles[cy][cx]
+                        raw_tiles[cy][cx] = (tid, RedMetatileBehavior.NORMAL, 0, elev)
+            grid = ["".join(row) for row in grid]
+        else:
+            grid = grid_static
 
         # Derive behavior/elevation maps from raw_tiles
         behavior_map = [[t[1] for t in tile_row] for tile_row in raw_tiles]

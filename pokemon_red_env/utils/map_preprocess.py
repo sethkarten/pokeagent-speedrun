@@ -64,6 +64,12 @@ _CARD_KEY_MAP_CONST_TO_NAME: Dict[str, str] = {
     "SILPH_CO_11F": "SilphCo11F",
 }
 
+# Warp positions to skip when marking 'D' on the grid.
+# These are warp pads / teleporters that should keep their underlying tile symbol
+# so the pathfinder doesn't route through them by accident.
+_WARP_EXCLUSIONS: set = {
+    ("SilphCo11F", 5, 5),   # warp pad to LAST_MAP — avoid accidental teleport
+}
 
 def parse_card_key_coords_asm(path: str) -> Dict[str, List[Tuple[int, int]]]:
     """Parse card_key_coords.asm → {map_name: [(x, y), ...]}."""
@@ -862,7 +868,7 @@ def main():
                 elif is_counter:
                     cell_char = 'C'
 
-                if (cx, cy) in warp_positions:
+                if (cx, cy) in warp_positions and (map_name, cx, cy) not in _WARP_EXCLUSIONS:
                     cell_char = 'D'
                 elif is_sign:
                     cell_char = sign_symbol_lookup[(cx, cy)]
