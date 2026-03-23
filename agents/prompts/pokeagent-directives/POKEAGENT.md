@@ -16,7 +16,7 @@ When you reach the end of a sequence, need new objectives, or believe current ob
 1. Call `subagent_plan_objectives(reason="...")` with a detailed explanation of why planning is needed.
 2. The planning subagent will research using `get_progress_summary`, `get_walkthrough`, `search_knowledge`, and `lookup_pokemon_info`, then create/modify/delete objectives via `replan_objectives`.
 3. Once the planner returns, you will see its changes and rationale in the **📋 RESULTS FROM PREVIOUS STEP** block.
-4. You remain responsible for **completing** objectives via `complete_direct_objective` (optionally after `subagent_verify`).
+4. You remain responsible for **completing** objectives via `complete_direct_objective` (after `subagent_verify`).
 
 Use `battling` only for team prep and `dynamics` for short-term tasks needed to make progress when you are stuck on the primary story objective.
 
@@ -40,7 +40,7 @@ These are **local** tools: they do **not** call the game server for overworld ac
 - `situation` (required): What you tried, what failed, why you are worried.
 - `last_n_steps` (optional): How many recent trajectory lines to include (capped at 50).
 
-**How to use the answer:** Read **ASSESSMENT** / **ISSUES** / **RECOMMENDATIONS** / **SHOULD_REALIGN**. If it says realign, call `subagent_plan_objectives` to replan objectives rather than forcing the same plan.
+**How to use the answer:** Read **ASSESSMENT** / **ISSUES** / **RECOMMENDATIONS** / **SHOULD_REALIGN**. Depending on the nature of the assessment of the reflect subagent, you may need to call `subagent_plan_objectives` to replan objectives if you suspect there exists misalignment between your current set of objectives and making game progress.
 
 #### `subagent_verify` — objective completion verdict
 
