@@ -72,6 +72,7 @@ from agents.prompts.paths import (
     POKEAGENT_SYSTEM_PROMPT_PATH,
     resolve_repo_path,
 )
+from utils.json_utils import convert_protobuf_value, convert_protobuf_args, normalize_replan_edits
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -1076,80 +1077,23 @@ class PokeAgent:
 
     def _convert_protobuf_value(self, value):
         """Recursively convert a protobuf value to JSON-serializable Python types."""
-        # Handle None
-        if value is None:
-            return None
-
-        # Check if it's a protobuf type
-        if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
-            value_type = value.__class__.__name__
-            logger.debug(f"      Converting protobuf value: type={value_type}, module={value.__class__.__module__}")
-            
-            # First try to convert as dict (for MapComposite objects)
-            # This must be checked BEFORE checking for __iter__ because MapComposite has both
-            try:
-                dict_value = dict(value)
-                logger.debug(f"      ✅ Converted to dict with {len(dict_value)} keys")
-                # Successfully converted to dict - recursively convert values
-                return {k: self._convert_protobuf_value(v) for k, v in dict_value.items()}
-            except (TypeError, ValueError) as e:
-                logger.debug(f"      Not dict-like: {e}")
-                # Not a dict-like type, check if it's a list
-                pass
-
-            # Check if it's a list-like type (RepeatedComposite, RepeatedScalar)
-            if hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
-                logger.debug(f"      Detected iterable (likely list/array)")
-                # It's a list/array - recursively convert each item
-                try:
-                    items = list(value)
-                    logger.debug(f"      ✅ Converted to list with {len(items)} items")
-                    converted = [self._convert_protobuf_value(item) for item in items]
-                    logger.debug(f"      ✅ Recursively converted all {len(converted)} items")
-                    return converted
-                except Exception as e:
-                    logger.warning(f"      ⚠️ Error converting list items: {e}")
-                    try:
-                        fallback = list(value)
-                        logger.debug(f"      Using fallback list conversion: {len(fallback)} items")
-                        return fallback
-                    except Exception as e2:
-                        logger.error(f"      ❌ Fallback also failed: {e2}")
-                        return value
-
-            # Fallback: return as-is
-            logger.debug(f"      Returning protobuf value as-is (type: {value_type})")
-            return value
-
-        # Check if it's a regular dict (might contain nested protobuf values)
-        elif isinstance(value, dict):
-            logger.debug(f"      Converting regular dict with {len(value)} keys")
-            return {k: self._convert_protobuf_value(v) for k, v in value.items()}
-        # Check if it's a regular list (might contain nested protobuf values)
-        elif isinstance(value, list):
-            logger.debug(f"      Converting regular list with {len(value)} items")
-            return [self._convert_protobuf_value(item) for item in value]
-        # Otherwise return as-is (native Python type)
-        else:
-            logger.debug(f"      Returning native Python value: type={type(value).__name__}")
-            return value
+        return convert_protobuf_value(value)
 
     def _convert_protobuf_args(self, proto_args) -> dict:
         """Convert protobuf arguments to JSON-serializable Python types."""
-        logger.debug(f"   Converting protobuf args: {len(proto_args)} keys")
-        arguments = {}
-        for key, value in proto_args.items():
-            logger.debug(f"   Converting key '{key}': type={type(value).__name__}")
-            try:
-                converted = self._convert_protobuf_value(value)
-                arguments[key] = converted
-                logger.debug(f"   ✅ Key '{key}' converted successfully: type={type(converted).__name__}")
-            except Exception as e:
-                logger.error(f"   ❌ Error converting key '{key}': {e}")
-                logger.error(f"   Traceback: {traceback.format_exc()}")
-                # Try to include the raw value as fallback
-                arguments[key] = str(value)
-        logger.debug(f"   ✅ Converted {len(arguments)} arguments")
+        return convert_protobuf_args(proto_args)
+
+    def _normalize_replan_objectives_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Coerce replan_objectives ``edits`` to ``list[dict]`` for JSON/MCP and DOM validation."""
+        arguments["edits"] = normalize_replan_edits(arguments.get("edits"))
+        if "category" in arguments:
+            arguments["category"] = convert_protobuf_value(arguments["category"])
+        if "rationale" in arguments:
+            arguments["rationale"] = convert_protobuf_value(arguments["rationale"])
+        if "return_to_orchestrator" in arguments:
+            arguments["return_to_orchestrator"] = bool(
+                convert_protobuf_value(arguments["return_to_orchestrator"])
+            )
         return arguments
 
     def _execute_function_call(self, function_call, allowed_tool_names: Optional[set[str]] = None) -> str:
@@ -1198,6 +1142,12 @@ class PokeAgent:
                     logger.info(f"   ✅ Objective {i} valid: id={obj.get('id')}, action_type={obj.get('action_type')}")
                 
                 logger.info(f"   ✅ All objectives validated successfully")
+
+            elif function_name == "replan_objectives":
+                # Gemini often returns nested args as protobuf MapComposite / RepeatedComposite.
+                # After _convert_protobuf_args, edits may still not be a plain list (e.g. tuple,
+                # or dict with "0","1",… keys). DirectObjectiveManager requires list[dict].
+                arguments = self._normalize_replan_objectives_arguments(arguments)
                 
         except Exception as e:
             logger.error(f"❌ Failed to parse function arguments: {e}")
