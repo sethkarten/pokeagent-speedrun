@@ -2269,10 +2269,10 @@ def _update_objectives_cache():
         if direct_objectives_manager and direct_objectives_manager.is_sequence_active():
             logger.info(f"📊 Updating objectives cache - mode: {direct_objectives_manager.mode}")
             if direct_objectives_manager.mode == "categorized":
-                # NEW: Categorized mode with 3 columns
-                objectives_data["mode"] = "categorized"
+                # Categorized cache: only mode, per-category windows, and status counts.
+                # Omit legacy root keys (current, recently_completed, total_in_sequence,
+                # current_index); consumers use story/battling/dynamics + categorized_status.
 
-                # Helper function to get recent objectives for a category
                 def get_recent_for_category(category, sequence, index):
                     items = []
                     # Current objective (if exists)
@@ -2296,30 +2296,30 @@ def _update_objectives_cache():
 
                     return items
 
-                objectives_data["story"] = get_recent_for_category(
-                    "story", direct_objectives_manager.story_sequence, direct_objectives_manager.story_index
-                )
-
-                objectives_data["battling"] = get_recent_for_category(
-                    "battling", direct_objectives_manager.battling_sequence, direct_objectives_manager.battling_index
-                )
-
-                objectives_data["dynamics"] = get_recent_for_category(
-                    "dynamics", direct_objectives_manager.dynamics_sequence, direct_objectives_manager.dynamics_index
-                )
-
-                objectives_data["categorized_status"] = {
-                    "story": {
-                        "current_index": direct_objectives_manager.story_index,
-                        "total": len(direct_objectives_manager.story_sequence),
-                    },
-                    "battling": {
-                        "current_index": direct_objectives_manager.battling_index,
-                        "total": len(direct_objectives_manager.battling_sequence),
-                    },
-                    "dynamics": {
-                        "current_index": direct_objectives_manager.dynamics_index,
-                        "total": len(direct_objectives_manager.dynamics_sequence),
+                objectives_data = {
+                    "mode": "categorized",
+                    "story": get_recent_for_category(
+                        "story", direct_objectives_manager.story_sequence, direct_objectives_manager.story_index
+                    ),
+                    "battling": get_recent_for_category(
+                        "battling", direct_objectives_manager.battling_sequence, direct_objectives_manager.battling_index
+                    ),
+                    "dynamics": get_recent_for_category(
+                        "dynamics", direct_objectives_manager.dynamics_sequence, direct_objectives_manager.dynamics_index
+                    ),
+                    "categorized_status": {
+                        "story": {
+                            "current_index": direct_objectives_manager.story_index,
+                            "total": len(direct_objectives_manager.story_sequence),
+                        },
+                        "battling": {
+                            "current_index": direct_objectives_manager.battling_index,
+                            "total": len(direct_objectives_manager.battling_sequence),
+                        },
+                        "dynamics": {
+                            "current_index": direct_objectives_manager.dynamics_index,
+                            "total": len(direct_objectives_manager.dynamics_sequence),
+                        },
                     },
                 }
 
