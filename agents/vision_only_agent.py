@@ -42,6 +42,7 @@ from agents.subagents import (
     load_subagent_context,
 )
 from agents.prompts.paths import POKEAGENT_PROMPT_PATH, resolve_repo_path
+from utils.json_utils import convert_protobuf_value, convert_protobuf_args
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -57,29 +58,7 @@ class MCPToolAdapter:
 
     def _convert_protobuf_to_native(self, value):
         """Recursively convert protobuf objects to native Python types."""
-        # Check if it's a protobuf object
-        if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
-            try:
-                # Check if it's dict-like first (has .items() method) - MapComposite
-                if hasattr(value, 'items'):
-                    return {k: self._convert_protobuf_to_native(v) for k, v in value.items()}
-                # Check if it's list-like (RepeatedComposite, RepeatedScalar)
-                elif hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
-                    return [self._convert_protobuf_to_native(item) for item in value]
-                else:
-                    # Fallback to string conversion
-                    return str(value)
-            except Exception as e:
-                logger.warning(f"Failed to convert protobuf object: {e}")
-                return str(value)
-        # Check if it's a list - recurse into it
-        elif isinstance(value, list):
-            return [self._convert_protobuf_to_native(item) for item in value]
-        # Check if it's a dict - recurse into it
-        elif isinstance(value, dict):
-            return {k: self._convert_protobuf_to_native(v) for k, v in value.items()}
-        else:
-            return value
+        return convert_protobuf_value(value)
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call an MCP tool via HTTP request to the game server."""
@@ -554,26 +533,7 @@ class VisionOnlyAgent:
 
     def _convert_protobuf_args(self, proto_args) -> dict:
         """Convert protobuf arguments to JSON-serializable Python types."""
-        arguments = {}
-        for key, value in proto_args.items():
-            # Convert protobuf types to native Python types
-            if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
-                # Check if it's a list-like type first (RepeatedComposite, RepeatedScalar)
-                if hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
-                    # It's a list/array - convert to Python list
-                    try:
-                        arguments[key] = list(value)
-                    except:
-                        arguments[key] = value
-                else:
-                    # It's a dict-like type - convert via dict
-                    try:
-                        arguments[key] = dict(value)
-                    except:
-                        arguments[key] = value
-            else:
-                arguments[key] = value
-        return arguments
+        return convert_protobuf_args(proto_args)
 
     def _execute_function_call(self, function_call) -> str:
         """Execute a function call and return the result as JSON string."""
