@@ -860,6 +860,11 @@ class PokeAgent:
                         response=reasoning_text,
                     )
 
+            try:
+                update_server_metrics(self.server_url)
+            except Exception:
+                pass
+
             battle_history.append({
                 "step": turns_taken + 1,
                 "reasoning": reasoning_text,
@@ -1028,6 +1033,11 @@ class PokeAgent:
                 "reasoning": reasoning_text,
                 "tool_calls": tool_calls_made,
             })
+
+            try:
+                update_server_metrics(self.server_url)
+            except Exception:
+                pass
 
             for tc in tool_calls_made:
                 if tc.get("name") == "replan_objectives":

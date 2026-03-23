@@ -1883,6 +1883,7 @@ async def stream_agent_thinking():
                                                         "response": entry.get("response", ""),
                                                         "duration": entry.get("duration", 0),
                                                         "timestamp": timestamp,
+                                                        "agent_step": entry.get("agent_step"),
                                                     }
                                                 )
                                     except Exception:
@@ -1898,8 +1899,12 @@ async def stream_agent_thinking():
                         logger.info(f"SSE: Found {len(new_interactions)} new interactions to send")
                         # Send new interactions
                         for interaction in new_interactions:
+                            # Prefer per-line global step (looping subagents); else server counter
+                            line_step = interaction.get("agent_step")
+                            if line_step is None:
+                                line_step = current_step
                             event_data = {
-                                "step": current_step,
+                                "step": line_step,
                                 "type": interaction.get("type", "unknown"),
                                 "response": interaction.get("response", ""),
                                 "duration": interaction.get("duration", 0),
@@ -1963,6 +1968,7 @@ async def get_agent_thinking():
                                         "response": entry.get("response", ""),
                                         "duration": entry.get("duration", 0),
                                         "timestamp": entry.get("timestamp", ""),
+                                        "agent_step": entry.get("agent_step"),
                                     }
                                 )
                         except json.JSONDecodeError:
@@ -2161,6 +2167,8 @@ async def update_agent_step(request: Request = None):
     """Update the agent step count and metrics"""
     global agent_step_count, latest_metrics
 
+    skip_default_increment = False
+
     try:
         # Check if this is a direct set operation or has metrics
         if request:
@@ -2172,23 +2180,54 @@ async def update_agent_step(request: Request = None):
                     thinking_text = request_data["thinking"]
                     interaction_type = request_data.get("interaction_type", "thinking")
                     duration = float(request_data.get("duration", 0))
+                    thinking_step = request_data.get("agent_step")
+                    if thinking_step is None:
+                        thinking_step = request_data.get("step")
+                    thinking_step_int = None
+                    if thinking_step is not None:
+                        try:
+                            thinking_step_int = int(thinking_step)
+                        except (TypeError, ValueError):
+                            pass
                     try:
                         from utils.data_persistence.llm_logger import get_llm_logger
-                        get_llm_logger().log_thinking(thinking_text, interaction_type, duration)
+
+                        get_llm_logger().log_thinking(
+                            thinking_text,
+                            interaction_type,
+                            duration,
+                            agent_step=thinking_step_int,
+                        )
                     except Exception as e:
                         logger.debug(f"Could not log thinking: {e}")
 
                 # Update metrics if provided (with thread safety)
                 if "metrics" in request_data and isinstance(request_data["metrics"], dict):
+                    metrics_payload = request_data["metrics"]
                     with step_lock:  # Use existing lock for thread safety
                         # Safely update each metric individually to avoid race conditions
-                        for key, value in request_data["metrics"].items():
+                        for key, value in metrics_payload.items():
                             if key in latest_metrics:
                                 # Always protect total_actions as it's managed by server
                                 if key == "total_actions":
                                     continue
                                 else:
                                     latest_metrics[key] = value
+
+                    # Full cumulative sync from client: align server step with max global LLM step
+                    if metrics_payload.get("total_llm_calls") is not None:
+                        steps = metrics_payload.get("steps") or []
+                        max_s = 0
+                        for s in steps:
+                            try:
+                                max_s = max(max_s, int(s.get("step") or 0))
+                            except (TypeError, ValueError):
+                                continue
+                        with step_lock:
+                            agent_step_count = max(agent_step_count, max_s)
+                        # Only skip legacy +1 when we have step rows; empty steps keeps old increment behavior
+                        if steps:
+                            skip_default_increment = True
 
                 # Handle set_step for initialization
                 if "set_step" in request_data:
@@ -2201,6 +2240,9 @@ async def update_agent_step(request: Request = None):
     except Exception as e:
         logger.error(f"Error in agent_step endpoint: {e}")
         # Continue with default increment behavior
+
+    if skip_default_increment:
+        return {"status": "updated", "agent_step": agent_step_count}
 
     # Default increment behavior
     with step_lock:
