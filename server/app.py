@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Local application imports
 from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
+from utils.json_utils import normalize_replan_edits
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -3701,6 +3702,11 @@ async def mcp_create_direct_objectives(request: dict):
         return {"success": False, "error": str(e)}
 
 
+def _coerce_replan_edits_to_list(edits: Any) -> List[Dict[str, Any]]:
+    """Normalize ``edits`` from JSON / odd client encodings into ``list[dict]``."""
+    return normalize_replan_edits(edits)
+
+
 @app.post("/mcp/replan_objectives")
 async def mcp_replan_objectives(request: dict):
     """MCP Tool: Apply index-based edits to a single objective category (used by subagent_plan_objectives)."""
@@ -3718,7 +3724,7 @@ async def mcp_replan_objectives(request: dict):
             return {"success": False, "error": "replan_objectives requires categorized mode"}
 
         category = request.get("category")
-        edits = request.get("edits", [])
+        edits = _coerce_replan_edits_to_list(request.get("edits"))
         return_to_orchestrator = request.get("return_to_orchestrator", False)
         rationale = request.get("rationale", "")
 
