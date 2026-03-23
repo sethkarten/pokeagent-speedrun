@@ -49,7 +49,7 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 - **Optional:** `last_n_steps` (integer) — trajectory window for the initial summary (default 25, capped at 50)  
 - Loops with its own short-term memory (up to 25 turns). Has access to research tools (`get_walkthrough`, `search_knowledge`, etc.), other subagents, and a planner-exclusive `replan_objectives` tool. Returns when `return_to_orchestrator` is set on a successful replan.
 
-**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON, a compacted `subagent_battler` summary, or `subagent_plan_objectives` changes). Use that verdict/summary when deciding whether to call `complete_direct_objective`.
+**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON, a compacted `subagent_battler` summary, or `subagent_plan_objectives` changes).
 
 ### Knowledge
 

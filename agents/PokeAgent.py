@@ -407,6 +407,46 @@ class PokeAgent:
                     "required": []
                 }
             },
+            # COMMENTED OUT FOR NOW AS OBJECTIVE CREATION IS HANDLED BY THE PLANNER SUBAGENT
+            #  {
+            #     "name": "create_direct_objectives",
+            #     "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' for training prep, and 'dynamics' for short-term navigation/cleanup. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "objectives": {
+            #                 "type_": "ARRAY",
+            #                 "items": {
+            #                     "type_": "OBJECT",
+            #                     "properties": {
+            #                         "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
+            #                         "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
+            #                         "action_type": {
+            #                             "type_": "STRING",
+            #                             "enum": ["navigate", "interact", "battle", "wait"],
+            #                             "description": "Type of action"
+            #                         },
+            #                         "target_location": {"type_": "STRING", "description": "Target location/map name"},
+            #                         "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
+            #                         "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
+            #                     },
+            #                     "required": ["id", "description", "action_type"]
+            #                 },
+            #                 "description": "Array of exactly 3 objectives to create next"
+            #             },
+            #             "category": {
+            #                 "type_": "STRING",
+            #                 "enum": ["dynamics", "story", "battling"],
+            #                 "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal."
+            #             },
+            #             "reasoning": {
+            #                 "type_": "STRING",
+            #                 "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
+            #             }
+            #         },
+            #         "required": ["objectives", "reasoning"]
+            #     }
+            # },
             {
                 "name": "get_progress_summary",
                 "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
@@ -727,7 +767,8 @@ class PokeAgent:
                 self._execute_subagent_summarize(
                     {
                         "reasoning": "Summarize the recent context leading into this battle for a delegated battler handoff.",
-                        "last_n_steps": max(50, last_n_steps),
+                        # Respect orchestrator's last_n_steps (already clamped); do not force a minimum.
+                        "last_n_steps": last_n_steps,
                     }
                 )
             )
@@ -828,11 +869,16 @@ class PokeAgent:
         if turns_taken >= SAFETY_CAP and not resolved:
             key_events.append("Battler hit the safety turn cap before returning to the overworld.")
 
+        # Exit summary: cover roughly the battler's own turns in global trajectory (cap 50).
+        exit_trajectory_window = clamp_trajectory_window(turns_taken)
         exit_summary = json.loads(
             self._execute_subagent_summarize(
                 {
-                    "reasoning": "Compact the completed delegated battle into a concise handoff for the main orchestrator.",
-                    "last_n_steps": 50,
+                    "reasoning": (
+                        "Compact the completed delegated battle into a concise handoff for the main orchestrator. "
+                        f"Focus on the last ~{exit_trajectory_window} global steps (battler inner turns: {turns_taken})."
+                    ),
+                    "last_n_steps": exit_trajectory_window,
                 }
             )
         )
@@ -865,7 +911,8 @@ class PokeAgent:
                             "Emphasize current progress, what objectives have been completed, and "
                             "any issues the orchestrator is experiencing."
                         ),
-                        "last_n_steps": max(50, last_n_steps),
+                        # Respect orchestrator's last_n_steps (already clamped); do not force a minimum.
+                        "last_n_steps": last_n_steps,
                     }
                 )
             )
@@ -1021,7 +1068,7 @@ class PokeAgent:
             "turns_taken": turns_taken,
             "steps_consumed": turns_taken,
             "rationale": final_rationale,
-            "recommended_next_action": reasoning_text[:500] if reasoning_text else "Resume normal execution.",
+            "recommended_next_action": reasoning_text if reasoning_text else "Resume normal execution.",
         }
 
     def _convert_protobuf_value(self, value):
