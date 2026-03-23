@@ -6,6 +6,7 @@ import pytest
 
 from agents.objectives.objective_types import DirectObjective
 from agents.objectives.direct_objectives import DirectObjectiveManager
+from utils.json_utils import coerce_replan_edit_index, convert_protobuf_value, normalize_replan_edits
 
 
 def _make_manager(
@@ -324,3 +325,47 @@ class TestServerEndpointSimulation:
         assert result["success"] is True
         assert mgr.story_sequence[0].completed is True
         assert mgr.story_sequence[0].id == "s0"
+
+
+# ---------------------------------------------------------------
+# json_utils: protobuf conversion + replan index coercion
+# ---------------------------------------------------------------
+
+
+class TestJsonUtilsReplanProtobuf:
+    def test_coerce_string_digit_index(self):
+        assert coerce_replan_edit_index("3") == 3
+        assert coerce_replan_edit_index("  0 ") == 0
+
+    def test_coerce_float_index(self):
+        assert coerce_replan_edit_index(4.0) == 4
+
+    def test_coerce_invalid_string_unchanged(self):
+        assert coerce_replan_edit_index("objective") == "objective"
+
+    def test_normalize_replan_edits_coerces_indices(self):
+        out = normalize_replan_edits(
+            [{"index": "0", "objective": {"id": "a", "description": "d", "action_type": "navigate"}}]
+        )
+        assert len(out) == 1
+        assert out[0]["index"] == 0
+
+    def test_convert_protobuf_sequence_before_mapping(self):
+        """Repeated-like protobuf must become a list, not a merged dict."""
+
+        class ProtoList(list):
+            __module__ = "proto.marshal.collections.repeated"
+
+        inner_a = {"index": 0, "x": 1}
+        inner_b = {"index": 1, "x": 2}
+        repeated = ProtoList([inner_a, inner_b])
+        assert convert_protobuf_value(repeated) == [inner_a, inner_b]
+
+    def test_replan_category_accepts_string_index_after_normalize(self):
+        mgr = _make_manager(story_objs=[_obj("s0"), _obj("s1")])
+        edits = normalize_replan_edits(
+            [{"index": "1", "objective": {"id": "s1_new", "description": "r", "action_type": "navigate"}}]
+        )
+        result = mgr.replan_category("story", edits)
+        assert result["success"] is True
+        assert mgr.story_sequence[1].id == "s1_new"
