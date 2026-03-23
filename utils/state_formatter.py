@@ -239,10 +239,12 @@ def _format_state_summary(state_data):
     if position and isinstance(position, dict):
         summary_parts.append(f"Pos: ({position.get('x', '?')}, {position.get('y', '?')})")
     
-    # Facing direction - removed as it's often unreliable
-    # facing = player_data.get('facing')
-    # if facing:
-    #     summary_parts.append(f"Facing: {facing}")
+    # Facing direction (Red only — Emerald's is unreliable)
+    _game_type_facing = os.environ.get("GAME_TYPE", "emerald")
+    if _game_type_facing == "red":
+        facing = player_data.get('facing')
+        if facing:
+            summary_parts.append(f"Facing: {facing}")
     
     # Game state
     game_state = game_data.get('game_state')
