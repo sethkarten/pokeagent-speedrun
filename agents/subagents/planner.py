@@ -53,8 +53,9 @@ REPLAN_OBJECTIVES_TOOL_DECLARATION: Dict[str, Any] = {
                         "index": {
                             "type_": "INTEGER",
                             "description": (
-                                "Per-category index to modify/create/delete. Must be >= "
-                                "the current index for this category."
+                                "Zero-based slot in this category's objective list (0, 1, 2, …). "
+                                "Must be an integer — not the word 'objective' and not an objective id. "
+                                "Must be >= the current index for this category."
                             ),
                         },
                         "objective": {

@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
-import traceback
-from typing import Any, Dict, List, Optional
+import math
+from collections.abc import MutableMapping, MutableSequence
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -104,13 +105,30 @@ def convert_protobuf_value(value: Any) -> Any:
         return None
 
     if _is_protobuf(value):
+        # RepeatedComposite / repeated fields are list-like (MutableSequence).
+        # They must be converted before Mapping: MapComposite is also iterable, but
+        # ``dict()`` is the correct path for maps; ``list()`` is correct for repeats.
+        if isinstance(value, MutableSequence) and not isinstance(
+            value, (str, bytes, bytearray)
+        ):
+            try:
+                return [convert_protobuf_value(item) for item in value]
+            except Exception:
+                pass
+
+        if isinstance(value, MutableMapping):
+            try:
+                return {k: convert_protobuf_value(v) for k, v in value.items()}
+            except (TypeError, ValueError):
+                pass
+
         try:
             dict_value = dict(value)
             return {k: convert_protobuf_value(v) for k, v in dict_value.items()}
         except (TypeError, ValueError):
             pass
 
-        if hasattr(value, "__iter__") and not isinstance(value, (str, dict)):
+        if hasattr(value, "__iter__") and not isinstance(value, (str, bytes, dict)):
             try:
                 return [convert_protobuf_value(item) for item in value]
             except Exception:
@@ -143,6 +161,27 @@ def convert_protobuf_args(proto_args) -> Dict[str, Any]:
             logger.warning("convert_protobuf_args: key '%s' fell back to str()", key, exc_info=True)
             arguments[key] = str(value)
     return arguments
+
+
+def coerce_replan_edit_index(idx: Any) -> Any:
+    """Best-effort coercion of ``index`` to ``int`` (VLMs often emit string/float indices).
+
+    Leaves values that cannot be interpreted as integers unchanged so validation
+    can surface a clear error (e.g. the literal string ``'objective'``).
+    """
+    if idx is None:
+        return None
+    if isinstance(idx, bool):
+        return idx
+    if isinstance(idx, int):
+        return idx
+    if isinstance(idx, float) and math.isfinite(idx) and idx == int(idx):
+        return int(idx)
+    if isinstance(idx, str):
+        s = idx.strip()
+        if s.lstrip("-").isdigit():
+            return int(s)
+    return idx
 
 
 def normalize_replan_edits(edits: Any) -> List[Dict[str, Any]]:
@@ -184,9 +223,14 @@ def normalize_replan_edits(edits: Any) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for item in raw_list:
         if isinstance(item, dict):
-            out.append({k: convert_protobuf_value(v) for k, v in item.items()})
+            edit = {k: convert_protobuf_value(v) for k, v in item.items()}
+            if "index" in edit:
+                edit["index"] = coerce_replan_edit_index(edit["index"])
+            out.append(edit)
         else:
             converted = convert_protobuf_value(item)
             if isinstance(converted, dict):
+                if "index" in converted:
+                    converted["index"] = coerce_replan_edit_index(converted["index"])
                 out.append(converted)
     return out
