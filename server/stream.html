@@ -1007,9 +1007,10 @@
                     // Format all LLM interactions in condensed format: "Step X: <msg>"
                     let html = '';
                     data.recent_interactions.forEach((interaction, index) => {
-                        // Calculate step number based on current step and interaction index
                         const baseStep = data.current_step || 0;
-                        const stepNumber = baseStep;
+                        const stepNumber = (interaction.agent_step != null && interaction.agent_step !== '')
+                            ? interaction.agent_step
+                            : baseStep;
                         
                         // Trim whitespace from the response
                         const trimmedResponse = interaction.response.trim();
