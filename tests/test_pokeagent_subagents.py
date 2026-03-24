@@ -11,6 +11,7 @@ from PIL import Image
 from agents.PokeAgent import PokeAgent
 from agents.subagents.utils.registry import (
     BATTLE_ALLOWED_TOOL_NAMES,
+    BUILTIN_SUBAGENT_TOOL_NAMES,
     PLANNER_ALLOWED_TOOL_NAMES,
     build_local_subagent_tool_declarations,
     get_local_subagent_spec,
@@ -279,7 +280,7 @@ def test_reflect_uses_toolless_local_subagent_and_trajectory_window(tmp_path):
     local_instances = [instance for instance in RecordingVLM.instances if instance.kwargs.get("tools") is None]
     assert len(local_instances) == 1
     assert local_instances[0].calls[0][1] == "Subagent_Reflect"
-    assert "last 50 steps" in local_instances[0].calls[0][2]
+    assert "last 99 steps" in local_instances[0].calls[0][2]
 
 
 def test_parse_verify_response_strips_markdown_json_fence():
@@ -745,3 +746,36 @@ def test_planner_accumulates_history_across_turns(tmp_path):
     assert result["turns_taken"] == 2
     assert "No previous planning actions" in prompts_seen[0]
     assert "Planning Turn 1" in prompts_seen[1]
+
+
+# ---------------------------------------------------------------------------
+# Built-in toggle tests
+# ---------------------------------------------------------------------------
+
+
+class TestBuiltinToggle:
+    """Tests for the include_builtins flag on build_local_subagent_tool_declarations."""
+
+    def test_include_builtins_true_has_all(self):
+        decls = build_local_subagent_tool_declarations(include_builtins=True)
+        names = {d["name"] for d in decls}
+        for bname in BUILTIN_SUBAGENT_TOOL_NAMES:
+            assert bname in names, f"Expected {bname} with include_builtins=True"
+
+    def test_include_builtins_false_excludes_builtins(self):
+        decls = build_local_subagent_tool_declarations(include_builtins=False)
+        names = {d["name"] for d in decls}
+        for bname in BUILTIN_SUBAGENT_TOOL_NAMES:
+            assert bname not in names, f"{bname} should be excluded with include_builtins=False"
+
+    def test_include_builtins_false_keeps_generic_tools(self):
+        decls = build_local_subagent_tool_declarations(include_builtins=False)
+        names = {d["name"] for d in decls}
+        assert "execute_custom_subagent" in names
+        assert "process_trajectory_history" in names
+
+    def test_default_includes_builtins(self):
+        decls = build_local_subagent_tool_declarations()
+        names = {d["name"] for d in decls}
+        assert "subagent_battler" in names
+        assert "subagent_reflect" in names

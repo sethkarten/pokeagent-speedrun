@@ -3405,6 +3405,44 @@ async def mcp_process_skill(request: dict):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/mcp/get_subagent_overview")
+async def mcp_get_subagent_overview(request: dict):
+    """MCP Tool: Get subagent registry tree overview (compact [id] name tree)."""
+    try:
+        from server import game_tools
+
+        return game_tools.get_subagent_overview_direct()
+    except Exception as e:
+        logger.error(f"Error getting subagent overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/process_subagent")
+async def mcp_process_subagent(request: dict):
+    """MCP Tool: Unified CRUD for subagent registry (read/add/update/delete)."""
+    try:
+        from server import game_tools
+
+        action = request.get("action", "")
+        entries = request.get("entries", [])
+        reasoning = request.get("reasoning", "")
+        result = game_tools.process_subagent_direct(action, entries, reasoning)
+
+        if action in ("add", "update", "delete") and result.get("success"):
+            from utils.data_persistence.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            if run_manager:
+                try:
+                    run_manager.copy_subagents()
+                except Exception as sync_err:
+                    logger.warning(f"Failed to sync subagents to run_data: {sync_err}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in process_subagent: {e}")
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/mcp/lookup_pokemon_info")
 async def mcp_lookup_pokemon_info(request: dict):
     """MCP Tool: Lookup Pokemon info from wikis"""

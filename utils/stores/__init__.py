@@ -8,6 +8,7 @@ concrete implementations for Memory and Skills.
 from utils.stores.base_store import BaseStore
 from utils.stores.memory import Memory, MemoryEntry, get_memory_store
 from utils.stores.skills import SkillStore, SkillEntry, get_skill_store
+from utils.stores.subagents import SubagentStore, SubagentEntry, get_subagent_store
 
 __all__ = [
     "BaseStore",
@@ -17,4 +18,7 @@ __all__ = [
     "SkillStore",
     "SkillEntry",
     "get_skill_store",
+    "SubagentStore",
+    "SubagentEntry",
+    "get_subagent_store",
 ]

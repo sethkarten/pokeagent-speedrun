@@ -21,6 +21,7 @@ import io
 import base64
 
 import json as json_module
+from collections import OrderedDict
 
 import google.generativeai.types as genai_types
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -57,6 +58,7 @@ from agents.subagents import (
     resolve_gym_name,
     resolve_verification_target,
 )
+from agents.subagents.utils.executor import SubagentExecutor
 from agents.subagents.planner import (
     PLANNER_HISTORY_CAP,
     PLANNER_SAFETY_CAP,
@@ -104,6 +106,8 @@ class MCPToolAdapter:
                 "process_memory": "/mcp/process_memory",
                 "get_skill_overview": "/mcp/get_skill_overview",
                 "process_skill": "/mcp/process_skill",
+                "get_subagent_overview": "/mcp/get_subagent_overview",
+                "process_subagent": "/mcp/process_subagent",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
@@ -171,7 +175,8 @@ class PokeAgent:
         max_context_chars: int = 100000,
         target_context_chars: int = 50000,
         enable_prompt_optimization: bool = False,
-        optimization_frequency: int = 10
+        optimization_frequency: int = 10,
+        include_builtins: bool = True,
     ):
         logger.info(f"🚀 Initializing PokeAgent with backend={backend}, model={model}, server={server_url}")
         self.server_url = server_url
@@ -183,6 +188,7 @@ class PokeAgent:
         self.target_context_chars = target_context_chars
         self.optimization_enabled = enable_prompt_optimization
         self.optimization_frequency = optimization_frequency
+        self.include_builtins = include_builtins
 
         # Conversation history for tracking and compaction
         self.conversation_history = []
@@ -190,7 +196,8 @@ class PokeAgent:
         # Recent function call results to add to next step's context
         # Format: [(function_name, result_json_string, timestamp), ...]
         self.recent_function_results = []
-        self._subagent_vlm_cache: Dict[Tuple[str, ...], Any] = {}
+        self._subagent_vlm_cache: OrderedDict[Tuple, Any] = OrderedDict()
+        self._VLM_CACHE_CAP = 10
         self._local_subagent_vlm = None
         self.runtime = PokeAgentRuntime(
             initial_step=self.step_count,
@@ -227,7 +234,21 @@ class PokeAgent:
 
         # Initialize LLM logger
         self.llm_logger = get_llm_logger()
-        
+
+        # Subagent executor (generic loop, custom subagents, trajectory analysis)
+        self.executor = SubagentExecutor(
+            runtime=self.runtime,
+            mcp_adapter=self.mcp_adapter,
+            get_run_data_manager_fn=get_run_data_manager,
+            server_url=self.server_url,
+            get_subagent_vlm_fn=self._get_subagent_vlm,
+            handle_vlm_function_calls_fn=self._handle_vlm_function_calls,
+            extract_text_fn=self._extract_text_from_response,
+            log_trajectory_fn=self._log_trajectory_for_step,
+            llm_logger=self.llm_logger,
+            wait_for_actions_fn=self._wait_for_actions_complete,
+        )
+
         # Initialize prompt optimizer if enabled
         self.prompt_optimizer = None
         if self.optimization_enabled:
@@ -419,6 +440,30 @@ class PokeAgent:
                     "required": ["action", "entries", "reasoning"]
                 }
             },
+            {
+                "name": "process_subagent",
+                "description": "Manage the subagent registry. The SUBAGENT REGISTRY section in your prompt shows all subagent IDs. Use 'read' to get full config, 'add' to create, 'update' to modify, 'delete' to remove (built-ins cannot be deleted).",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "action": {
+                            "type_": "STRING",
+                            "enum": ["read", "add", "update", "delete"],
+                            "description": "The action to perform on subagent entries."
+                        },
+                        "entries": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "OBJECT"},
+                            "description": "Array of entry objects. For read: [{id}]. For add: [{path, name, description, handler_type, max_turns, available_tools, system_instructions, directive, return_condition, importance}]. For update: [{id, ...fields}]. For delete: [{id}]."
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Required. Brief justification for this subagent operation.",
+                        },
+                    },
+                    "required": ["action", "entries", "reasoning"]
+                }
+            },
             # COMMENTED OUT FOR NOW AS OBJECTIVE CREATION IS HANDLED BY THE PLANNER SUBAGENT
             #  {
             #     "name": "create_direct_objectives",
@@ -505,7 +550,7 @@ class PokeAgent:
             },
         ]
 
-        tools.extend(build_local_subagent_tool_declarations())
+        tools.extend(build_local_subagent_tool_declarations(include_builtins=self.include_builtins))
 
         logger.info(f"✅ Created {len(tools)} tool declarations (ALL TOOLS ENABLED)")
         return tools
@@ -521,12 +566,17 @@ class PokeAgent:
         # Return as JSON string
         return json.dumps(result, indent=2)
 
+    # Built-in tool-set keys are pinned in the LRU cache (never evicted).
+    _BUILTIN_VLM_KEYS: set = set()
+
     def _get_subagent_vlm(
         self,
         tool_names: Optional[set[str]] = None,
         supplemental_tools: Optional[list[dict]] = None,
+        *,
+        pinned: bool = False,
     ):
-        """Lazily create cached VLMs for local subagents.
+        """Lazily create cached VLMs for local subagents with LRU eviction.
 
         Tool-less subagents (reflect, verify, summarize, gym_puzzle) get a bare
         VLM without tools or system instructions.  Tool-using subagents (battler,
@@ -537,6 +587,9 @@ class PokeAgent:
         ``supplemental_tools`` allows injecting extra tool declarations that are
         not part of the orchestrator's own tool set (e.g. ``replan_objectives``
         which is planner-exclusive).
+
+        ``pinned`` marks the VLM as immune to LRU eviction (used for built-in
+        subagent tool sets).
         """
         normalized = tuple(sorted(tool_names or ()))
         supp_key = tuple(t["name"] for t in (supplemental_tools or []))
@@ -552,17 +605,36 @@ class PokeAgent:
             return self._local_subagent_vlm
 
         cached = self._subagent_vlm_cache.get(cache_key)
-        if cached is None:
-            allowed_tools = [tool for tool in self.tools if tool.get("name") in set(normalized)]
-            if supplemental_tools:
-                allowed_tools.extend(supplemental_tools)
-            cached = VLM(
-                model_name=self.model,
-                backend=self.backend,
-                tools=allowed_tools,
-                system_instruction=self.system_instructions,
-            )
-            self._subagent_vlm_cache[cache_key] = cached
+        if cached is not None:
+            self._subagent_vlm_cache.move_to_end(cache_key)
+            return cached
+
+        allowed_tools = [tool for tool in self.tools if tool.get("name") in set(normalized)]
+        if supplemental_tools:
+            allowed_tools.extend(supplemental_tools)
+        cached = VLM(
+            model_name=self.model,
+            backend=self.backend,
+            tools=allowed_tools,
+            system_instruction=self.system_instructions,
+        )
+
+        if pinned:
+            self._BUILTIN_VLM_KEYS.add(cache_key)
+
+        self._subagent_vlm_cache[cache_key] = cached
+        self._subagent_vlm_cache.move_to_end(cache_key)
+
+        while len(self._subagent_vlm_cache) > self._VLM_CACHE_CAP:
+            oldest_key, _ = next(iter(self._subagent_vlm_cache.items()))
+            if oldest_key in self._BUILTIN_VLM_KEYS:
+                self._subagent_vlm_cache.move_to_end(oldest_key)
+                if all(k in self._BUILTIN_VLM_KEYS for k in self._subagent_vlm_cache):
+                    break
+                continue
+            self._subagent_vlm_cache.pop(oldest_key)
+            logger.debug(f"VLM cache evicted: {oldest_key}")
+
         return cached
 
     @staticmethod
@@ -613,6 +685,18 @@ class PokeAgent:
         if text:
             return step_number, text
         raise RuntimeError(f"{interaction_name} did not return text output")
+
+    # ------------------------------------------------------------------
+    # M3: Generic subagent primitives (delegated to SubagentExecutor)
+    # ------------------------------------------------------------------
+
+    def _execute_custom_subagent(self, arguments: dict) -> str:
+        """Launch a custom subagent (from registry or inline config)."""
+        return self.executor.execute_custom_subagent(arguments)
+
+    def _execute_process_trajectory_history(self, arguments: dict) -> str:
+        """One-step VLM analysis on a trajectory window with a directive."""
+        return self.executor.process_trajectory_history(arguments)
 
     def _extract_recommended_next_action(self, text: str) -> str:
         for line in (text or "").splitlines():
@@ -829,7 +913,7 @@ class PokeAgent:
 
     def _run_battler_loop(self, *, handoff_summary: str) -> Dict[str, Any]:
         run_manager = get_run_data_manager()
-        battler_vlm = self._get_subagent_vlm(allowed_battler_tool_names())
+        battler_vlm = self._get_subagent_vlm(allowed_battler_tool_names(), pinned=True)
         turns_taken = 0
         key_events: List[str] = []
         battle_history: List[Dict[str, Any]] = []
@@ -1005,6 +1089,7 @@ class PokeAgent:
         planner_vlm = self._get_subagent_vlm(
             allowed_planner_tool_names(),
             supplemental_tools=[REPLAN_OBJECTIVES_TOOL_DECLARATION],
+            pinned=True,
         )
 
         planner_history: List[Dict[str, Any]] = []
@@ -1992,6 +2077,24 @@ class PokeAgent:
             logger.warning(f"Failed to fetch skill overview for prompt: {e}")
             return "No skills learned yet."
 
+    def _get_subagent_context(self) -> str:
+        """Fetch the subagent registry tree overview for inclusion in the prompt."""
+        try:
+            sa_result = self.mcp_adapter.call_tool("get_subagent_overview", {})
+
+            if not sa_result.get("success"):
+                logger.debug("Subagent overview not available")
+                return "No subagents registered yet."
+
+            overview = sa_result.get("overview", "")
+            if not overview or overview.strip() == "No subagents registered yet.":
+                return "No subagents registered yet."
+            return overview
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch subagent overview for prompt: {e}")
+            return "No subagents registered yet."
+
     def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build optimized prompt by combining base_prompt.md with current game context.
         
@@ -2154,6 +2257,7 @@ class PokeAgent:
 
         memory_context = self._get_memory_context()
         skill_context = self._get_skill_context()
+        subagent_context = self._get_subagent_context()
 
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
@@ -2199,6 +2303,9 @@ class PokeAgent:
 
 ### SKILL LIBRARY
 {skill_context}
+
+### SUBAGENT REGISTRY
+{subagent_context}
 
 Step {step_count}"""
 
@@ -2395,6 +2502,7 @@ Step {step_count}"""
 
         memory_context = self._get_memory_context()
         skill_context = self._get_skill_context()
+        subagent_context = self._get_subagent_context()
 
         # Build autonomous prompt
         prompt = f"""# Step: {step_count}
@@ -2411,6 +2519,8 @@ Step {step_count}"""
 {memory_context}
 ### SKILL LIBRARY
 {skill_context}
+### SUBAGENT REGISTRY
+{subagent_context}
 """
 
         return prompt

@@ -16,6 +16,7 @@ from utils.json_utils import serialize_for_json
 from utils.mapping.pathfinding import Pathfinder
 from utils.stores.memory import get_memory_store
 from utils.stores.skills import get_skill_store
+from utils.stores.subagents import get_subagent_store
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 pathfinder = Pathfinder()
 memory_store = get_memory_store()
 skill_store = get_skill_store()
+subagent_store = get_subagent_store()
 
 
 # ---------------------------------------------------------------------------
@@ -614,6 +616,103 @@ def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
         return {"success": True, "results": results}
     except Exception as e:
         logger.error(f"process_skill error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Subagent registry helpers
+# ---------------------------------------------------------------------------
+
+def get_subagent_overview_direct() -> dict:
+    """Get compact tree overview of the subagent registry ([id] name grouped by path)."""
+    try:
+        overview = subagent_store.get_tree_overview()
+        return {"success": True, "overview": overview}
+    except Exception as e:
+        logger.error(f"Failed to get subagent overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def process_subagent_direct(action: str, entries: list, reasoning: object) -> dict:
+    """Unified CRUD dispatch for the subagent registry.
+
+    ``reasoning`` is required (non-empty): why this subagent operation is appropriate.
+    """
+    try:
+        if _normalize_process_reasoning(reasoning) is None:
+            return {
+                "success": False,
+                "error": "reasoning is required (non-empty string explaining why this subagent operation is needed)",
+            }
+        results = []
+        for entry_data in entries:
+            if action == "read":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for read"})
+                    continue
+                entry = subagent_store.get(entry_id)
+                if entry is None:
+                    results.append({"success": False, "error": f"Subagent {entry_id} not found"})
+                else:
+                    results.append({"success": True, "entry": subagent_store.to_display_dict(entry)})
+
+            elif action == "add":
+                path = entry_data.get("path", "custom")
+                name = entry_data.get("name", entry_data.get("title", ""))
+                description = entry_data.get("description", "")
+                handler_type = entry_data.get("handler_type", "looping")
+                max_turns = int(entry_data.get("max_turns", 25))
+                available_tools = entry_data.get("available_tools", [])
+                system_instructions = entry_data.get("system_instructions", "")
+                directive = entry_data.get("directive", "")
+                return_condition = entry_data.get("return_condition", "")
+                importance = int(entry_data.get("importance", 3))
+                try:
+                    entry_id = subagent_store.add(
+                        path=path, name=name, title=name, description=description,
+                        handler_type=handler_type, max_turns=max_turns,
+                        available_tools=available_tools,
+                        system_instructions=system_instructions,
+                        directive=directive, return_condition=return_condition,
+                        importance=importance,
+                    )
+                    results.append({"success": True, "entry_id": entry_id})
+                except ValueError as ve:
+                    results.append({"success": False, "error": str(ve)})
+
+            elif action == "update":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for update"})
+                    continue
+                update_fields = {k: v for k, v in entry_data.items() if k != "id" and v is not None}
+                if "name" in update_fields:
+                    update_fields.setdefault("title", update_fields["name"])
+                try:
+                    ok = subagent_store.update(entry_id, **update_fields)
+                    results.append({"success": ok, "entry_id": entry_id})
+                except ValueError as ve:
+                    results.append({"success": False, "error": str(ve)})
+
+            elif action == "delete":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for delete"})
+                    continue
+                entry = subagent_store.get(entry_id)
+                if entry is not None and getattr(entry, "is_builtin", False):
+                    results.append({"success": False, "error": f"Cannot delete built-in subagent {entry_id}"})
+                    continue
+                ok = subagent_store.remove(entry_id)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            else:
+                results.append({"success": False, "error": f"Unknown action: {action}"})
+
+        return {"success": True, "results": results}
+    except Exception as e:
+        logger.error(f"process_subagent error: {e}")
         return {"success": False, "error": str(e)}
 
 

@@ -81,15 +81,16 @@ def test_load_recent_trajectories_from_cache(tmp_path):
     assert [entry["step"] for entry in loaded] == [6, 7, 8]
 
 
-def test_load_recent_trajectories_caps_window_at_50(tmp_path):
+def test_load_recent_trajectories_caps_window_at_max(tmp_path):
     cache_dir = tmp_path / ".pokeagent_cache" / "test_run"
-    _write_trajectories_cache(cache_dir, 70)
+    n_entries = MAX_TRAJECTORY_WINDOW + 30
+    _write_trajectories_cache(cache_dir, n_entries)
 
     with mock.patch(_CACHE_MOCK_TARGET, side_effect=lambda rel: cache_dir / rel):
         loaded = load_recent_trajectories(None, last_n_steps=999)
     assert len(loaded) == MAX_TRAJECTORY_WINDOW
-    assert loaded[0]["step"] == 21
-    assert loaded[-1]["step"] == 70
+    assert loaded[0]["step"] == n_entries - MAX_TRAJECTORY_WINDOW + 1
+    assert loaded[-1]["step"] == n_entries
 
 
 # ---- Fallback to legacy path ----
