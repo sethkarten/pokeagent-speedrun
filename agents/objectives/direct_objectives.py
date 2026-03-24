@@ -2824,21 +2824,18 @@ class DirectObjectiveManager:
         self.dynamics_sequence = []
         self.battling_sequence = []
 
-        # When EXCLUDE_BUILTIN_SUBAGENTS=1 the registry starts empty and built-in
-        # subagent tools are stripped.  The model must bootstrap from scratch:
-        # use get_walkthrough + get_progress_summary to research, then create its
-        # own planning subagent via process_subagent(action="add") if desired, or
-        # simply create objectives directly.
+        # Under the 'simplest' scaffold (EXCLUDE_BUILTIN_SUBAGENTS=1) the registry
+        # starts empty and built-in subagent tools are stripped.  The orchestrator
+        # owns replan_objectives directly so it can modify the objective sequence
+        # without needing a planner subagent.
         if os.environ.get("EXCLUDE_BUILTIN_SUBAGENTS") == "1":
             _initial_plan = DirectObjective(
                 id="autonomous_01_plan_objectives",
                 description=(
                     "Plan the initial set of objectives. Built-in subagent tools are disabled "
-                    "and the SUBAGENT REGISTRY starts empty. Use get_walkthrough and "
-                    "get_progress_summary to research your current progress, then create "
-                    "objectives yourself. You may also create a custom planning subagent via "
-                    "process_subagent(action='add') and invoke it with execute_custom_subagent "
-                    "if you want to delegate planning."
+                    "and the SUBAGENT REGISTRY starts empty. Use the research tools at your disposal "
+                    "to research your current progress, understand what you need to do next, then call "
+                    "replan_objectives to create objectives."
                 ),
                 action_type="create_new_objectives",
                 category="story",
@@ -2846,8 +2843,8 @@ class DirectObjectiveManager:
                 navigation_hint=(
                     "1. Call get_progress_summary() to see current state. "
                     "2. Call get_walkthrough(part=...) to find what comes next. "
-                    "3. Optionally create a planning subagent via process_subagent. "
-                    "4. Complete this objective once you have a plan for next steps."
+                    "3. Call replan_objectives(edits=[...], category=...) to create objectives. "
+                    "4. Complete this objective once you have created your plan."
                 ),
                 completion_condition="story_objectives_created",
                 priority=1,

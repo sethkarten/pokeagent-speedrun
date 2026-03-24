@@ -97,12 +97,12 @@ class TestDirectObjectiveManager:
         assert manager.battling_sequence == []
         assert manager.dynamics_sequence == []
 
-    def test_load_autonomous_sequence_mentions_execute_custom_when_no_builtins_env(self, manager, monkeypatch):
+    def test_load_autonomous_sequence_mentions_replan_when_simplest_scaffold(self, manager, monkeypatch):
         monkeypatch.setenv("EXCLUDE_BUILTIN_SUBAGENTS", "1")
         manager.load_autonomous_objective_creation_sequence()
         desc = manager.story_sequence[0].description
         hint = manager.story_sequence[0].navigation_hint or ""
-        assert "execute_custom_subagent" in desc
+        assert "replan_objectives" in desc or "replan_objectives" in hint
         assert "get_progress_summary" in hint
         assert "subagent_plan_objectives" not in desc
 
