@@ -21,6 +21,7 @@ import io
 import base64
 
 import json as json_module
+from collections import OrderedDict
 
 import google.generativeai.types as genai_types
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
@@ -57,16 +58,31 @@ from agents.subagents import (
     resolve_gym_name,
     resolve_verification_target,
 )
+from agents.subagents.utils.executor import SubagentExecutor
+from agents.subagents.planner import (
+    PLANNER_HISTORY_CAP,
+    PLANNER_SAFETY_CAP,
+    REPLAN_OBJECTIVES_TOOL_DECLARATION,
+    allowed_planner_tool_names,
+    build_planner_prompt,
+    format_full_objective_sequence,
+    format_planner_history,
+)
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
+    POKEAGENT_NO_BUILTINS_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
     POKEAGENT_SYSTEM_PROMPT_PATH,
     resolve_repo_path,
 )
+from utils.json_utils import convert_protobuf_value, convert_protobuf_args, normalize_replan_edits
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Orchestrator short-term action history: slice size and prompt header must stay in sync
+ACTION_HISTORY_WINDOW = 20
 
 
 class MCPToolAdapter:
@@ -84,9 +100,15 @@ class MCPToolAdapter:
                 "get_game_state": "/mcp/get_game_state",
                 "press_buttons": "/mcp/press_buttons",
                 "navigate_to": "/mcp/navigate_to",
-                "add_knowledge": "/mcp/add_knowledge",
-                "search_knowledge": "/mcp/search_knowledge",
-                "get_knowledge_summary": "/mcp/get_knowledge_summary",
+                "add_memory": "/mcp/add_memory",
+                "search_memory": "/mcp/search_memory",
+                "get_memory_summary": "/mcp/get_memory_summary",
+                "get_memory_overview": "/mcp/get_memory_overview",
+                "process_memory": "/mcp/process_memory",
+                "get_skill_overview": "/mcp/get_skill_overview",
+                "process_skill": "/mcp/process_skill",
+                "get_subagent_overview": "/mcp/get_subagent_overview",
+                "process_subagent": "/mcp/process_subagent",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
@@ -94,6 +116,9 @@ class MCPToolAdapter:
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
+                # Planner subagent (categorized mode) — must match server/app.py routes
+                "get_full_objective_sequence": "/mcp/get_full_objective_sequence",
+                "replan_objectives": "/mcp/replan_objectives",
             }
 
             endpoint = endpoint_map.get(tool_name)
@@ -110,7 +135,7 @@ class MCPToolAdapter:
             logger.info(f"   Args: {args_for_log}")
 
             # Use longer timeout for initial MCP calls that may need to load data from disk
-            # (knowledge base, porymap data, etc.)
+            # (memory, porymap data, etc.)
             timeout = 90  # Increased from 30 to handle startup initialization
             response = requests.post(url, json=arguments, timeout=timeout)
             response.raise_for_status()
@@ -151,9 +176,10 @@ class PokeAgent:
         max_context_chars: int = 100000,
         target_context_chars: int = 50000,
         enable_prompt_optimization: bool = False,
-        optimization_frequency: int = 10
+        optimization_frequency: int = 10,
+        scaffold: str = "pokeagent",
     ):
-        logger.info(f"🚀 Initializing PokeAgent with backend={backend}, model={model}, server={server_url}")
+        logger.info(f"🚀 Initializing PokeAgent with backend={backend}, model={model}, server={server_url}, scaffold={scaffold}")
         self.server_url = server_url
         self.model = model
         self.backend = backend
@@ -163,6 +189,8 @@ class PokeAgent:
         self.target_context_chars = target_context_chars
         self.optimization_enabled = enable_prompt_optimization
         self.optimization_frequency = optimization_frequency
+        self.scaffold = scaffold
+        self.include_builtins = scaffold != "simplest"
 
         # Conversation history for tracking and compaction
         self.conversation_history = []
@@ -170,7 +198,8 @@ class PokeAgent:
         # Recent function call results to add to next step's context
         # Format: [(function_name, result_json_string, timestamp), ...]
         self.recent_function_results = []
-        self._subagent_vlm_cache: Dict[Tuple[str, ...], Any] = {}
+        self._subagent_vlm_cache: OrderedDict[Tuple, Any] = OrderedDict()
+        self._VLM_CACHE_CAP = 10
         self._local_subagent_vlm = None
         self.runtime = PokeAgentRuntime(
             initial_step=self.step_count,
@@ -182,9 +211,11 @@ class PokeAgent:
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.optimization_enabled:
-                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Tools + hard constraints
+                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH
+            elif self.scaffold == "simplest":
+                system_instructions_file = POKEAGENT_NO_BUILTINS_PROMPT_PATH
             else:
-                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full single-file prompt
+                system_instructions_file = POKEAGENT_PROMPT_PATH
 
         # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
@@ -207,7 +238,21 @@ class PokeAgent:
 
         # Initialize LLM logger
         self.llm_logger = get_llm_logger()
-        
+
+        # Subagent executor (generic loop, custom subagents, trajectory analysis)
+        self.executor = SubagentExecutor(
+            runtime=self.runtime,
+            mcp_adapter=self.mcp_adapter,
+            get_run_data_manager_fn=get_run_data_manager,
+            server_url=self.server_url,
+            get_subagent_vlm_fn=self._get_subagent_vlm,
+            handle_vlm_function_calls_fn=self._handle_vlm_function_calls,
+            extract_text_fn=self._extract_text_from_response,
+            log_trajectory_fn=self._log_trajectory_for_step,
+            llm_logger=self.llm_logger,
+            wait_for_actions_fn=self._wait_for_actions_complete,
+        )
+
         # Initialize prompt optimizer if enabled
         self.prompt_optimizer = None
         if self.optimization_enabled:
@@ -266,7 +311,7 @@ class PokeAgent:
 ## Make intelligent decisions to progress through Pokemon Emerald.
 - Think step-by-step
 - Use tools effectively
-- Store knowledge
+- Store memories
 - Complete objectives"""
         
         with open(filepath, 'r') as f:
@@ -349,97 +394,157 @@ class PokeAgent:
                     "required": ["reasoning"]
                 }
             },
-            # Knowledge Base Tools - NOW ENABLED
+            # Long-Term Memory Tool (unified CRUD)
             {
-                "name": "add_knowledge",
-                "description": "Store important discoveries in your knowledge base.",
+                "name": "process_memory",
+                "description": "Manage long-term memory. The LONG-TERM MEMORY OVERVIEW in your prompt shows all entry IDs. Use 'read' to get full details, 'add' to create, 'update' to modify, 'delete' to remove.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "category": {
+                        "action": {
                             "type_": "STRING",
-                            "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
-                            "description": "Category of knowledge"
+                            "enum": ["read", "add", "update", "delete"],
+                            "description": "The action to perform on memory entries."
                         },
-                        "title": {"type_": "STRING", "description": "Short title"},
-                        "content": {"type_": "STRING", "description": "Detailed content"},
-                        "location": {"type_": "STRING", "description": "Map name (optional)"},
-                        "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
-                        "importance": {
-                            "type_": "INTEGER",
-                            "description": "Importance 1-5",
-                        }
-                    },
-                    "required": ["category", "title", "content", "importance"]
-                }
-            },
-            {
-                "name": "search_knowledge",
-                "description": "Search your knowledge base for stored information.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "category": {"type_": "STRING", "description": "Category (optional)"},
-                        "query": {"type_": "STRING", "description": "Text to search (optional)"},
-                        "location": {"type_": "STRING", "description": "Map name filter (optional)"},
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"}
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "get_knowledge_summary",
-                "description": "Get a summary of the most important things you've learned.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance (default 3)"}
-                    },
-                    "required": []
-                }
-            },
-            {
-                "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' for training prep, and 'dynamics' for short-term navigation/cleanup. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "objectives": {
+                        "entries": {
                             "type_": "ARRAY",
                             "items": {
                                 "type_": "OBJECT",
                                 "properties": {
-                                    "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
-                                    "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
-                                    "action_type": {
-                                        "type_": "STRING",
-                                        "enum": ["navigate", "interact", "battle", "wait"],
-                                        "description": "Type of action"
-                                    },
-                                    "target_location": {"type_": "STRING", "description": "Target location/map name"},
-                                    "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
-                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
+                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "path": {"type_": "STRING", "description": "Category path, e.g. 'navigation/routes'. Defaults to 'uncategorized'."},
+                                    "title": {"type_": "STRING", "description": "Short descriptive title (required for add)."},
+                                    "content": {"type_": "STRING", "description": "Detailed content text (required for add)."},
+                                    "importance": {"type_": "INTEGER", "description": "1-5 importance rating (default 3)."},
+                                    "location": {"type_": "STRING", "description": "Game location this memory relates to."},
                                 },
-                                "required": ["id", "description", "action_type"]
                             },
-                            "description": "Array of exactly 3 objectives to create next"
-                        },
-                        "category": {
-                            "type_": "STRING",
-                            "enum": ["dynamics", "story", "battling"],
-                            "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal."
+                            "description": "For read: [{id}]. For add: [{path, title, content}] — title AND content required. For update: [{id, ...fields}]. For delete: [{id}]."
                         },
                         "reasoning": {
                             "type_": "STRING",
-                            "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
-                        }
+                            "description": "Required. Brief justification for this memory operation (what you are trying to learn or change and why).",
+                        },
                     },
-                    "required": ["objectives", "reasoning"]
+                    "required": ["action", "entries", "reasoning"]
+                }
+            },
+            # Skill Library Tool (unified CRUD)
+            {
+                "name": "process_skill",
+                "description": "Manage the skill library. The SKILL LIBRARY section in your prompt shows all skill IDs. Use 'read' to get full details, 'add' to create, 'update' to modify, 'delete' to remove.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "action": {
+                            "type_": "STRING",
+                            "enum": ["read", "add", "update", "delete"],
+                            "description": "The action to perform on skill entries."
+                        },
+                        "entries": {
+                            "type_": "ARRAY",
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "name": {"type_": "STRING", "description": "Skill name (required for add)."},
+                                    "description": {"type_": "STRING", "description": "What the skill does and when to use it (required for add)."},
+                                    "path": {"type_": "STRING", "description": "Category path, e.g. 'battle/type_matchups'. Defaults to 'general'."},
+                                    "effectiveness": {"type_": "STRING", "description": "'low', 'medium', or 'high'."},
+                                },
+                            },
+                            "description": "For read: [{id}]. For add: [{name, description}] — both required. For update: [{id, ...fields}]. For delete: [{id}]."
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Required. Brief justification for this skill operation (what strategy you are recording or updating and why).",
+                        },
+                    },
+                    "required": ["action", "entries", "reasoning"]
                 }
             },
             {
+                "name": "process_subagent",
+                "description": "Manage the subagent registry. The SUBAGENT REGISTRY section in your prompt shows all subagent IDs. Use 'read' to get full config, 'add' to create, 'update' to modify, 'delete' to remove (built-ins cannot be deleted).",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "action": {
+                            "type_": "STRING",
+                            "enum": ["read", "add", "update", "delete"],
+                            "description": "The action to perform on subagent entries."
+                        },
+                        "entries": {
+                            "type_": "ARRAY",
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "name": {"type_": "STRING", "description": "Subagent name (required for add)."},
+                                    "description": {"type_": "STRING", "description": "What the subagent does (required for add)."},
+                                    "system_instructions": {"type_": "STRING", "description": "System prompt for the subagent (max 12000 chars)."},
+                                    "directive": {"type_": "STRING", "description": "Per-invocation directive (max 12000 chars)."},
+                                    "handler_type": {"type_": "STRING", "description": "'one_step' or 'looping' (default 'looping')."},
+                                    "max_turns": {"type_": "INTEGER", "description": "Max turns for looping subagents (default 25)."},
+                                    "return_condition": {"type_": "STRING", "description": "When the subagent should return control."},
+                                },
+                            },
+                            "description": "For read: [{id}]. For add: [{name, description, system_instructions?, directive?}] — name AND description required. For update: [{id, ...fields}]. For delete: [{id}]."
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Required. Brief justification for this subagent operation.",
+                        },
+                    },
+                    "required": ["action", "entries", "reasoning"]
+                }
+            },
+            # COMMENTED OUT FOR NOW AS OBJECTIVE CREATION IS HANDLED BY THE PLANNER SUBAGENT
+            #  {
+            #     "name": "create_direct_objectives",
+            #     "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' for training prep, and 'dynamics' for short-term navigation/cleanup. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
+            #     "parameters": {
+            #         "type_": "OBJECT",
+            #         "properties": {
+            #             "objectives": {
+            #                 "type_": "ARRAY",
+            #                 "items": {
+            #                     "type_": "OBJECT",
+            #                     "properties": {
+            #                         "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
+            #                         "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
+            #                         "action_type": {
+            #                             "type_": "STRING",
+            #                             "enum": ["navigate", "interact", "battle", "wait"],
+            #                             "description": "Type of action"
+            #                         },
+            #                         "target_location": {"type_": "STRING", "description": "Target location/map name"},
+            #                         "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
+            #                         "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
+            #                     },
+            #                     "required": ["id", "description", "action_type"]
+            #                 },
+            #                 "description": "Array of exactly 3 objectives to create next"
+            #             },
+            #             "category": {
+            #                 "type_": "STRING",
+            #                 "enum": ["dynamics", "story", "battling"],
+            #                 "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal."
+            #             },
+            #             "reasoning": {
+            #                 "type_": "STRING",
+            #                 "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
+            #             }
+            #         },
+            #         "required": ["objectives", "reasoning"]
+            #     }
+            # },
+            {
                 "name": "get_progress_summary",
-                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
+                "description": (
+                    "Get progress: milestones, current location/coords, direct-objective status, completed objectives "
+                    "history, memory tree overview, and run directory. Call with no arguments."
+                ),
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {},
@@ -480,9 +585,12 @@ class PokeAgent:
             },
         ]
 
-        tools.extend(build_local_subagent_tool_declarations())
+        tools.extend(build_local_subagent_tool_declarations(include_builtins=self.include_builtins))
 
-        logger.info(f"✅ Created {len(tools)} tool declarations (ALL TOOLS ENABLED)")
+        if self.scaffold == "simplest":
+            tools.append(REPLAN_OBJECTIVES_TOOL_DECLARATION)
+
+        logger.info(f"✅ Created {len(tools)} tool declarations (scaffold={self.scaffold})")
         return tools
 
     def _execute_function_call_by_name(self, function_name: str, arguments: dict) -> str:
@@ -496,16 +604,37 @@ class PokeAgent:
         # Return as JSON string
         return json.dumps(result, indent=2)
 
-    def _get_subagent_vlm(self, tool_names: Optional[set[str]] = None):
-        """Lazily create cached VLMs for local subagents.
+    # Built-in tool-set keys are pinned in the LRU cache (never evicted).
+    _BUILTIN_VLM_KEYS: set = set()
+
+    def _get_subagent_vlm(
+        self,
+        tool_names: Optional[set[str]] = None,
+        supplemental_tools: Optional[list[dict]] = None,
+        *,
+        pinned: bool = False,
+    ):
+        """Lazily create cached VLMs for local subagents with LRU eviction.
 
         Tool-less subagents (reflect, verify, summarize, gym_puzzle) get a bare
-        VLM without tools or system instructions.  Tool-using subagents (battler)
-        get a VLM with only their allowed tool declarations AND the orchestrator's
-        system instructions so the battler inherits the same behavioural grounding.
+        VLM without tools or system instructions.  Tool-using subagents (battler,
+        planner) get a VLM with only their allowed tool declarations AND the
+        orchestrator's system instructions so they inherit the same behavioural
+        grounding.
+
+        ``supplemental_tools`` allows injecting extra tool declarations that are
+        not part of the orchestrator's default tool set (e.g. ``replan_objectives``
+        is planner-exclusive in the default scaffold, but exposed directly to the
+        orchestrator in the ``simplest`` scaffold).
+
+        ``pinned`` marks the VLM as immune to LRU eviction (used for built-in
+        subagent tool sets).
         """
         normalized = tuple(sorted(tool_names or ()))
-        if not normalized:
+        supp_key = tuple(t["name"] for t in (supplemental_tools or []))
+        cache_key = (normalized, supp_key)
+
+        if not normalized and not supp_key:
             if self._local_subagent_vlm is None:
                 self._local_subagent_vlm = VLM(
                     model_name=self.model,
@@ -514,17 +643,56 @@ class PokeAgent:
                 )
             return self._local_subagent_vlm
 
-        cached = self._subagent_vlm_cache.get(normalized)
-        if cached is None:
-            allowed_tools = [tool for tool in self.tools if tool.get("name") in set(normalized)]
-            cached = VLM(
-                model_name=self.model,
-                backend=self.backend,
-                tools=allowed_tools,
-                system_instruction=self.system_instructions,
-            )
-            self._subagent_vlm_cache[normalized] = cached
+        cached = self._subagent_vlm_cache.get(cache_key)
+        if cached is not None:
+            self._subagent_vlm_cache.move_to_end(cache_key)
+            return cached
+
+        allowed_tools = [tool for tool in self.tools if tool.get("name") in set(normalized)]
+        if supplemental_tools:
+            allowed_tools.extend(supplemental_tools)
+        cached = VLM(
+            model_name=self.model,
+            backend=self.backend,
+            tools=allowed_tools,
+            system_instruction=self.system_instructions,
+        )
+
+        if pinned:
+            self._BUILTIN_VLM_KEYS.add(cache_key)
+
+        self._subagent_vlm_cache[cache_key] = cached
+        self._subagent_vlm_cache.move_to_end(cache_key)
+
+        while len(self._subagent_vlm_cache) > self._VLM_CACHE_CAP:
+            oldest_key, _ = next(iter(self._subagent_vlm_cache.items()))
+            if oldest_key in self._BUILTIN_VLM_KEYS:
+                self._subagent_vlm_cache.move_to_end(oldest_key)
+                if all(k in self._BUILTIN_VLM_KEYS for k in self._subagent_vlm_cache):
+                    break
+                continue
+            self._subagent_vlm_cache.pop(oldest_key)
+            logger.debug(f"VLM cache evicted: {oldest_key}")
+
         return cached
+
+    @staticmethod
+    def _metrics_safe_subagent_args(arguments: Optional[Dict[str, Any]], *, keys: tuple[str, ...]) -> Dict[str, Any]:
+        """Copy selected orchestrator tool args for cumulative_metrics (truncate long strings)."""
+        if not arguments:
+            return {}
+        out: Dict[str, Any] = {}
+        max_len = 800
+        for key in keys:
+            if key not in arguments:
+                continue
+            val = arguments[key]
+            if val is None:
+                continue
+            if isinstance(val, str) and len(val) > max_len:
+                val = val[:max_len] + "…"
+            out[key] = val
+        return out
 
     def _run_one_step_subagent(
         self,
@@ -532,6 +700,8 @@ class PokeAgent:
         prompt: str,
         interaction_name: str,
         current_image=None,
+        orchestrator_args: Optional[Dict[str, Any]] = None,
+        metrics_arg_keys: Optional[tuple[str, ...]] = None,
     ) -> tuple[int, str]:
         """Run a one-step local subagent with its own claimed global step."""
         step_number = self.runtime.claim_step(owner="subagent", interaction_name=interaction_name)
@@ -541,18 +711,85 @@ class PokeAgent:
         else:
             response = subagent_vlm.get_text_query(prompt, interaction_name)
 
-        # Tag the step in cumulative_metrics so one-step subagent calls are
-        # identifiable (they produce no tool calls, so without this the entry
-        # would appear as an anonymous ghost step).
+        # Tag the step in cumulative_metrics (subagent VLM has no function-calling tool_calls).
+        log_args: Dict[str, Any] = {}
+        if orchestrator_args is not None and metrics_arg_keys:
+            log_args = self._metrics_safe_subagent_args(orchestrator_args, keys=metrics_arg_keys)
         self.llm_logger.add_step_tool_calls(
             step_number,
-            [{"name": interaction_name, "args": {}}],
+            [{"name": interaction_name, "args": log_args}],
         )
 
         text = self._extract_text_from_response(response)
         if text:
             return step_number, text
         raise RuntimeError(f"{interaction_name} did not return text output")
+
+    # ------------------------------------------------------------------
+    # M3: Generic subagent primitives (delegated to SubagentExecutor)
+    # ------------------------------------------------------------------
+
+    def _execute_custom_subagent(self, arguments: dict) -> str:
+        """Launch a custom subagent (from registry or inline config).
+
+        Under the ``simplest`` scaffold the registry starts empty (no built-in
+        rows are seeded) and the dedicated subagent tools are stripped.  The
+        delegation fallback below is retained as a safety net: if a built-in
+        entry somehow exists (e.g. migrated from a previous run's cache), it
+        routes to the native handler.
+        """
+        if not self.include_builtins:
+            sid = arguments.get("subagent_id")
+            if sid and not arguments.get("config"):
+                delegated = self._execute_builtin_subagent_by_registry_id(sid, arguments)
+                if delegated is not None:
+                    return delegated
+        return self.executor.execute_custom_subagent(arguments)
+
+    def _execute_builtin_subagent_by_registry_id(
+        self, subagent_id: str, arguments: dict
+    ) -> Optional[str]:
+        """If *subagent_id* is a built-in registry entry, run native handler; else None."""
+        from utils.stores.subagents import get_subagent_store
+
+        entry = get_subagent_store().get(subagent_id)
+        if entry is None or not getattr(entry, "is_builtin", False):
+            return None
+
+        reasoning = (arguments.get("reasoning") or "").strip() or "Registry built-in delegation."
+        name = (entry.name or "").strip()
+
+        if name == "Planner":
+            return self._execute_subagent_plan_objectives({"reason": reasoning})
+        if name == "Battler":
+            return self._execute_subagent_battler({"reasoning": reasoning})
+        if name == "Reflect":
+            return self._execute_subagent_reflect(
+                {"situation": reasoning, "last_n_steps": arguments.get("last_n_steps")},
+            )
+        if name == "Verify":
+            return self._execute_subagent_verify(
+                {
+                    "reasoning": reasoning,
+                    "category": arguments.get("category"),
+                    "last_n_steps": arguments.get("last_n_steps"),
+                },
+            )
+        if name == "Summarize":
+            return self._execute_subagent_summarize(
+                {"reasoning": reasoning, "last_n_steps": arguments.get("last_n_steps")},
+            )
+        if name == "Gym Puzzle Analysis":
+            return self._execute_subagent_gym_puzzle(
+                {"gym_name": arguments.get("gym_name")},
+            )
+
+        logger.warning("Built-in subagent %s (%s) has no delegation mapping", subagent_id, name)
+        return None
+
+    def _execute_process_trajectory_history(self, arguments: dict) -> str:
+        """One-step VLM analysis on a trajectory window with a directive."""
+        return self.executor.process_trajectory_history(arguments)
 
     def _extract_recommended_next_action(self, text: str) -> str:
         for line in (text or "").splitlines():
@@ -583,6 +820,8 @@ class PokeAgent:
                 prompt=prompt,
                 interaction_name="Subagent_Reflect",
                 current_image=context.get("current_image"),
+                orchestrator_args=arguments,
+                metrics_arg_keys=("situation", "last_n_steps"),
             )
             logger.info(f"✅ Self-reflection complete ({len(reflection_text)} chars)")
             return json.dumps(
@@ -627,6 +866,8 @@ class PokeAgent:
                 prompt=prompt,
                 interaction_name="Subagent_Verify",
                 current_image=context.get("current_image"),
+                orchestrator_args=arguments,
+                metrics_arg_keys=("reasoning", "category", "last_n_steps"),
             )
             verdict = parse_verify_response(verify_text, target=target)
             verdict["success"] = True
@@ -663,6 +904,8 @@ class PokeAgent:
                 ),
                 interaction_name="Gym_Puzzle_Analysis",
                 current_image=current_image,
+                orchestrator_args={**arguments, "gym_name": gym_name},
+                metrics_arg_keys=("gym_name",),
             )
 
             logger.info(f"✅ Gym puzzle analysis complete ({len(puzzle_text)} chars)")
@@ -699,6 +942,8 @@ class PokeAgent:
                 ),
                 interaction_name="Subagent_Summarize",
                 current_image=None,
+                orchestrator_args=arguments,
+                metrics_arg_keys=("reasoning", "last_n_steps"),
             )
             return json.dumps(
                 {
@@ -743,7 +988,8 @@ class PokeAgent:
                 self._execute_subagent_summarize(
                     {
                         "reasoning": "Summarize the recent context leading into this battle for a delegated battler handoff.",
-                        "last_n_steps": max(50, last_n_steps),
+                        # Respect orchestrator's last_n_steps (already clamped); do not force a minimum.
+                        "last_n_steps": last_n_steps,
                     }
                 )
             )
@@ -760,7 +1006,7 @@ class PokeAgent:
 
     def _run_battler_loop(self, *, handoff_summary: str) -> Dict[str, Any]:
         run_manager = get_run_data_manager()
-        battler_vlm = self._get_subagent_vlm(allowed_battler_tool_names())
+        battler_vlm = self._get_subagent_vlm(allowed_battler_tool_names(), pinned=True)
         turns_taken = 0
         key_events: List[str] = []
         battle_history: List[Dict[str, Any]] = []
@@ -793,7 +1039,8 @@ class PokeAgent:
                 location=current_context.get("current_state", {}).get("location", "Unknown"),
                 objective_state=current_context.get("objective_state", {}),
                 progress=current_context.get("progress", {}),
-                knowledge_summary=current_context.get("knowledge_summary", ""),
+                memory_summary=current_context.get("memory_summary", ""),
+                skill_overview=current_context.get("skill_overview", ""),
                 handoff_summary=handoff_summary,
                 battle_history=format_battler_history(battle_history),
                 turn_index=turns_taken + 1,
@@ -831,6 +1078,11 @@ class PokeAgent:
                         response=reasoning_text,
                     )
 
+            try:
+                update_server_metrics(self.server_url)
+            except Exception:
+                pass
+
             battle_history.append({
                 "step": turns_taken + 1,
                 "reasoning": reasoning_text,
@@ -844,11 +1096,16 @@ class PokeAgent:
         if turns_taken >= SAFETY_CAP and not resolved:
             key_events.append("Battler hit the safety turn cap before returning to the overworld.")
 
+        # Exit summary: cover roughly the battler's own turns in global trajectory (cap 50).
+        exit_trajectory_window = clamp_trajectory_window(turns_taken)
         exit_summary = json.loads(
             self._execute_subagent_summarize(
                 {
-                    "reasoning": "Compact the completed delegated battle into a concise handoff for the main orchestrator.",
-                    "last_n_steps": 50,
+                    "reasoning": (
+                        "Compact the completed delegated battle into a concise handoff for the main orchestrator. "
+                        f"Focus on the last ~{exit_trajectory_window} global steps (battler inner turns: {turns_taken})."
+                    ),
+                    "last_n_steps": exit_trajectory_window,
                 }
             )
         )
@@ -863,82 +1120,210 @@ class PokeAgent:
             or "Resume overworld planning using the compacted battle summary.",
         }
 
-    def _convert_protobuf_value(self, value):
-        """Recursively convert a protobuf value to JSON-serializable Python types."""
-        # Handle None
-        if value is None:
-            return None
+    # ------------------------------------------------------------------
+    # Objectives planner subagent (looping)
+    # ------------------------------------------------------------------
 
-        # Check if it's a protobuf type
-        if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
-            value_type = value.__class__.__name__
-            logger.debug(f"      Converting protobuf value: type={value_type}, module={value.__class__.__module__}")
-            
-            # First try to convert as dict (for MapComposite objects)
-            # This must be checked BEFORE checking for __iter__ because MapComposite has both
+    def _execute_subagent_plan_objectives(self, arguments: dict) -> str:
+        """Delegate objective planning/replanning to the local planner loop."""
+        try:
+            reason = arguments.get("reason", "Orchestrator requested objective planning.")
+            last_n_steps = clamp_trajectory_window(arguments.get("last_n_steps", DEFAULT_SUMMARY_WINDOW))
+
+            handoff = json.loads(
+                self._execute_subagent_summarize(
+                    {
+                        "reasoning": (
+                            "Summarize the recent context for a delegated objective-planning handoff. "
+                            "Emphasize current progress, what objectives have been completed, and "
+                            "any issues the orchestrator is experiencing."
+                        ),
+                        # Respect orchestrator's last_n_steps (already clamped); do not force a minimum.
+                        "last_n_steps": last_n_steps,
+                    }
+                )
+            )
+
+            full_seq_raw = self.mcp_adapter.call_tool("get_full_objective_sequence", {})
+            if isinstance(full_seq_raw, str):
+                cached_sequence = json.loads(full_seq_raw)
+            elif isinstance(full_seq_raw, dict):
+                cached_sequence = full_seq_raw
+            else:
+                cached_sequence = {}
+
+            if not cached_sequence.get("success", True):
+                return json.dumps(
+                    {"success": False, "error": cached_sequence.get("error", "Failed to load objective sequence")},
+                    indent=2,
+                )
+
+            planner_result = self._run_planner_loop(
+                handoff_summary=handoff.get("summary", ""),
+                reason=reason,
+                cached_sequence=cached_sequence,
+            )
+            planner_result["success"] = True
+            return json.dumps(planner_result, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in plan_objectives execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _run_planner_loop(
+        self,
+        *,
+        handoff_summary: str,
+        reason: str,
+        cached_sequence: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        run_manager = get_run_data_manager()
+        planner_vlm = self._get_subagent_vlm(
+            allowed_planner_tool_names(),
+            supplemental_tools=[REPLAN_OBJECTIVES_TOOL_DECLARATION],
+            pinned=True,
+        )
+
+        planner_history: List[Dict[str, Any]] = []
+        replan_results: List[Dict[str, Any]] = []
+        turns_taken = 0
+        should_return = False
+
+        while turns_taken < PLANNER_SAFETY_CAP and not should_return:
+            current_context = load_subagent_context(
+                self.mcp_adapter,
+                run_manager,
+                last_n_steps=1,
+                include_current_image=True,
+            )
+            current_image = current_context.get("current_image")
+
+            step_number = self.runtime.claim_step(
+                owner="subagent_plan_objectives",
+                interaction_name="Subagent_Plan_Objectives",
+            )
+
+            prompt = build_planner_prompt(
+                reason=reason,
+                objective_sequence=format_full_objective_sequence(cached_sequence),
+                current_state_text=current_context.get("current_state", {}).get("state_text", ""),
+                location=current_context.get("current_state", {}).get("location", "Unknown"),
+                progress=current_context.get("progress", {}),
+                memory_summary=current_context.get("memory_summary", ""),
+                skill_overview=current_context.get("skill_overview", ""),
+                planner_history=format_planner_history(planner_history[-PLANNER_HISTORY_CAP:]),
+                handoff_summary=handoff_summary,
+                turn_index=turns_taken + 1,
+            )
+
+            if current_image is not None:
+                response = planner_vlm.get_query(current_image, prompt, "Subagent_Plan_Objectives")
+            else:
+                response = planner_vlm.get_text_query(prompt, "Subagent_Plan_Objectives")
+            reasoning_text = self._extract_text_from_response(response)
+
+            tool_calls_made: List[Dict[str, Any]] = []
+            used_tools = self._handle_vlm_function_calls(
+                response,
+                tool_calls_made,
+                0,
+                4,
+                allowed_tool_names=allowed_planner_tool_names(),
+            )
+
+            self.llm_logger.add_step_tool_calls(step_number, tool_calls_made)
+            if run_manager:
+                game_state_result = current_context.get("game_state_result", {})
+                raw_state = game_state_result.get("raw_state", {}) or {}
+                pre_state = run_manager.create_state_snapshot(raw_state) if raw_state else None
+                if pre_state:
+                    self._log_trajectory_for_step(
+                        run_manager=run_manager,
+                        step_num=step_number,
+                        pre_state=pre_state,
+                        prompt=prompt,
+                        reasoning=reasoning_text,
+                        tool_calls=tool_calls_made,
+                        response=reasoning_text,
+                    )
+
+            planner_history.append({
+                "step": turns_taken + 1,
+                "reasoning": reasoning_text,
+                "tool_calls": tool_calls_made,
+            })
+
             try:
-                dict_value = dict(value)
-                logger.debug(f"      ✅ Converted to dict with {len(dict_value)} keys")
-                # Successfully converted to dict - recursively convert values
-                return {k: self._convert_protobuf_value(v) for k, v in dict_value.items()}
-            except (TypeError, ValueError) as e:
-                logger.debug(f"      Not dict-like: {e}")
-                # Not a dict-like type, check if it's a list
+                update_server_metrics(self.server_url)
+            except Exception:
                 pass
 
-            # Check if it's a list-like type (RepeatedComposite, RepeatedScalar)
-            if hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
-                logger.debug(f"      Detected iterable (likely list/array)")
-                # It's a list/array - recursively convert each item
-                try:
-                    items = list(value)
-                    logger.debug(f"      ✅ Converted to list with {len(items)} items")
-                    converted = [self._convert_protobuf_value(item) for item in items]
-                    logger.debug(f"      ✅ Recursively converted all {len(converted)} items")
-                    return converted
-                except Exception as e:
-                    logger.warning(f"      ⚠️ Error converting list items: {e}")
+            for tc in tool_calls_made:
+                if tc.get("name") == "replan_objectives":
+                    result_raw = tc.get("result", "{}")
                     try:
-                        fallback = list(value)
-                        logger.debug(f"      Using fallback list conversion: {len(fallback)} items")
-                        return fallback
-                    except Exception as e2:
-                        logger.error(f"      ❌ Fallback also failed: {e2}")
-                        return value
+                        result = json.loads(result_raw) if isinstance(result_raw, str) else result_raw
+                    except (json.JSONDecodeError, TypeError):
+                        result = {}
+                    if result.get("success"):
+                        replan_results.append({
+                            "category": tc.get("args", {}).get("category"),
+                            "edits_applied": result.get("edits_applied", []),
+                            "rationale": tc.get("args", {}).get("rationale", ""),
+                            "new_sequence_length": result.get("new_sequence_length"),
+                        })
+                        fresh_seq = self.mcp_adapter.call_tool("get_full_objective_sequence", {})
+                        if isinstance(fresh_seq, str):
+                            try:
+                                cached_sequence = json.loads(fresh_seq)
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                        elif isinstance(fresh_seq, dict):
+                            cached_sequence = fresh_seq
 
-            # Fallback: return as-is
-            logger.debug(f"      Returning protobuf value as-is (type: {value_type})")
-            return value
+                        if tc.get("args", {}).get("return_to_orchestrator"):
+                            should_return = True
 
-        # Check if it's a regular dict (might contain nested protobuf values)
-        elif isinstance(value, dict):
-            logger.debug(f"      Converting regular dict with {len(value)} keys")
-            return {k: self._convert_protobuf_value(v) for k, v in value.items()}
-        # Check if it's a regular list (might contain nested protobuf values)
-        elif isinstance(value, list):
-            logger.debug(f"      Converting regular list with {len(value)} items")
-            return [self._convert_protobuf_value(item) for item in value]
-        # Otherwise return as-is (native Python type)
-        else:
-            logger.debug(f"      Returning native Python value: type={type(value).__name__}")
-            return value
+            if not used_tools or not tool_calls_made:
+                logger.warning("Planner produced no executable tool call — breaking loop.")
+                break
+
+            turns_taken += 1
+
+        if turns_taken >= PLANNER_SAFETY_CAP and not should_return:
+            logger.warning("Planner hit the safety turn cap (%d) without returning.", PLANNER_SAFETY_CAP)
+
+        final_rationale = (
+            replan_results[-1]["rationale"] if replan_results else "No changes applied."
+        )
+        return {
+            "changes": replan_results,
+            "turns_taken": turns_taken,
+            "steps_consumed": turns_taken,
+            "rationale": final_rationale,
+            "recommended_next_action": reasoning_text if reasoning_text else "Resume normal execution.",
+        }
+
+    def _convert_protobuf_value(self, value):
+        """Recursively convert a protobuf value to JSON-serializable Python types."""
+        return convert_protobuf_value(value)
 
     def _convert_protobuf_args(self, proto_args) -> dict:
         """Convert protobuf arguments to JSON-serializable Python types."""
-        logger.debug(f"   Converting protobuf args: {len(proto_args)} keys")
-        arguments = {}
-        for key, value in proto_args.items():
-            logger.debug(f"   Converting key '{key}': type={type(value).__name__}")
-            try:
-                converted = self._convert_protobuf_value(value)
-                arguments[key] = converted
-                logger.debug(f"   ✅ Key '{key}' converted successfully: type={type(converted).__name__}")
-            except Exception as e:
-                logger.error(f"   ❌ Error converting key '{key}': {e}")
-                logger.error(f"   Traceback: {traceback.format_exc()}")
-                # Try to include the raw value as fallback
-                arguments[key] = str(value)
-        logger.debug(f"   ✅ Converted {len(arguments)} arguments")
+        return convert_protobuf_args(proto_args)
+
+    def _normalize_replan_objectives_arguments(self, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        """Coerce replan_objectives ``edits`` to ``list[dict]`` for JSON/MCP and DOM validation."""
+        arguments["edits"] = normalize_replan_edits(arguments.get("edits"))
+        if "category" in arguments:
+            arguments["category"] = convert_protobuf_value(arguments["category"])
+        if "rationale" in arguments:
+            arguments["rationale"] = convert_protobuf_value(arguments["rationale"])
+        if "return_to_orchestrator" in arguments:
+            arguments["return_to_orchestrator"] = bool(
+                convert_protobuf_value(arguments["return_to_orchestrator"])
+            )
         return arguments
 
     def _execute_function_call(self, function_call, allowed_tool_names: Optional[set[str]] = None) -> str:
@@ -987,6 +1372,12 @@ class PokeAgent:
                     logger.info(f"   ✅ Objective {i} valid: id={obj.get('id')}, action_type={obj.get('action_type')}")
                 
                 logger.info(f"   ✅ All objectives validated successfully")
+
+            elif function_name == "replan_objectives":
+                # Gemini often returns nested args as protobuf MapComposite / RepeatedComposite.
+                # After _convert_protobuf_args, edits may still not be a plain list (e.g. tuple,
+                # or dict with "0","1",… keys). DirectObjectiveManager requires list[dict].
+                arguments = self._normalize_replan_objectives_arguments(arguments)
                 
         except Exception as e:
             logger.error(f"❌ Failed to parse function arguments: {e}")
@@ -1064,9 +1455,9 @@ class PokeAgent:
 
         self.conversation_history.append(entry)
 
-        # Keep only last 10 entries to prevent unbounded growth
-        if len(self.conversation_history) > 10:
-            self.conversation_history = self.conversation_history[-10:]
+        # Keep only last 20 entries to prevent unbounded growth
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]
 
         logger.debug(f"✅ History now has {len(self.conversation_history)} entries")
 
@@ -1088,7 +1479,7 @@ class PokeAgent:
 
         lines = [f"\n{'='*70}", "CONVERSATION HISTORY", '='*70]
 
-        for entry in self.conversation_history[-10:]:
+        for entry in self.conversation_history[-20:]:
             try:
                 lines.append(f"\nStep {entry['step']}:")
                 lines.append(f"  Prompt: {entry['prompt'][:100]}...")
@@ -1123,7 +1514,7 @@ class PokeAgent:
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
                     logger.info(f"⏳ Server not ready yet (attempt {attempt + 1}/{max_retries}), waiting {retry_delay}s...")
-                    logger.info(f"   (Server may be loading porymap data, knowledge base, etc.)")
+                    logger.info(f"   (Server may be loading porymap data, memory, etc.)")
                     time.sleep(retry_delay)
                 else:
                     logger.error(f"Game server not running at {self.server_url} after {max_retries * retry_delay}s: {e}")
@@ -1733,93 +2124,69 @@ class PokeAgent:
 
         return "\n".join(lines)
 
-    def _get_knowledge_base_context(self, max_entries: int = 15, min_importance: int = 3) -> str:
-        """
-        Fetch and format knowledge base entries for inclusion in the prompt.
-        Returns the N most recent entries (by importance first, then recency).
+    def _get_memory_context(self, **_kwargs) -> str:
+        """Fetch the memory tree overview for inclusion in the prompt.
 
-        Args:
-            max_entries: Maximum number of entries to include (default 15)
-            min_importance: Minimum importance level (1-5, default 3)
-
-        Returns:
-            Formatted knowledge base string for prompt injection
+        Returns a compact tree of ``[id] title`` entries grouped by path,
+        rather than a full content dump.  The agent reads specific entries
+        on demand via ``process_memory(action="read", entries=[...], reasoning="...")``.
         """
         try:
-            # Call the get_knowledge_summary tool via MCP
-            kb_result = self.mcp_adapter.call_tool("get_knowledge_summary", {"min_importance": min_importance})
+            mem_result = self.mcp_adapter.call_tool("get_memory_overview", {})
 
-            if not kb_result.get("success"):
-                logger.debug("Knowledge base summary not available")
-                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+            if not mem_result.get("success"):
+                logger.debug("Memory overview not available")
+                return "No memory entries yet."
 
-            summary = kb_result.get("summary", "")
+            overview = mem_result.get("overview", "")
 
-            if not summary or summary.strip() == "No knowledge entries yet.":
-                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+            if not overview or overview.strip() in (
+                "No memory entries yet.",
+                "No knowledge entries yet.",
+            ):
+                return "No memory entries yet."
 
-            # Parse the summary to limit entries
-            lines = summary.split("\n")
-
-            # Count actual entries (lines starting with "  • ")
-            entry_count = sum(1 for line in lines if line.strip().startswith("•"))
-
-            if entry_count == 0:
-                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
-
-            # If we have too many entries, keep only the most recent N entries
-            if entry_count > max_entries:
-                # Collect all entries with their content
-                entries = []
-                current_entry = []
-                in_entry = False
-                category_headers = []
-                header_lines = []
-
-                for line in lines:
-                    # Save header/preamble lines
-                    if not line.strip().startswith("•") and not in_entry and not line.strip().startswith("["):
-                        if "===" in line or "Total:" in line:
-                            continue  # Skip header/footer lines
-                        header_lines.append(line)
-                    # Category header
-                    elif line.strip().startswith("["):
-                        if current_entry:
-                            entries.append("\n".join(current_entry))
-                            current_entry = []
-                        category_headers.append(line)
-                        in_entry = False
-                    # Start of new entry
-                    elif line.strip().startswith("•"):
-                        if current_entry:
-                            entries.append("\n".join(current_entry))
-                        current_entry = [line]
-                        in_entry = True
-                    # Entry content line
-                    elif in_entry:
-                        current_entry.append(line)
-
-                # Add last entry
-                if current_entry:
-                    entries.append("\n".join(current_entry))
-
-                # Keep only the last N entries (most recent)
-                recent_entries = entries[-max_entries:]
-
-                # Rebuild summary with recent entries
-                result_lines = []
-                if header_lines:
-                    result_lines.extend([h for h in header_lines if h.strip()])
-                result_lines.extend(recent_entries)
-                result_lines.append(f"\n(Showing {len(recent_entries)} most recent entries - {entry_count - len(recent_entries)} older entries available via get_knowledge_summary())")
-
-                return "\n".join(result_lines)
-
-            return summary
+            return overview
 
         except Exception as e:
-            logger.warning(f"Failed to fetch knowledge base for prompt: {e}")
-            return "Knowledge base temporarily unavailable."
+            logger.warning(f"Failed to fetch memory overview for prompt: {e}")
+            return "Long-term memory temporarily unavailable."
+
+    def _get_skill_context(self) -> str:
+        """Fetch the skill library tree overview for inclusion in the prompt."""
+        try:
+            skill_result = self.mcp_adapter.call_tool("get_skill_overview", {})
+
+            if not skill_result.get("success"):
+                logger.debug("Skill overview not available")
+                return "No skills learned yet."
+
+            overview = skill_result.get("overview", "")
+            if not overview or overview.strip() == "No skills learned yet.":
+                return "No skills learned yet."
+            return overview
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch skill overview for prompt: {e}")
+            return "No skills learned yet."
+
+    def _get_subagent_context(self) -> str:
+        """Fetch the subagent registry tree overview for inclusion in the prompt."""
+        try:
+            sa_result = self.mcp_adapter.call_tool("get_subagent_overview", {})
+
+            if not sa_result.get("success"):
+                logger.debug("Subagent overview not available")
+                return "No subagents registered yet."
+
+            overview = sa_result.get("overview", "")
+            if not overview or overview.strip() == "No subagents registered yet.":
+                return "No subagents registered yet."
+            return overview
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch subagent overview for prompt: {e}")
+            return "No subagents registered yet."
 
     def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build optimized prompt by combining base_prompt.md with current game context.
@@ -1842,18 +2209,6 @@ class PokeAgent:
 
         # Detect if in title sequence
         is_title_sequence = self._is_title_sequence(game_state_data)
-
-        # Extract player coordinates for stuck detection
-        player_position = game_state_data.get("player_position", {})
-        current_coords = None
-        if player_position and "x" in player_position and "y" in player_position:
-            current_coords = (player_position["x"], player_position["y"])
-
-        # Add stuck warning if detected (but not during title sequence)
-        if not is_title_sequence:
-            stuck_warning = self._get_stuck_warning(current_coords)
-            if stuck_warning:
-                state_text = stuck_warning + state_text
 
         # Strip map information during title sequence
         if is_title_sequence:
@@ -1993,8 +2348,9 @@ class PokeAgent:
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
-        # Get knowledge base summary for context
-        knowledge_context = self._get_knowledge_base_context(max_entries=15, min_importance=3)
+        memory_context = self._get_memory_context()
+        skill_context = self._get_skill_context()
+        subagent_context = self._get_subagent_context()
 
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
@@ -2005,7 +2361,8 @@ class PokeAgent:
         logger.info(f"   state_text: {len(state_text):,} chars")
         logger.info(f"   action_history: {len(action_history):,} chars")
         logger.info(f"   function_results: {len(function_results_context):,} chars")
-        logger.info(f"   knowledge_base: {len(knowledge_context):,} chars")
+        logger.info(f"   memory: {len(memory_context):,} chars")
+        logger.info(f"   skills: {len(skill_context):,} chars")
         logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
@@ -2017,7 +2374,7 @@ class PokeAgent:
 
 ## CONTEXT FOR THIS STEP
 
-### ACTION HISTORY (Recent Steps):
+### ACTION HISTORY (last {ACTION_HISTORY_WINDOW} steps):
 {action_history}
 {function_results_context}
 
@@ -2034,8 +2391,14 @@ class PokeAgent:
 ### CURRENT GAME STATE:
 {state_text}
 
-### KNOWLEDGE BASE - What You've Learned:
-{knowledge_context}
+### LONG-TERM MEMORY OVERVIEW
+{memory_context}
+
+### SKILL LIBRARY
+{skill_context}
+
+### SUBAGENT REGISTRY
+{subagent_context}
 
 Step {step_count}"""
 
@@ -2085,18 +2448,6 @@ Step {step_count}"""
         is_title_sequence = self._is_title_sequence(game_state_data)
         if is_title_sequence:
             logger.info("🎬 Title sequence detected - map information will be hidden")
-
-        # Extract player coordinates for stuck detection
-        player_position = game_state_data.get("player_position", {})
-        current_coords = None
-        if player_position and "x" in player_position and "y" in player_position:
-            current_coords = (player_position["x"], player_position["y"])
-
-        # Add stuck warning if detected
-        if not is_title_sequence:
-            stuck_warning = self._get_stuck_warning(current_coords)
-            if stuck_warning:
-                state_text = stuck_warning + state_text
 
         # Strip map information during title sequence
         if is_title_sequence:
@@ -2242,12 +2593,13 @@ Step {step_count}"""
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
-        # Get knowledge base summary for context
-        knowledge_context = self._get_knowledge_base_context(max_entries=15, min_importance=3)
+        memory_context = self._get_memory_context()
+        skill_context = self._get_skill_context()
+        subagent_context = self._get_subagent_context()
 
         # Build autonomous prompt
         prompt = f"""# Step: {step_count}
-### SHORT-TERM MEMORY (last 10 steps)
+### SHORT-TERM MEMORY (last {ACTION_HISTORY_WINDOW} steps)
 {action_history}
 {function_results_context}
 ### OBJECTIVES
@@ -2256,8 +2608,12 @@ Step {step_count}"""
 {direct_objective_status}
 ### STATE
 {state_text}
-### KNOWLEDGE BASE
-{knowledge_context}
+### LONG-TERM MEMORY OVERVIEW
+{memory_context}
+### SKILL LIBRARY
+{skill_context}
+### SUBAGENT REGISTRY
+{subagent_context}
 """
 
         return prompt
@@ -2349,108 +2705,51 @@ Step {step_count}"""
             logger.warning(f"Error checking for black frame: {e}")
             return False
 
-    def _detect_stuck_pattern(self, current_coords: Optional[Tuple[int, int]]) -> bool:
-        """Detect if agent is stuck (same position for multiple recent steps)"""
-        if not current_coords or len(self.conversation_history) < 3:
-            return False
-
-        recent_positions = []
-        for entry in self.conversation_history[-3:]:
-            coords = entry.get("player_coords")
-            if coords:
-                recent_positions.append(coords)
-
-        if len(recent_positions) >= 3:
-            if all(pos == recent_positions[0] for pos in recent_positions):
-                return True
-
-        return False
-
-    def _get_stuck_warning(self, coords: Optional[Tuple[int, int]]) -> str:
-        """Generate warning text if stuck pattern detected"""
-        if self._detect_stuck_pattern(coords):
-            return "\n⚠️ WARNING: You appear to be stuck at this location. Try a different approach!\n" \
-                   "💡 TIP: If you try an action like RIGHT but coordinates don't change from (X,Y) to (X+1,Y), there's likely an obstacle.\n"
-        return ""
-    
     def _log_trajectory_for_step(self, run_manager, step_num: int, pre_state: dict, 
                                   prompt: str, reasoning: str, tool_calls: list, response: str):
-        """Log trajectory for a CLI agent step
-        
-        Args:
-            run_manager: RunDataManager instance
-            step_num: Step number
-            pre_state: Pre-state snapshot
-            prompt: Prompt sent to LLM
-            reasoning: Reasoning from LLM
-            tool_calls: List of tool calls made
-            response: Full response from LLM
+        """Log trajectory for a CLI agent step.
+
+        Writes a single entry to trajectory_history.jsonl via run_manager.
+        The new schema drops ``post_state`` (inferable from the next step's
+        pre_state) and promotes location / player_coords / objective_context
+        to top-level fields for efficient querying.
         """
         try:
-            # Get post-state after tool calls
-            try:
-                game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
-                if isinstance(game_state_result, str):
-                    game_state_result = json.loads(game_state_result)
-                if game_state_result.get("success"):
-                    raw_state = game_state_result.get("raw_state", {})
-                    post_state = run_manager.create_state_snapshot(raw_state)
-                else:
-                    post_state = pre_state  # Fallback to pre-state
-            except Exception as e:
-                logger.debug(f"Could not capture post-state: {e}")
-                post_state = pre_state  # Fallback to pre-state
-            
-            # Build action dict from tool calls
             action = {
                 "type": "tool_calls",
                 "tool_calls": [
                     {
                         "name": tc.get("name"),
-                        "args": {k: v for k, v in tc.get("args", {}).items() 
-                                if k not in ["screenshot_base64"]}  # Exclude large base64 data
+                        "args": {k: v for k, v in tc.get("args", {}).items()
+                                if k not in ["screenshot_base64"]}
                     }
                     for tc in tool_calls
                 ],
                 "total_tool_calls": len(tool_calls)
             }
-            
-            # Determine outcome
-            outcome = {
-                "success": True,
-                "objectives_completed": []
-            }
-            
-            # Check if location/coordinates changed
-            if pre_state.get("location") != post_state.get("location"):
-                outcome["observations"] = f"Moved from {pre_state.get('location')} to {post_state.get('location')}"
-            elif pre_state.get("player_coords") != post_state.get("player_coords"):
-                outcome["observations"] = f"Position changed from {pre_state.get('player_coords')} to {post_state.get('player_coords')}"
-            else:
-                outcome["observations"] = "No significant state change"
-            
-            # Log trajectory
-            logger.debug(f"🔍 [DEBUG] Calling run_manager.log_trajectory for step {step_num}")
+
+            outcome = {"success": True, "objectives_completed": []}
+
             run_manager.log_trajectory(
                 step=step_num,
                 reasoning=reasoning,
                 action=action,
                 pre_state=pre_state,
-                post_state=post_state,
+                post_state={},
                 outcome=outcome,
-                llm_prompt=prompt
+                llm_prompt=prompt,
             )
-            logger.info(f"🔍 [DEBUG] Successfully logged trajectory for step {step_num}")
+            logger.debug(f"Logged trajectory for step {step_num}")
         except Exception as e:
-            logger.error(f"🔍 [DEBUG] Failed to log trajectory at step {step_num}: {e}")
+            logger.error(f"Failed to log trajectory at step {step_num}: {e}")
             logger.error(traceback.format_exc())
 
     def _format_action_history(self) -> str:
-        """Format short-term memory (last 10 steps) with full tool details."""
+        """Format short-term memory (last ACTION_HISTORY_WINDOW steps) with full tool details."""
         if not self.conversation_history:
             return "No previous actions recorded."
 
-        recent_entries = self.conversation_history[-10:]
+        recent_entries = self.conversation_history[-ACTION_HISTORY_WINDOW:]
 
         history_lines = []
         for entry in recent_entries:

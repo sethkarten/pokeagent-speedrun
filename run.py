@@ -18,13 +18,25 @@ CUSTOM_AGENT_CONFIGS = {
         "name": "PokeAgent",
         "details": [
             "Custom VLM benchmark agent with tool scaffolding",
-            "All MCP tools enabled",
+            "All MCP tools enabled (built-in subagents + generic primitives)",
             "Supports autonomous objective creation and prompt optimization",
         ],
         "module": "agents.PokeAgent",
         "class": "PokeAgent",
         "use_backend": True,
         "supports_prompt_optimization": True,
+    },
+    "simplest": {
+        "name": "PokeAgent",
+        "details": [
+            "Minimal PokeAgent scaffold for AutoEvolve baseline experiments",
+            "No built-in subagent tools; orchestrator owns replan_objectives directly",
+            "Empty subagent registry (agent must create its own)",
+        ],
+        "module": "agents.PokeAgent",
+        "class": "PokeAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": False,
     },
     "autonomous_cli": {
         "name": "PokeAgent",
@@ -55,6 +67,7 @@ CUSTOM_AGENT_CONFIGS = {
 
 SCAFFOLD_DESCRIPTIONS = {
     "pokeagent": "PokeAgent (VLM benchmark agent with tool scaffolding)",
+    "simplest": "PokeAgent-Simplest (no built-in subagents, direct replan, empty registry)",
     "autonomous_cli": "PokeAgent (legacy alias)",
     "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",
 }
@@ -87,7 +100,11 @@ def start_server(args, run_id=None):
 
     # Single-writer metrics: server is the only writer
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
-    
+
+    # The 'simplest' scaffold starts with an empty subagent registry
+    if getattr(args, "scaffold", "pokeagent") == "simplest":
+        server_env["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
+
     # Pass through server-relevant arguments
     if args.record:
         server_cmd.append("--record")
@@ -208,6 +225,10 @@ def start_custom_agent(agent_config, args):
         agent_kwargs["enable_prompt_optimization"] = args.enable_prompt_optimization if hasattr(args, 'enable_prompt_optimization') else False
         agent_kwargs["optimization_frequency"] = args.optimization_frequency if hasattr(args, 'optimization_frequency') else 10
 
+    # Pass scaffold name to PokeAgent so it can select tool set and prompt
+    if agent_config.get("class") == "PokeAgent":
+        agent_kwargs["scaffold"] = args.scaffold
+
     agent = agent_class(**agent_kwargs)
     print("✅ Agent created", flush=True)
 
@@ -260,8 +281,11 @@ def main():
                        help="Start index for story objectives in legacy mode, or story objectives in categorized mode")
     parser.add_argument("--direct-objectives-battling-start", type=int, default=0,
                        help="Start index for battling objectives (only used in categorized mode)")
+    parser.add_argument("--clear-memory", action="store_true",
+                       help="Clear the memory.json file before starting the run")
     parser.add_argument("--clear-knowledge-base", action="store_true",
-                       help="Clear the knowledge_base.json file before starting the run")
+                       dest="clear_memory",
+                       help="Deprecated alias for --clear-memory")
     parser.add_argument("--run-name", type=str, default=None,
                        help="Optional name to append to run directory (e.g., 'test_run' -> 'run_20251129_191503_test_run')")
     parser.add_argument("--enable-prompt-optimization", action="store_true",
@@ -272,7 +296,6 @@ def main():
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",
                        help="Enable SLAM (map building) for vision_only agent")
-
     args = parser.parse_args()
     
     print("=" * 60)
@@ -350,22 +373,21 @@ def main():
             else:
                 print(f"❌ Failed to restore backup, continuing with fresh state")
         
-        # Clear knowledge base if requested
-        if args.clear_knowledge_base:
+        if args.clear_memory:
             from utils.data_persistence.run_data_manager import get_cache_path
-            knowledge_base_file = get_cache_path("knowledge_base.json")
-            if knowledge_base_file.exists():
-                # Clear the file by writing empty JSON structure
-                import json
-                empty_data = {
-                    "next_id": 1,
-                    "entries": {}
-                }
-                with open(knowledge_base_file, 'w') as f:
-                    json.dump(empty_data, f, indent=2)
-                print(f"🧹 Cleared knowledge base: {knowledge_base_file}")
-            else:
-                print(f"ℹ️  Knowledge base file does not exist yet: {knowledge_base_file}")
+            import json
+            memory_file = get_cache_path("memory.json")
+            legacy_file = get_cache_path("knowledge_base.json")
+            cleared = False
+            for f in (memory_file, legacy_file):
+                if f.exists():
+                    empty_data = {"next_id": 1, "entries": {}}
+                    with open(f, 'w') as fh:
+                        json.dump(empty_data, fh, indent=2)
+                    print(f"🧹 Cleared memory: {f}")
+                    cleared = True
+            if not cleared:
+                print(f"ℹ️  Memory file does not exist yet: {memory_file}")
         
         # Auto-start server if requested
         if args.agent_auto or args.manual or args.scaffold in SERVER_MANAGED_SCAFFOLDS:

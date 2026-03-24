@@ -40,6 +40,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Local application imports
 from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
+from utils.json_utils import normalize_replan_edits
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -452,8 +453,10 @@ def signal_handler(signum, frame):
 
             if os.environ.get("POKEAGENT_CLI_MODE") != "1":
                 run_manager.copy_objectives()
-                # Copy knowledge_base to agent_scratch_space (agent writes to it)
-                run_manager.copy_knowledge_base()
+                run_manager.copy_memory()
+
+            # Sync trajectories from cache to run_data before finalizing
+            run_manager.sync_trajectories_to_run_data()
 
             # Copy frame_cache to end_state
             run_manager.copy_frame_cache()
@@ -1882,6 +1885,7 @@ async def stream_agent_thinking():
                                                         "response": entry.get("response", ""),
                                                         "duration": entry.get("duration", 0),
                                                         "timestamp": timestamp,
+                                                        "agent_step": entry.get("agent_step"),
                                                     }
                                                 )
                                     except Exception:
@@ -1897,8 +1901,12 @@ async def stream_agent_thinking():
                         logger.info(f"SSE: Found {len(new_interactions)} new interactions to send")
                         # Send new interactions
                         for interaction in new_interactions:
+                            # Prefer per-line global step (looping subagents); else server counter
+                            line_step = interaction.get("agent_step")
+                            if line_step is None:
+                                line_step = current_step
                             event_data = {
-                                "step": current_step,
+                                "step": line_step,
                                 "type": interaction.get("type", "unknown"),
                                 "response": interaction.get("response", ""),
                                 "duration": interaction.get("duration", 0),
@@ -1962,6 +1970,7 @@ async def get_agent_thinking():
                                         "response": entry.get("response", ""),
                                         "duration": entry.get("duration", 0),
                                         "timestamp": entry.get("timestamp", ""),
+                                        "agent_step": entry.get("agent_step"),
                                     }
                                 )
                         except json.JSONDecodeError:
@@ -2160,6 +2169,8 @@ async def update_agent_step(request: Request = None):
     """Update the agent step count and metrics"""
     global agent_step_count, latest_metrics
 
+    skip_default_increment = False
+
     try:
         # Check if this is a direct set operation or has metrics
         if request:
@@ -2171,23 +2182,54 @@ async def update_agent_step(request: Request = None):
                     thinking_text = request_data["thinking"]
                     interaction_type = request_data.get("interaction_type", "thinking")
                     duration = float(request_data.get("duration", 0))
+                    thinking_step = request_data.get("agent_step")
+                    if thinking_step is None:
+                        thinking_step = request_data.get("step")
+                    thinking_step_int = None
+                    if thinking_step is not None:
+                        try:
+                            thinking_step_int = int(thinking_step)
+                        except (TypeError, ValueError):
+                            pass
                     try:
                         from utils.data_persistence.llm_logger import get_llm_logger
-                        get_llm_logger().log_thinking(thinking_text, interaction_type, duration)
+
+                        get_llm_logger().log_thinking(
+                            thinking_text,
+                            interaction_type,
+                            duration,
+                            agent_step=thinking_step_int,
+                        )
                     except Exception as e:
                         logger.debug(f"Could not log thinking: {e}")
 
                 # Update metrics if provided (with thread safety)
                 if "metrics" in request_data and isinstance(request_data["metrics"], dict):
+                    metrics_payload = request_data["metrics"]
                     with step_lock:  # Use existing lock for thread safety
                         # Safely update each metric individually to avoid race conditions
-                        for key, value in request_data["metrics"].items():
+                        for key, value in metrics_payload.items():
                             if key in latest_metrics:
                                 # Always protect total_actions as it's managed by server
                                 if key == "total_actions":
                                     continue
                                 else:
                                     latest_metrics[key] = value
+
+                    # Full cumulative sync from client: align server step with max global LLM step
+                    if metrics_payload.get("total_llm_calls") is not None:
+                        steps = metrics_payload.get("steps") or []
+                        max_s = 0
+                        for s in steps:
+                            try:
+                                max_s = max(max_s, int(s.get("step") or 0))
+                            except (TypeError, ValueError):
+                                continue
+                        with step_lock:
+                            agent_step_count = max(agent_step_count, max_s)
+                        # Only skip legacy +1 when we have step rows; empty steps keeps old increment behavior
+                        if steps:
+                            skip_default_increment = True
 
                 # Handle set_step for initialization
                 if "set_step" in request_data:
@@ -2200,6 +2242,9 @@ async def update_agent_step(request: Request = None):
     except Exception as e:
         logger.error(f"Error in agent_step endpoint: {e}")
         # Continue with default increment behavior
+
+    if skip_default_increment:
+        return {"status": "updated", "agent_step": agent_step_count}
 
     # Default increment behavior
     with step_lock:
@@ -2268,10 +2313,10 @@ def _update_objectives_cache():
         if direct_objectives_manager and direct_objectives_manager.is_sequence_active():
             logger.info(f"📊 Updating objectives cache - mode: {direct_objectives_manager.mode}")
             if direct_objectives_manager.mode == "categorized":
-                # NEW: Categorized mode with 3 columns
-                objectives_data["mode"] = "categorized"
+                # Categorized cache: only mode, per-category windows, and status counts.
+                # Omit legacy root keys (current, recently_completed, total_in_sequence,
+                # current_index); consumers use story/battling/dynamics + categorized_status.
 
-                # Helper function to get recent objectives for a category
                 def get_recent_for_category(category, sequence, index):
                     items = []
                     # Current objective (if exists)
@@ -2295,30 +2340,30 @@ def _update_objectives_cache():
 
                     return items
 
-                objectives_data["story"] = get_recent_for_category(
-                    "story", direct_objectives_manager.story_sequence, direct_objectives_manager.story_index
-                )
-
-                objectives_data["battling"] = get_recent_for_category(
-                    "battling", direct_objectives_manager.battling_sequence, direct_objectives_manager.battling_index
-                )
-
-                objectives_data["dynamics"] = get_recent_for_category(
-                    "dynamics", direct_objectives_manager.dynamics_sequence, direct_objectives_manager.dynamics_index
-                )
-
-                objectives_data["categorized_status"] = {
-                    "story": {
-                        "current_index": direct_objectives_manager.story_index,
-                        "total": len(direct_objectives_manager.story_sequence),
-                    },
-                    "battling": {
-                        "current_index": direct_objectives_manager.battling_index,
-                        "total": len(direct_objectives_manager.battling_sequence),
-                    },
-                    "dynamics": {
-                        "current_index": direct_objectives_manager.dynamics_index,
-                        "total": len(direct_objectives_manager.dynamics_sequence),
+                objectives_data = {
+                    "mode": "categorized",
+                    "story": get_recent_for_category(
+                        "story", direct_objectives_manager.story_sequence, direct_objectives_manager.story_index
+                    ),
+                    "battling": get_recent_for_category(
+                        "battling", direct_objectives_manager.battling_sequence, direct_objectives_manager.battling_index
+                    ),
+                    "dynamics": get_recent_for_category(
+                        "dynamics", direct_objectives_manager.dynamics_sequence, direct_objectives_manager.dynamics_index
+                    ),
+                    "categorized_status": {
+                        "story": {
+                            "current_index": direct_objectives_manager.story_index,
+                            "total": len(direct_objectives_manager.story_sequence),
+                        },
+                        "battling": {
+                            "current_index": direct_objectives_manager.battling_index,
+                            "total": len(direct_objectives_manager.battling_sequence),
+                        },
+                        "dynamics": {
+                            "current_index": direct_objectives_manager.dynamics_index,
+                            "total": len(direct_objectives_manager.dynamics_sequence),
+                        },
                     },
                 }
 
@@ -2626,23 +2671,40 @@ async def mcp_get_game_state():
 
                 if needs_loading and os.environ.get("POKEAGENT_CLI_MODE") != "1":
                     # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
-                    from utils.data_persistence.run_data_manager import get_run_data_manager
+                    from utils.data_persistence.run_data_manager import get_run_data_manager, get_cache_path
 
                     run_manager = get_run_data_manager()
                     objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
 
-                    if direct_objectives_sequence == "autonomous_objective_creation":
-                        direct_objectives_manager.load_autonomous_objective_creation_sequence(
-                            direct_objectives_start_index, run_dir=objectives_run_dir
-                        )
-                    elif direct_objectives_sequence == "categorized_full_game":
-                        direct_objectives_manager.load_categorized_full_game_sequence(
-                            start_story_index=direct_objectives_start_index,
-                            start_battling_index=direct_objectives_battling_start_index,
-                            run_dir=objectives_run_dir,
-                        )
-                    else:
-                        logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+                    # Try restoring from persisted objectives.json first
+                    _restored_from_file = False
+                    try:
+                        cache_objectives_path = str(get_cache_path("objectives.json"))
+                        if os.path.exists(cache_objectives_path):
+                            direct_objectives_manager.restore_from_state(
+                                json.load(open(cache_objectives_path, "r", encoding="utf-8"))
+                            )
+                            _restored_from_file = True
+                            logger.info(f"✅ Restored objectives from {cache_objectives_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to restore objectives from cache, falling back to sequence load: {e}")
+
+                    if not _restored_from_file:
+                        if direct_objectives_sequence == "autonomous_objective_creation":
+                            direct_objectives_manager.load_autonomous_objective_creation_sequence(
+                                direct_objectives_start_index, run_dir=objectives_run_dir
+                            )
+                        elif direct_objectives_sequence == "categorized_full_game":
+                            direct_objectives_manager.load_categorized_full_game_sequence(
+                                start_story_index=direct_objectives_start_index,
+                                start_battling_index=direct_objectives_battling_start_index,
+                                run_dir=objectives_run_dir,
+                            )
+                        else:
+                            logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+
+                        # Persist the freshly-loaded state
+                        direct_objectives_manager.auto_save()
 
                     # Update objectives cache after loading
                     _update_objectives_cache()
@@ -2964,6 +3026,9 @@ async def mcp_complete_direct_objective(request: dict):
                     f"✅ Completed objective: {current_obj.id} (advanced to index {direct_objectives_manager.current_index})"
                 )
 
+        # Persist full objectives state after mutation
+        direct_objectives_manager.auto_save()
+
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
 
@@ -3200,13 +3265,14 @@ async def mcp_navigate_to(request: dict):
         return {"success": False, "error": str(e)}
 
 
-@app.post("/mcp/add_knowledge")
-async def mcp_add_knowledge(request: dict):
-    """MCP Tool: Add knowledge to knowledge base (persistent across runs)"""
+@app.post("/mcp/add_memory")
+@app.post("/mcp/add_knowledge")  # backward-compat alias
+async def mcp_add_memory(request: dict):
+    """MCP Tool: Add entry to long-term memory (persistent across runs)"""
     try:
         from server import game_tools
 
-        result = game_tools.add_knowledge_direct(
+        result = game_tools.add_memory_direct(
             category=request.get("category"),
             title=request.get("title"),
             content=request.get("content"),
@@ -3214,52 +3280,166 @@ async def mcp_add_knowledge(request: dict):
             coordinates=request.get("coordinates"),
             importance=request.get("importance", 3),
         )
-        # Keep agent_scratch_space in sync for real-time access of knowledge base
-        # CLI agents do not use knowledge_base; skip when POKEAGENT_CLI_MODE
         if os.environ.get("POKEAGENT_CLI_MODE") != "1":
             try:
                 from utils.data_persistence.run_data_manager import get_run_data_manager
 
                 run_manager = get_run_data_manager()
                 if run_manager:
-                    run_manager.copy_knowledge_base()
+                    run_manager.copy_memory()
                 else:
-                    logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
+                    logger.warning("Cannot copy memory: run_data_manager not initialized")
             except Exception as e:
-                logger.warning(f"Failed to copy knowledge_base: {e}")
+                logger.warning(f"Failed to copy memory: {e}")
 
         return result
     except Exception as e:
-        logger.error(f"Error adding knowledge: {e}")
+        logger.error(f"Error adding memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-@app.post("/mcp/search_knowledge")
-async def mcp_search_knowledge(request: dict):
-    """MCP Tool: Search knowledge base (persistent across runs)"""
+@app.post("/mcp/search_memory")
+@app.post("/mcp/search_knowledge")  # backward-compat alias
+async def mcp_search_memory(request: dict):
+    """MCP Tool: Search long-term memory (persistent across runs)"""
     try:
         from server import game_tools
 
-        return game_tools.search_knowledge_direct(
+        return game_tools.search_memory_direct(
             category=request.get("category"),
             query=request.get("query"),
             location=request.get("location"),
             min_importance=request.get("min_importance", 1),
         )
     except Exception as e:
-        logger.error(f"Error searching knowledge: {e}")
+        logger.error(f"Error searching memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-@app.post("/mcp/get_knowledge_summary")
-async def mcp_search_knowledge_summary(request: dict):
-    """MCP Tool: Get knowledge summary (persistent across runs)"""
+@app.post("/mcp/get_memory_summary")
+@app.post("/mcp/get_knowledge_summary")  # backward-compat alias
+async def mcp_get_memory_summary(request: dict):
+    """MCP Tool: Get long-term memory summary (persistent across runs)"""
     try:
         from server import game_tools
 
-        return game_tools.get_knowledge_summary_direct(min_importance=request.get("min_importance", 3))
+        return game_tools.get_memory_summary_direct(min_importance=request.get("min_importance", 3))
     except Exception as e:
-        logger.error(f"Error getting knowledge summary: {e}")
+        logger.error(f"Error getting memory summary: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_memory_overview")
+async def mcp_get_memory_overview(request: dict):
+    """MCP Tool: Get long-term memory tree overview (compact [id] title tree)."""
+    try:
+        from server import game_tools
+
+        return game_tools.get_memory_overview_direct()
+    except Exception as e:
+        logger.error(f"Error getting memory overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/process_memory")
+async def mcp_process_memory(request: dict):
+    """MCP Tool: Unified CRUD for long-term memory (read/add/update/delete)."""
+    try:
+        from server import game_tools
+
+        action = request.get("action", "")
+        entries = request.get("entries", [])
+        reasoning = request.get("reasoning", "")
+        result = game_tools.process_memory_direct(action, entries, reasoning)
+
+        if action in ("add", "update", "delete") and result.get("success"):
+            from utils.data_persistence.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            if run_manager:
+                try:
+                    run_manager.copy_memory()
+                except Exception as sync_err:
+                    logger.warning(f"Failed to sync memory to run_data: {sync_err}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in process_memory: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_skill_overview")
+async def mcp_get_skill_overview(request: dict):
+    """MCP Tool: Get skill library tree overview (compact [id] name tree)."""
+    try:
+        from server import game_tools
+
+        return game_tools.get_skill_overview_direct()
+    except Exception as e:
+        logger.error(f"Error getting skill overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/process_skill")
+async def mcp_process_skill(request: dict):
+    """MCP Tool: Unified CRUD for skill library (read/add/update/delete)."""
+    try:
+        from server import game_tools
+
+        action = request.get("action", "")
+        entries = request.get("entries", [])
+        reasoning = request.get("reasoning", "")
+        result = game_tools.process_skill_direct(action, entries, reasoning)
+
+        if action in ("add", "update", "delete") and result.get("success"):
+            from utils.data_persistence.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            if run_manager:
+                try:
+                    run_manager.copy_skills()
+                except Exception as sync_err:
+                    logger.warning(f"Failed to sync skills to run_data: {sync_err}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in process_skill: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_subagent_overview")
+async def mcp_get_subagent_overview(request: dict):
+    """MCP Tool: Get subagent registry tree overview (compact [id] name tree)."""
+    try:
+        from server import game_tools
+
+        return game_tools.get_subagent_overview_direct()
+    except Exception as e:
+        logger.error(f"Error getting subagent overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/process_subagent")
+async def mcp_process_subagent(request: dict):
+    """MCP Tool: Unified CRUD for subagent registry (read/add/update/delete)."""
+    try:
+        from server import game_tools
+
+        action = request.get("action", "")
+        entries = request.get("entries", [])
+        reasoning = request.get("reasoning", "")
+        result = game_tools.process_subagent_direct(action, entries, reasoning)
+
+        if action in ("add", "update", "delete") and result.get("success"):
+            from utils.data_persistence.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            if run_manager:
+                try:
+                    run_manager.copy_subagents()
+                except Exception as sync_err:
+                    logger.warning(f"Failed to sync subagents to run_data: {sync_err}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in process_subagent: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -3642,6 +3822,9 @@ async def mcp_create_direct_objectives(request: dict):
                     f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)"
                 )
 
+        # Persist full objectives state after mutation
+        direct_objectives_manager.auto_save()
+
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
 
@@ -3701,13 +3884,92 @@ async def mcp_create_direct_objectives(request: dict):
         return {"success": False, "error": str(e)}
 
 
-@app.post("/mcp/get_progress_summary")
-async def mcp_get_progress_summary():
-    """MCP Tool: Get comprehensive progress summary including milestones, completed objectives, and knowledge"""
+def _coerce_replan_edits_to_list(edits: Any) -> List[Dict[str, Any]]:
+    """Normalize ``edits`` from JSON / odd client encodings into ``list[dict]``."""
+    return normalize_replan_edits(edits)
+
+
+@app.post("/mcp/replan_objectives")
+async def mcp_replan_objectives(request: dict):
+    """MCP Tool: Apply index-based edits to a single objective category (used by subagent_plan_objectives)."""
     if env is None:
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
+        from agents.objectives import DirectObjectiveManager
+
+        global direct_objectives_manager
+        if direct_objectives_manager is None:
+            return {"success": False, "error": "Objective manager not initialized"}
+
+        if direct_objectives_manager.mode != "categorized":
+            return {"success": False, "error": "replan_objectives requires categorized mode"}
+
+        category = request.get("category")
+        edits = _coerce_replan_edits_to_list(request.get("edits"))
+        return_to_orchestrator = request.get("return_to_orchestrator", False)
+        rationale = request.get("rationale", "")
+
+        if not category:
+            return {"success": False, "error": "Missing required 'category' parameter"}
+
+        result = direct_objectives_manager.replan_category(category, edits)
+
+        if result.get("success"):
+            _update_objectives_cache()
+            logger.info(
+                f"🔄 replan_objectives({category}): {len(result.get('edits_applied', []))} edits applied. "
+                f"return_to_orchestrator={return_to_orchestrator}"
+            )
+
+        result["return_to_orchestrator"] = return_to_orchestrator
+        result["rationale"] = rationale
+        return result
+
+    except Exception as e:
+        logger.error(f"Error in replan_objectives: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_full_objective_sequence")
+async def mcp_get_full_objective_sequence():
+    """MCP Tool: Return the complete objective state across all categories (used by subagent_plan_objectives)."""
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        global direct_objectives_manager
+        if direct_objectives_manager is None:
+            return {"success": False, "error": "Objective manager not initialized"}
+
+        from utils.json_utils import serialize_for_json
+        snapshot = direct_objectives_manager.get_full_sequence_snapshot()
+        return serialize_for_json({"success": True, **snapshot})
+
+    except Exception as e:
+        logger.error(f"Error in get_full_objective_sequence: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_progress_summary")
+async def mcp_get_progress_summary(request: dict):
+    """MCP Tool: Get comprehensive progress summary.
+
+    Request body may include ``compact: true`` to omit ``memory_overview`` and
+    ``completed_sequences_history`` (for subagent prompts that already load memory
+    via get_memory_overview). Default / orchestrator tool calls with ``{}`` return
+    the full payload.
+    """
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        req = request if isinstance(request, dict) else {}
+        compact = bool(req.get("compact"))
         # Get milestones
         milestones = env.milestone_tracker.milestones if env.milestone_tracker else {}
         completed_milestones = [mid for mid, data in milestones.items() if data.get("completed", False)]
@@ -3726,20 +3988,19 @@ async def mcp_get_progress_summary():
         if direct_objectives_manager:
             obj_status = direct_objectives_manager.get_sequence_status()
 
-            # Load completed objectives history from current run directory
-            # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
-            global current_run_dir
-            completed_obj_file = None
-            if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
-                # Use agent_scratch_space in run_data
-                from utils.data_persistence.run_data_manager import get_run_data_manager
+            # Load completed objectives history (skip when compact — subagents use separate memory overview)
+            if not compact:
+                global current_run_dir
+                completed_obj_file = None
+                if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                    from utils.data_persistence.run_data_manager import get_run_data_manager
 
-                run_manager = get_run_data_manager()
-                if not run_manager:
-                    logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
-                else:
-                    completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
-            if completed_obj_file and os.path.exists(completed_obj_file):
+                    run_manager = get_run_data_manager()
+                    if not run_manager:
+                        logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
+                    else:
+                        completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
+                if completed_obj_file and os.path.exists(completed_obj_file):
                     import json
 
                     with open(completed_obj_file, "r") as f:
@@ -3749,34 +4010,36 @@ async def mcp_get_progress_summary():
                         else:
                             completed_history = history_data.get("sequences", [])
 
-        # Get knowledge summary (persistent)
-        kb_result = game_tools.get_knowledge_summary_direct(min_importance=3)
-        kb_summary = kb_result.get("summary", "No knowledge yet") if isinstance(kb_result, dict) else "No knowledge yet"
+        memory_overview = ""
+        if not compact:
+            mem_result = game_tools.get_memory_overview_direct()
+            memory_overview = mem_result.get("overview", "No memories yet") if isinstance(mem_result, dict) else "No memories yet"
 
         # Get location and coordinates
         location = game_state.get("player", {}).get("location", "Unknown")
         player_pos = game_state_result.get("player_position", {}) if game_state_result.get("success") else {}
 
         from utils.json_utils import serialize_for_json
-        return serialize_for_json({
-            "success": True,
-            "progress": {
-                "milestones_completed": completed_milestones,
-                "total_milestones_completed": len(completed_milestones),
-                "current_location": location,
-                "player_coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")} if player_pos else None,
-                "direct_objectives": {
-                    "current_sequence": obj_status.get("sequence_name"),
-                    "objectives_completed_in_current_sequence": obj_status.get("completed_count", 0),
-                    "total_in_current_sequence": obj_status.get("total_objectives", 0),
-                    "is_sequence_complete": obj_status.get("is_complete", False),
-                    "current_objective": obj_status.get("current_objective"),
-                },
-                "completed_sequences_history": completed_history,
-                "knowledge_summary": kb_summary,
-                "run_directory": current_run_dir,
+
+        progress = {
+            "milestones_completed": completed_milestones,
+            "total_milestones_completed": len(completed_milestones),
+            "current_location": location,
+            "player_coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")} if player_pos else None,
+            "direct_objectives": {
+                "current_sequence": obj_status.get("sequence_name"),
+                "objectives_completed_in_current_sequence": obj_status.get("completed_count", 0),
+                "total_in_current_sequence": obj_status.get("total_objectives", 0),
+                "is_sequence_complete": obj_status.get("is_complete", False),
+                "current_objective": obj_status.get("current_objective"),
             },
-        })
+            "run_directory": current_run_dir,
+        }
+        if not compact:
+            progress["completed_sequences_history"] = completed_history
+            progress["memory_overview"] = memory_overview
+
+        return serialize_for_json({"success": True, "progress": progress})
     except Exception as e:
         logger.error(f"Error getting progress summary: {e}")
         import traceback

@@ -44,19 +44,54 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 - **Optional:** `reasoning` (string) — what the delegated battler should prioritize  
 - Loops only while battle is active, consumes **real global steps** for every inner VLM call, logs battle turns into the main trajectory stream, and returns only a **single compacted battle summary** to the orchestrator.
 
-**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON or a compacted `subagent_battler` summary). Use that verdict/summary when deciding whether to call `complete_direct_objective`.
+**`subagent_plan_objectives`**  
+- **Required:** `reason` (string) — why planning is needed (stuck, sequence exhausted, replanning required)  
+- **Optional:** `last_n_steps` (integer) — trajectory window for the initial summary (default 25, capped at 50)  
+- Loops with its own short-term memory (up to 25 turns). Has access to research tools (`get_walkthrough`, `process_memory`, `process_skill`, etc. — memory/skill tools require `reasoning`), other subagents, and a planner-exclusive `replan_objectives` tool. Returns when `return_to_orchestrator` is set on a successful replan.
 
-### Knowledge
+**Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON, a compacted `subagent_battler` summary, or `subagent_plan_objectives` changes).
 
-**add_knowledge**  
-- **Required:** `category` (`location` | `npc` | `item` | `pokemon` | `strategy` | `custom`), `title` (string), `content` (string), `importance` (integer 1–5)  
-- **Optional:** `location` (string), `coordinates` (string, e.g. `"x,y"`)
+### Long-Term Memory
 
-**search_knowledge**  
-- **Optional:** `category`, `query`, `location`, `min_importance` (integer)
+**process_memory**  
+- **Required:** `action` (`read` | `add` | `update` | `delete`), `entries` (array of objects), `reasoning` (string — why you are performing this memory operation)  
+- For `read`: `[{id}]` — returns full entry content (up to 3 per call)  
+- For `add`: `[{path, title, content, importance}]` — path is hierarchical e.g. `"pokemon/gym_leaders"`  
+- For `update`: `[{id, title?, content?, path?, importance?}]`  
+- For `delete`: `[{id}]`  
+- Your prompt includes a **LONG-TERM MEMORY OVERVIEW** tree showing all entry IDs — use `read` to inspect specific entries.
 
-**get_knowledge_summary**  
-- **Optional:** `min_importance` (integer; default 3)
+### Skill Library
+
+**process_skill**  
+- **Required:** `action` (`read` | `add` | `update` | `delete`), `entries` (array of objects), `reasoning` (string — why you are performing this skill operation)  
+- For `read`: `[{id}]` — returns full skill details (up to 3 per call)  
+- For `add`: `[{path, name, description, effectiveness, importance}]`  
+- For `update`: `[{id, name?, description?, path?, effectiveness?}]`  
+- For `delete`: `[{id}]`  
+- Your prompt includes a **SKILL LIBRARY** tree showing all skill IDs.
+
+### Subagent Registry
+
+**process_subagent**  
+- **Required:** `action` (`read` | `add` | `update` | `delete`), `entries` (array of objects), `reasoning` (string — why you are performing this subagent operation)  
+- For `read`: `[{id}]` — returns full subagent config  
+- For `add`: `[{path, name, description, handler_type, max_turns, available_tools, system_instructions, directive, return_condition, importance}]`  
+- For `update`: `[{id, ...fields}]`  
+- For `delete`: `[{id}]` — built-in subagents cannot be deleted  
+- Your prompt includes a **SUBAGENT REGISTRY** tree showing all subagent IDs.  
+- `system_instructions` and `directive` are capped at 12,000 characters each.
+
+**execute_custom_subagent**  
+- **Required:** `reasoning` (string)  
+- **One of:** `subagent_id` (string — ID from the registry) **OR** `config` (object — inline config with `max_turns`, `available_tools`, `system_instructions`, `directive`, `return_condition`, `name`)  
+- Launches a multi-turn subagent loop. The subagent signals completion by including `return_to_orchestrator: true` in a tool-call argument.  
+- **Forbidden tools:** Custom subagents cannot call `execute_custom_subagent` (no recursive nesting).
+
+**process_trajectory_history**  
+- **Required:** `window_range` (array of 2 integers `[start, end]` — step range), `directive` (string — analysis question)  
+- One-step VLM pass over the specified trajectory window. Max window is 100 steps.  
+- Returns `analysis` (text), `steps_analyzed`, `actual_range`, `requested_range`.
 
 **get_walkthrough**  
 - **Required:** `part` (integer 1–21)
@@ -69,12 +104,6 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 
 ### Objectives and progress
 
-**create_direct_objectives**  
-- **Required:** `objectives` (array of objects), `reasoning` (string)  
-- **Optional:** `category` — `dynamics` | `story` | `battling`  
-- **Per objective (required unless noted):** `id` (string), `description` (string), `action_type` (`navigate` | `interact` | `battle` | `wait`)  
-- **Per objective (optional):** `target_location`, `navigation_hint`, `completion_condition` (strings)
-
 **get_progress_summary**  
-- *(no parameters)*
+- *(no parameters)* — returns milestones, location, objective status, **completed objectives history**, **memory tree overview**, and run directory. Use **`get_memory_overview`** / **`process_memory`** when you only need memory details.
 

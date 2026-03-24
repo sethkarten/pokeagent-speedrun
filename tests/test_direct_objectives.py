@@ -93,9 +93,18 @@ class TestDirectObjectiveManager:
         assert manager.mode == "categorized"
         assert manager.sequence_name == "autonomous_objective_creation"
         assert len(manager.story_sequence) == 1
-        assert manager.story_sequence[0].id == "autonomous_01_create_next_story_objectives"
+        assert manager.story_sequence[0].id == "autonomous_01_plan_objectives"
         assert manager.battling_sequence == []
         assert manager.dynamics_sequence == []
+
+    def test_load_autonomous_sequence_mentions_replan_when_simplest_scaffold(self, manager, monkeypatch):
+        monkeypatch.setenv("EXCLUDE_BUILTIN_SUBAGENTS", "1")
+        manager.load_autonomous_objective_creation_sequence()
+        desc = manager.story_sequence[0].description
+        hint = manager.story_sequence[0].navigation_hint or ""
+        assert "replan_objectives" in desc or "replan_objectives" in hint
+        assert "get_progress_summary" in hint
+        assert "subagent_plan_objectives" not in desc
 
     def test_get_first_objective_info_for_supported_sequences(self):
         autonomous = get_first_objective_info("autonomous_objective_creation")
@@ -167,7 +176,9 @@ class TestDirectObjectiveManager:
         assert manager.battling_sequence == []
         assert manager.dynamics_sequence == []
 
-    def test_save_completed_objectives(self, manager):
+    def test_save_completed_objectives_delegates_to_auto_save(self, manager):
+        """save_completed_objectives is deprecated and should delegate to auto_save."""
+        import warnings
         manager.add_dynamic_objectives(
             [
                 {
@@ -179,15 +190,141 @@ class TestDirectObjectiveManager:
         )
         manager._mark_objective_completed(manager.current_sequence[0])
 
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            manager.save_completed_objectives()
+            assert any(issubclass(x.category, DeprecationWarning) for x in w)
+
+
+class TestDirectObjectiveSerde:
+    """Tests for DirectObjective.to_dict / from_dict round-trip."""
+
+    def test_round_trip_full(self):
+        from datetime import datetime
+        obj = DirectObjective(
+            id="story_007",
+            description="Enter Petalburg City",
+            action_type="navigate",
+            category="story",
+            target_location="Petalburg City",
+            target_coords=(12, 34),
+            navigation_hint="Go west on Route 102",
+            completion_condition="location_reached",
+            priority=1,
+            completed=True,
+            completed_at=datetime(2026, 1, 15, 10, 30, 0),
+            optional=False,
+            recommended_battling_objectives=["battling_01", "battling_02"],
+            prerequisite_story_objective="story_006",
+        )
+        d = obj.to_dict()
+        restored = DirectObjective.from_dict(d)
+
+        assert restored.id == obj.id
+        assert restored.description == obj.description
+        assert restored.action_type == obj.action_type
+        assert restored.category == obj.category
+        assert restored.target_location == obj.target_location
+        assert restored.target_coords == obj.target_coords
+        assert restored.navigation_hint == obj.navigation_hint
+        assert restored.completion_condition == obj.completion_condition
+        assert restored.priority == obj.priority
+        assert restored.completed == obj.completed
+        assert restored.completed_at == obj.completed_at
+        assert restored.optional == obj.optional
+        assert restored.recommended_battling_objectives == obj.recommended_battling_objectives
+        assert restored.prerequisite_story_objective == obj.prerequisite_story_objective
+
+    def test_round_trip_minimal(self):
+        obj = DirectObjective(id="dyn_01", description="Quick task", action_type="interact")
+        d = obj.to_dict()
+        restored = DirectObjective.from_dict(d)
+
+        assert restored.id == "dyn_01"
+        assert restored.completed is False
+        assert restored.completed_at is None
+        assert restored.target_coords is None
+        assert restored.recommended_battling_objectives == []
+
+    def test_to_dict_coords_are_list(self):
+        obj = DirectObjective(
+            id="t", description="t", action_type="move", target_coords=(5, 10)
+        )
+        d = obj.to_dict()
+        assert isinstance(d["target_coords"], list)
+
+    def test_from_dict_coords_become_tuple(self):
+        d = {"id": "t", "description": "t", "action_type": "move", "target_coords": [5, 10]}
+        obj = DirectObjective.from_dict(d)
+        assert isinstance(obj.target_coords, tuple)
+        assert obj.target_coords == (5, 10)
+
+
+class TestDirectObjectiveManagerSerde:
+    """Tests for serialize_full_state / restore_from_state round-trip."""
+
+    @pytest.fixture
+    def populated_manager(self):
+        mgr = DirectObjectiveManager()
+        mgr.load_categorized_full_game_sequence(start_story_index=3, start_battling_index=2)
+        mgr.add_objectives_to_category(
+            "dynamics",
+            [{"id": "dyn_01", "description": "Temp task", "action_type": "navigate"}],
+        )
+        return mgr
+
+    def test_serialize_restore_round_trip(self, populated_manager):
+        state = populated_manager.serialize_full_state()
+        restored = DirectObjectiveManager()
+        restored.restore_from_state(state)
+
+        assert restored.mode == populated_manager.mode
+        assert restored.sequence_name == populated_manager.sequence_name
+        assert restored.story_index == populated_manager.story_index
+        assert restored.battling_index == populated_manager.battling_index
+        assert restored.dynamics_index == populated_manager.dynamics_index
+        assert len(restored.story_sequence) == len(populated_manager.story_sequence)
+        assert len(restored.battling_sequence) == len(populated_manager.battling_sequence)
+        assert len(restored.dynamics_sequence) == len(populated_manager.dynamics_sequence)
+
+    def test_serialize_restore_preserves_completion(self, populated_manager):
+        state = populated_manager.serialize_full_state()
+        restored = DirectObjectiveManager()
+        restored.restore_from_state(state)
+
+        for orig, rest in zip(populated_manager.story_sequence, restored.story_sequence):
+            assert orig.completed == rest.completed
+
+    def test_save_load_file_round_trip(self, populated_manager):
         with tempfile.TemporaryDirectory() as tmpdir:
-            filename = manager.save_completed_objectives(run_dir=tmpdir)
+            path = os.path.join(tmpdir, "objectives.json")
+            populated_manager.save_to_file(path)
 
-            assert os.path.exists(filename)
+            assert os.path.exists(path)
 
-            with open(filename, "r") as f:
-                data = json.load(f)
+            loaded = DirectObjectiveManager.load_from_file(path)
+            assert loaded.mode == populated_manager.mode
+            assert loaded.story_index == populated_manager.story_index
+            assert loaded.battling_index == populated_manager.battling_index
+            assert len(loaded.dynamics_sequence) == len(populated_manager.dynamics_sequence)
 
-            assert data["sequences"][0]["total_objectives_completed"] == 1
+    def test_current_objective_matches_after_restore(self, populated_manager):
+        orig_story = populated_manager._get_current_objective_for_category("story")
+        state = populated_manager.serialize_full_state()
+
+        restored = DirectObjectiveManager()
+        restored.restore_from_state(state)
+        rest_story = restored._get_current_objective_for_category("story")
+
+        assert rest_story is not None
+        assert rest_story.id == orig_story.id
+        assert rest_story.description == orig_story.description
+
+    def test_json_schema_version(self, populated_manager):
+        state = populated_manager.serialize_full_state()
+        assert state["version"] == 1
+        assert "saved_at" in state
+        assert "story" in state and "battling" in state and "dynamics" in state
 
 
 class TestDirectObjectiveIntegration:
