@@ -92,13 +92,19 @@ def load_subagent_context(
     if not game_state_result.get("success"):
         raise RuntimeError(game_state_result.get("error", "Failed to load game state"))
 
-    progress_result = mcp_adapter.call_tool("get_progress_summary", {})
+    # Compact: omit memory tree + completed history (already loaded below as memory_summary / game state)
+    progress_result = mcp_adapter.call_tool("get_progress_summary", {"compact": True})
     progress = progress_result.get("progress", {}) if progress_result.get("success") else {}
 
-    memory_result = mcp_adapter.call_tool("get_memory_summary", {"min_importance": 3})
+    memory_result = mcp_adapter.call_tool("get_memory_overview", {})
     memory_summary = ""
     if memory_result.get("success"):
-        memory_summary = memory_result.get("summary", "") or ""
+        memory_summary = memory_result.get("overview", "") or ""
+
+    skill_result = mcp_adapter.call_tool("get_skill_overview", {})
+    skill_overview = ""
+    if skill_result.get("success"):
+        skill_overview = skill_result.get("overview", "") or ""
 
     trajectory_window = load_recent_trajectories(run_data_manager, last_n_steps=last_n_steps)
     current_image = None
@@ -110,6 +116,7 @@ def load_subagent_context(
         "objective_state": _extract_objective_state(game_state_result),
         "progress": progress,
         "memory_summary": memory_summary.strip(),
+        "skill_overview": skill_overview.strip(),
         "trajectory_window": trajectory_window,
         "trajectory_summary": format_trajectory_window(trajectory_window),
         "current_image": current_image,

@@ -373,7 +373,8 @@ class RunDataManager:
                        checkpoint_state: Optional[str] = None,
                        milestones: Optional[str] = None,
                        maps: Optional[str] = None,
-                       memory: Optional[str] = None):
+                       memory: Optional[str] = None,
+                       skills: Optional[str] = None):
         """Copy game state files to run_data end_state
         
         Args:
@@ -381,6 +382,7 @@ class RunDataManager:
             milestones: Path to milestones file
             maps: Path to maps file
             memory: Path to memory.json
+            skills: Path to skills.json
         """
         from utils.data_persistence.run_data_manager import get_cache_path
         
@@ -397,12 +399,15 @@ class RunDataManager:
             if not os.path.exists(str(memory_path)):
                 memory_path = get_cache_path("knowledge_base.json")
             memory = str(memory_path)
+        if skills is None:
+            skills = str(get_cache_path("skills.json"))
         
         files_to_copy = {
             "checkpoint.state": checkpoint_state,
             "milestones.json": milestones,
             "maps.json": maps,
-            "memory.json": memory
+            "memory.json": memory,
+            "skills.json": skills,
         }
         
         for dest_name, src_path in files_to_copy.items():
@@ -473,6 +478,24 @@ class RunDataManager:
             logger.info(f"Copied memory: {memory_file} -> {dest_file}")
         else:
             logger.debug(f"Memory file not found: {memory_file}")
+
+    def copy_skills(self, skills_file: Optional[str] = None):
+        """Copy skills.json to agent_scratch_space.
+
+        Args:
+            skills_file: Path to skills.json. If None, looks in run-specific cache.
+        """
+        from utils.data_persistence.run_data_manager import get_cache_path
+        if skills_file is None:
+            skills_file = str(get_cache_path("skills.json"))
+
+        if os.path.exists(skills_file):
+            dest_file = self.run_dir / "agent_scratch_space" / "skills.json"
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(skills_file, dest_file)
+            logger.info(f"Copied skills: {skills_file} -> {dest_file}")
+        else:
+            logger.debug(f"Skills file not found: {skills_file}")
 
     def copy_knowledge_base(self, knowledge_base_file: Optional[str] = None):
         """Deprecated: use copy_memory() instead."""

@@ -3329,6 +3329,82 @@ async def mcp_get_memory_summary(request: dict):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/mcp/get_memory_overview")
+async def mcp_get_memory_overview(request: dict):
+    """MCP Tool: Get long-term memory tree overview (compact [id] title tree)."""
+    try:
+        from server import game_tools
+
+        return game_tools.get_memory_overview_direct()
+    except Exception as e:
+        logger.error(f"Error getting memory overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/process_memory")
+async def mcp_process_memory(request: dict):
+    """MCP Tool: Unified CRUD for long-term memory (read/add/update/delete)."""
+    try:
+        from server import game_tools
+
+        action = request.get("action", "")
+        entries = request.get("entries", [])
+        reasoning = request.get("reasoning", "")
+        result = game_tools.process_memory_direct(action, entries, reasoning)
+
+        if action in ("add", "update", "delete") and result.get("success"):
+            from utils.data_persistence.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            if run_manager:
+                try:
+                    run_manager.copy_memory()
+                except Exception as sync_err:
+                    logger.warning(f"Failed to sync memory to run_data: {sync_err}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in process_memory: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/get_skill_overview")
+async def mcp_get_skill_overview(request: dict):
+    """MCP Tool: Get skill library tree overview (compact [id] name tree)."""
+    try:
+        from server import game_tools
+
+        return game_tools.get_skill_overview_direct()
+    except Exception as e:
+        logger.error(f"Error getting skill overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/process_skill")
+async def mcp_process_skill(request: dict):
+    """MCP Tool: Unified CRUD for skill library (read/add/update/delete)."""
+    try:
+        from server import game_tools
+
+        action = request.get("action", "")
+        entries = request.get("entries", [])
+        reasoning = request.get("reasoning", "")
+        result = game_tools.process_skill_direct(action, entries, reasoning)
+
+        if action in ("add", "update", "delete") and result.get("success"):
+            from utils.data_persistence.run_data_manager import get_run_data_manager
+            run_manager = get_run_data_manager()
+            if run_manager:
+                try:
+                    run_manager.copy_skills()
+                except Exception as sync_err:
+                    logger.warning(f"Failed to sync skills to run_data: {sync_err}")
+
+        return result
+    except Exception as e:
+        logger.error(f"Error in process_skill: {e}")
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/mcp/lookup_pokemon_info")
 async def mcp_lookup_pokemon_info(request: dict):
     """MCP Tool: Lookup Pokemon info from wikis"""
@@ -3842,12 +3918,20 @@ async def mcp_get_full_objective_sequence():
 
 
 @app.post("/mcp/get_progress_summary")
-async def mcp_get_progress_summary():
-    """MCP Tool: Get comprehensive progress summary including milestones, completed objectives, and memory"""
+async def mcp_get_progress_summary(request: dict):
+    """MCP Tool: Get comprehensive progress summary.
+
+    Request body may include ``compact: true`` to omit ``memory_overview`` and
+    ``completed_sequences_history`` (for subagent prompts that already load memory
+    via get_memory_overview). Default / orchestrator tool calls with ``{}`` return
+    the full payload.
+    """
     if env is None:
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
+        req = request if isinstance(request, dict) else {}
+        compact = bool(req.get("compact"))
         # Get milestones
         milestones = env.milestone_tracker.milestones if env.milestone_tracker else {}
         completed_milestones = [mid for mid, data in milestones.items() if data.get("completed", False)]
@@ -3866,20 +3950,19 @@ async def mcp_get_progress_summary():
         if direct_objectives_manager:
             obj_status = direct_objectives_manager.get_sequence_status()
 
-            # Load completed objectives history from current run directory
-            # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
-            global current_run_dir
-            completed_obj_file = None
-            if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
-                # Use agent_scratch_space in run_data
-                from utils.data_persistence.run_data_manager import get_run_data_manager
+            # Load completed objectives history (skip when compact — subagents use separate memory overview)
+            if not compact:
+                global current_run_dir
+                completed_obj_file = None
+                if current_run_dir and os.environ.get("POKEAGENT_CLI_MODE") != "1":
+                    from utils.data_persistence.run_data_manager import get_run_data_manager
 
-                run_manager = get_run_data_manager()
-                if not run_manager:
-                    logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
-                else:
-                    completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
-            if completed_obj_file and os.path.exists(completed_obj_file):
+                    run_manager = get_run_data_manager()
+                    if not run_manager:
+                        logger.warning("Cannot load completed_objectives: run_data_manager not initialized")
+                    else:
+                        completed_obj_file = str(run_manager.get_scratch_space_dir() / "completed_objectives.json")
+                if completed_obj_file and os.path.exists(completed_obj_file):
                     import json
 
                     with open(completed_obj_file, "r") as f:
@@ -3889,34 +3972,36 @@ async def mcp_get_progress_summary():
                         else:
                             completed_history = history_data.get("sequences", [])
 
-        # Get memory summary (persistent long-term memory)
-        mem_result = game_tools.get_memory_summary_direct(min_importance=3)
-        memory_summary = mem_result.get("summary", "No memories yet") if isinstance(mem_result, dict) else "No memories yet"
+        memory_overview = ""
+        if not compact:
+            mem_result = game_tools.get_memory_overview_direct()
+            memory_overview = mem_result.get("overview", "No memories yet") if isinstance(mem_result, dict) else "No memories yet"
 
         # Get location and coordinates
         location = game_state.get("player", {}).get("location", "Unknown")
         player_pos = game_state_result.get("player_position", {}) if game_state_result.get("success") else {}
 
         from utils.json_utils import serialize_for_json
-        return serialize_for_json({
-            "success": True,
-            "progress": {
-                "milestones_completed": completed_milestones,
-                "total_milestones_completed": len(completed_milestones),
-                "current_location": location,
-                "player_coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")} if player_pos else None,
-                "direct_objectives": {
-                    "current_sequence": obj_status.get("sequence_name"),
-                    "objectives_completed_in_current_sequence": obj_status.get("completed_count", 0),
-                    "total_in_current_sequence": obj_status.get("total_objectives", 0),
-                    "is_sequence_complete": obj_status.get("is_complete", False),
-                    "current_objective": obj_status.get("current_objective"),
-                },
-                "completed_sequences_history": completed_history,
-                "memory_summary": memory_summary,
-                "run_directory": current_run_dir,
+
+        progress = {
+            "milestones_completed": completed_milestones,
+            "total_milestones_completed": len(completed_milestones),
+            "current_location": location,
+            "player_coordinates": {"x": player_pos.get("x"), "y": player_pos.get("y")} if player_pos else None,
+            "direct_objectives": {
+                "current_sequence": obj_status.get("sequence_name"),
+                "objectives_completed_in_current_sequence": obj_status.get("completed_count", 0),
+                "total_in_current_sequence": obj_status.get("total_objectives", 0),
+                "is_sequence_complete": obj_status.get("is_complete", False),
+                "current_objective": obj_status.get("current_objective"),
             },
-        })
+            "run_directory": current_run_dir,
+        }
+        if not compact:
+            progress["completed_sequences_history"] = completed_history
+            progress["memory_overview"] = memory_overview
+
+        return serialize_for_json({"success": True, "progress": progress})
     except Exception as e:
         logger.error(f"Error getting progress summary: {e}")
         import traceback

@@ -14,13 +14,15 @@ from typing import List, Optional, Tuple
 
 from utils.json_utils import serialize_for_json
 from utils.mapping.pathfinding import Pathfinder
-from utils.memory import get_memory_store
+from utils.stores.memory import get_memory_store
+from utils.stores.skills import get_skill_store
 
 logger = logging.getLogger(__name__)
 
 # Module-level singletons (lazy on first import of this module)
 pathfinder = Pathfinder()
 memory_store = get_memory_store()
+skill_store = get_skill_store()
 
 
 # ---------------------------------------------------------------------------
@@ -391,29 +393,37 @@ def navigate_to_direct(
 # Memory (long-term) helpers — formerly "knowledge base"
 # ---------------------------------------------------------------------------
 
-def add_memory_direct(category, title, content, location=None, coordinates=None, importance=3) -> dict:
+def add_memory_direct(category=None, title="", content="", location=None, coordinates=None, importance=3, path=None) -> dict:
     """Add an entry to long-term memory."""
     try:
+        title_s = (title or "").strip()
+        content_s = (content or "").strip()
+        if not title_s and not content_s:
+            return {
+                "success": False,
+                "error": "title and content cannot both be empty (refusing useless memory rows)",
+            }
+        effective_path = path or category or "uncategorized"
         entry_id = memory_store.add(
-            category=category,
-            title=title,
-            content=content,
+            path=effective_path,
+            title=title_s,
+            content=content_s,
             location=location,
             coordinates=coordinates,
             importance=importance,
         )
-        logger.info(f"📝 Added memory: {title} ({category})")
-        return {"success": True, "entry_id": entry_id, "message": f"Stored memory: {title}"}
+        logger.info(f"📝 Added memory: {title_s} ({effective_path})")
+        return {"success": True, "entry_id": entry_id, "message": f"Stored memory: {title_s}"}
     except Exception as e:
         logger.error(f"Failed to add memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-def search_memory_direct(category=None, query="", location="", min_importance=1) -> dict:
+def search_memory_direct(category=None, query="", location="", min_importance=1, path=None) -> dict:
     """Search long-term memory."""
     try:
         results = memory_store.search(
-            category=category, location=location or None, query=query or None, min_importance=min_importance
+            path=path, category=category, location=location or None, query=query or None, min_importance=min_importance
         )
         return {"success": True, "count": len(results), "results": results}
     except Exception as e:
@@ -422,12 +432,188 @@ def search_memory_direct(category=None, query="", location="", min_importance=1)
 
 
 def get_memory_summary_direct(min_importance=3) -> dict:
-    """Get long-term memory summary."""
+    """Get long-term memory summary (legacy content dump)."""
     try:
         summary = memory_store.get_summary(min_importance=min_importance)
         return {"success": True, "summary": summary}
     except Exception as e:
         logger.error(f"Failed to get memory summary: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def get_memory_overview_direct() -> dict:
+    """Get compact tree overview of long-term memory ([id] title grouped by path)."""
+    try:
+        overview = memory_store.get_tree_overview()
+        return {"success": True, "overview": overview}
+    except Exception as e:
+        logger.error(f"Failed to get memory overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def _normalize_process_reasoning(reasoning: object) -> Optional[str]:
+    """Return stripped non-empty reasoning string, or None if missing/invalid."""
+    if reasoning is None:
+        return None
+    text = str(reasoning).strip()
+    return text if text else None
+
+
+def process_memory_direct(action: str, entries: list, reasoning: object) -> dict:
+    """Unified CRUD dispatch for long-term memory.
+
+    ``action`` is one of: read, add, update, delete.
+    ``entries`` is a list of per-entry dicts with action-specific fields.
+    ``reasoning`` is required (non-empty): why this memory operation is appropriate.
+    """
+    try:
+        if _normalize_process_reasoning(reasoning) is None:
+            return {
+                "success": False,
+                "error": "reasoning is required (non-empty string explaining why this memory operation is needed)",
+            }
+        results = []
+        for entry_data in entries:
+            if action == "read":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for read"})
+                    continue
+                entry = memory_store.get(entry_id)
+                if entry is None:
+                    results.append({"success": False, "error": f"Entry {entry_id} not found"})
+                else:
+                    results.append({"success": True, "entry": memory_store.to_display_dict(entry)})
+
+            elif action == "add":
+                path = entry_data.get("path", entry_data.get("category", "uncategorized"))
+                title = (entry_data.get("title") or "").strip()
+                content = (entry_data.get("content") or "").strip()
+                if not title and not content:
+                    results.append(
+                        {
+                            "success": False,
+                            "error": "add requires non-empty title and/or content (empty entries create useless memory rows)",
+                        }
+                    )
+                    continue
+                importance = int(entry_data.get("importance", 3))
+                location = entry_data.get("location")
+                coordinates = entry_data.get("coordinates")
+                if isinstance(coordinates, str) and "," in coordinates:
+                    parts = coordinates.split(",")
+                    try:
+                        coordinates = (int(parts[0].strip()), int(parts[1].strip()))
+                    except (ValueError, IndexError):
+                        coordinates = None
+                entry_id = memory_store.add(
+                    path=path, title=title or "", content=content or "",
+                    importance=importance, location=location,
+                    coordinates=coordinates,
+                )
+                results.append({"success": True, "entry_id": entry_id})
+
+            elif action == "update":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for update"})
+                    continue
+                update_fields = {k: v for k, v in entry_data.items() if k != "id" and v is not None}
+                ok = memory_store.update(entry_id, **update_fields)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            elif action == "delete":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for delete"})
+                    continue
+                ok = memory_store.remove(entry_id)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            else:
+                results.append({"success": False, "error": f"Unknown action: {action}"})
+
+        return {"success": True, "results": results}
+    except Exception as e:
+        logger.error(f"process_memory error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Skill library helpers
+# ---------------------------------------------------------------------------
+
+def get_skill_overview_direct() -> dict:
+    """Get compact tree overview of the skill library ([id] name grouped by path)."""
+    try:
+        overview = skill_store.get_tree_overview()
+        return {"success": True, "overview": overview}
+    except Exception as e:
+        logger.error(f"Failed to get skill overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
+    """Unified CRUD dispatch for the skill library.
+
+    ``reasoning`` is required (non-empty): why this skill operation is appropriate.
+    """
+    try:
+        if _normalize_process_reasoning(reasoning) is None:
+            return {
+                "success": False,
+                "error": "reasoning is required (non-empty string explaining why this skill operation is needed)",
+            }
+        results = []
+        for entry_data in entries:
+            if action == "read":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for read"})
+                    continue
+                entry = skill_store.get(entry_id)
+                if entry is None:
+                    results.append({"success": False, "error": f"Skill {entry_id} not found"})
+                else:
+                    results.append({"success": True, "entry": skill_store.to_display_dict(entry)})
+
+            elif action == "add":
+                path = entry_data.get("path", "general")
+                name = entry_data.get("name", entry_data.get("title", ""))
+                description = entry_data.get("description", "")
+                effectiveness = entry_data.get("effectiveness", "medium")
+                importance = int(entry_data.get("importance", 3))
+                entry_id = skill_store.add(
+                    path=path, name=name, title=name, description=description,
+                    effectiveness=effectiveness, importance=importance,
+                )
+                results.append({"success": True, "entry_id": entry_id})
+
+            elif action == "update":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for update"})
+                    continue
+                update_fields = {k: v for k, v in entry_data.items() if k != "id" and v is not None}
+                if "name" in update_fields:
+                    update_fields.setdefault("title", update_fields["name"])
+                ok = skill_store.update(entry_id, **update_fields)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            elif action == "delete":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for delete"})
+                    continue
+                ok = skill_store.remove(entry_id)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            else:
+                results.append({"success": False, "error": f"Unknown action: {action}"})
+
+        return {"success": True, "results": results}
+    except Exception as e:
+        logger.error(f"process_skill error: {e}")
         return {"success": False, "error": str(e)}
 
 
