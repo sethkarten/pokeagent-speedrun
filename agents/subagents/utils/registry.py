@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, FrozenSet, Optional, Sequence
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,19 @@ PLANNER_ALLOWED_TOOL_NAMES = (
     "subagent_gym_puzzle",
     "replan_objectives",
 )
+
+# Tools that all subagents are never allowed to call (prevents recursion).
+SUBAGENT_FORBIDDEN_TOOLS: FrozenSet[str] = frozenset({"execute_custom_subagent"})
+
+# Tool names of built-in subagents (toggled off in experimental settings).
+BUILTIN_SUBAGENT_TOOL_NAMES: FrozenSet[str] = frozenset({
+    "subagent_reflect",
+    "subagent_verify",
+    "subagent_gym_puzzle",
+    "subagent_summarize",
+    "subagent_battler",
+    "subagent_plan_objectives",
+})
 
 
 LOCAL_SUBAGENT_SPECS = (
@@ -241,6 +254,89 @@ LOCAL_SUBAGENT_SPECS = (
         },
         allowed_tool_names=PLANNER_ALLOWED_TOOL_NAMES,
     ),
+    # ----- M3: Generalized subagent primitives -----
+    LocalSubagentSpec(
+        tool_name="execute_custom_subagent",
+        handler_type="looping",
+        interaction_name="Execute_Custom_Subagent",
+        handler_method="_execute_custom_subagent",
+        description=(
+            "Execute a custom subagent from the subagent registry by ID, or run "
+            "an ad-hoc subagent with an inline config. The subagent runs in a "
+            "looping mode with its own tool access and exits via "
+            "return_to_orchestrator. Cannot be called from within another subagent."
+        ),
+        parameters={
+            "type_": "OBJECT",
+            "properties": {
+                "subagent_id": {
+                    "type_": "STRING",
+                    "description": (
+                        "ID of a subagent in the registry (e.g. 'sa_0007'). "
+                        "Mutually exclusive with 'config'."
+                    ),
+                },
+                "config": {
+                    "type_": "OBJECT",
+                    "description": (
+                        "Inline subagent config for ad-hoc execution. Fields: "
+                        "max_turns (int), available_tools (list of tool names), "
+                        "system_instructions (str), directive (str), "
+                        "return_condition (str)."
+                    ),
+                    "properties": {
+                        "max_turns": {"type_": "INTEGER"},
+                        "available_tools": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "STRING"},
+                        },
+                        "system_instructions": {"type_": "STRING"},
+                        "directive": {"type_": "STRING"},
+                        "return_condition": {"type_": "STRING"},
+                    },
+                },
+                "reasoning": {
+                    "type_": "STRING",
+                    "description": "Why you are launching this subagent now.",
+                },
+            },
+            "required": ["reasoning"],
+        },
+    ),
+    LocalSubagentSpec(
+        tool_name="process_trajectory_history",
+        handler_type="one_step",
+        interaction_name="Process_Trajectory_History",
+        handler_method="_execute_process_trajectory_history",
+        description=(
+            "Analyze a window of trajectory history with a custom directive. "
+            "Reads trajectory entries in the requested step range and passes "
+            "them with your directive to a VLM for analysis. Use this for "
+            "custom reflection, pattern detection, or behaviour review."
+        ),
+        parameters={
+            "type_": "OBJECT",
+            "properties": {
+                "window_range": {
+                    "type_": "ARRAY",
+                    "items": {"type_": "INTEGER"},
+                    "description": (
+                        "Two-element array [start_step, end_step] defining "
+                        "the range of trajectory steps to analyze. The range "
+                        "is clipped to available data."
+                    ),
+                },
+                "directive": {
+                    "type_": "STRING",
+                    "description": (
+                        "Your analysis directive — what should the VLM look "
+                        "for or reason about in this trajectory window?"
+                    ),
+                },
+            },
+            "required": ["window_range", "directive"],
+        },
+    ),
 )
 
 
@@ -255,12 +351,27 @@ def is_local_subagent_tool(tool_name: str) -> bool:
     return tool_name in LOCAL_SUBAGENT_SPEC_BY_NAME
 
 
-def build_local_subagent_tool_declarations() -> list[Dict[str, Any]]:
-    return [
-        {
-            "name": spec.tool_name,
-            "description": spec.description,
-            "parameters": spec.parameters,
-        }
-        for spec in LOCAL_SUBAGENT_SPECS
-    ]
+def build_local_subagent_tool_declarations(
+    include_builtins: bool = True,
+) -> list[Dict[str, Any]]:
+    """Build tool declarations for all registered local subagents.
+
+    When *include_builtins* is ``False``, built-in subagents (reflect,
+    verify, summarize, gym_puzzle, battler, planner) are excluded so that
+    only the generic primitives (execute_custom_subagent,
+    process_trajectory_history) are exposed.  This is used for
+    experimental settings where the AutoEvolve loop must learn subagent
+    usage from scratch.
+    """
+    declarations: list[Dict[str, Any]] = []
+    for spec in LOCAL_SUBAGENT_SPECS:
+        if not include_builtins and spec.tool_name in BUILTIN_SUBAGENT_TOOL_NAMES:
+            continue
+        declarations.append(
+            {
+                "name": spec.tool_name,
+                "description": spec.description,
+                "parameters": spec.parameters,
+            }
+        )
+    return declarations

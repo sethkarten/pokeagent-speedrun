@@ -208,6 +208,10 @@ def start_custom_agent(agent_config, args):
         agent_kwargs["enable_prompt_optimization"] = args.enable_prompt_optimization if hasattr(args, 'enable_prompt_optimization') else False
         agent_kwargs["optimization_frequency"] = args.optimization_frequency if hasattr(args, 'optimization_frequency') else 10
 
+    # Milestone 3: optional built-in subagent tool strip (AutoEvolve-style harness experiments)
+    if agent_config.get("class") == "PokeAgent":
+        agent_kwargs["include_builtins"] = not getattr(args, "exclude_builtin_subagents", False)
+
     agent = agent_class(**agent_kwargs)
     print("✅ Agent created", flush=True)
 
@@ -275,6 +279,14 @@ def main():
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",
                        help="Enable SLAM (map building) for vision_only agent")
+    parser.add_argument(
+        "--exclude-builtin-subagents",
+        action="store_true",
+        help=(
+            "PokeAgent only: omit built-in subagent tools (reflect, verify, battler, planner, …); "
+            "keeps execute_custom_subagent, process_trajectory_history, and MCP process_subagent."
+        ),
+    )
 
     args = parser.parse_args()
     
