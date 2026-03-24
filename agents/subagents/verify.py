@@ -58,6 +58,7 @@ def build_verify_prompt(
     current_state = context.get("current_state", {})
     objective = target.get("objective", {})
     memory_summary = context.get("memory_summary") or "No memories recorded yet."
+    skill_overview = context.get("skill_overview") or "No skills learned yet."
 
     return f"""You are the verify subagent for a Pokemon Emerald speedrun agent.
 Your only job is to decide whether the current objective has already been completed.
@@ -82,8 +83,11 @@ Location: {current_state.get('location')}
 Coordinates: ({current_state.get('coordinates', {}).get('x')}, {current_state.get('coordinates', {}).get('y')})
 {current_state.get('state_text', '')}
 
-LONG-TERM MEMORY:
+LONG-TERM MEMORY OVERVIEW:
 {memory_summary}
+
+SKILL LIBRARY:
+{skill_overview}
 
 RECENT TRAJECTORY WINDOW (last {last_n_steps} steps):
 {context.get('trajectory_summary', 'No prior trajectories recorded.')}

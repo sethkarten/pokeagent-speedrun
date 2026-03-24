@@ -72,6 +72,8 @@ class MCPToolAdapter:
                 "add_memory": "/mcp/add_memory",
                 "search_memory": "/mcp/search_memory",
                 "get_memory_summary": "/mcp/get_memory_summary",
+                "get_memory_overview": "/mcp/get_memory_overview",
+                "process_memory": "/mcp/process_memory",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",

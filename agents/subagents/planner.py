@@ -5,20 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from .utils.registry import PLANNER_ALLOWED_TOOL_NAMES
 
-PLANNER_ALLOWED_TOOL_NAMES = (
-    "get_progress_summary",
-    "get_walkthrough",
-    "search_memory",
-    "get_memory_summary",
-    "add_memory",
-    "lookup_pokemon_info",
-    "subagent_summarize",
-    "subagent_verify",
-    "subagent_reflect",
-    "subagent_gym_puzzle",
-    "replan_objectives",
-)
 
 PLANNER_SAFETY_CAP = 25
 PLANNER_HISTORY_CAP = 20
@@ -199,6 +187,7 @@ def build_planner_prompt(
     location: str,
     progress: Dict[str, Any],
     memory_summary: str,
+    skill_overview: str = "",
     planner_history: str,
     handoff_summary: str,
     turn_index: int,
@@ -220,8 +209,11 @@ CURRENT GAME STATE:
 PROGRESS SUMMARY:
 {progress}
 
-LONG-TERM MEMORY:
+LONG-TERM MEMORY OVERVIEW:
 {memory_summary or "No memories recorded yet."}
+
+SKILL LIBRARY:
+{skill_overview or "No skills learned yet."}
 
 PRE-PLANNING CONTEXT HANDOFF:
 {handoff_summary}

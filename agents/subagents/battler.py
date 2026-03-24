@@ -46,6 +46,7 @@ def build_battler_prompt(
     objective_state: Dict[str, Any],
     progress: Dict[str, Any],
     memory_summary: str,
+    skill_overview: str = "",
     handoff_summary: str,
     battle_history: str,
     turn_index: int,
@@ -66,8 +67,11 @@ OBJECTIVE STATE:
 PROGRESS SUMMARY:
 {progress}
 
-LONG-TERM MEMORY:
+LONG-TERM MEMORY OVERVIEW:
 {memory_summary or "No memories recorded yet."}
+
+SKILL LIBRARY:
+{skill_overview or "No skills learned yet."}
 
 PRE-BATTLE CONTEXT HANDOFF:
 {handoff_summary}
