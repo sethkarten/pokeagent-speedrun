@@ -104,11 +104,19 @@ class BaseStore(Generic[T]):
             return False
 
         entry = self.entries[entry_id]
+        changed: Dict[str, Any] = {}
         for key, value in fields.items():
-            if value is not None and hasattr(entry, key):
+            if value is not None and hasattr(entry, key) and key != "mutation_history":
+                old = getattr(entry, key)
+                if old != value:
+                    changed[key] = {"old": old, "new": value}
                 setattr(entry, key, value)
 
-        entry.updated_at = datetime.now().isoformat()  # type: ignore[attr-defined]
+        now = datetime.now().isoformat()
+        if changed and hasattr(entry, "mutation_history"):
+            entry.mutation_history.append({"timestamp": now, "fields": changed})  # type: ignore[attr-defined]
+
+        entry.updated_at = now  # type: ignore[attr-defined]
         self._invalidate_cache()
         self.save()
         logger.info(f"Updated entry: {entry_id}")

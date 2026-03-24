@@ -70,6 +70,7 @@ from agents.subagents.planner import (
 )
 from agents.prompts.paths import (
     POKEAGENT_BASE_PROMPT_PATH,
+    POKEAGENT_NO_BUILTINS_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
     POKEAGENT_SYSTEM_PROMPT_PATH,
     resolve_repo_path,
@@ -210,6 +211,8 @@ class PokeAgent:
         if system_instructions_file is None:
             if self.optimization_enabled:
                 system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Tools + hard constraints
+            elif not self.include_builtins:
+                system_instructions_file = POKEAGENT_NO_BUILTINS_PROMPT_PATH  # Stripped of built-in subagent tool refs
             else:
                 system_instructions_file = POKEAGENT_PROMPT_PATH  # Full single-file prompt
 
@@ -404,8 +407,18 @@ class PokeAgent:
                         },
                         "entries": {
                             "type_": "ARRAY",
-                            "items": {"type_": "OBJECT"},
-                            "description": "Array of entry objects. For read: [{id}]. For add: [{path, title, content, importance}] — each add must include non-empty title and/or content. For update: [{id, title?, content?, path?, importance?}]. For delete: [{id}]."
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "path": {"type_": "STRING", "description": "Category path, e.g. 'navigation/routes'. Defaults to 'uncategorized'."},
+                                    "title": {"type_": "STRING", "description": "Short descriptive title (required for add)."},
+                                    "content": {"type_": "STRING", "description": "Detailed content text (required for add)."},
+                                    "importance": {"type_": "INTEGER", "description": "1-5 importance rating (default 3)."},
+                                    "location": {"type_": "STRING", "description": "Game location this memory relates to."},
+                                },
+                            },
+                            "description": "For read: [{id}]. For add: [{path, title, content}] — title AND content required. For update: [{id, ...fields}]. For delete: [{id}]."
                         },
                         "reasoning": {
                             "type_": "STRING",
@@ -429,8 +442,17 @@ class PokeAgent:
                         },
                         "entries": {
                             "type_": "ARRAY",
-                            "items": {"type_": "OBJECT"},
-                            "description": "Array of entry objects. For read: [{id}]. For add: [{path, name, description, effectiveness, importance}]. For update: [{id, name?, description?, path?, effectiveness?}]. For delete: [{id}]."
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "name": {"type_": "STRING", "description": "Skill name (required for add)."},
+                                    "description": {"type_": "STRING", "description": "What the skill does and when to use it (required for add)."},
+                                    "path": {"type_": "STRING", "description": "Category path, e.g. 'battle/type_matchups'. Defaults to 'general'."},
+                                    "effectiveness": {"type_": "STRING", "description": "'low', 'medium', or 'high'."},
+                                },
+                            },
+                            "description": "For read: [{id}]. For add: [{name, description}] — both required. For update: [{id, ...fields}]. For delete: [{id}]."
                         },
                         "reasoning": {
                             "type_": "STRING",
@@ -453,8 +475,20 @@ class PokeAgent:
                         },
                         "entries": {
                             "type_": "ARRAY",
-                            "items": {"type_": "OBJECT"},
-                            "description": "Array of entry objects. For read: [{id}]. For add: [{path, name, description, handler_type, max_turns, available_tools, system_instructions, directive, return_condition, importance}]. For update: [{id, ...fields}]. For delete: [{id}]."
+                            "items": {
+                                "type_": "OBJECT",
+                                "properties": {
+                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "name": {"type_": "STRING", "description": "Subagent name (required for add)."},
+                                    "description": {"type_": "STRING", "description": "What the subagent does (required for add)."},
+                                    "system_instructions": {"type_": "STRING", "description": "System prompt for the subagent (max 12000 chars)."},
+                                    "directive": {"type_": "STRING", "description": "Per-invocation directive (max 12000 chars)."},
+                                    "handler_type": {"type_": "STRING", "description": "'one_step' or 'looping' (default 'looping')."},
+                                    "max_turns": {"type_": "INTEGER", "description": "Max turns for looping subagents (default 25)."},
+                                    "return_condition": {"type_": "STRING", "description": "When the subagent should return control."},
+                                },
+                            },
+                            "description": "For read: [{id}]. For add: [{name, description, system_instructions?, directive?}] — name AND description required. For update: [{id, ...fields}]. For delete: [{id}]."
                         },
                         "reasoning": {
                             "type_": "STRING",
@@ -691,8 +725,62 @@ class PokeAgent:
     # ------------------------------------------------------------------
 
     def _execute_custom_subagent(self, arguments: dict) -> str:
-        """Launch a custom subagent (from registry or inline config)."""
+        """Launch a custom subagent (from registry or inline config).
+
+        When ``include_builtins`` is False the registry starts empty (no
+        built-in rows are seeded) and the dedicated subagent tools are
+        stripped.  The delegation fallback below is retained as a safety
+        net: if a built-in entry somehow exists (e.g. migrated from a
+        previous run's cache), it routes to the native handler.
+        """
+        if not self.include_builtins:
+            sid = arguments.get("subagent_id")
+            if sid and not arguments.get("config"):
+                delegated = self._execute_builtin_subagent_by_registry_id(sid, arguments)
+                if delegated is not None:
+                    return delegated
         return self.executor.execute_custom_subagent(arguments)
+
+    def _execute_builtin_subagent_by_registry_id(
+        self, subagent_id: str, arguments: dict
+    ) -> Optional[str]:
+        """If *subagent_id* is a built-in registry entry, run native handler; else None."""
+        from utils.stores.subagents import get_subagent_store
+
+        entry = get_subagent_store().get(subagent_id)
+        if entry is None or not getattr(entry, "is_builtin", False):
+            return None
+
+        reasoning = (arguments.get("reasoning") or "").strip() or "Registry built-in delegation."
+        name = (entry.name or "").strip()
+
+        if name == "Planner":
+            return self._execute_subagent_plan_objectives({"reason": reasoning})
+        if name == "Battler":
+            return self._execute_subagent_battler({"reasoning": reasoning})
+        if name == "Reflect":
+            return self._execute_subagent_reflect(
+                {"situation": reasoning, "last_n_steps": arguments.get("last_n_steps")},
+            )
+        if name == "Verify":
+            return self._execute_subagent_verify(
+                {
+                    "reasoning": reasoning,
+                    "category": arguments.get("category"),
+                    "last_n_steps": arguments.get("last_n_steps"),
+                },
+            )
+        if name == "Summarize":
+            return self._execute_subagent_summarize(
+                {"reasoning": reasoning, "last_n_steps": arguments.get("last_n_steps")},
+            )
+        if name == "Gym Puzzle Analysis":
+            return self._execute_subagent_gym_puzzle(
+                {"gym_name": arguments.get("gym_name")},
+            )
+
+        logger.warning("Built-in subagent %s (%s) has no delegation mapping", subagent_id, name)
+        return None
 
     def _execute_process_trajectory_history(self, arguments: dict) -> str:
         """One-step VLM analysis on a trajectory window with a directive."""

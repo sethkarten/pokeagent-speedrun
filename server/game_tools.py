@@ -461,6 +461,20 @@ def _normalize_process_reasoning(reasoning: object) -> Optional[str]:
     return text if text else None
 
 
+def _validate_process_entries_list(entries: object) -> Optional[str]:
+    """Return an error message if *entries* is not a non-empty list."""
+    if not isinstance(entries, list):
+        return "entries must be a list"
+    if len(entries) == 0:
+        return "entries must be non-empty (provide at least one entry object for this action)"
+    return None
+
+
+def _batch_all_succeeded(results: list) -> bool:
+    """True only if every per-entry result reports success (batch semantics)."""
+    return bool(results) and all(r.get("success") for r in results)
+
+
 def process_memory_direct(action: str, entries: list, reasoning: object) -> dict:
     """Unified CRUD dispatch for long-term memory.
 
@@ -474,6 +488,9 @@ def process_memory_direct(action: str, entries: list, reasoning: object) -> dict
                 "success": False,
                 "error": "reasoning is required (non-empty string explaining why this memory operation is needed)",
             }
+        ent_err = _validate_process_entries_list(entries)
+        if ent_err:
+            return {"success": False, "error": ent_err, "results": []}
         results = []
         for entry_data in entries:
             if action == "read":
@@ -535,7 +552,7 @@ def process_memory_direct(action: str, entries: list, reasoning: object) -> dict
             else:
                 results.append({"success": False, "error": f"Unknown action: {action}"})
 
-        return {"success": True, "results": results}
+        return {"success": _batch_all_succeeded(results), "results": results}
     except Exception as e:
         logger.error(f"process_memory error: {e}")
         return {"success": False, "error": str(e)}
@@ -566,6 +583,9 @@ def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
                 "success": False,
                 "error": "reasoning is required (non-empty string explaining why this skill operation is needed)",
             }
+        ent_err = _validate_process_entries_list(entries)
+        if ent_err:
+            return {"success": False, "error": ent_err, "results": []}
         results = []
         for entry_data in entries:
             if action == "read":
@@ -580,9 +600,24 @@ def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
                     results.append({"success": True, "entry": skill_store.to_display_dict(entry)})
 
             elif action == "add":
+                raw_name = entry_data.get("name", entry_data.get("title", ""))
+                name = (raw_name or "").strip() if isinstance(raw_name, str) else str(raw_name or "").strip()
+                raw_desc = entry_data.get("description", "")
+                description = (
+                    (raw_desc or "").strip() if isinstance(raw_desc, str) else str(raw_desc or "").strip()
+                )
+                if not name or not description:
+                    results.append(
+                        {
+                            "success": False,
+                            "error": (
+                                "add requires non-empty name (or title) and description "
+                                "(empty objects {} are rejected; do not batch placeholder rows)"
+                            ),
+                        }
+                    )
+                    continue
                 path = entry_data.get("path", "general")
-                name = entry_data.get("name", entry_data.get("title", ""))
-                description = entry_data.get("description", "")
                 effectiveness = entry_data.get("effectiveness", "medium")
                 importance = int(entry_data.get("importance", 3))
                 entry_id = skill_store.add(
@@ -613,7 +648,7 @@ def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
             else:
                 results.append({"success": False, "error": f"Unknown action: {action}"})
 
-        return {"success": True, "results": results}
+        return {"success": _batch_all_succeeded(results), "results": results}
     except Exception as e:
         logger.error(f"process_skill error: {e}")
         return {"success": False, "error": str(e)}
@@ -644,6 +679,9 @@ def process_subagent_direct(action: str, entries: list, reasoning: object) -> di
                 "success": False,
                 "error": "reasoning is required (non-empty string explaining why this subagent operation is needed)",
             }
+        ent_err = _validate_process_entries_list(entries)
+        if ent_err:
+            return {"success": False, "error": ent_err, "results": []}
         results = []
         for entry_data in entries:
             if action == "read":
@@ -658,9 +696,24 @@ def process_subagent_direct(action: str, entries: list, reasoning: object) -> di
                     results.append({"success": True, "entry": subagent_store.to_display_dict(entry)})
 
             elif action == "add":
+                raw_name = entry_data.get("name", entry_data.get("title", ""))
+                name = (raw_name or "").strip() if isinstance(raw_name, str) else str(raw_name or "").strip()
+                raw_desc = entry_data.get("description", "")
+                description = (
+                    (raw_desc or "").strip() if isinstance(raw_desc, str) else str(raw_desc or "").strip()
+                )
+                if not name or not description:
+                    results.append(
+                        {
+                            "success": False,
+                            "error": (
+                                "add requires non-empty name (or title) and description "
+                                "(empty objects {} are rejected; fill fields before calling)"
+                            ),
+                        }
+                    )
+                    continue
                 path = entry_data.get("path", "custom")
-                name = entry_data.get("name", entry_data.get("title", ""))
-                description = entry_data.get("description", "")
                 handler_type = entry_data.get("handler_type", "looping")
                 max_turns = int(entry_data.get("max_turns", 25))
                 available_tools = entry_data.get("available_tools", [])
@@ -710,7 +763,7 @@ def process_subagent_direct(action: str, entries: list, reasoning: object) -> di
             else:
                 results.append({"success": False, "error": f"Unknown action: {action}"})
 
-        return {"success": True, "results": results}
+        return {"success": _batch_all_succeeded(results), "results": results}
     except Exception as e:
         logger.error(f"process_subagent error: {e}")
         return {"success": False, "error": str(e)}
