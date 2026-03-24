@@ -12,7 +12,7 @@ DEFAULT_SUMMARY_WINDOW = 25
 def build_summarize_prompt(*, context: Dict[str, Any], last_n_steps: int, reasoning: str) -> str:
     current_state = context.get("current_state", {})
     objective_state = context.get("objective_state", {})
-    knowledge_summary = context.get("knowledge_summary") or "No knowledge recorded yet."
+    memory_summary = context.get("memory_summary") or "No memories recorded yet."
     progress = context.get("progress", {})
 
     return f"""You are the summarize subagent for a Pokemon Emerald speedrun agent.
@@ -32,8 +32,8 @@ OBJECTIVE STATE:
 PROGRESS SUMMARY:
 {progress}
 
-KNOWLEDGE SUMMARY:
-{knowledge_summary}
+LONG-TERM MEMORY:
+{memory_summary}
 
 RECENT TRAJECTORY WINDOW (last {last_n_steps} steps):
 {context.get('trajectory_summary', 'No prior trajectories recorded.')}

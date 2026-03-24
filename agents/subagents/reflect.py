@@ -80,7 +80,7 @@ def build_reflect_prompt(*, situation: str, context: Dict[str, Any], last_n_step
     """Build the prompt for the local reflection subagent."""
     current_state = context.get("current_state", {})
     objective_state = context.get("objective_state", {})
-    knowledge_summary = context.get("knowledge_summary") or "No knowledge recorded yet."
+    memory_summary = context.get("memory_summary") or "No memories recorded yet."
 
     return f"""You are the reflection subagent for a Pokemon Emerald speedrun agent.
 Your job is to diagnose whether the orchestrator is stuck, pursuing the wrong objective, or missing a simpler next move.
@@ -104,15 +104,15 @@ Status: {objective_state.get('status')}
 PROGRESS SUMMARY:
 {_format_progress(context.get('progress', {}), objective_state)}
 
-KNOWLEDGE SUMMARY:
-{knowledge_summary}
+LONG-TERM MEMORY:
+{memory_summary}
 
 RECENT TRAJECTORY WINDOW (last {last_n_steps} steps):
 {context.get('trajectory_summary', 'No prior trajectories recorded.')}
 
 GROUND TRUTH PRIORITY:
 1. Current game state and screenshot
-2. Knowledge summary
+2. Long-term memory
 3. Trajectory window
 4. Current objectives
 

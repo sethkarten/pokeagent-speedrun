@@ -77,9 +77,8 @@ class RunDataManager:
         """
         self.run_dir.mkdir(exist_ok=True)
         
-        # Component 1: Prompt evolution data
+        # Component 1: Prompt evolution data (trajectories now in cache, not here)
         (self.run_dir / "prompt_evolution" / "llm_traces").mkdir(parents=True, exist_ok=True)
-        (self.run_dir / "prompt_evolution" / "trajectories").mkdir(parents=True, exist_ok=True)
         
         # Component 2: End-state information
         (self.run_dir / "end_state" / "game_state").mkdir(parents=True, exist_ok=True)
@@ -195,61 +194,51 @@ class RunDataManager:
                       reasoning: str,
                       action: Dict[str, Any],
                       pre_state: Dict[str, Any],
-                      post_state: Dict[str, Any],
-                      outcome: Dict[str, Any],
+                      post_state: Optional[Dict[str, Any]] = None,
+                      outcome: Optional[Dict[str, Any]] = None,
                       llm_prompt: Optional[str] = None,
-                      llm_trace_ref: Optional[str] = None):
-        """Log a system-level trajectory (reasoning → action → outcome)
-        
-        Args:
-            step: Step number
-            reasoning: LLM reasoning/thought process
-            action: Action taken (buttons, tool calls, etc.)
-            pre_state: Game state before action (simple snapshot with location, coords, context, etc.)
-            post_state: Game state after action (simple snapshot with location, coords, context, etc.)
-            outcome: Result of the action
-            llm_prompt: Full prompt that was sent to the LLM
-            llm_trace_ref: Reference to raw LLM log entry
+                      llm_trace_ref: Optional[str] = None,
+                      objective_context: Optional[str] = None):
+        """Log a system-level trajectory entry.
+
+        New schema (v2): ``post_state`` is no longer written. Location and
+        player_coords are promoted from pre_state to top-level fields.
+        ``objective_context`` captures the active objective IDs.
         """
-        trajectory_entry = {
+        trajectory_entry: Dict[str, Any] = {
             "step": step,
             "timestamp": datetime.now().isoformat(),
             "reasoning": reasoning,
             "action": action,
             "pre_state": pre_state,
-            "post_state": post_state,
-            "outcome": outcome,
+            "outcome": outcome or {},
+            "location": pre_state.get("location"),
+            "player_coords": pre_state.get("player_coords"),
         }
-        
+
+        if objective_context:
+            trajectory_entry["objective_context"] = objective_context
+
         if llm_prompt:
             trajectory_entry["llm_prompt"] = llm_prompt
-        
+
         if llm_trace_ref:
             trajectory_entry["llm_trace_ref"] = llm_trace_ref
         
-        # Append to trajectories file in prompt_evolution directory
-        trajectories_file = self.run_dir / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
-        
-        # DEBUG: Log trajectory file path and directory
-        logger.debug(f"🔍 [DEBUG] Writing trajectory for step {step} to: {trajectories_file}")
-        logger.debug(f"🔍 [DEBUG] Trajectory directory exists: {trajectories_file.parent.exists()}")
-        logger.debug(f"🔍 [DEBUG] Run directory: {self.run_dir}")
-        
+        # Write to cache as the primary location
+        trajectories_file = get_cache_path("trajectory_history.jsonl")
+
         try:
-            # Ensure directory exists
             trajectories_file.parent.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"🔍 [DEBUG] Ensured trajectory directory exists: {trajectories_file.parent}")
-            
             with open(trajectories_file, 'a', encoding='utf-8') as f:
                 entry_json = json.dumps(trajectory_entry, ensure_ascii=False)
                 f.write(entry_json + '\n')
-                f.flush()  # Ensure data is written immediately
-                logger.debug(f"🔍 [DEBUG] Wrote {len(entry_json)} bytes to trajectory file")
-            
+                f.flush()
+
             self.trajectory_step += 1
-            logger.info(f"🔍 [DEBUG] ✅ Successfully wrote trajectory for step {step} (total: {self.trajectory_step})")
+            logger.debug(f"Wrote trajectory step {step} to {trajectories_file}")
         except Exception as e:
-            logger.error(f"🔍 [DEBUG] ❌ Failed to write trajectory entry for step {step}: {e}")
+            logger.error(f"Failed to write trajectory entry for step {step}: {e}")
             import traceback
             logger.error(traceback.format_exc())
     
@@ -362,39 +351,58 @@ class RunDataManager:
             logger.info(f"Copied objectives: {objectives_file} -> {dest_file}")
         else:
             logger.warning(f"Objectives file not found: {objectives_file}")
-    
+
+    def copy_objectives_state(self, objectives_state_file: Optional[str] = None):
+        """Sync objectives.json from cache to agent_scratch_space.
+
+        Called automatically by DirectObjectiveManager.auto_save and during
+        copy_game_state flow.
+        """
+        if objectives_state_file is None:
+            objectives_state_file = str(get_cache_path("objectives.json"))
+
+        if os.path.exists(objectives_state_file):
+            dest_file = self.run_dir / "agent_scratch_space" / "objectives.json"
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(objectives_state_file, dest_file)
+            logger.debug(f"Synced objectives state: {objectives_state_file} -> {dest_file}")
+        else:
+            logger.debug(f"objectives.json not found at {objectives_state_file}, skipping sync")
+
     def copy_game_state(self, 
                        checkpoint_state: Optional[str] = None,
                        milestones: Optional[str] = None,
                        maps: Optional[str] = None,
-                       knowledge_base: Optional[str] = None):
+                       memory: Optional[str] = None):
         """Copy game state files to run_data end_state
         
         Args:
             checkpoint_state: Path to checkpoint.state file
             milestones: Path to milestones file
             maps: Path to maps file
-            knowledge_base: Path to knowledge_base.json
+            memory: Path to memory.json
         """
         from utils.data_persistence.run_data_manager import get_cache_path
         
         game_state_dir = self.run_dir / "end_state" / "game_state"
         
-        # Use run-specific cache paths if not explicitly provided
         if checkpoint_state is None:
             checkpoint_state = str(get_cache_path("checkpoint.state"))
         if milestones is None:
             milestones = str(get_cache_path("milestones_progress.json"))
         if maps is None:
             maps = str(get_cache_path("checkpoint_maps.json"))
-        if knowledge_base is None:
-            knowledge_base = str(get_cache_path("knowledge_base.json"))
+        if memory is None:
+            memory_path = get_cache_path("memory.json")
+            if not os.path.exists(str(memory_path)):
+                memory_path = get_cache_path("knowledge_base.json")
+            memory = str(memory_path)
         
         files_to_copy = {
             "checkpoint.state": checkpoint_state,
             "milestones.json": milestones,
             "maps.json": maps,
-            "knowledge_base.json": knowledge_base
+            "memory.json": memory
         }
         
         for dest_name, src_path in files_to_copy.items():
@@ -404,7 +412,9 @@ class RunDataManager:
                 logger.info(f"Copied {dest_name}")
             else:
                 logger.debug(f"Skipping {dest_name} (not found)")
-    
+
+        self.copy_objectives_state()
+
     def copy_map_data(self, map_stitcher_file: Optional[str] = None):
         """Copy map stitcher data to run_data end_state
         
@@ -443,24 +453,46 @@ class RunDataManager:
             shutil.copy2(submission_log, dest_file)
             logger.info(f"Copied submission log: {submission_log}")
     
-    def copy_knowledge_base(self, knowledge_base_file: Optional[str] = None):
-        """Copy knowledge_base.json to agent_scratch_space
+    def copy_memory(self, memory_file: Optional[str] = None):
+        """Copy memory.json to agent_scratch_space
         
         Args:
-            knowledge_base_file: Path to knowledge_base.json. If None, looks in run-specific cache
+            memory_file: Path to memory.json. If None, looks in run-specific cache
         """
         from utils.data_persistence.run_data_manager import get_cache_path
-        if knowledge_base_file is None:
-            knowledge_base_file = str(get_cache_path("knowledge_base.json"))
+        if memory_file is None:
+            memory_path = get_cache_path("memory.json")
+            if not os.path.exists(str(memory_path)):
+                memory_path = get_cache_path("knowledge_base.json")
+            memory_file = str(memory_path)
         
-        if os.path.exists(knowledge_base_file):
-            dest_file = self.run_dir / "agent_scratch_space" / "knowledge_base.json"
+        if os.path.exists(memory_file):
+            dest_file = self.run_dir / "agent_scratch_space" / "memory.json"
             dest_file.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(knowledge_base_file, dest_file)
-            logger.info(f"Copied knowledge_base: {knowledge_base_file} -> {dest_file}")
+            shutil.copy2(memory_file, dest_file)
+            logger.info(f"Copied memory: {memory_file} -> {dest_file}")
         else:
-            logger.debug(f"Knowledge base file not found: {knowledge_base_file}")
+            logger.debug(f"Memory file not found: {memory_file}")
+
+    def copy_knowledge_base(self, knowledge_base_file: Optional[str] = None):
+        """Deprecated: use copy_memory() instead."""
+        import warnings
+        warnings.warn("copy_knowledge_base() is deprecated, use copy_memory()", DeprecationWarning, stacklevel=2)
+        self.copy_memory(memory_file=knowledge_base_file)
     
+    def sync_trajectories_to_run_data(self) -> None:
+        """Copy trajectory_history.jsonl from cache to run_data/{run_id}/."""
+        src = get_cache_path("trajectory_history.jsonl")
+        if not src.exists():
+            logger.debug("No trajectory_history.jsonl in cache, skipping sync")
+            return
+        dest = self.run_dir / "trajectory_history.jsonl"
+        try:
+            shutil.copy2(str(src), str(dest))
+            logger.info(f"Synced trajectories: {src} -> {dest}")
+        except Exception as e:
+            logger.warning(f"Failed to sync trajectories to run_data: {e}")
+
     def copy_frame_cache(self, frame_cache_file: Optional[str] = None):
         """Copy frame_cache.json to end_state/frame_cache
         

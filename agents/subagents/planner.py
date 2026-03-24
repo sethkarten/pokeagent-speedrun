@@ -9,9 +9,9 @@ from typing import Any, Dict, List
 PLANNER_ALLOWED_TOOL_NAMES = (
     "get_progress_summary",
     "get_walkthrough",
-    "search_knowledge",
-    "get_knowledge_summary",
-    "add_knowledge",
+    "search_memory",
+    "get_memory_summary",
+    "add_memory",
     "lookup_pokemon_info",
     "subagent_summarize",
     "subagent_verify",
@@ -198,7 +198,7 @@ def build_planner_prompt(
     current_state_text: str,
     location: str,
     progress: Dict[str, Any],
-    knowledge_summary: str,
+    memory_summary: str,
     planner_history: str,
     handoff_summary: str,
     turn_index: int,
@@ -220,8 +220,8 @@ CURRENT GAME STATE:
 PROGRESS SUMMARY:
 {progress}
 
-KNOWLEDGE SUMMARY:
-{knowledge_summary or "No knowledge recorded yet."}
+LONG-TERM MEMORY:
+{memory_summary or "No memories recorded yet."}
 
 PRE-PLANNING CONTEXT HANDOFF:
 {handoff_summary}
@@ -234,7 +234,7 @@ FULL OBJECTIVE SEQUENCE (all categories):
 
 INSTRUCTIONS:
 1. Review the orchestrator's reason and the current objective sequence.
-2. Use research tools (get_walkthrough, get_progress_summary, search_knowledge, lookup_pokemon_info)
+2. Use research tools (get_walkthrough, get_progress_summary, search_memory, lookup_pokemon_info)
    as necessary to gather information about what objectives should come next.
 3. Use subagent tools (subagent_verify, subagent_reflect, subagent_summarize) if you need
    analysis of the agent's recent trajectory or verification of objective completion.

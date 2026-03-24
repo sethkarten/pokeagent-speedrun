@@ -453,8 +453,10 @@ def signal_handler(signum, frame):
 
             if os.environ.get("POKEAGENT_CLI_MODE") != "1":
                 run_manager.copy_objectives()
-                # Copy knowledge_base to agent_scratch_space (agent writes to it)
-                run_manager.copy_knowledge_base()
+                run_manager.copy_memory()
+
+            # Sync trajectories from cache to run_data before finalizing
+            run_manager.sync_trajectories_to_run_data()
 
             # Copy frame_cache to end_state
             run_manager.copy_frame_cache()
@@ -2669,23 +2671,40 @@ async def mcp_get_game_state():
 
                 if needs_loading and os.environ.get("POKEAGENT_CLI_MODE") != "1":
                     # CLI agents do not use objectives; skip when POKEAGENT_CLI_MODE
-                    from utils.data_persistence.run_data_manager import get_run_data_manager
+                    from utils.data_persistence.run_data_manager import get_run_data_manager, get_cache_path
 
                     run_manager = get_run_data_manager()
                     objectives_run_dir = str(run_manager.get_scratch_space_dir()) if run_manager else None
 
-                    if direct_objectives_sequence == "autonomous_objective_creation":
-                        direct_objectives_manager.load_autonomous_objective_creation_sequence(
-                            direct_objectives_start_index, run_dir=objectives_run_dir
-                        )
-                    elif direct_objectives_sequence == "categorized_full_game":
-                        direct_objectives_manager.load_categorized_full_game_sequence(
-                            start_story_index=direct_objectives_start_index,
-                            start_battling_index=direct_objectives_battling_start_index,
-                            run_dir=objectives_run_dir,
-                        )
-                    else:
-                        logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+                    # Try restoring from persisted objectives.json first
+                    _restored_from_file = False
+                    try:
+                        cache_objectives_path = str(get_cache_path("objectives.json"))
+                        if os.path.exists(cache_objectives_path):
+                            direct_objectives_manager.restore_from_state(
+                                json.load(open(cache_objectives_path, "r", encoding="utf-8"))
+                            )
+                            _restored_from_file = True
+                            logger.info(f"✅ Restored objectives from {cache_objectives_path}")
+                    except Exception as e:
+                        logger.warning(f"Failed to restore objectives from cache, falling back to sequence load: {e}")
+
+                    if not _restored_from_file:
+                        if direct_objectives_sequence == "autonomous_objective_creation":
+                            direct_objectives_manager.load_autonomous_objective_creation_sequence(
+                                direct_objectives_start_index, run_dir=objectives_run_dir
+                            )
+                        elif direct_objectives_sequence == "categorized_full_game":
+                            direct_objectives_manager.load_categorized_full_game_sequence(
+                                start_story_index=direct_objectives_start_index,
+                                start_battling_index=direct_objectives_battling_start_index,
+                                run_dir=objectives_run_dir,
+                            )
+                        else:
+                            logger.warning(f"Unknown direct objectives sequence: {direct_objectives_sequence}")
+
+                        # Persist the freshly-loaded state
+                        direct_objectives_manager.auto_save()
 
                     # Update objectives cache after loading
                     _update_objectives_cache()
@@ -3007,6 +3026,9 @@ async def mcp_complete_direct_objective(request: dict):
                     f"✅ Completed objective: {current_obj.id} (advanced to index {direct_objectives_manager.current_index})"
                 )
 
+        # Persist full objectives state after mutation
+        direct_objectives_manager.auto_save()
+
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
 
@@ -3243,13 +3265,14 @@ async def mcp_navigate_to(request: dict):
         return {"success": False, "error": str(e)}
 
 
-@app.post("/mcp/add_knowledge")
-async def mcp_add_knowledge(request: dict):
-    """MCP Tool: Add knowledge to knowledge base (persistent across runs)"""
+@app.post("/mcp/add_memory")
+@app.post("/mcp/add_knowledge")  # backward-compat alias
+async def mcp_add_memory(request: dict):
+    """MCP Tool: Add entry to long-term memory (persistent across runs)"""
     try:
         from server import game_tools
 
-        result = game_tools.add_knowledge_direct(
+        result = game_tools.add_memory_direct(
             category=request.get("category"),
             title=request.get("title"),
             content=request.get("content"),
@@ -3257,52 +3280,52 @@ async def mcp_add_knowledge(request: dict):
             coordinates=request.get("coordinates"),
             importance=request.get("importance", 3),
         )
-        # Keep agent_scratch_space in sync for real-time access of knowledge base
-        # CLI agents do not use knowledge_base; skip when POKEAGENT_CLI_MODE
         if os.environ.get("POKEAGENT_CLI_MODE") != "1":
             try:
                 from utils.data_persistence.run_data_manager import get_run_data_manager
 
                 run_manager = get_run_data_manager()
                 if run_manager:
-                    run_manager.copy_knowledge_base()
+                    run_manager.copy_memory()
                 else:
-                    logger.warning("Cannot copy knowledge_base: run_data_manager not initialized")
+                    logger.warning("Cannot copy memory: run_data_manager not initialized")
             except Exception as e:
-                logger.warning(f"Failed to copy knowledge_base: {e}")
+                logger.warning(f"Failed to copy memory: {e}")
 
         return result
     except Exception as e:
-        logger.error(f"Error adding knowledge: {e}")
+        logger.error(f"Error adding memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-@app.post("/mcp/search_knowledge")
-async def mcp_search_knowledge(request: dict):
-    """MCP Tool: Search knowledge base (persistent across runs)"""
+@app.post("/mcp/search_memory")
+@app.post("/mcp/search_knowledge")  # backward-compat alias
+async def mcp_search_memory(request: dict):
+    """MCP Tool: Search long-term memory (persistent across runs)"""
     try:
         from server import game_tools
 
-        return game_tools.search_knowledge_direct(
+        return game_tools.search_memory_direct(
             category=request.get("category"),
             query=request.get("query"),
             location=request.get("location"),
             min_importance=request.get("min_importance", 1),
         )
     except Exception as e:
-        logger.error(f"Error searching knowledge: {e}")
+        logger.error(f"Error searching memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-@app.post("/mcp/get_knowledge_summary")
-async def mcp_search_knowledge_summary(request: dict):
-    """MCP Tool: Get knowledge summary (persistent across runs)"""
+@app.post("/mcp/get_memory_summary")
+@app.post("/mcp/get_knowledge_summary")  # backward-compat alias
+async def mcp_get_memory_summary(request: dict):
+    """MCP Tool: Get long-term memory summary (persistent across runs)"""
     try:
         from server import game_tools
 
-        return game_tools.get_knowledge_summary_direct(min_importance=request.get("min_importance", 3))
+        return game_tools.get_memory_summary_direct(min_importance=request.get("min_importance", 3))
     except Exception as e:
-        logger.error(f"Error getting knowledge summary: {e}")
+        logger.error(f"Error getting memory summary: {e}")
         return {"success": False, "error": str(e)}
 
 
@@ -3685,6 +3708,9 @@ async def mcp_create_direct_objectives(request: dict):
                     f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)"
                 )
 
+        # Persist full objectives state after mutation
+        direct_objectives_manager.auto_save()
+
         # Update objectives cache for stream.html (fast file read)
         _update_objectives_cache()
 
@@ -3817,7 +3843,7 @@ async def mcp_get_full_objective_sequence():
 
 @app.post("/mcp/get_progress_summary")
 async def mcp_get_progress_summary():
-    """MCP Tool: Get comprehensive progress summary including milestones, completed objectives, and knowledge"""
+    """MCP Tool: Get comprehensive progress summary including milestones, completed objectives, and memory"""
     if env is None:
         return {"success": False, "error": "Emulator not initialized"}
 
@@ -3863,9 +3889,9 @@ async def mcp_get_progress_summary():
                         else:
                             completed_history = history_data.get("sequences", [])
 
-        # Get knowledge summary (persistent)
-        kb_result = game_tools.get_knowledge_summary_direct(min_importance=3)
-        kb_summary = kb_result.get("summary", "No knowledge yet") if isinstance(kb_result, dict) else "No knowledge yet"
+        # Get memory summary (persistent long-term memory)
+        mem_result = game_tools.get_memory_summary_direct(min_importance=3)
+        memory_summary = mem_result.get("summary", "No memories yet") if isinstance(mem_result, dict) else "No memories yet"
 
         # Get location and coordinates
         location = game_state.get("player", {}).get("location", "Unknown")
@@ -3887,7 +3913,7 @@ async def mcp_get_progress_summary():
                     "current_objective": obj_status.get("current_objective"),
                 },
                 "completed_sequences_history": completed_history,
-                "knowledge_summary": kb_summary,
+                "memory_summary": memory_summary,
                 "run_directory": current_run_dir,
             },
         })
