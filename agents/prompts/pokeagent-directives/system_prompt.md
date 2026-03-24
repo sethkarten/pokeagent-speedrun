@@ -47,21 +47,29 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 **`subagent_plan_objectives`**  
 - **Required:** `reason` (string) — why planning is needed (stuck, sequence exhausted, replanning required)  
 - **Optional:** `last_n_steps` (integer) — trajectory window for the initial summary (default 25, capped at 50)  
-- Loops with its own short-term memory (up to 25 turns). Has access to research tools (`get_walkthrough`, `search_memory`, etc.), other subagents, and a planner-exclusive `replan_objectives` tool. Returns when `return_to_orchestrator` is set on a successful replan.
+- Loops with its own short-term memory (up to 25 turns). Has access to research tools (`get_walkthrough`, `process_memory`, `process_skill`, etc. — memory/skill tools require `reasoning`), other subagents, and a planner-exclusive `replan_objectives` tool. Returns when `return_to_orchestrator` is set on a successful replan.
 
 **Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON, a compacted `subagent_battler` summary, or `subagent_plan_objectives` changes).
 
 ### Long-Term Memory
 
-**add_memory**  
-- **Required:** `category` (`location` | `npc` | `item` | `pokemon` | `strategy` | `custom`), `title` (string), `content` (string), `importance` (integer 1–5)  
-- **Optional:** `location` (string), `coordinates` (string, e.g. `"x,y"`)
+**process_memory**  
+- **Required:** `action` (`read` | `add` | `update` | `delete`), `entries` (array of objects), `reasoning` (string — why you are performing this memory operation)  
+- For `read`: `[{id}]` — returns full entry content (up to 3 per call)  
+- For `add`: `[{path, title, content, importance}]` — path is hierarchical e.g. `"pokemon/gym_leaders"`  
+- For `update`: `[{id, title?, content?, path?, importance?}]`  
+- For `delete`: `[{id}]`  
+- Your prompt includes a **LONG-TERM MEMORY OVERVIEW** tree showing all entry IDs — use `read` to inspect specific entries.
 
-**search_memory**  
-- **Optional:** `category`, `query`, `location`, `min_importance` (integer)
+### Skill Library
 
-**get_memory_summary**  
-- **Optional:** `min_importance` (integer; default 3)
+**process_skill**  
+- **Required:** `action` (`read` | `add` | `update` | `delete`), `entries` (array of objects), `reasoning` (string — why you are performing this skill operation)  
+- For `read`: `[{id}]` — returns full skill details (up to 3 per call)  
+- For `add`: `[{path, name, description, effectiveness, importance}]`  
+- For `update`: `[{id, name?, description?, path?, effectiveness?}]`  
+- For `delete`: `[{id}]`  
+- Your prompt includes a **SKILL LIBRARY** tree showing all skill IDs.
 
 **get_walkthrough**  
 - **Required:** `part` (integer 1–21)
@@ -75,5 +83,5 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 ### Objectives and progress
 
 **get_progress_summary**  
-- *(no parameters)*
+- *(no parameters)* — returns milestones, location, objective status, **completed objectives history**, **memory tree overview**, and run directory. Use **`get_memory_overview`** / **`process_memory`** when you only need memory details.
 

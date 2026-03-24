@@ -175,6 +175,10 @@ def _build_adapter(states=None):
             }
         if name in ("get_memory_summary", "get_knowledge_summary"):
             return {"success": True, "summary": "Saved Birch on Route 101."}
+        if name == "get_memory_overview":
+            return {"success": True, "overview": "=== LONG-TERM MEMORY OVERVIEW ===\nevents:\n  - [mem_0001] Saved Birch on Route 101"}
+        if name == "get_skill_overview":
+            return {"success": True, "overview": "No skills learned yet."}
         if name == "press_buttons":
             return {"success": True}
         if name == "get_full_objective_sequence":

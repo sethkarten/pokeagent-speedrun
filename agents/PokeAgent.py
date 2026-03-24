@@ -78,6 +78,9 @@ from utils.json_utils import convert_protobuf_value, convert_protobuf_args, norm
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Orchestrator short-term action history: slice size and prompt header must stay in sync
+ACTION_HISTORY_WINDOW = 20
+
 
 class MCPToolAdapter:
     """Adapter to call MCP server tools via HTTP."""
@@ -97,6 +100,10 @@ class MCPToolAdapter:
                 "add_memory": "/mcp/add_memory",
                 "search_memory": "/mcp/search_memory",
                 "get_memory_summary": "/mcp/get_memory_summary",
+                "get_memory_overview": "/mcp/get_memory_overview",
+                "process_memory": "/mcp/process_memory",
+                "get_skill_overview": "/mcp/get_skill_overview",
+                "process_skill": "/mcp/process_skill",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
@@ -362,53 +369,54 @@ class PokeAgent:
                     "required": ["reasoning"]
                 }
             },
-            # Long-Term Memory Tools
+            # Long-Term Memory Tool (unified CRUD)
             {
-                "name": "add_memory",
-                "description": "Store important discoveries in your long-term memory.",
+                "name": "process_memory",
+                "description": "Manage long-term memory. The LONG-TERM MEMORY OVERVIEW in your prompt shows all entry IDs. Use 'read' to get full details, 'add' to create, 'update' to modify, 'delete' to remove.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "category": {
+                        "action": {
                             "type_": "STRING",
-                            "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
-                            "description": "Category of memory"
+                            "enum": ["read", "add", "update", "delete"],
+                            "description": "The action to perform on memory entries."
                         },
-                        "title": {"type_": "STRING", "description": "Short title"},
-                        "content": {"type_": "STRING", "description": "Detailed content"},
-                        "location": {"type_": "STRING", "description": "Map name (optional)"},
-                        "coordinates": {"type_": "STRING", "description": "Coordinates as 'x,y' (optional)"},
-                        "importance": {
-                            "type_": "INTEGER",
-                            "description": "Importance 1-5",
-                        }
+                        "entries": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "OBJECT"},
+                            "description": "Array of entry objects. For read: [{id}]. For add: [{path, title, content, importance}] — each add must include non-empty title and/or content. For update: [{id, title?, content?, path?, importance?}]. For delete: [{id}]."
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Required. Brief justification for this memory operation (what you are trying to learn or change and why).",
+                        },
                     },
-                    "required": ["category", "title", "content", "importance"]
+                    "required": ["action", "entries", "reasoning"]
                 }
             },
+            # Skill Library Tool (unified CRUD)
             {
-                "name": "search_memory",
-                "description": "Search your long-term memory for stored information.",
+                "name": "process_skill",
+                "description": "Manage the skill library. The SKILL LIBRARY section in your prompt shows all skill IDs. Use 'read' to get full details, 'add' to create, 'update' to modify, 'delete' to remove.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "category": {"type_": "STRING", "description": "Category (optional)"},
-                        "query": {"type_": "STRING", "description": "Text to search (optional)"},
-                        "location": {"type_": "STRING", "description": "Map name filter (optional)"},
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance 1-5 (optional)"}
+                        "action": {
+                            "type_": "STRING",
+                            "enum": ["read", "add", "update", "delete"],
+                            "description": "The action to perform on skill entries."
+                        },
+                        "entries": {
+                            "type_": "ARRAY",
+                            "items": {"type_": "OBJECT"},
+                            "description": "Array of entry objects. For read: [{id}]. For add: [{path, name, description, effectiveness, importance}]. For update: [{id, name?, description?, path?, effectiveness?}]. For delete: [{id}]."
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Required. Brief justification for this skill operation (what strategy you are recording or updating and why).",
+                        },
                     },
-                    "required": []
-                }
-            },
-            {
-                "name": "get_memory_summary",
-                "description": "Get a summary of the most important things you've learned.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "min_importance": {"type_": "INTEGER", "description": "Min importance (default 3)"}
-                    },
-                    "required": []
+                    "required": ["action", "entries", "reasoning"]
                 }
             },
             # COMMENTED OUT FOR NOW AS OBJECTIVE CREATION IS HANDLED BY THE PLANNER SUBAGENT
@@ -453,7 +461,10 @@ class PokeAgent:
             # },
             {
                 "name": "get_progress_summary",
-                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and memory summary.",
+                "description": (
+                    "Get progress: milestones, current location/coords, direct-objective status, completed objectives "
+                    "history, memory tree overview, and run directory. Call with no arguments."
+                ),
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {},
@@ -554,12 +565,32 @@ class PokeAgent:
             self._subagent_vlm_cache[cache_key] = cached
         return cached
 
+    @staticmethod
+    def _metrics_safe_subagent_args(arguments: Optional[Dict[str, Any]], *, keys: tuple[str, ...]) -> Dict[str, Any]:
+        """Copy selected orchestrator tool args for cumulative_metrics (truncate long strings)."""
+        if not arguments:
+            return {}
+        out: Dict[str, Any] = {}
+        max_len = 800
+        for key in keys:
+            if key not in arguments:
+                continue
+            val = arguments[key]
+            if val is None:
+                continue
+            if isinstance(val, str) and len(val) > max_len:
+                val = val[:max_len] + "…"
+            out[key] = val
+        return out
+
     def _run_one_step_subagent(
         self,
         *,
         prompt: str,
         interaction_name: str,
         current_image=None,
+        orchestrator_args: Optional[Dict[str, Any]] = None,
+        metrics_arg_keys: Optional[tuple[str, ...]] = None,
     ) -> tuple[int, str]:
         """Run a one-step local subagent with its own claimed global step."""
         step_number = self.runtime.claim_step(owner="subagent", interaction_name=interaction_name)
@@ -569,12 +600,13 @@ class PokeAgent:
         else:
             response = subagent_vlm.get_text_query(prompt, interaction_name)
 
-        # Tag the step in cumulative_metrics so one-step subagent calls are
-        # identifiable (they produce no tool calls, so without this the entry
-        # would appear as an anonymous ghost step).
+        # Tag the step in cumulative_metrics (subagent VLM has no function-calling tool_calls).
+        log_args: Dict[str, Any] = {}
+        if orchestrator_args is not None and metrics_arg_keys:
+            log_args = self._metrics_safe_subagent_args(orchestrator_args, keys=metrics_arg_keys)
         self.llm_logger.add_step_tool_calls(
             step_number,
-            [{"name": interaction_name, "args": {}}],
+            [{"name": interaction_name, "args": log_args}],
         )
 
         text = self._extract_text_from_response(response)
@@ -611,6 +643,8 @@ class PokeAgent:
                 prompt=prompt,
                 interaction_name="Subagent_Reflect",
                 current_image=context.get("current_image"),
+                orchestrator_args=arguments,
+                metrics_arg_keys=("situation", "last_n_steps"),
             )
             logger.info(f"✅ Self-reflection complete ({len(reflection_text)} chars)")
             return json.dumps(
@@ -655,6 +689,8 @@ class PokeAgent:
                 prompt=prompt,
                 interaction_name="Subagent_Verify",
                 current_image=context.get("current_image"),
+                orchestrator_args=arguments,
+                metrics_arg_keys=("reasoning", "category", "last_n_steps"),
             )
             verdict = parse_verify_response(verify_text, target=target)
             verdict["success"] = True
@@ -691,6 +727,8 @@ class PokeAgent:
                 ),
                 interaction_name="Gym_Puzzle_Analysis",
                 current_image=current_image,
+                orchestrator_args={**arguments, "gym_name": gym_name},
+                metrics_arg_keys=("gym_name",),
             )
 
             logger.info(f"✅ Gym puzzle analysis complete ({len(puzzle_text)} chars)")
@@ -727,6 +765,8 @@ class PokeAgent:
                 ),
                 interaction_name="Subagent_Summarize",
                 current_image=None,
+                orchestrator_args=arguments,
+                metrics_arg_keys=("reasoning", "last_n_steps"),
             )
             return json.dumps(
                 {
@@ -823,6 +863,7 @@ class PokeAgent:
                 objective_state=current_context.get("objective_state", {}),
                 progress=current_context.get("progress", {}),
                 memory_summary=current_context.get("memory_summary", ""),
+                skill_overview=current_context.get("skill_overview", ""),
                 handoff_summary=handoff_summary,
                 battle_history=format_battler_history(battle_history),
                 turn_index=turns_taken + 1,
@@ -992,6 +1033,7 @@ class PokeAgent:
                 location=current_context.get("current_state", {}).get("location", "Unknown"),
                 progress=current_context.get("progress", {}),
                 memory_summary=current_context.get("memory_summary", ""),
+                skill_overview=current_context.get("skill_overview", ""),
                 planner_history=format_planner_history(planner_history[-PLANNER_HISTORY_CAP:]),
                 handoff_summary=handoff_summary,
                 turn_index=turns_taken + 1,
@@ -1904,70 +1946,51 @@ class PokeAgent:
 
         return "\n".join(lines)
 
-    def _get_memory_context(self, max_entries: int = 15, min_importance: int = 3) -> str:
-        """Fetch and format long-term memory entries for inclusion in the prompt."""
+    def _get_memory_context(self, **_kwargs) -> str:
+        """Fetch the memory tree overview for inclusion in the prompt.
+
+        Returns a compact tree of ``[id] title`` entries grouped by path,
+        rather than a full content dump.  The agent reads specific entries
+        on demand via ``process_memory(action="read", entries=[...], reasoning="...")``.
+        """
         try:
-            mem_result = self.mcp_adapter.call_tool("get_memory_summary", {"min_importance": min_importance})
+            mem_result = self.mcp_adapter.call_tool("get_memory_overview", {})
 
             if not mem_result.get("success"):
-                logger.debug("Memory summary not available")
-                return "No memory entries yet. Use add_memory() to store important discoveries!"
+                logger.debug("Memory overview not available")
+                return "No memory entries yet."
 
-            summary = mem_result.get("summary", "")
+            overview = mem_result.get("overview", "")
 
-            if not summary or summary.strip() in ("No memory entries yet.", "No knowledge entries yet."):
-                return "No memory entries yet. Use add_memory() to store important discoveries!"
+            if not overview or overview.strip() in (
+                "No memory entries yet.",
+                "No knowledge entries yet.",
+            ):
+                return "No memory entries yet."
 
-            lines = summary.split("\n")
-            entry_count = sum(1 for line in lines if line.strip().startswith("•"))
-
-            if entry_count == 0:
-                return "No memory entries yet. Use add_memory() to store important discoveries!"
-
-            if entry_count > max_entries:
-                entries = []
-                current_entry = []
-                in_entry = False
-                category_headers = []
-                header_lines = []
-
-                for line in lines:
-                    if not line.strip().startswith("•") and not in_entry and not line.strip().startswith("["):
-                        if "===" in line or "Total:" in line:
-                            continue
-                        header_lines.append(line)
-                    elif line.strip().startswith("["):
-                        if current_entry:
-                            entries.append("\n".join(current_entry))
-                            current_entry = []
-                        category_headers.append(line)
-                        in_entry = False
-                    elif line.strip().startswith("•"):
-                        if current_entry:
-                            entries.append("\n".join(current_entry))
-                        current_entry = [line]
-                        in_entry = True
-                    elif in_entry:
-                        current_entry.append(line)
-
-                if current_entry:
-                    entries.append("\n".join(current_entry))
-
-                recent_entries = entries[-max_entries:]
-
-                result_lines = []
-                if header_lines:
-                    result_lines.extend([h for h in header_lines if h.strip()])
-                result_lines.extend(recent_entries)
-                result_lines.append(f"\n(Showing {len(recent_entries)} most recent entries - {entry_count - len(recent_entries)} older entries available via get_memory_summary())")
-
-                return "\n".join(result_lines)
-
-            return summary
+            return overview
 
         except Exception as e:
-            logger.warning(f"Failed to fetch memory for prompt: {e}")
+            logger.warning(f"Failed to fetch memory overview for prompt: {e}")
             return "Long-term memory temporarily unavailable."
+
+    def _get_skill_context(self) -> str:
+        """Fetch the skill library tree overview for inclusion in the prompt."""
+        try:
+            skill_result = self.mcp_adapter.call_tool("get_skill_overview", {})
+
+            if not skill_result.get("success"):
+                logger.debug("Skill overview not available")
+                return "No skills learned yet."
+
+            overview = skill_result.get("overview", "")
+            if not overview or overview.strip() == "No skills learned yet.":
+                return "No skills learned yet."
+            return overview
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch skill overview for prompt: {e}")
+            return "No skills learned yet."
 
     def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build optimized prompt by combining base_prompt.md with current game context.
@@ -2129,7 +2152,8 @@ class PokeAgent:
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
-        memory_context = self._get_memory_context(max_entries=15, min_importance=3)
+        memory_context = self._get_memory_context()
+        skill_context = self._get_skill_context()
 
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
@@ -2141,6 +2165,7 @@ class PokeAgent:
         logger.info(f"   action_history: {len(action_history):,} chars")
         logger.info(f"   function_results: {len(function_results_context):,} chars")
         logger.info(f"   memory: {len(memory_context):,} chars")
+        logger.info(f"   skills: {len(skill_context):,} chars")
         logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
@@ -2152,7 +2177,7 @@ class PokeAgent:
 
 ## CONTEXT FOR THIS STEP
 
-### ACTION HISTORY (Recent Steps):
+### ACTION HISTORY (last {ACTION_HISTORY_WINDOW} steps):
 {action_history}
 {function_results_context}
 
@@ -2169,8 +2194,11 @@ class PokeAgent:
 ### CURRENT GAME STATE:
 {state_text}
 
-### LONG-TERM MEMORY:
+### LONG-TERM MEMORY OVERVIEW
 {memory_context}
+
+### SKILL LIBRARY
+{skill_context}
 
 Step {step_count}"""
 
@@ -2365,11 +2393,12 @@ Step {step_count}"""
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
-        memory_context = self._get_memory_context(max_entries=15, min_importance=3)
+        memory_context = self._get_memory_context()
+        skill_context = self._get_skill_context()
 
         # Build autonomous prompt
         prompt = f"""# Step: {step_count}
-### SHORT-TERM MEMORY (last 10 steps)
+### SHORT-TERM MEMORY (last {ACTION_HISTORY_WINDOW} steps)
 {action_history}
 {function_results_context}
 ### OBJECTIVES
@@ -2378,8 +2407,10 @@ Step {step_count}"""
 {direct_objective_status}
 ### STATE
 {state_text}
-### LONG-TERM MEMORY
+### LONG-TERM MEMORY OVERVIEW
 {memory_context}
+### SKILL LIBRARY
+{skill_context}
 """
 
         return prompt
@@ -2511,11 +2542,11 @@ Step {step_count}"""
             logger.error(traceback.format_exc())
 
     def _format_action_history(self) -> str:
-        """Format short-term memory (last 20 steps) with full tool details."""
+        """Format short-term memory (last ACTION_HISTORY_WINDOW steps) with full tool details."""
         if not self.conversation_history:
             return "No previous actions recorded."
 
-        recent_entries = self.conversation_history[-20:]
+        recent_entries = self.conversation_history[-ACTION_HISTORY_WINDOW:]
 
         history_lines = []
         for entry in recent_entries:

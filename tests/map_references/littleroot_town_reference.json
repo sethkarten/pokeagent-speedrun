@@ -1,29 +1,11 @@
 {
   "location": "LITTLEROOT TOWN",
   "position": {
-    "x": 5,
+    "x": 8,
     "y": 8
   },
   "tiles": [
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        560,
-        0,
-        1,
-        0
-      ],
       [
         561,
         0,
@@ -95,27 +77,27 @@
         51,
         0,
         0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ]
     ],
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        568,
-        0,
-        1,
-        0
-      ],
       [
         569,
         0,
@@ -187,27 +169,27 @@
         51,
         0,
         0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ]
     ],
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        516,
-        0,
-        0,
-        3
-      ],
       [
         517,
         0,
@@ -279,27 +261,27 @@
         51,
         0,
         0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ]
     ],
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        516,
-        0,
-        0,
-        3
-      ],
       [
         513,
         0,
@@ -371,27 +353,27 @@
         51,
         0,
         0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ]
     ],
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        516,
-        0,
-        0,
-        3
-      ],
       [
         565,
         0,
@@ -463,27 +445,27 @@
         51,
         0,
         0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ]
     ],
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        516,
-        0,
-        0,
-        3
-      ],
       [
         536,
         0,
@@ -555,27 +537,27 @@
         51,
         0,
         0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ]
     ],
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        516,
-        0,
-        0,
-        3
-      ],
       [
         544,
         0,
@@ -647,27 +629,27 @@
         51,
         0,
         0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ]
     ],
     [
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        1023,
-        51,
-        0,
-        0
-      ],
-      [
-        516,
-        0,
-        0,
-        3
-      ],
       [
         552,
         0,
@@ -727,6 +709,24 @@
         0,
         0,
         3
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
+      ],
+      [
+        1023,
+        51,
+        0,
+        0
       ],
       [
         1023,
@@ -1386,5 +1386,5 @@
       ]
     ]
   ],
-  "formatted_map": "=== LITTLEROOT TOWN ===\nFormat: (MetatileID, Behavior, X, Y)\nMap dimensions: 15x15\n\n--- TRAVERSABILITY MAP ---\n      0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 \n    ------------------------------\n 0: IM IM # # # # # # # # # # # IM IM\n 1: IM IM # # # # # . . # D # # IM IM\n 2: IM IM . . . . . . . . . . . IM IM\n 3: IM IM . . # # TE . . . . . . IM IM\n 4: IM IM . . . . . . . . . . . IM IM\n 5: IM IM . . . # # . . . . . . IM IM\n 6: IM IM . . . # # . . . . . . IM IM\n 7: IM IM . . . . . P . . SO SO . IM IM\n 8: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n 9: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n10: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n11: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n12: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n13: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n14: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM"
+  "formatted_map": "=== LITTLEROOT TOWN ===\nFormat: (MetatileID, Behavior, X, Y)\nMap dimensions: 15x15\n\n--- TRAVERSABILITY MAP ---\n      0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 \n    ------------------------------\n 0: # # # # # # # # # # IM IM IM IM IM\n 1: # # # # . . # D # # IM IM IM IM IM\n 2: . . . . . . . . . . IM IM IM IM IM\n 3: . # # TE . . . . . . IM IM IM IM IM\n 4: . . . . . . . . . . IM IM IM IM IM\n 5: . . # # . . . . . . IM IM IM IM IM\n 6: . . # # . . . . . . IM IM IM IM IM\n 7: . . . . . . . P SO . IM IM IM IM IM\n 8: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n 9: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n10: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n11: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n12: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n13: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM\n14: IM IM IM IM IM IM IM IM IM IM IM IM IM IM IM"
 }

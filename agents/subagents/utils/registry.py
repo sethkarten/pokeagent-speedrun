@@ -19,6 +19,8 @@ class LocalSubagentSpec:
 
 BATTLE_ALLOWED_TOOL_NAMES = (
     "press_buttons",
+    "process_memory",
+    "process_skill",
     "add_memory",
     "search_memory",
     "get_memory_summary",
@@ -29,6 +31,8 @@ BATTLE_ALLOWED_TOOL_NAMES = (
 PLANNER_ALLOWED_TOOL_NAMES = (
     "get_progress_summary",
     "get_walkthrough",
+    "process_memory",
+    "process_skill",
     "search_memory",
     "get_memory_summary",
     "add_memory",

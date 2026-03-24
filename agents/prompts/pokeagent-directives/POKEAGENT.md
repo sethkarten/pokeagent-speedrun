@@ -26,7 +26,7 @@ These are **local** tools: they do **not** call the game server for overworld ac
 
 - **Current screenshot** (what is on screen *now*)
 - **Current game state text** (from the usual `get_game_state`-style payload)
-- **Progress + memory summaries** (via MCP in one batch)
+- **Progress + memory overview + skill library** (via MCP in one batch)
 - **Trajectory window**: last **`last_n_steps`** entries from the trajectory history (default **10** for reflect/verify, **25** for summarize, maximum **50**). This is *not* arbitrary history slices—only a tail window.
 
 `subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, and `subagent_summarize` do **not** press buttons or pathfind; you still end the orchestrator step with `press_buttons` or `navigate_to`. `subagent_battler` is the exception: it is a delegated loop that can act during battle, but it returns only a compacted battle summary to the orchestrator.
@@ -89,7 +89,7 @@ These are **local** tools: they do **not** call the game server for overworld ac
 **Behavior:**
 - Starts with a summarization handoff, then enters a multi-turn planning loop (up to 25 turns).
 - The planner sees the **full objective sequence** across all categories at every step, along with the current game frame, progress, and memory summaries.
-- It can call research tools (`get_walkthrough`, `get_progress_summary`, `search_memory`, `lookup_pokemon_info`, `add_memory`) and other subagents (`subagent_summarize`, `subagent_verify`, `subagent_reflect`, `subagent_gym_puzzle`).
+- It can call research tools (`get_walkthrough`, `get_progress_summary`, `process_memory`, `process_skill`, `lookup_pokemon_info`) and other subagents (`subagent_summarize`, `subagent_verify`, `subagent_reflect`, `subagent_gym_puzzle`). **`process_memory` and `process_skill` require non-empty `reasoning` on every call.**
 - It calls `replan_objectives(category, edits, return_to_orchestrator, rationale)` to create, modify, or delete objectives. Max 5 edits per call, one category per call.
 - It exits when a successful `replan_objectives` call has `return_to_orchestrator=true`.
 
@@ -149,7 +149,7 @@ DIRECT_OBJECTIVE: {
 ### Completing Objectives (By Category)
 
 - Always complete objectives with the correct `category` ("story", "battling", "dynamics").
-- Before completing, store key discoveries with `add_memory()` (NPCs, items, puzzle solutions).
+- Before completing, store key discoveries with `process_memory(action="add", entries=[...], reasoning="...")` (NPCs, items, puzzle solutions).
 
 ## CRITICAL: Decision-Making Process
 
@@ -299,13 +299,15 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 ## Tool Usage (Concise)
 
 - `press_buttons(buttons, reasoning)` and `navigate_to(x, y, variance, reasoning)` are the primary control tools.
+- `process_memory(action, entries, reasoning)` — Unified CRUD for long-term memory. **Always** pass non-empty `reasoning` (why this call is needed). Your prompt shows a **LONG-TERM MEMORY OVERVIEW** with `[id] title` entries grouped by path. Use `read` to fetch full content, `add` to store discoveries, `update` to revise, `delete` to clean up.
+- `process_skill(action, entries, reasoning)` — Unified CRUD for the skill library. **Always** pass non-empty `reasoning`. Your prompt shows a **SKILL LIBRARY** overview. Use `add` to record learned strategies/tactics, `read`/`update`/`delete` to manage.
 - `subagent_reflect(situation, last_n_steps?)` — Local critique using trajectory tail + current frame; use when stuck or misaligned.
 - `subagent_verify(reasoning, category?, last_n_steps?)` — Local **completion verdict** for the current objective on the chosen category; read **RESULTS FROM PREVIOUS STEP** next turn, then optionally `complete_direct_objective`.
 - `subagent_gym_puzzle(gym_name?)` — Lightweight puzzle guidance using current state and static gym puzzle hints.
 - `subagent_summarize(reasoning?, last_n_steps?)` — Detailed unbiased summary over the latest trajectory tail.
 - `subagent_battler(reasoning?)` — Delegated battle loop with restricted tools; returns one compacted battle summary instead of every inner turn.
 - `subagent_plan_objectives(reason)` — Delegated planning loop for creating/modifying/deleting objectives across all categories.
-- `get_progress_summary()` → `get_walkthrough(part)` for research; `subagent_plan_objectives(reason)` for objective creation/replanning.
+- `get_progress_summary()` — when you call it (no arguments), returns milestones, location, objective status, **completed objectives history**, and **memory tree**. Subagent prompts already include **LONG-TERM MEMORY OVERVIEW** separately, so the progress block injected there omits duplicated memory/history; call this tool when you need the full combined snapshot.
 - Always use `complete_direct_objective(category=..., reasoning=...)` for completion.
 
 ## HOW TO DETERMINE YOUR CURRENT WALKTHROUGH PART
@@ -313,7 +315,7 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 **CRITICAL REASONING PROCESS** - Follow these steps EVERY TIME you need to figure out which walkthrough part you're on:
 
 ### Step 1: Gather Evidence
-1. Call `get_memory_summary()` to see what you've accomplished
+1. Check the **LONG-TERM MEMORY OVERVIEW** in your prompt to see what you've accomplished (use `process_memory(action="read", entries=[...], reasoning="...")` for details)
 2. Check your current location from game state
 3. Look at your party Pokemon and badges
 
@@ -379,7 +381,7 @@ After calling `get_walkthrough(part=X)`:
 When there's conflicting information, trust these sources in priority order:
 
 1. **PORYMAP** (map layout) - Definitive source for tile walkability, map structure, warp locations
-2. **LONG-TERM MEMORY** (your accomplishments) Represents what you've actually done, as detailed by you.
+2. **LONG-TERM MEMORY OVERVIEW** (your accomplishments) Represents what you've actually done, as detailed by you.
 3. **WALKTHROUGH** (game progression) - Official guide for correct sequence of steps
 4. **Current objectives** - May be WRONG if they conflict with the above sources
 
@@ -394,7 +396,7 @@ When there's conflicting information, trust these sources in priority order:
 
 - **Be strategic**: Consider type advantages in battles, manage Pokemon health
 - **Explore thoroughly**: Find items, talk to NPCs, explore new areas
-- **Use long-term memory**: Always store important information you discover to help ground your progress.
+- **Use long-term memory**: Always store important information you discover via `process_memory(..., reasoning="...")` to help ground your progress.
 - **Plan ahead**: Use pathfinding for efficient navigation
 - **Explain reasoning**: Before each action, briefly explain your thinking
 - **🏃 RUN from wild battles strategically**: Don't waste time on unnecessary wild encounters - run when your Pokemon are adequately leveled and you're just trying to navigate through grass
@@ -487,8 +489,9 @@ unnecessary wild battle - Pokemon adequately leveled and objective is navigation
 
 - **NEVER save the game** using the START menu - this disrupts the game flow
 - Do not open START menu unless absolutely necessary (checking Pokemon status)
-- Always use your long-term memory to remember important information
+- Always use long-term memory (`process_memory` with required `reasoning`) to remember important information
 - Store NPCs, item locations, puzzle solutions, and strategies as you discover them
+- Record learned strategies and tactics in the skill library (`process_skill` with required `reasoning`) for future reference
 - **If navigate_to gets you BLOCKED repeatedly at the same position**, increase the `variance` parameter (`"low"`, `"medium"`, `"high"`, or `"extreme"`) to explore alternative paths around obstacles
 
 ## Navigation Quick Reference
@@ -514,7 +517,7 @@ When you call `get_game_state` or after executing actions, you'll receive format
 ```
 1. Call get_game_state to see where you are
 2. Analyze the situation and plan your next move
-3. Use add_memory to store any important discoveries
+3. Use `process_memory` (with `reasoning`) to store any important discoveries
 4. Either:
    - Use navigate_to for efficient pathfinding
    - Use press_buttons for direct control
