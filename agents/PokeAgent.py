@@ -177,9 +177,9 @@ class PokeAgent:
         target_context_chars: int = 50000,
         enable_prompt_optimization: bool = False,
         optimization_frequency: int = 10,
-        include_builtins: bool = True,
+        scaffold: str = "pokeagent",
     ):
-        logger.info(f"🚀 Initializing PokeAgent with backend={backend}, model={model}, server={server_url}")
+        logger.info(f"🚀 Initializing PokeAgent with backend={backend}, model={model}, server={server_url}, scaffold={scaffold}")
         self.server_url = server_url
         self.model = model
         self.backend = backend
@@ -189,7 +189,8 @@ class PokeAgent:
         self.target_context_chars = target_context_chars
         self.optimization_enabled = enable_prompt_optimization
         self.optimization_frequency = optimization_frequency
-        self.include_builtins = include_builtins
+        self.scaffold = scaffold
+        self.include_builtins = scaffold != "simplest"
 
         # Conversation history for tracking and compaction
         self.conversation_history = []
@@ -210,11 +211,11 @@ class PokeAgent:
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.optimization_enabled:
-                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH  # Tools + hard constraints
-            elif not self.include_builtins:
-                system_instructions_file = POKEAGENT_NO_BUILTINS_PROMPT_PATH  # Stripped of built-in subagent tool refs
+                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH
+            elif self.scaffold == "simplest":
+                system_instructions_file = POKEAGENT_NO_BUILTINS_PROMPT_PATH
             else:
-                system_instructions_file = POKEAGENT_PROMPT_PATH  # Full single-file prompt
+                system_instructions_file = POKEAGENT_PROMPT_PATH
 
         # Load system instructions
         self.system_instructions = self._load_system_instructions(system_instructions_file)
@@ -586,7 +587,10 @@ class PokeAgent:
 
         tools.extend(build_local_subagent_tool_declarations(include_builtins=self.include_builtins))
 
-        logger.info(f"✅ Created {len(tools)} tool declarations (ALL TOOLS ENABLED)")
+        if self.scaffold == "simplest":
+            tools.append(REPLAN_OBJECTIVES_TOOL_DECLARATION)
+
+        logger.info(f"✅ Created {len(tools)} tool declarations (scaffold={self.scaffold})")
         return tools
 
     def _execute_function_call_by_name(self, function_name: str, arguments: dict) -> str:
@@ -619,8 +623,9 @@ class PokeAgent:
         grounding.
 
         ``supplemental_tools`` allows injecting extra tool declarations that are
-        not part of the orchestrator's own tool set (e.g. ``replan_objectives``
-        which is planner-exclusive).
+        not part of the orchestrator's default tool set (e.g. ``replan_objectives``
+        is planner-exclusive in the default scaffold, but exposed directly to the
+        orchestrator in the ``simplest`` scaffold).
 
         ``pinned`` marks the VLM as immune to LRU eviction (used for built-in
         subagent tool sets).
@@ -727,11 +732,11 @@ class PokeAgent:
     def _execute_custom_subagent(self, arguments: dict) -> str:
         """Launch a custom subagent (from registry or inline config).
 
-        When ``include_builtins`` is False the registry starts empty (no
-        built-in rows are seeded) and the dedicated subagent tools are
-        stripped.  The delegation fallback below is retained as a safety
-        net: if a built-in entry somehow exists (e.g. migrated from a
-        previous run's cache), it routes to the native handler.
+        Under the ``simplest`` scaffold the registry starts empty (no built-in
+        rows are seeded) and the dedicated subagent tools are stripped.  The
+        delegation fallback below is retained as a safety net: if a built-in
+        entry somehow exists (e.g. migrated from a previous run's cache), it
+        routes to the native handler.
         """
         if not self.include_builtins:
             sid = arguments.get("subagent_id")
