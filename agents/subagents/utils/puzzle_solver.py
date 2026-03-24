@@ -10,7 +10,7 @@ and returns step-by-step instructions for solving the puzzle.
 from typing import Dict, Any
 
 
-# Gym puzzle knowledge base
+# Gym puzzle hints (hardcoded, not part of agent long-term memory)
 GYM_PUZZLES: Dict[str, Dict[str, Any]] = {
     "RUSTBORO_CITY_GYM": {
         "type": "trainer_gauntlet",
@@ -53,7 +53,7 @@ Common path patterns:
 - Defeat trainers to potentially open new paths
 - Reach the back where Flannery is located
 
-Use the knowledge base to write notes about which geysers led where and any possible routes or deadends"""
+Use memory to write notes about which geysers led where and any possible routes or deadends"""
     },
     "PETALBURG_CITY_GYM": {
         "type": "door_puzzle",

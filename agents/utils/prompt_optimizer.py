@@ -77,7 +77,7 @@ class PromptOptimizer:
 
 ## Core Principles
 - Think step-by-step
-- Store important knowledge
+- Store important information in memory
 - Navigate efficiently
 - Complete objectives when done
 """
@@ -105,8 +105,13 @@ class PromptOptimizer:
         Returns:
             List of trajectory dictionaries
         """
-        trajectory_file = self.run_manager.run_dir / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
-        
+        from utils.data_persistence.run_data_manager import get_cache_path
+        trajectory_file = get_cache_path("trajectory_history.jsonl")
+
+        # Fallback to legacy path for older runs
+        if not trajectory_file.exists():
+            trajectory_file = self.run_manager.run_dir / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
+
         if not trajectory_file.exists():
             logger.warning("No trajectory file found")
             return []
@@ -183,10 +188,10 @@ Analyze the agent's recent performance and create an IMPROVED base prompt that:
 
 **Look for these patterns:**
 - Repeated failures (stuck in loops, wrong tool usage, blocked navigation)
-- Successful strategies (good knowledge base usage, efficient pathfinding, smart battle decisions)
+- Successful strategies (good memory usage, efficient pathfinding, smart battle decisions)
 - Progress toward objectives (completing tasks, leveling up, advancing story)
 - Tool usage patterns (are they using the tools at their disposal effectively?)
-- Knowledge management (are they storing and retrieving knowledge appropriately?)
+- Memory management (are they storing and retrieving information in memory appropriately?)
 - Not adapting when stuck → emphasize flexibility and trying new approaches
 
 ## Output Format:
