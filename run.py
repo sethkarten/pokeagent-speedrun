@@ -18,13 +18,25 @@ CUSTOM_AGENT_CONFIGS = {
         "name": "PokeAgent",
         "details": [
             "Custom VLM benchmark agent with tool scaffolding",
-            "All MCP tools enabled",
+            "All MCP tools enabled (built-in subagents + generic primitives)",
             "Supports autonomous objective creation and prompt optimization",
         ],
         "module": "agents.PokeAgent",
         "class": "PokeAgent",
         "use_backend": True,
         "supports_prompt_optimization": True,
+    },
+    "simplest": {
+        "name": "PokeAgent",
+        "details": [
+            "Minimal PokeAgent scaffold for AutoEvolve baseline experiments",
+            "No built-in subagent tools; orchestrator owns replan_objectives directly",
+            "Empty subagent registry (agent must create its own)",
+        ],
+        "module": "agents.PokeAgent",
+        "class": "PokeAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": False,
     },
     "autonomous_cli": {
         "name": "PokeAgent",
@@ -55,6 +67,7 @@ CUSTOM_AGENT_CONFIGS = {
 
 SCAFFOLD_DESCRIPTIONS = {
     "pokeagent": "PokeAgent (VLM benchmark agent with tool scaffolding)",
+    "simplest": "PokeAgent-Simplest (no built-in subagents, direct replan, empty registry)",
     "autonomous_cli": "PokeAgent (legacy alias)",
     "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",
 }
@@ -88,8 +101,8 @@ def start_server(args, run_id=None):
     # Single-writer metrics: server is the only writer
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
 
-    # Align server-loaded objectives with client PokeAgent(include_builtins=False)
-    if getattr(args, "exclude_builtin_subagents", False):
+    # The 'simplest' scaffold starts with an empty subagent registry
+    if getattr(args, "scaffold", "pokeagent") == "simplest":
         server_env["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
 
     # Pass through server-relevant arguments
@@ -212,9 +225,9 @@ def start_custom_agent(agent_config, args):
         agent_kwargs["enable_prompt_optimization"] = args.enable_prompt_optimization if hasattr(args, 'enable_prompt_optimization') else False
         agent_kwargs["optimization_frequency"] = args.optimization_frequency if hasattr(args, 'optimization_frequency') else 10
 
-    # Milestone 3: optional built-in subagent tool strip (AutoEvolve-style harness experiments)
+    # Pass scaffold name to PokeAgent so it can select tool set and prompt
     if agent_config.get("class") == "PokeAgent":
-        agent_kwargs["include_builtins"] = not getattr(args, "exclude_builtin_subagents", False)
+        agent_kwargs["scaffold"] = args.scaffold
 
     agent = agent_class(**agent_kwargs)
     print("✅ Agent created", flush=True)
@@ -283,15 +296,6 @@ def main():
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",
                        help="Enable SLAM (map building) for vision_only agent")
-    parser.add_argument(
-        "--exclude-builtin-subagents",
-        action="store_true",
-        help=(
-            "PokeAgent only: omit built-in subagent tools (reflect, verify, battler, planner, …); "
-            "keeps execute_custom_subagent, process_trajectory_history, and MCP process_subagent."
-        ),
-    )
-
     args = parser.parse_args()
     
     print("=" * 60)
