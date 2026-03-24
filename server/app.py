@@ -62,6 +62,50 @@ agent_step_count = 0  # Track agent steps separately from frame steps
 current_obs = None
 fps = 80
 
+
+def _is_simplest_scaffold() -> bool:
+    """Return True when the run is using the simplest scaffold."""
+    return os.environ.get("EXCLUDE_BUILTIN_SUBAGENTS") == "1"
+
+
+def _build_story_planning_objective():
+    """Create scaffold-aware planning guidance when story objectives run out."""
+    from agents.objectives import DirectObjective
+
+    if _is_simplest_scaffold():
+        return DirectObjective(
+            id="autonomous_01_plan_more_objectives",
+            description=(
+                "You have reached the end of the story objectives currently available. "
+                "Create more objectives to keep progressing through the game."
+            ),
+            action_type="create_new_objectives",
+            category="story",
+            target_location=None,
+            navigation_hint=(
+                "Review your current progress and create new objectives."
+            ),
+            completion_condition="objectives_created",
+            priority=1,
+        )
+
+    return DirectObjective(
+        id="autonomous_01_plan_more_objectives",
+        description=(
+            "The current story sequence is complete. Use subagent_plan_objectives "
+            "to create more story objectives based on your progress and the walkthrough."
+        ),
+        action_type="create_new_objectives",
+        category="story",
+        target_location=None,
+        navigation_hint=(
+            "Call subagent_plan_objectives with a brief reason explaining that the "
+            "current story objectives are exhausted and more objectives are needed."
+        ),
+        completion_condition="objectives_created",
+        priority=1,
+    )
+
 # Performance monitoring
 last_fps_log = time.time()
 frame_count_since_log = 0
@@ -2954,33 +2998,7 @@ async def mcp_complete_direct_objective(request: dict):
             # Advance the appropriate index, and inject guidance when a category ends
             if category == "story":
                 if direct_objectives_manager.story_index >= len(direct_objectives_manager.story_sequence) - 1:
-                    from agents.objectives import DirectObjective
-
-                    next_obj = DirectObjective(
-                        id="autonomous_01_create_next_story_objectives",
-                        description=(
-                            "Follow the autonomous objective creation procedure to create the next 3 objectives. "
-                            "Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). "
-                            "Step 2: Call get_walkthrough(part=X) with the appropriate part number. "
-                            "Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information."
-                        ),
-                        action_type="create_new_objectives",
-                        category="story",
-                        target_location=None,
-                        navigation_hint=(
-                            "IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. "
-                            "Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). "
-                            "Step 3: Create new objectives with create_direct_objectives(category=...). "
-                            "In categorized mode, you MUST include a category (story, battling, or dynamics). "
-                            "Use 'story' for walkthrough progression, 'battling' only for training prep, and 'dynamics' for short-term navigation/cleanup. "
-                            "Multiple create_direct_objectives calls are allowed. Each function call result will appear in the "
-                            "'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), "
-                            "the new objectives will be added to the sequence and the current_index for that category will be incremented "
-                            "to the first new objective."
-                        ),
-                        completion_condition="story_objectives_created",
-                        priority=1,
-                    )
+                    next_obj = _build_story_planning_objective()
                     direct_objectives_manager.story_sequence.append(next_obj)
                     direct_objectives_manager.story_index = len(direct_objectives_manager.story_sequence) - 1
                     logger.info(
@@ -3166,18 +3184,8 @@ async def mcp_complete_direct_objective(request: dict):
 
             # Automatically create a new objective to guide the agent through next steps
             try:
-                from agents.objectives import DirectObjective
-
                 # Get current game state for context
-                next_step_obj = DirectObjective(
-                    id="sequence_complete_create_next_objectives",
-                    description="Sequence completed! Call get_progress_summary() to review accomplishments, then use get_walkthrough() to find the next relevant walkthrough part based on your location, and finally create the next 3 direct objectives using create_direct_objectives()",
-                    action_type="interact",
-                    target_location=None,
-                    navigation_hint="Step 1: Call get_progress_summary() to see milestones and current location. Step 2: Use get_walkthrough(part=X) based on your location to plan next steps. Step 3: Call create_direct_objectives() with 3 new objectives based on the walkthrough information.",
-                    completion_condition="dynamic_objectives_created",
-                    priority=1,
-                )
+                next_step_obj = _build_story_planning_objective()
 
                 # Add the new objective to the sequence
                 direct_objectives_manager.current_sequence.append(next_step_obj)
@@ -3191,7 +3199,7 @@ async def mcp_complete_direct_objective(request: dict):
                     "completed_objective": {"id": current_obj.id, "description": current_obj.description},
                     "next_objective": next_guidance,
                     "sequence_status": direct_objectives_manager.get_sequence_status(),
-                    "message": "All objectives completed! A new objective has been automatically created to guide you through creating the next 3 objectives. Follow the steps: get_progress_summary() → get_walkthrough() → create_direct_objectives()",
+                    "message": "All objectives completed! A new objective has been automatically created to guide you through planning more objectives and continuing the run.",
                     "sequence_complete": False,  # Not complete anymore - we added a new objective
                     "auto_objective_created": True,
                 })
@@ -3204,7 +3212,7 @@ async def mcp_complete_direct_objective(request: dict):
                     "completed_objective": {"id": current_obj.id, "description": current_obj.description},
                     "next_objective": None,
                     "sequence_status": direct_objectives_manager.get_sequence_status(),
-                    "message": "All objectives completed! Use get_progress_summary() to see what you've accomplished, then get_walkthrough() to plan next steps, and create_direct_objectives() to create the next 3 objectives.",
+                    "message": "All objectives completed! Review your progress and plan more objectives to continue the run.",
                     "sequence_complete": True,
                 })
 
