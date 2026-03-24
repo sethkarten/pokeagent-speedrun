@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-MAX_TRAJECTORY_WINDOW = 50
+MAX_TRAJECTORY_WINDOW = 100
 DEFAULT_TRAJECTORY_WINDOW = 10
 
 
@@ -111,6 +111,47 @@ def load_recent_trajectories(run_data_manager: Any, last_n_steps: Optional[int] 
             logger.warning("Skipping malformed trajectory line from %s", trajectory_file)
 
     return trajectories
+
+
+def load_trajectory_range(
+    run_data_manager: Any,
+    start: int,
+    end: int,
+) -> tuple[List[Dict[str, Any]], int, int]:
+    """Load trajectory entries whose ``step`` falls in [start, end].
+
+    Returns ``(entries, actual_min_step, actual_max_step)`` where the
+    actual values reflect the available data (the range is clipped).
+    """
+    trajectory_file = _trajectory_file_for_run(run_data_manager)
+    if not trajectory_file or not trajectory_file.exists():
+        return [], 0, 0
+
+    all_lines = _read_last_jsonl_lines(trajectory_file, MAX_TRAJECTORY_WINDOW * 10)
+
+    entries: List[Dict[str, Any]] = []
+    min_step = float("inf")
+    max_step = float("-inf")
+
+    for line in all_lines:
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        step = entry.get("step")
+        if step is None:
+            continue
+        step_int = int(step)
+        if step_int < min_step:
+            min_step = step_int
+        if step_int > max_step:
+            max_step = step_int
+        if start <= step_int <= end:
+            entries.append(entry)
+
+    actual_min = int(min_step) if min_step != float("inf") else 0
+    actual_max = int(max_step) if max_step != float("-inf") else 0
+    return entries, actual_min, actual_max
 
 
 def _format_coords(snapshot: Dict[str, Any]) -> str:

@@ -1,4 +1,5 @@
-"""Tests for process_memory and process_skill endpoint dispatch functions in server.game_tools."""
+"""Tests for process_memory, process_skill, and process_subagent endpoint dispatch
+functions in server.game_tools."""
 
 import sys
 import tempfile
@@ -13,6 +14,7 @@ if str(sys_path) not in sys.path:
 
 from utils.stores.memory import Memory
 from utils.stores.skills import SkillStore
+from utils.stores.subagents import SubagentStore
 
 # Required by process_memory_direct / process_skill_direct (mirrors agent tool contract)
 _PROC_REASON = "Test: valid non-empty reasoning for store operation"
@@ -259,3 +261,156 @@ class TestBackwardCompat:
         result = game_tools_memory.search_memory_direct(query="Mudkip")
         assert result["success"] is True
         assert result["count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# process_subagent — fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def subagent_store(tmp_path):
+    store = SubagentStore(cache_dir=str(tmp_path))
+    store.add(
+        path="custom/test", name="TestAgent",
+        description="A test subagent", handler_type="looping",
+        available_tools=["press_buttons"], importance=3,
+    )
+    return store
+
+
+@pytest.fixture()
+def game_tools_subagent(subagent_store, monkeypatch):
+    import server.game_tools as gt
+    monkeypatch.setattr(gt, "subagent_store", subagent_store)
+    return gt
+
+
+# ---------------------------------------------------------------------------
+# process_subagent — reasoning validation
+# ---------------------------------------------------------------------------
+
+
+class TestProcessSubagentRequiresReasoning:
+    def test_missing_reasoning_fails(self, game_tools_subagent):
+        result = game_tools_subagent.process_subagent_direct("read", [{"id": "sa_0001"}], "")
+        assert result["success"] is False
+        assert "reasoning" in result["error"].lower()
+
+    def test_none_reasoning_fails(self, game_tools_subagent):
+        result = game_tools_subagent.process_subagent_direct("read", [{"id": "sa_0001"}], None)
+        assert result["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# process_subagent — CRUD
+# ---------------------------------------------------------------------------
+
+
+class TestProcessSubagentRead:
+    def test_read_custom(self, game_tools_subagent, subagent_store):
+        custom_ids = [
+            eid for eid, e in subagent_store.entries.items()
+            if not e.is_builtin
+        ]
+        assert len(custom_ids) > 0
+        eid = custom_ids[0]
+        result = game_tools_subagent.process_subagent_direct(
+            "read", [{"id": eid}], _PROC_REASON,
+        )
+        assert result["success"] is True
+        assert result["results"][0]["success"] is True
+        assert result["results"][0]["entry"]["name"] == "TestAgent"
+
+    def test_read_missing(self, game_tools_subagent):
+        result = game_tools_subagent.process_subagent_direct(
+            "read", [{"id": "sa_9999"}], _PROC_REASON,
+        )
+        assert result["results"][0]["success"] is False
+
+    def test_read_no_id(self, game_tools_subagent):
+        result = game_tools_subagent.process_subagent_direct(
+            "read", [{}], _PROC_REASON,
+        )
+        assert result["results"][0]["success"] is False
+
+
+class TestProcessSubagentAdd:
+    def test_add(self, game_tools_subagent, subagent_store):
+        n_before = len(subagent_store.entries)
+        result = game_tools_subagent.process_subagent_direct("add", [
+            {"path": "custom/new", "name": "NewAgent", "description": "Brand new"},
+        ], _PROC_REASON)
+        assert result["results"][0]["success"] is True
+        assert len(subagent_store.entries) == n_before + 1
+
+    def test_add_rejects_oversized_instructions(self, game_tools_subagent, subagent_store):
+        n_before = len(subagent_store.entries)
+        result = game_tools_subagent.process_subagent_direct("add", [
+            {"name": "Huge", "system_instructions": "x" * 13000},
+        ], _PROC_REASON)
+        assert result["results"][0]["success"] is False
+        assert len(subagent_store.entries) == n_before
+
+
+class TestProcessSubagentUpdate:
+    def test_update(self, game_tools_subagent, subagent_store):
+        custom_ids = [
+            eid for eid, e in subagent_store.entries.items()
+            if not e.is_builtin
+        ]
+        eid = custom_ids[0]
+        result = game_tools_subagent.process_subagent_direct("update", [
+            {"id": eid, "description": "Updated desc"},
+        ], _PROC_REASON)
+        assert result["results"][0]["success"] is True
+        assert subagent_store.get(eid).description == "Updated desc"
+
+    def test_update_missing(self, game_tools_subagent):
+        result = game_tools_subagent.process_subagent_direct("update", [
+            {"id": "sa_9999", "description": "nope"},
+        ], _PROC_REASON)
+        assert result["results"][0]["success"] is False
+
+
+class TestProcessSubagentDelete:
+    def test_delete_custom(self, game_tools_subagent, subagent_store):
+        custom_ids = [
+            eid for eid, e in subagent_store.entries.items()
+            if not e.is_builtin
+        ]
+        eid = custom_ids[0]
+        result = game_tools_subagent.process_subagent_direct("delete", [
+            {"id": eid},
+        ], _PROC_REASON)
+        assert result["results"][0]["success"] is True
+        assert subagent_store.get(eid) is None
+
+    def test_delete_builtin_rejected(self, game_tools_subagent, subagent_store):
+        builtin_id = next(
+            eid for eid, e in subagent_store.entries.items() if e.is_builtin
+        )
+        result = game_tools_subagent.process_subagent_direct("delete", [
+            {"id": builtin_id},
+        ], _PROC_REASON)
+        assert result["results"][0]["success"] is False
+        assert subagent_store.get(builtin_id) is not None
+
+
+class TestProcessSubagentUnknownAction:
+    def test_unknown_action(self, game_tools_subagent):
+        result = game_tools_subagent.process_subagent_direct("explode", [{}], _PROC_REASON)
+        assert result["results"][0]["success"] is False
+
+
+# ---------------------------------------------------------------------------
+# Subagent overview endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestSubagentOverview:
+    def test_overview(self, game_tools_subagent):
+        result = game_tools_subagent.get_subagent_overview_direct()
+        assert result["success"] is True
+        assert "SUBAGENT REGISTRY" in result["overview"]
+        assert "TestAgent" in result["overview"]

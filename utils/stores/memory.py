@@ -29,7 +29,7 @@ class MemoryEntry:
     created_at: str = None  # type: ignore[assignment]
     updated_at: str = None  # type: ignore[assignment]
     importance: int = 3
-    source: str = "orchestrator"
+    source: str = "orchestrator" # "evolved" | "orchestrator"
     last_modified_step: Optional[int] = None
     mutation_history: List[dict] = field(default_factory=list)
 

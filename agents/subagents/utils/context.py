@@ -92,10 +92,6 @@ def load_subagent_context(
     if not game_state_result.get("success"):
         raise RuntimeError(game_state_result.get("error", "Failed to load game state"))
 
-    # Compact: omit memory tree + completed history (already loaded below as memory_summary / game state)
-    progress_result = mcp_adapter.call_tool("get_progress_summary", {"compact": True})
-    progress = progress_result.get("progress", {}) if progress_result.get("success") else {}
-
     memory_result = mcp_adapter.call_tool("get_memory_overview", {})
     memory_summary = ""
     if memory_result.get("success"):
@@ -114,7 +110,6 @@ def load_subagent_context(
     return {
         "current_state": _extract_current_state(game_state_result),
         "objective_state": _extract_objective_state(game_state_result),
-        "progress": progress,
         "memory_summary": memory_summary.strip(),
         "skill_overview": skill_overview.strip(),
         "trajectory_window": trajectory_window,

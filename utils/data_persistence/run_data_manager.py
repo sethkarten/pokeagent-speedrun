@@ -374,7 +374,8 @@ class RunDataManager:
                        milestones: Optional[str] = None,
                        maps: Optional[str] = None,
                        memory: Optional[str] = None,
-                       skills: Optional[str] = None):
+                       skills: Optional[str] = None,
+                       subagents: Optional[str] = None):
         """Copy game state files to run_data end_state
         
         Args:
@@ -383,6 +384,7 @@ class RunDataManager:
             maps: Path to maps file
             memory: Path to memory.json
             skills: Path to skills.json
+            subagents: Path to subagents.json
         """
         from utils.data_persistence.run_data_manager import get_cache_path
         
@@ -401,6 +403,8 @@ class RunDataManager:
             memory = str(memory_path)
         if skills is None:
             skills = str(get_cache_path("skills.json"))
+        if subagents is None:
+            subagents = str(get_cache_path("subagents.json"))
         
         files_to_copy = {
             "checkpoint.state": checkpoint_state,
@@ -408,6 +412,7 @@ class RunDataManager:
             "maps.json": maps,
             "memory.json": memory,
             "skills.json": skills,
+            "subagents.json": subagents,
         }
         
         for dest_name, src_path in files_to_copy.items():
@@ -496,6 +501,24 @@ class RunDataManager:
             logger.info(f"Copied skills: {skills_file} -> {dest_file}")
         else:
             logger.debug(f"Skills file not found: {skills_file}")
+
+    def copy_subagents(self, subagents_file: Optional[str] = None):
+        """Copy subagents.json to agent_scratch_space.
+
+        Args:
+            subagents_file: Path to subagents.json. If None, looks in run-specific cache.
+        """
+        from utils.data_persistence.run_data_manager import get_cache_path
+        if subagents_file is None:
+            subagents_file = str(get_cache_path("subagents.json"))
+
+        if os.path.exists(subagents_file):
+            dest_file = self.run_dir / "agent_scratch_space" / "subagents.json"
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(subagents_file, dest_file)
+            logger.info(f"Copied subagents: {subagents_file} -> {dest_file}")
+        else:
+            logger.debug(f"Subagents file not found: {subagents_file}")
 
     def copy_knowledge_base(self, knowledge_base_file: Optional[str] = None):
         """Deprecated: use copy_memory() instead."""

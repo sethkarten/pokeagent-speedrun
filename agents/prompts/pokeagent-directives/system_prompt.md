@@ -71,6 +71,28 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 - For `delete`: `[{id}]`  
 - Your prompt includes a **SKILL LIBRARY** tree showing all skill IDs.
 
+### Subagent Registry
+
+**process_subagent**  
+- **Required:** `action` (`read` | `add` | `update` | `delete`), `entries` (array of objects), `reasoning` (string — why you are performing this subagent operation)  
+- For `read`: `[{id}]` — returns full subagent config  
+- For `add`: `[{path, name, description, handler_type, max_turns, available_tools, system_instructions, directive, return_condition, importance}]`  
+- For `update`: `[{id, ...fields}]`  
+- For `delete`: `[{id}]` — built-in subagents cannot be deleted  
+- Your prompt includes a **SUBAGENT REGISTRY** tree showing all subagent IDs.  
+- `system_instructions` and `directive` are capped at 12,000 characters each.
+
+**execute_custom_subagent**  
+- **Required:** `reasoning` (string)  
+- **One of:** `subagent_id` (string — ID from the registry) **OR** `config` (object — inline config with `max_turns`, `available_tools`, `system_instructions`, `directive`, `return_condition`, `name`)  
+- Launches a multi-turn subagent loop. The subagent signals completion by including `return_to_orchestrator: true` in a tool-call argument.  
+- **Forbidden tools:** Custom subagents cannot call `execute_custom_subagent` (no recursive nesting).
+
+**process_trajectory_history**  
+- **Required:** `window_range` (array of 2 integers `[start, end]` — step range), `directive` (string — analysis question)  
+- One-step VLM pass over the specified trajectory window. Max window is 100 steps.  
+- Returns `analysis` (text), `steps_analyzed`, `actual_range`, `requested_range`.
+
 **get_walkthrough**  
 - **Required:** `part` (integer 1–21)
 

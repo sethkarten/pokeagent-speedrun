@@ -22,7 +22,7 @@ class SkillEntry:
     name: str = ""
     description: str = ""
     effectiveness: str = "medium"  # low / medium / high
-    source: str = "orchestrator"
+    source: str = "orchestrator" # "evolved" | "orchestrator"
     created_at: str = None  # type: ignore[assignment]
     updated_at: str = None  # type: ignore[assignment]
     importance: int = 3
