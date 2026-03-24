@@ -42,6 +42,7 @@ from agents.subagents import (
     load_subagent_context,
 )
 from agents.prompts.paths import POKEAGENT_PROMPT_PATH, resolve_repo_path
+from utils.json_utils import convert_protobuf_value, convert_protobuf_args
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -57,29 +58,7 @@ class MCPToolAdapter:
 
     def _convert_protobuf_to_native(self, value):
         """Recursively convert protobuf objects to native Python types."""
-        # Check if it's a protobuf object
-        if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
-            try:
-                # Check if it's dict-like first (has .items() method) - MapComposite
-                if hasattr(value, 'items'):
-                    return {k: self._convert_protobuf_to_native(v) for k, v in value.items()}
-                # Check if it's list-like (RepeatedComposite, RepeatedScalar)
-                elif hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
-                    return [self._convert_protobuf_to_native(item) for item in value]
-                else:
-                    # Fallback to string conversion
-                    return str(value)
-            except Exception as e:
-                logger.warning(f"Failed to convert protobuf object: {e}")
-                return str(value)
-        # Check if it's a list - recurse into it
-        elif isinstance(value, list):
-            return [self._convert_protobuf_to_native(item) for item in value]
-        # Check if it's a dict - recurse into it
-        elif isinstance(value, dict):
-            return {k: self._convert_protobuf_to_native(v) for k, v in value.items()}
-        else:
-            return value
+        return convert_protobuf_value(value)
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         """Call an MCP tool via HTTP request to the game server."""
@@ -90,14 +69,18 @@ class MCPToolAdapter:
                 "get_game_state": "/mcp/get_game_state",
                 "press_buttons": "/mcp/press_buttons",
                 # navigate_to REMOVED - no pathfinding in this version
-                "add_knowledge": "/mcp/add_knowledge",
-                "search_knowledge": "/mcp/search_knowledge",
-                "get_knowledge_summary": "/mcp/get_knowledge_summary",
+                "add_memory": "/mcp/add_memory",
+                "search_memory": "/mcp/search_memory",
+                "get_memory_summary": "/mcp/get_memory_summary",
+                "get_memory_overview": "/mcp/get_memory_overview",
+                "process_memory": "/mcp/process_memory",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
                 "complete_direct_objective": "/mcp/complete_direct_objective",
                 "create_direct_objectives": "/mcp/create_direct_objectives",
+                "get_full_objective_sequence": "/mcp/get_full_objective_sequence",
+                "replan_objectives": "/mcp/replan_objectives",
                 # "get_progress_summary": "/mcp/get_progress_summary",
                 # SLAM tools
                 "save_map": "/mcp/save_map",
@@ -320,10 +303,10 @@ class VisionOnlyAgent:
             #     }
             # },
 
-            # Knowledge & Information Tools
+            # Long-Term Memory Tools
             {
-                "name": "add_knowledge",
-                "description": "Store information in the persistent knowledge base for later recall.",
+                "name": "add_memory",
+                "description": "Store information in persistent long-term memory for later recall.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -335,8 +318,8 @@ class VisionOnlyAgent:
                 }
             },
             {
-                "name": "search_knowledge",
-                "description": "Search the knowledge base for previously stored information.",
+                "name": "search_memory",
+                "description": "Search long-term memory for previously stored information.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -346,8 +329,8 @@ class VisionOnlyAgent:
                 }
             },
             {
-                "name": "get_knowledge_summary",
-                "description": "Get a summary of all knowledge stored in the database.",
+                "name": "get_memory_summary",
+                "description": "Get a summary of all entries stored in long-term memory.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {},
@@ -552,26 +535,7 @@ class VisionOnlyAgent:
 
     def _convert_protobuf_args(self, proto_args) -> dict:
         """Convert protobuf arguments to JSON-serializable Python types."""
-        arguments = {}
-        for key, value in proto_args.items():
-            # Convert protobuf types to native Python types
-            if hasattr(value, '__class__') and 'proto' in value.__class__.__module__:
-                # Check if it's a list-like type first (RepeatedComposite, RepeatedScalar)
-                if hasattr(value, '__iter__') and not isinstance(value, (str, dict)):
-                    # It's a list/array - convert to Python list
-                    try:
-                        arguments[key] = list(value)
-                    except:
-                        arguments[key] = value
-                else:
-                    # It's a dict-like type - convert via dict
-                    try:
-                        arguments[key] = dict(value)
-                    except:
-                        arguments[key] = value
-            else:
-                arguments[key] = value
-        return arguments
+        return convert_protobuf_args(proto_args)
 
     def _execute_function_call(self, function_call) -> str:
         """Execute a function call and return the result as JSON string."""

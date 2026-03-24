@@ -92,6 +92,62 @@ def _openai_text_part(text: str):
     return part
 
 
+def _format_function_call_for_thinking(function_call) -> str:
+    """One-line summary of a single function_call for agent-thinking / JSONL logging."""
+    name = getattr(function_call, "name", None) or "unknown_tool"
+    raw_args = getattr(function_call, "args", None)
+    args: Dict[str, Any] = {}
+    if raw_args is not None:
+        try:
+            args = dict(raw_args)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            if isinstance(raw_args, dict):
+                args = raw_args
+    reasoning = ""
+    if isinstance(args, dict):
+        reasoning = args.get("reasoning") or args.get("reason") or ""
+    if reasoning:
+        return f"[{name}] {reasoning}"
+    if isinstance(args, dict) and args:
+        args_str = ", ".join(f"{k}={v}" for k, v in list(args.items())[:3])
+        if len(args) > 3:
+            args_str += ", ..."
+        return f"Calling {name}({args_str})"
+    return f"Calling {name}()"
+
+
+def _thinking_from_content_parts(parts) -> str:
+    """Aggregate every text and function_call part (parallel tool calls in one model turn)."""
+    if not parts:
+        return "[Executing function call]"
+    lines: List[str] = []
+    for part in parts:
+        fc = getattr(part, "function_call", None)
+        if fc:
+            try:
+                lines.append(_format_function_call_for_thinking(fc))
+            except Exception:
+                lines.append(f"Calling {getattr(fc, 'name', '?')}()")
+        elif getattr(part, "text", None):
+            t = str(part.text).strip()
+            if t:
+                lines.append(t)
+    if lines:
+        return "\n".join(lines)
+    return "[Executing function call]"
+
+
+def _extract_thinking_from_gemini_like_response(response) -> str:
+    """Shared extractor for adapters/responses with candidates[0].content.parts."""
+    if not response or not getattr(response, "candidates", None):
+        return "[Executing function call]"
+    candidate = response.candidates[0]
+    content = getattr(candidate, "content", None)
+    if not content or not getattr(content, "parts", None):
+        return "[Executing function call]"
+    return _thinking_from_content_parts(content.parts)
+
+
 def _normalize_token_counts(prompt_tokens: int, completion_tokens: int, total_tokens: int) -> tuple[int, int, int]:
     """Normalize provider token counters to a consistent billing shape.
 
@@ -294,34 +350,8 @@ class OpenAIBackend(VLMBackend):
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _extract_thinking_from_response(self, response) -> str:
-        """Extract reasoning for logging from response/adapter (candidates[0].content.parts structure).
-        
-        Prioritizes function calls over text parts to ensure the command name is included,
-        since some backends (like Anthropic) return text explanations before tool calls.
-        """
-        if not response or not getattr(response, "candidates", None):
-            return "[Executing function call]"
-        candidate = response.candidates[0]
-        content = getattr(candidate, "content", None)
-        if not content or not getattr(content, "parts", None):
-            return "[Executing function call]"
-        
-        # First pass: prioritize function calls to include command name in output
-        for part in content.parts:
-            fc = getattr(part, "function_call", None)
-            if fc:
-                args = getattr(fc, "args", {}) or {}
-                reasoning = args.get("reasoning") or args.get("reason", "")
-                if reasoning:
-                    return f"[{fc.name}] {reasoning}"
-                return f"Calling {fc.name}({list(args.keys())[:3]})"
-        
-        # Second pass: fall back to text parts if no function call found
-        for part in content.parts:
-            if getattr(part, "text", None):
-                return part.text
-        
-        return "[Executing function call]"
+        """Extract reasoning for logging from response/adapter (all parts, including parallel tool calls)."""
+        return _extract_thinking_from_gemini_like_response(response)
 
     def get_query(
         self,
@@ -697,34 +727,8 @@ class AnthropicBackend(VLMBackend):
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _extract_thinking_from_response(self, response) -> str:
-        """Extract reasoning for logging from adapter (candidates[0].content.parts).
-        
-        Prioritizes function calls over text parts to ensure the command name is included,
-        since Anthropic often returns text explanations before tool calls.
-        """
-        if not response or not getattr(response, "candidates", None):
-            return "[Executing function call]"
-        candidate = response.candidates[0]
-        content = getattr(candidate, "content", None)
-        if not content or not getattr(content, "parts", None):
-            return "[Executing function call]"
-        
-        # First pass: prioritize function calls to include command name in output
-        for part in content.parts:
-            fc = getattr(part, "function_call", None)
-            if fc:
-                args = getattr(fc, "args", {}) or {}
-                reasoning = args.get("reasoning") or args.get("reason", "")
-                if reasoning:
-                    return f"[{fc.name}] {reasoning}"
-                return f"Calling {fc.name}({list(args.keys())[:3]})"
-        
-        # Second pass: fall back to text parts if no function call found
-        for part in content.parts:
-            if getattr(part, "text", None):
-                return part.text
-        
-        return "[Executing function call]"
+        """Extract reasoning for logging from adapter (all parts, including parallel tool calls)."""
+        return _extract_thinking_from_gemini_like_response(response)
 
     def get_query(
         self,
@@ -1154,34 +1158,8 @@ class OpenRouterBackend(VLMBackend):
         return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
     def _extract_thinking_from_response(self, response) -> str:
-        """Extract reasoning for logging from adapter (candidates[0].content.parts).
-        
-        Prioritizes function calls over text parts to ensure the command name is included,
-        since some models return text explanations before tool calls.
-        """
-        if not response or not getattr(response, "candidates", None):
-            return "[Executing function call]"
-        candidate = response.candidates[0]
-        content = getattr(candidate, "content", None)
-        if not content or not getattr(content, "parts", None):
-            return "[Executing function call]"
-        
-        # First pass: prioritize function calls to include command name in output
-        for part in content.parts:
-            fc = getattr(part, "function_call", None)
-            if fc:
-                args = getattr(fc, "args", {}) or {}
-                reasoning = args.get("reasoning") or args.get("reason", "")
-                if reasoning:
-                    return f"[{fc.name}] {reasoning}"
-                return f"Calling {fc.name}({list(args.keys())[:3]})"
-        
-        # Second pass: fall back to text parts if no function call found
-        for part in content.parts:
-            if getattr(part, "text", None):
-                return part.text
-        
-        return "[Executing function call]"
+        """Extract reasoning for logging from adapter (all parts, including parallel tool calls)."""
+        return _extract_thinking_from_gemini_like_response(response)
 
     @retry_with_exponential_backoff
     def _call_completion(self, messages, tools=None):
@@ -1763,48 +1741,8 @@ class VertexBackend(VLMBackend):
         return upscaled_image
 
     def _extract_thinking_from_response(self, response):
-        """Extract thinking/reasoning text from response for logging
-
-        Args:
-            response: GenerationResponse object
-
-        Returns:
-            String containing extracted reasoning or function call info
-        """
-        thinking_text = ""
-
-        # Try to extract reasoning from function calls
-        if hasattr(response, "candidates") and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, "content") and candidate.content:
-                content = candidate.content
-                if hasattr(content, "parts"):
-                    for part in content.parts:
-                        if hasattr(part, "function_call") and part.function_call:
-                            function_call = part.function_call
-                            # Extract reasoning from common argument names
-                            if hasattr(function_call, "args"):
-                                args = dict(function_call.args)
-                                reasoning = args.get("reasoning") or args.get("reason") or ""
-                                if reasoning:
-                                    thinking_text = f"[{function_call.name}] {reasoning}"
-                                else:
-                                    # Show function call with args if no reasoning
-                                    args_str = ", ".join(
-                                        f"{k}={v}" for k, v in list(args.items())[:3]
-                                    )  # Limit to first 3 args
-                                    if len(args) > 3:
-                                        args_str += ", ..."
-                                    thinking_text = f"Calling {function_call.name}({args_str})"
-                        elif hasattr(part, "text") and part.text:
-                            # If there's also text content, use that
-                            thinking_text = part.text
-
-        # If no thinking text found, use a default
-        if not thinking_text:
-            thinking_text = "[Executing function call]"
-
-        return thinking_text
+        """Extract thinking for logging (all parts; multiple tool calls in one turn)."""
+        return _extract_thinking_from_gemini_like_response(response)
 
     def _extract_text_from_response(self, response):
         """Extract text from VertexAI response, handling multiple parts
@@ -2305,57 +2243,8 @@ class GeminiBackend(VLMBackend):
         return " ".join(text_parts) if text_parts else ""
 
     def _extract_thinking_from_response(self, response):
-        """Extract thinking/reasoning text from response for logging
-
-        Args:
-            response: GenerationResponse object
-
-        Returns:
-            String containing extracted reasoning or function call info
-        """
-        thinking_text = ""
-        function_name = None
-
-        # Try to extract reasoning from function calls
-        if hasattr(response, "candidates") and response.candidates:
-            candidate = response.candidates[0]
-            if hasattr(candidate, "content") and candidate.content:
-                content = candidate.content
-                if hasattr(content, "parts"):
-                    for part in content.parts:
-                        if hasattr(part, "function_call") and part.function_call:
-                            function_call = part.function_call
-                            function_name = function_call.name  # Always capture the function name
-
-                            # Extract reasoning from common argument names
-                            try:
-                                args = dict(function_call.args) if hasattr(function_call, "args") else {}
-                                reasoning = args.get("reasoning") or args.get("reason") or ""
-                                if reasoning:
-                                    thinking_text = f"[{function_call.name}] {reasoning}"
-                                else:
-                                    # Show function call with args if no reasoning
-                                    args_str = ", ".join(
-                                        f"{k}={v}" for k, v in list(args.items())[:3]
-                                    )  # Limit to first 3 args
-                                    if len(args) > 3:
-                                        args_str += ", ..."
-                                    thinking_text = f"Calling {function_call.name}({args_str})"
-                            except Exception as e:
-                                # If we can't extract args, at least show the function name
-                                thinking_text = f"Calling {function_call.name}()"
-                        elif hasattr(part, "text") and part.text:
-                            # If there's also text content, use that
-                            thinking_text = part.text
-
-        # If no thinking text found, use function name if available, otherwise generic message
-        if not thinking_text:
-            if function_name:
-                thinking_text = f"[Executing {function_name}]"
-            else:
-                thinking_text = "[Executing function call - unable to extract details]"
-
-        return thinking_text
+        """Extract thinking for logging (all parts; multiple tool calls in one turn)."""
+        return _extract_thinking_from_gemini_like_response(response)
 
     def _call_generate_content(self, content_parts):
         """Calls the generate_content method with exponential backoff for rate limits.

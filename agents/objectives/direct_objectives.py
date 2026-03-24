@@ -2800,16 +2800,13 @@ class DirectObjectiveManager:
         logger.info(f"Loaded part_1_walkthrough_claude_4_5 sequence with {len(self.current_sequence)} objectives, starting at index {self.current_index} ({len(initial_completed)} pre-completed)")
         
     def load_autonomous_objective_creation_sequence(self, start_index: int = 0, run_dir: Optional[str] = None):
-        """Load a dummy sequence with one objective that prompts the autonomous agent to create new objectives.
-        
-        This sequence is designed for the autonomous CLI agent. It contains a single objective
-        that guides the agent through the autonomous objective creation pipeline:
-        1. Call get_progress_summary() to review accomplishments
-        2. Use get_walkthrough(part=X) to find the next relevant walkthrough part
-        3. Create the next 3 direct objectives using create_direct_objectives()
-        
-        When this objective is completed, the agent will have created new objectives and can
-        proceed with those objectives.
+        """Load a sequence with one objective that triggers the objectives-planning subagent.
+
+        This sequence is designed for autonomous play.  It contains a single
+        story objective that instructs the orchestrator to call
+        ``subagent_plan_objectives`` so the planning agent can create the
+        initial set of objectives based on the walkthrough and current
+        progress.
         
         Args:
             start_index: Index to start from (0 = start from beginning)
@@ -2826,88 +2823,55 @@ class DirectObjectiveManager:
         # Categorized mode: use dynamics for autonomous objective creation
         self.dynamics_sequence = []
         self.battling_sequence = []
-        self.story_sequence = [
-            # DirectObjective(
-            #     id="dynamic_01_reach_route_102",
-            #     description="Head south from route 103 to enter Route 102",
-            #     action_type="navigate",
-            #     target_location="route 102",
-            #     navigation_hint="In route 103, go to the south (down) exit to reach Route 102.",
-            #     completion_condition="location_contains_route_102",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="dynamic_01_travel_to_route_104",
-            #     description="Head south from petalburg to enter Route 104",
-            #     action_type="navigate",
-            #     target_location="route 104",
-            #     navigation_hint="In petalburg, go to exit to reach Route 104.",
-            #     completion_condition="location_contains_route_104",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="dynamic_01_exit_rustboro_gym",
-            #     description="I have just defeated Gym Leader Roxanne at Rustboro Gym. I need to exit the gym and continue my journey.",
-            #     action_type="navigate",
-            #     target_location="Rustboro City",
-            #     navigation_hint="Travel to the exit of the gym and continue my journey.",
-            #     completion_condition="location_contains_rustboro_city",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="dynamic_03_find_briney",
-            #     description="Travel to Mr. Briney's Cottage",
-            #     action_type="navigate",
-            #     target_location="Route 104",
-            #     navigation_hint="Go south from Rustboro, through Petalburg Woods, to reach the cottage on the south side of Route 104.",
-            #     completion_condition="location_map_is_route_104_south",
-            #     priority=1
-            # ),
 
-
-
-
-            # ------------------------------
-            # gemini 2.5 - flash
-            # DirectObjective(
-            #     id="battle_rival_in_route_103",
-            #     description="Battle your rival May in Route 103",
-            #     action_type="battle",
-            #     target_location="Route 103",
-            #     navigation_hint="Navigate to Route 103 and battle your rival May/Brendan. Use your starter's basic attack move to defeat them. This should be an easy first battle.",
-            #     completion_condition="battle_ends_and_rival_says_theyre_returning_to_lab",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="visit_birch_lab_to_collect_pokedex",
-            #     description="Visit Professor Birch's Lab to collect the Pokedex",
-            #     action_type="navigate",
-            #     target_location="Professor Birch's Lab",
-            #     navigation_hint="Navigate to Professor Birch's Lab and collect the Pokedex. The Pokedex is located in the Lab.",
-            #     completion_condition="pokedex_collected",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="visit_petalbug_city_gym",
-            #     description="Enter the Petalburg City Gym",
-            #     action_type="interact",
-            #     target_location="Petalburg City Gym",
-            #     navigation_hint="Navigate to Petalburg City Gym and enter through the front door. Talk to Norman who is currently standing in the lobby at (4, 107). Align youself to face him by looking at the visual frame and interact with him by pressing A.",
-            #     completion_condition="location_contains_petalburg_city_gym_and_talked_to_norman",
-            #     priority=1
-            # ),
-            DirectObjective(
-                id="autonomous_01_create_next_story_objectives",
-                description="Follow the autonomous objective creation procedure to create the next 3 objectives. Step 1: Call get_progress_summary() to review your accomplishments (milestones, badges, current location). Step 2: Call get_walkthrough(part=X) with the appropriate part number. Step 3: Create the next 3 logical objectives using create_direct_objectives() based on the walkthrough information.",
+        # Under the 'simplest' scaffold (EXCLUDE_BUILTIN_SUBAGENTS=1) the registry
+        # starts empty and built-in subagent tools are stripped.  The orchestrator
+        # owns replan_objectives directly so it can modify the objective sequence
+        # without needing a planner subagent.
+        if os.environ.get("EXCLUDE_BUILTIN_SUBAGENTS") == "1":
+            _initial_plan = DirectObjective(
+                id="autonomous_01_plan_objectives",
+                description=(
+                    "Plan the initial set of objectives. Built-in subagent tools are disabled "
+                    "and the SUBAGENT REGISTRY starts empty. Use the research tools at your disposal "
+                    "to research your current progress, understand what you need to do next, then call "
+                    "replan_objectives to create objectives."
+                ),
                 action_type="create_new_objectives",
                 category="story",
                 target_location=None,
-                navigation_hint="IMPORTANT: Function call results appear in the NEXT step! Call ONE function per step. Step 1: Call get_progress_summary(). Step 2: Call get_walkthrough(part=X). Step 3: Create new objectives with create_direct_objectives(category=...). In categorized mode, you MUST include a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' only for training prep, and 'dynamics' for short-term navigation/cleanup. Multiple create_direct_objectives calls are allowed. Each function call result will appear in the 'RESULTS FROM PREVIOUS STEP' section of the next step. Once you call create_direct_objectives(), the new objectives will be added to the sequence and the current_index for that category will be incremented to the first new objective.",
+                navigation_hint=(
+                    "1. Call get_progress_summary() to see current state. "
+                    "2. Call get_walkthrough(part=...) to find what comes next. "
+                    "3. Call replan_objectives(edits=[...], category=...) to create objectives. "
+                    "4. Complete this objective once you have created your plan."
+                ),
                 completion_condition="story_objectives_created",
-                priority=1
-            ),
+                priority=1,
+            )
+        else:
+            _initial_plan = DirectObjective(
+                id="autonomous_01_plan_objectives",
+                description=(
+                    "Call subagent_plan_objectives to plan the initial set of objectives. "
+                    "Provide a reason explaining that this is the start of autonomous play "
+                    "and new objectives are needed based on the current progress and walkthrough."
+                ),
+                action_type="create_new_objectives",
+                category="story",
+                target_location=None,
+                navigation_hint=(
+                    "Call subagent_plan_objectives(reason='Starting autonomous play — "
+                    "need initial objectives based on current progress and walkthrough.'). "
+                    "The planning subagent will use research tools to determine the next "
+                    "logical objectives and add them to the sequence. Once it returns, "
+                    "complete this objective and proceed with the newly created objectives."
+                ),
+                completion_condition="story_objectives_created",
+                priority=1,
+            )
 
-        ]
+        self.story_sequence = [_initial_plan]
         self.dynamics_index = 0
         self.battling_index = 0
         self.story_index = min(start_index, len(self.story_sequence))
@@ -3118,75 +3082,15 @@ class DirectObjectiveManager:
             logger.info(f"Added {len(objectives_data)} dynamic objectives to sequence")
     
     def save_completed_objectives(self, run_dir: Optional[str] = None):
-        """Save completed objectives history to file in run_data agent_scratch_space
-        
-        Args:
-            run_dir: Optional run directory path. If None, tries to use run_data manager.
-                     DEPRECATED: No longer falls back to .pokeagent_cache.
-        
-        Raises:
-            RuntimeError: If run_dir is not provided and run_data_manager is not available.
-        """
-        if not run_dir:
-            # Try to use run_data manager if available
-            try:
-                from utils.data_persistence.run_data_manager import get_run_data_manager
-                run_manager = get_run_data_manager()
-                if run_manager:
-                    run_dir = str(run_manager.get_scratch_space_dir())
-                else:
-                    raise RuntimeError(
-                        "Cannot save completed_objectives: run_data_manager not initialized. "
-                        "Please ensure run_data_manager is initialized before saving objectives. "
-                        "Saving to .pokeagent_cache is deprecated."
-                    )
-            except ImportError:
-                raise RuntimeError(
-                    "Cannot save completed_objectives: run_data_manager module not available. "
-                    "Saving to .pokeagent_cache is deprecated."
-                )
-        
-        os.makedirs(run_dir, exist_ok=True)
-        
-        filename = os.path.join(run_dir, "completed_objectives.json")
-        
-        completed_data = {
-            "sequence_name": self.sequence_name,
-            "completed_at": datetime.now().isoformat(),
-            "completed_objectives": [
-                {
-                    "id": obj.id,
-                    "description": obj.description,
-                    "target_location": obj.target_location,
-                    "action_type": obj.action_type,
-                    "completed_at": obj.completed_at.isoformat() if hasattr(obj, 'completed_at') and obj.completed_at else None
-                }
-                for obj in self.current_sequence if obj.completed
-            ],
-            "total_objectives_completed": sum(1 for obj in self.current_sequence if obj.completed),
-            "total_objectives": len(self.current_sequence)
-        }
-        
-        # Load existing history and append (preserving initial completed objectives if present)
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                history = json.load(f)
-            # Check if this sequence name already exists (from initial load)
-            existing_sequences = history.get("sequences", [])
-            # If there's already a sequence with the same name from initial load, we'll append to it
-            # Otherwise, just append the new completion data
-        else:
-            history = {"sequences": []}
-        
-        # Append the new completion data (this could be final completion or dynamic objectives)
-        history["sequences"].append(completed_data)
-        history["last_updated"] = datetime.now().isoformat()
-        
-        with open(filename, 'w') as f:
-            json.dump(history, f, indent=2)
-        
-        logger.info(f"Saved completed objectives to {filename}")
-        return filename
+        """DEPRECATED: Use auto_save() instead. Delegates to auto_save() for backward compat."""
+        import warnings
+        warnings.warn(
+            "save_completed_objectives() is deprecated; use auto_save() which persists "
+            "the full objectives state via objectives.json",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.auto_save()
         
     def get_sequence_status(self) -> Dict[str, Any]:
         """Get current status of the objective sequence"""
@@ -3351,27 +3255,8 @@ class DirectObjectiveManager:
         logger.info(f"   ⚔️  Battling: {len(self.battling_sequence)} objectives (starting at index {self.battling_index}, {battling_completed_count} pre-completed)")
         logger.info(f"   🎯 Dynamics: 0 objectives (agent will create as needed)")
 
-        # Save initial state
-        if run_dir:
-            try:
-                filename = os.path.join(run_dir, "categorized_objectives_state.json")
-                state = {
-                    "loaded_at": datetime.now().isoformat(),
-                    "mode": "categorized",
-                    "story_count": len(self.story_sequence),
-                    "story_index": self.story_index,
-                    "story_completed": story_completed_count,
-                    "battling_count": len(self.battling_sequence),
-                    "battling_index": self.battling_index,
-                    "battling_completed": battling_completed_count,
-                    "dynamics_count": 0,
-                    "dynamics_index": 0
-                }
-                with open(filename, 'w') as f:
-                    json.dump(state, f, indent=2)
-                logger.info(f"💾 Saved categorized objectives initial state to {filename}")
-            except Exception as e:
-                logger.warning(f"Failed to save initial state: {e}")
+        # Persist initial state via the unified objectives.json system
+        self.auto_save()
 
     def get_current_objectives_by_category(self) -> Dict[str, Optional[DirectObjective]]:
         """Get current objectives for all 3 categories
@@ -3389,14 +3274,32 @@ class DirectObjectiveManager:
             "dynamics": self._get_current_objective_for_category("dynamics")
         }
 
+    _STORY_EXHAUSTION_FALLBACK = DirectObjective(
+        id="auto_plan_objectives",
+        description=(
+            "The current story sequence is complete. Use subagent_plan_objectives "
+            "to plan future objectives based on your progress and the walkthrough."
+        ),
+        action_type="create_new_objectives",
+        category="story",
+        completion_condition="story_objectives_created",
+    )
+
     def _get_current_objective_for_category(self, category: str) -> Optional[DirectObjective]:
         """Get current objective for a specific category
 
         For battling objectives, filters based on prerequisite_story_objective to ensure
         battling objectives only appear after reaching the required story milestone.
+
+        If the story sequence is exhausted, returns a fallback objective that instructs
+        the orchestrator to invoke the objectives-planning subagent.
         """
         if category == "story":
             if self.story_index < len(self.story_sequence):
+                return self.story_sequence[self.story_index]
+            if self.story_sequence:
+                self.story_sequence.append(self._STORY_EXHAUSTION_FALLBACK)
+                logger.info("📋 Story sequence exhausted — appended planning fallback objective.")
                 return self.story_sequence[self.story_index]
         elif category == "battling":
             # Filter battling objectives by prerequisite
@@ -3531,6 +3434,8 @@ class DirectObjectiveManager:
         if category == "dynamics":
             self._save_dynamics_objectives_backup(run_dir)
 
+        self.auto_save()
+
     def _get_sequence_for_category(self, category: str) -> List[DirectObjective]:
         """Helper to get sequence list for a category"""
         if category == "story":
@@ -3573,6 +3478,8 @@ class DirectObjectiveManager:
 
         if reasoning:
             logger.info(f"   Reasoning: {reasoning}")
+
+        self.auto_save()
 
     def get_categorized_status(self) -> Dict[str, Any]:
         """Get status summary for all 3 categories
@@ -3660,3 +3567,330 @@ class DirectObjectiveManager:
             logger.info(f"💾 Saved {len(dynamics_data)} dynamics objectives to {filename}")
         except Exception as e:
             logger.warning(f"Failed to save dynamics objectives backup: {e}")
+
+    # ------------------------------------------------------------------
+    # Replanning & full-sequence snapshot (used by subagent_plan_objectives)
+    # ------------------------------------------------------------------
+
+    def _get_index_for_category(self, category: str) -> int:
+        if category == "story":
+            return self.story_index
+        elif category == "battling":
+            return self.battling_index
+        elif category == "dynamics":
+            return self.dynamics_index
+        return 0
+
+    def replan_category(self, category: str, edits: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Apply a batch of index-based edits to a single objective category.
+
+        Each edit is ``{"index": int, "objective": dict | None}``.
+        * Non-null objective at an existing index  -> **modify** (replace).
+        * Non-null objective at a new contiguous index -> **create** (append).
+        * Null / missing objective at an existing index -> **delete** (shift down).
+
+        Returns a structured result dict (never raises for validation errors).
+        """
+        VALID_CATEGORIES = ("story", "battling", "dynamics")
+        MAX_EDITS = 5
+
+        if category not in VALID_CATEGORIES:
+            return {"success": False, "error": f"Invalid category '{category}'. Must be one of {VALID_CATEGORIES}."}
+
+        if not isinstance(edits, list):
+            return {"success": False, "error": "edits must be a list."}
+
+        if len(edits) > MAX_EDITS:
+            return {"success": False, "error": f"Too many edits ({len(edits)}). Maximum is {MAX_EDITS} per call."}
+
+        sequence = self._get_sequence_for_category(category)
+        current_idx = self._get_index_for_category(category)
+
+        for edit in edits:
+            idx = edit.get("index")
+            if idx is None or not isinstance(idx, int):
+                return {"success": False, "error": f"Each edit must have an integer 'index'. Got: {edit}"}
+            if idx < current_idx:
+                return {
+                    "success": False,
+                    "error": (
+                        f"Cannot edit index {idx} in '{category}' — it is before the current "
+                        f"index ({current_idx}). Only current and future objectives may be modified."
+                    ),
+                }
+
+        for edit in edits:
+            obj_data = edit.get("objective")
+            is_delete = obj_data is None or (isinstance(obj_data, dict) and not obj_data)
+            if is_delete and edit["index"] >= len(sequence):
+                return {
+                    "success": False,
+                    "error": f"Cannot delete index {edit['index']} — it does not exist in '{category}'.",
+                }
+
+        append_indices = sorted(
+            e["index"] for e in edits
+            if e["index"] >= len(sequence) and e.get("objective") and (not isinstance(e["objective"], dict) or e["objective"])
+        )
+        if append_indices:
+            expected_start = len(sequence)
+            for i, ai in enumerate(append_indices):
+                if ai != expected_start + i:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Non-contiguous append index {ai} in '{category}'. "
+                            f"Current sequence length is {len(sequence)}; expected next append "
+                            f"index {expected_start + i}."
+                        ),
+                    }
+
+        edits_applied: List[Dict[str, Any]] = []
+        indices_to_delete: List[int] = []
+
+        for edit in sorted(edits, key=lambda e: e["index"]):
+            idx = edit["index"]
+            obj_data = edit.get("objective")
+
+            is_delete = obj_data is None or (isinstance(obj_data, dict) and not obj_data)
+
+            if is_delete:
+                if idx >= len(sequence):
+                    return {"success": False, "error": f"Cannot delete index {idx} — it does not exist in '{category}'."}
+                indices_to_delete.append(idx)
+                edits_applied.append({"action": "delete", "index": idx, "id": sequence[idx].id})
+            elif idx < len(sequence):
+                new_obj = DirectObjective(
+                    id=obj_data.get("id", sequence[idx].id),
+                    description=obj_data.get("description", sequence[idx].description),
+                    action_type=obj_data.get("action_type", sequence[idx].action_type),
+                    category=category,
+                    target_location=obj_data.get("target_location"),
+                    target_coords=obj_data.get("target_coords"),
+                    navigation_hint=obj_data.get("navigation_hint"),
+                    completion_condition=obj_data.get("completion_condition"),
+                    priority=obj_data.get("priority", 1),
+                    optional=obj_data.get("optional", False),
+                    recommended_battling_objectives=obj_data.get("recommended_battling_objectives", []),
+                    prerequisite_story_objective=obj_data.get("prerequisite_story_objective"),
+                )
+                sequence[idx] = new_obj
+                edits_applied.append({"action": "modify", "index": idx, "id": new_obj.id})
+            else:
+                new_obj = DirectObjective(
+                    id=obj_data.get("id", f"{category}_appended_{idx}"),
+                    description=obj_data["description"],
+                    action_type=obj_data.get("action_type", "navigate"),
+                    category=category,
+                    target_location=obj_data.get("target_location"),
+                    target_coords=obj_data.get("target_coords"),
+                    navigation_hint=obj_data.get("navigation_hint"),
+                    completion_condition=obj_data.get("completion_condition"),
+                    priority=obj_data.get("priority", 1),
+                    optional=obj_data.get("optional", False),
+                    recommended_battling_objectives=obj_data.get("recommended_battling_objectives", []),
+                    prerequisite_story_objective=obj_data.get("prerequisite_story_objective"),
+                )
+                sequence.append(new_obj)
+                edits_applied.append({"action": "create", "index": idx, "id": new_obj.id})
+
+        if indices_to_delete:
+            for del_idx in sorted(indices_to_delete, reverse=True):
+                sequence.pop(del_idx)
+            if current_idx >= len(sequence) and len(sequence) > 0:
+                self._set_index_for_category(category, len(sequence) - 1)
+            elif current_idx >= len(sequence):
+                self._set_index_for_category(category, 0)
+
+        new_current = self._get_index_for_category(category)
+        logger.info(
+            f"🔄 Replanned '{category}': {len(edits_applied)} edits applied, "
+            f"sequence length {len(sequence)}, current_index {new_current}"
+        )
+        self.auto_save()
+
+        return {
+            "success": True,
+            "error": None,
+            "edits_applied": edits_applied,
+            "new_sequence_length": len(sequence),
+            "current_index": new_current,
+        }
+
+    def _set_index_for_category(self, category: str, value: int):
+        if category == "story":
+            self.story_index = value
+        elif category == "battling":
+            self.battling_index = value
+        elif category == "dynamics":
+            self.dynamics_index = value
+
+    def get_full_sequence_snapshot(self) -> Dict[str, Any]:
+        """Return the complete objective state across all three categories.
+
+        Used by ``subagent_plan_objectives`` to present the full planning
+        picture at every step.
+        """
+        def _serialize_sequence(seq: List[DirectObjective]) -> List[Dict[str, Any]]:
+            result = []
+            for i, obj in enumerate(seq):
+                entry: Dict[str, Any] = {
+                    "index": i,
+                    "id": obj.id,
+                    "description": obj.description,
+                    "action_type": obj.action_type,
+                    "category": obj.category,
+                    "target_location": obj.target_location,
+                    "navigation_hint": obj.navigation_hint,
+                    "completion_condition": obj.completion_condition,
+                    "completed": obj.completed,
+                    "optional": obj.optional,
+                    "priority": obj.priority,
+                }
+                if obj.recommended_battling_objectives:
+                    entry["recommended_battling_objectives"] = obj.recommended_battling_objectives
+                if obj.prerequisite_story_objective:
+                    entry["prerequisite_story_objective"] = obj.prerequisite_story_objective
+                result.append(entry)
+            return result
+
+        return {
+            "story": {
+                "sequence": _serialize_sequence(self.story_sequence),
+                "current_index": self.story_index,
+                "total": len(self.story_sequence),
+                "completed": sum(1 for o in self.story_sequence if o.completed),
+            },
+            "battling": {
+                "sequence": _serialize_sequence(self.battling_sequence),
+                "current_index": self.battling_index,
+                "total": len(self.battling_sequence),
+                "completed": sum(1 for o in self.battling_sequence if o.completed),
+            },
+            "dynamics": {
+                "sequence": _serialize_sequence(self.dynamics_sequence),
+                "current_index": self.dynamics_index,
+                "total": len(self.dynamics_sequence),
+                "completed": sum(1 for o in self.dynamics_sequence if o.completed),
+            },
+        }
+
+    # ------------------------------------------------------------------
+    # Full-state persistence (objectives.json)
+    # ------------------------------------------------------------------
+
+    _OBJECTIVES_JSON_VERSION = 1
+
+    def serialize_full_state(self) -> Dict[str, Any]:
+        """Serialize the complete manager state for persistence to objectives.json.
+
+        The output is sufficient to reconstruct the manager via ``restore_from_state``
+        without re-importing hardcoded sequences.
+        """
+        return {
+            "version": self._OBJECTIVES_JSON_VERSION,
+            "mode": self.mode,
+            "sequence_name": self.sequence_name,
+            "saved_at": datetime.now().isoformat(),
+            "story": {
+                "index": self.story_index,
+                "sequence": [obj.to_dict() for obj in self.story_sequence],
+            },
+            "battling": {
+                "index": self.battling_index,
+                "sequence": [obj.to_dict() for obj in self.battling_sequence],
+            },
+            "dynamics": {
+                "index": self.dynamics_index,
+                "sequence": [obj.to_dict() for obj in self.dynamics_sequence],
+            },
+            "legacy": {
+                "index": self.current_index,
+                "sequence": [obj.to_dict() for obj in self.current_sequence],
+            },
+        }
+
+    def restore_from_state(self, data: Dict[str, Any]) -> None:
+        """Reconstruct manager state from a dict produced by ``serialize_full_state``."""
+        version = data.get("version", 0)
+        if version > self._OBJECTIVES_JSON_VERSION:
+            logger.warning(
+                f"objectives.json version {version} is newer than supported "
+                f"({self._OBJECTIVES_JSON_VERSION}); attempting best-effort restore"
+            )
+
+        self.mode = data.get("mode", "legacy")
+        self.sequence_name = data.get("sequence_name", "")
+
+        # Restore categorized sequences
+        for category in ("story", "battling", "dynamics"):
+            cat_data = data.get(category, {})
+            seq = [DirectObjective.from_dict(d) for d in cat_data.get("sequence", [])]
+            idx = cat_data.get("index", 0)
+            if category == "story":
+                self.story_sequence = seq
+                self.story_index = min(idx, len(seq))
+            elif category == "battling":
+                self.battling_sequence = seq
+                self.battling_index = min(idx, len(seq))
+            elif category == "dynamics":
+                self.dynamics_sequence = seq
+                self.dynamics_index = min(idx, len(seq))
+
+        # Restore legacy sequence
+        legacy_data = data.get("legacy", {})
+        self.current_sequence = [DirectObjective.from_dict(d) for d in legacy_data.get("sequence", [])]
+        self.current_index = min(legacy_data.get("index", 0), max(len(self.current_sequence), 0))
+
+        logger.info(
+            f"Restored objectives state: mode={self.mode}, "
+            f"story={self.story_index}/{len(self.story_sequence)}, "
+            f"battling={self.battling_index}/{len(self.battling_sequence)}, "
+            f"dynamics={self.dynamics_index}/{len(self.dynamics_sequence)}"
+        )
+
+    def save_to_file(self, path: str) -> None:
+        """Serialize full state and write to *path* atomically."""
+        state = self.serialize_full_state()
+        tmp_path = path + ".tmp"
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+            logger.debug(f"Saved objectives state to {path}")
+        except Exception as e:
+            logger.warning(f"Failed to save objectives state to {path}: {e}")
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+    @classmethod
+    def load_from_file(cls, path: str) -> "DirectObjectiveManager":
+        """Create a new manager restored from a previously saved objectives.json."""
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        manager = cls()
+        manager.restore_from_state(data)
+        return manager
+
+    def auto_save(self) -> None:
+        """Persist current state to the standard cache and run_data locations.
+
+        Called automatically after every mutation (complete, replan, add, etc.).
+        Silently no-ops if the cache system is not yet initialized.
+        """
+        try:
+            from utils.data_persistence.run_data_manager import get_cache_path, get_run_data_manager
+
+            cache_path = str(get_cache_path("objectives.json"))
+            self.save_to_file(cache_path)
+
+            run_manager = get_run_data_manager()
+            if run_manager:
+                scratch_path = str(run_manager.get_scratch_space_dir() / "objectives.json")
+                self.save_to_file(scratch_path)
+        except Exception as e:
+            logger.debug(f"auto_save skipped: {e}")

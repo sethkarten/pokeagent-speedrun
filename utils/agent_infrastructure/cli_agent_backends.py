@@ -20,7 +20,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -692,7 +692,7 @@ class ClaudeCodeBackend(CliAgentBackend):
 
         logger.info("JSONL poll: appending %d step(s) from %s", len(new_entries), target_path)
 
-        new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=None)))
+        new_entries.sort(key=lambda e: (e["_parsed_timestamp"] or datetime.min.replace(tzinfo=timezone.utc)))
 
         llm_logger = get_llm_logger()
         # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
@@ -1123,7 +1123,7 @@ class GeminiCliBackend(CliAgentBackend):
             return updated_hashes, last_cli_step
 
         logger.info("Gemini session: appending %d step(s)", len(new_entries))
-        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=timezone.utc)))
 
         llm_logger = get_llm_logger()
         # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
@@ -1590,7 +1590,7 @@ env_key = "OPENROUTER_API_KEY"
             return updated_hashes, last_cli_step
 
         logger.info("Codex session: appending %d step(s)", len(new_entries))
-        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=None)))
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=timezone.utc)))
 
         llm_logger = get_llm_logger()
         # Use last step's timestamp so first entry of this poll gets correct duration (not 0.0)
@@ -1652,6 +1652,474 @@ env_key = "OPENROUTER_API_KEY"
             return False
 
 
+class HermesCliBackend(CliAgentBackend):
+    """Backend for the Nous Hermes agent, bridged through a local JSONL wrapper."""
+
+    WORKSPACE_PATH = "/workspace"
+    PROJECT_ROOT_PATH = "/opt/pokeagent-src"
+    AGENT_MEMORY_PATH = "/home/hermes-agent/.hermes"
+    DIRECTIVE_FILENAME = ".agent_directive.txt"
+    CONFIG_FILENAME = "config.yaml"
+    CONFIG_MARKER_BEGIN = "# BEGIN POKEAGENT HERMES MCP"
+    CONFIG_MARKER_END = "# END POKEAGENT HERMES MCP"
+
+    @property
+    def name(self) -> str:
+        return "HermesCLI"
+
+    @property
+    def agent_memory_subdir(self) -> str:
+        return "hermes_memory"
+
+    @property
+    def container_image(self) -> str:
+        return "hermes-agent-devcontainer"
+
+    @property
+    def devcontainer_build_context(self) -> str:
+        return ".devcontainer/hermes-agent"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._last_event_time: float | None = None
+        self._last_seen_session_totals: dict[str, dict] = {}
+
+    def is_auth_fatal_error(self, text: str) -> bool:
+        lowered = text.lower()
+        return (
+            "invalid api key" in lowered
+            or "authentication" in lowered
+            or "not configured" in lowered
+            or "missing api key" in lowered
+        )
+
+    @staticmethod
+    def _normalize_tool_name(name: str) -> str:
+        for prefix in ("mcp_pokemon_emerald_", "mcp__pokemon-emerald__"):
+            if name.startswith(prefix):
+                return name[len(prefix) :]
+        return name.split("__")[-1] if "__" in name else name
+
+    def seed_agent_auth(self, agent_memory_dir: Path) -> None:
+        """Seed run-local Hermes home from the user's ~/.hermes directory when present."""
+        import shutil
+
+        host_hermes_dir = Path.home() / ".hermes"
+        if not host_hermes_dir.exists():
+            print("ℹ️  Host ~/.hermes not found; Hermes will rely on environment variables/config generated for this run.")
+            return
+
+        skipped_names = {"audio_cache", "hermes-agent", "image_cache", "logs", "sessions", "state.db"}
+        for child in host_hermes_dir.iterdir():
+            if child.name in skipped_names:
+                continue
+            target = agent_memory_dir / child.name
+            try:
+                if child.is_dir():
+                    shutil.copytree(child, target, dirs_exist_ok=True)
+                else:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(child, target)
+            except OSError as exc:
+                logger.warning("Could not seed Hermes path %s: %s", child, exc)
+
+    def _build_hermes_mcp_block(
+        self,
+        *,
+        mcp_url: str | None = None,
+        server_url: str | None = None,
+        pythonpath: str | None = None,
+    ) -> str:
+        if mcp_url:
+            body = (
+                "mcp_servers:\n"
+                "  pokemon-emerald:\n"
+                f'    url: "{mcp_url}"\n'
+                "    tools:\n"
+                "      prompts: false\n"
+                "      resources: false\n"
+            )
+        else:
+            executable = Path(sys.executable).resolve().as_posix()
+            body = (
+                "mcp_servers:\n"
+                "  pokemon-emerald:\n"
+                f'    command: "{executable}"\n'
+                '    args: ["-m", "server.cli.pokemon_mcp_server"]\n'
+                "    env:\n"
+                f'      POKEMON_SERVER_URL: "{server_url}"\n'
+                f'      PYTHONPATH: "{pythonpath}"\n'
+                "    tools:\n"
+                "      prompts: false\n"
+                "      resources: false\n"
+            )
+        return f"{self.CONFIG_MARKER_BEGIN}\n{body}{self.CONFIG_MARKER_END}\n"
+
+    def _ensure_hermes_config(
+        self,
+        agent_memory_dir: Path,
+        *,
+        mcp_url: str | None = None,
+        server_url: str | None = None,
+        pythonpath: str | None = None,
+    ) -> Path:
+        agent_memory_dir.mkdir(parents=True, exist_ok=True)
+        config_path = agent_memory_dir / self.CONFIG_FILENAME
+        existing = ""
+        if config_path.exists():
+            try:
+                existing = config_path.read_text(encoding="utf-8")
+            except OSError:
+                existing = ""
+
+        if self.CONFIG_MARKER_BEGIN in existing and self.CONFIG_MARKER_END in existing:
+            start = existing.index(self.CONFIG_MARKER_BEGIN)
+            end = existing.index(self.CONFIG_MARKER_END) + len(self.CONFIG_MARKER_END)
+            existing = (existing[:start] + existing[end:]).strip()
+
+        injected = self._build_hermes_mcp_block(
+            mcp_url=mcp_url,
+            server_url=server_url,
+            pythonpath=pythonpath,
+        )
+        new_content = (existing.rstrip() + "\n\n" + injected) if existing.strip() else injected
+        config_path.write_text(new_content, encoding="utf-8")
+        return config_path
+
+    def _build_wrapper_cmd(
+        self,
+        directive_path: Path,
+        working_dir: Path,
+        server_url: str,
+        hermes_home: Path,
+        *,
+        python_bin: str = "python3",
+        resume_session_id: str | None = None,
+        project_root: str | Path | None = None,
+    ) -> list[str]:
+        # Run wrapper as script (not -m) so Hermes's utils.py is found when PYTHONPATH has hermes-agent first
+        root = Path(project_root) if project_root else Path(self.PROJECT_ROOT_PATH)
+        wrapper_script = str(root / "utils" / "agent_infrastructure" / "hermes_wrapper.py")
+        cmd = [
+            python_bin,
+            wrapper_script,
+            "--directive-path",
+            str(directive_path),
+            "--working-dir",
+            str(working_dir),
+            "--server-url",
+            server_url,
+            "--hermes-home",
+            str(hermes_home),
+        ]
+        if resume_session_id:
+            cmd.extend(["--resume-session-id", resume_session_id])
+
+        if getattr(self, "api_gateway", "login") == "openrouter" and os.environ.get("OPENROUTER_API_KEY"):
+            cmd.extend(
+                [
+                    "--provider",
+                    "openrouter",
+                    "--base-url",
+                    "https://openrouter.ai/api/v1",
+                    "--api-key-env",
+                    "OPENROUTER_API_KEY",
+                    "--model",
+                    os.environ.get("HERMES_MODEL", "google/gemini-3-flash-preview"),
+                ]
+            )
+        else:
+            model = os.environ.get("HERMES_MODEL")
+            provider = os.environ.get("HERMES_PROVIDER")
+            base_url = os.environ.get("HERMES_BASE_URL")
+            api_key_env = os.environ.get("HERMES_API_KEY_ENV")
+            if model:
+                cmd.extend(["--model", model])
+            if provider:
+                cmd.extend(["--provider", provider])
+            if base_url:
+                cmd.extend(["--base-url", base_url])
+            if api_key_env:
+                cmd.extend(["--api-key-env", api_key_env])
+        return cmd
+
+    def build_launch_cmd(
+        self,
+        directive_path: str,
+        server_url: str,
+        working_dir: str,
+        *,
+        dangerously_skip_permissions: bool = True,
+        project_root: str | None = None,
+        containerized: bool = False,
+        session_number: int = 1,
+        resume_session_id: str | None = None,
+        thinking_effort: str | None = None,
+        mcp_sse_port: int | None = None,
+        run_id: str | None = None,
+        agent_memory_dir: str | None = None,
+    ) -> tuple[list[str], dict[str, str], str, str | None]:
+        del dangerously_skip_permissions, session_number, thinking_effort
+        env = os.environ.copy()
+        env["POKEMON_MCP_SERVER_URL"] = server_url
+        env["POKEMON_SERVER_URL"] = server_url
+
+        working_dir_abs = Path(working_dir).resolve()
+        working_dir_abs.mkdir(parents=True, exist_ok=True)
+        bootstrap = self._build_bootstrap_content(directive_path, server_url)
+        directive_file = working_dir_abs / self.DIRECTIVE_FILENAME
+        directive_file.write_text(bootstrap, encoding="utf-8")
+
+        if containerized:
+            if not run_id or not agent_memory_dir:
+                raise ValueError("containerized mode requires run_id and agent_memory_dir")
+            if not mcp_sse_port:
+                raise ValueError("containerized mode requires mcp_sse_port")
+            if not project_root:
+                raise ValueError("containerized mode requires project_root")
+
+            agent_memory_path = Path(agent_memory_dir).resolve()
+            project_root_path = Path(project_root).resolve()
+            debug_dir_path = project_root_path / ".cursor"
+            # Use Streamable HTTP (/mcp) - Hermes MCP client sends POST; /sse expects GET and returns 405
+            mcp_url = f"http://host.docker.internal:{mcp_sse_port}/mcp"
+            self._ensure_hermes_config(agent_memory_path, mcp_url=mcp_url)
+
+            # Use container paths: working_dir and directive are mounted at WORKSPACE_PATH
+            container_directive = f"{self.WORKSPACE_PATH}/{self.DIRECTIVE_FILENAME}"
+            container_working_dir = self.WORKSPACE_PATH
+            wrapper_cmd = self._build_wrapper_cmd(
+                Path(container_directive),
+                Path(container_working_dir),
+                server_url,
+                Path(self.AGENT_MEMORY_PATH),
+                python_bin="python3",
+                resume_session_id=resume_session_id,
+                project_root=self.PROJECT_ROOT_PATH,
+            )
+            game_port = server_url.rstrip("/").split(":")[-1]
+
+            docker_cmd = [
+                "docker",
+                "run",
+                "--rm",
+                "--name",
+                f"hermes-agent-{run_id}",
+                "--cap-add=NET_ADMIN",
+                "--security-opt=seccomp=unconfined",
+                "--network=bridge",
+                "--add-host=host.docker.internal:host-gateway",
+                "-v",
+                f"{agent_memory_path}:{self.AGENT_MEMORY_PATH}",
+                "-v",
+                f"{working_dir_abs}:{self.WORKSPACE_PATH}",
+                "-v",
+                f"{project_root_path}:{self.PROJECT_ROOT_PATH}:ro",
+                "-v",
+                f"{debug_dir_path}:{debug_dir_path}",
+                "-w",
+                self.WORKSPACE_PATH,
+                "-e",
+                f"MCP_PORT={mcp_sse_port}",
+                "-e",
+                f"GAME_SERVER_PORT={game_port}",
+                "-e",
+                f"RUN_DATA_ID={run_id}",
+                "-e",
+                f"HERMES_HOME={self.AGENT_MEMORY_PATH}",
+                "-e",
+                f"PYTHONPATH={self.PROJECT_ROOT_PATH}",
+            ]
+
+            passthrough_envs = [
+                "OPENROUTER_API_KEY",
+                "OPENAI_API_KEY",
+                "ANTHROPIC_API_KEY",
+                "HERMES_MODEL",
+                "HERMES_PROVIDER",
+                "HERMES_BASE_URL",
+                "HERMES_API_KEY_ENV",
+                "HERMES_DISABLE_MULTIMODAL",
+                "HERMES_API_TIMEOUT",
+                "HERMES_VISION_TIMEOUT",
+            ]
+            for env_var in passthrough_envs:
+                if os.environ.get(env_var):
+                    docker_cmd.extend(["-e", f"{env_var}={os.environ[env_var]}"])
+
+            docker_cmd.append(self.container_image)
+            docker_cmd.extend(wrapper_cmd)
+            return docker_cmd, env, bootstrap, None
+
+        agent_memory_path = Path(agent_memory_dir).resolve() if agent_memory_dir else (working_dir_abs / ".hermes")
+        pythonpath = project_root or os.getcwd()
+        self._ensure_hermes_config(
+            agent_memory_path,
+            server_url=server_url,
+            pythonpath=pythonpath,
+        )
+        env["HERMES_HOME"] = str(agent_memory_path)
+        env["PYTHONPATH"] = (
+            f"{pythonpath}{os.pathsep}{env['PYTHONPATH']}"
+            if env.get("PYTHONPATH")
+            else pythonpath
+        )
+        wrapper_cmd = self._build_wrapper_cmd(
+            directive_file,
+            working_dir_abs,
+            server_url,
+            agent_memory_path,
+            python_bin=sys.executable,
+            resume_session_id=resume_session_id,
+            project_root=pythonpath,
+        )
+        return wrapper_cmd, env, bootstrap, None
+
+    def handle_stream_event(
+        self,
+        event: dict,
+        metrics: CliSessionMetrics | None,
+        server_url: str | None = None,
+    ) -> None:
+        etype = event.get("type", "")
+        now = time.time()
+
+        if etype == "system":
+            self._last_event_time = now
+            if metrics:
+                metrics.session_id = event.get("session_id", "")
+                metrics.model = event.get("model", "")
+        elif etype == "thinking":
+            content = (event.get("content") or "").strip()
+            if content and server_url:
+                duration = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+                self._post_thinking(server_url, content, duration, interaction_type=self.name)
+            self._last_event_time = now
+        elif etype == "tool_use":
+            if metrics:
+                metrics.tool_use_count += 1
+            args = (
+                event.get("arguments")
+                or event.get("parameters")
+                or event.get("input")
+                or {}
+            )
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            if not isinstance(args, dict):
+                args = {}
+            reasoning = args.get("reasoning") or args.get("reason") or ""
+            tool_name = event.get("tool_name") or event.get("name") or "tool"
+            short_name = self._normalize_tool_name(tool_name)
+            if server_url:
+                duration = (now - self._last_event_time) if self._last_event_time is not None else 0.0
+                thinking_text = f"[{short_name}] {reasoning}".strip() if reasoning else f"[{short_name}]"
+                self._post_thinking(
+                    server_url,
+                    thinking_text,
+                    duration,
+                    interaction_type=self.name,
+                )
+            self._last_event_time = now
+        elif etype == "result":
+            if metrics:
+                metrics.session_id = event.get("session_id", metrics.session_id)
+                metrics.model = event.get("model", metrics.model)
+                metrics.total_cost_usd = float(event.get("total_cost_usd", 0.0) or 0.0)
+                metrics.num_turns = int(event.get("num_turns", 0) or 0)
+                metrics.duration_ms = int(event.get("duration_ms", 0) or 0)
+                metrics.duration_api_ms = int(event.get("duration_api_ms", 0) or 0)
+                metrics.is_error = bool(event.get("is_error", False))
+                metrics.error = event.get("error", "") or ""
+                usage = event.get("usage") or {}
+                metrics.input_tokens = int(usage.get("input_tokens", 0) or 0)
+                metrics.output_tokens = int(usage.get("output_tokens", 0) or 0)
+        elif etype == "error":
+            message = event.get("message", "") or event.get("error", "")
+            if metrics and self.is_auth_fatal_error(message):
+                metrics.auth_fatal_error = True
+                metrics.error = message
+                metrics.is_error = True
+
+    def log_cli_interaction(
+        self,
+        agent_memory_dir: Path,
+        processed_hashes: set,
+        last_cli_step: int,
+        server_url: str | None = None,
+    ) -> tuple[set, int]:
+        from utils.metric_tracking.hermes_session_reader import load_new_usage_entries
+        from utils.data_persistence.llm_logger import get_llm_logger
+
+        search_path = Path(agent_memory_dir).resolve()
+        if not search_path.is_dir():
+            return processed_hashes, last_cli_step
+
+        try:
+            new_entries, updated_hashes, self._last_seen_session_totals = load_new_usage_entries(
+                search_path,
+                processed_hashes,
+                self._last_seen_session_totals,
+            )
+        except Exception as exc:
+            logger.warning("Hermes session poll failed: %s", exc)
+            return processed_hashes, last_cli_step
+
+        if not new_entries:
+            return updated_hashes, last_cli_step
+
+        new_entries.sort(key=lambda e: (e.get("_parsed_timestamp") or datetime.min.replace(tzinfo=timezone.utc)))
+        llm_logger = get_llm_logger()
+        steps = llm_logger.cumulative_metrics.get("steps", [])
+        prev_ts: float | None = steps[-1]["timestamp"] if steps else None
+
+        for entry in new_entries:
+            tokens = entry.get("_tokens", {})
+            tool_calls = entry.get("_tool_calls", [])
+            parsed_ts = entry.get("_parsed_timestamp")
+            ts_float = parsed_ts.timestamp() if parsed_ts is not None else time.time()
+            duration = max(0.0, ts_float - prev_ts) if prev_ts is not None else 0.0
+            prev_ts = ts_float
+            model_info = {"model": entry.get("_model", "hermes-agent")}
+            last_cli_step += 1
+            try:
+                llm_logger.append_cli_step(
+                    step_number=last_cli_step,
+                    token_usage=tokens,
+                    duration=duration,
+                    timestamp=ts_float,
+                    model_info=model_info,
+                    tool_calls=tool_calls if tool_calls else None,
+                )
+            except Exception as exc:
+                logger.warning("Failed to append Hermes CLI step %d: %s", last_cli_step, exc)
+                last_cli_step -= 1
+
+        if server_url and new_entries:
+            self._sync_metrics_to_server(server_url)
+        return updated_hashes, last_cli_step
+
+    def get_resume_session_id(self, agent_memory_dir: Path) -> str | None:
+        from utils.metric_tracking.hermes_session_reader import get_latest_session_id
+
+        return get_latest_session_id(agent_memory_dir)
+
+    def run_login(self) -> bool:
+        if getattr(self, "api_gateway", "login") == "openrouter":
+            print("\nℹ️  Using --api-gateway openrouter. No interactive Hermes login required.")
+            return True
+        print("\n🔐 Running 'hermes model' (interactive)...")
+        try:
+            result = subprocess.run(["hermes", "model"], check=False)
+            return result.returncode == 0
+        except FileNotFoundError:
+            print("❌ Hermes CLI not found. Install Hermes or run the backend in containerized mode.")
+            return False
+
+
 def get_backend(cli_type: str) -> CliAgentBackend:
     """Return the backend for the given CLI type."""
     if cli_type == "claude":
@@ -1660,4 +2128,6 @@ def get_backend(cli_type: str) -> CliAgentBackend:
         return GeminiCliBackend()
     if cli_type == "codex":
         return CodexCliBackend()
-    raise ValueError(f"Unknown CLI type: {cli_type}. Supported: claude, gemini, codex")
+    if cli_type == "hermes":
+        return HermesCliBackend()
+    raise ValueError(f"Unknown CLI type: {cli_type}. Supported: claude, gemini, codex, hermes")

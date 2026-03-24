@@ -143,3 +143,43 @@ class TestBackupRestoreWithoutMetricsFile:
             assert result is False
             assert logger.cumulative_metrics["total_tokens"] == 0
             assert logger.cumulative_metrics["total_llm_calls"] == 0
+
+
+class TestAgentStepInJsonl:
+    """SSE/UI: each log line should carry the global agent step when known."""
+
+    def test_log_interaction_embeds_agent_step_from_env(self, monkeypatch):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir) / "logs"
+            log_dir.mkdir()
+            metrics_file = Path(tmpdir) / "cumulative_metrics.json"
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
+                logger = LLMLogger(log_dir=str(log_dir), session_id="test")
+            monkeypatch.setenv("LLM_STEP_NUMBER", "42")
+            logger.log_interaction(
+                "test",
+                "p",
+                "r",
+                metadata={"token_usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}},
+                duration=0.1,
+                model_info={"model": "test-model"},
+                step_number=None,
+            )
+            lines = Path(logger.log_file).read_text(encoding="utf-8").strip().splitlines()
+            entries = [json.loads(l) for l in lines]
+            inter = [e for e in entries if e.get("type") == "interaction"]
+            assert inter[-1].get("agent_step") == 42
+
+    def test_log_thinking_embeds_agent_step_argument(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir) / "logs"
+            log_dir.mkdir()
+            metrics_file = Path(tmpdir) / "cumulative_metrics.json"
+            with patch("utils.data_persistence.run_data_manager.get_cache_path", return_value=metrics_file):
+                logger = LLMLogger(log_dir=str(log_dir), session_id="test")
+            logger.log_thinking("hello", "cli", 1.0, agent_step=7)
+            lines = Path(logger.log_file).read_text(encoding="utf-8").strip().splitlines()
+            last = json.loads(lines[-1])
+            assert last.get("agent_step") == 7

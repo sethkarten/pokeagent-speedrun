@@ -213,6 +213,12 @@ class LLMLogger:
             model_info: Information about the model used
             step_number: Optional step number for per-step tracking
         """
+        effective_step = step_number
+        if effective_step is None:
+            env_step = os.environ.get("LLM_STEP_NUMBER")
+            if env_step and str(env_step).isdigit():
+                effective_step = int(env_step)
+
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "type": "interaction",
@@ -221,9 +227,11 @@ class LLMLogger:
             "response": response,
             "duration": duration,
             "metadata": metadata or {},
-            "model_info": model_info or {}
+            "model_info": model_info or {},
         }
-        
+        if effective_step is not None:
+            log_entry["agent_step"] = effective_step
+
         self._write_log_entry(log_entry)
 
         # Update cumulative metrics
@@ -306,15 +314,10 @@ class LLMLogger:
                 completion_cost = (step_tokens["completion"] / 1000) * pricing["completion"]
                 self.cumulative_metrics["total_cost"] += prompt_cost + completion_cost
         
-        # NEW: Track per-step metrics
-        if step_number is None:
-            env_step = os.environ.get("LLM_STEP_NUMBER")
-            if env_step and env_step.isdigit():
-                step_number = int(env_step)
-
-        if step_number is not None and duration is not None:
+        # NEW: Track per-step metrics (effective_step from arg or LLM_STEP_NUMBER)
+        if effective_step is not None and duration is not None:
             step_entry = {
-                "step": step_number,
+                "step": effective_step,
                 "prompt_tokens": step_tokens["prompt"],
                 "completion_tokens": step_tokens["completion"],
                 "cached_tokens": step_tokens["cached"],
@@ -587,10 +590,22 @@ class LLMLogger:
         except Exception as e:
             logger.error(f"Failed to write log entry: {e}")
 
-    def log_thinking(self, text: str, interaction_type: str = "thinking", duration: float = 0) -> None:
+    def log_thinking(
+        self,
+        text: str,
+        interaction_type: str = "thinking",
+        duration: float = 0,
+        agent_step: Optional[int] = None,
+    ) -> None:
         """Log agent thinking for UI streaming (same format as log_interaction, no metrics update).
         Used by CLI agent and any path that POSTs thinking to /agent_step so the SSE has one source.
         """
+        step_val = agent_step
+        if step_val is None:
+            env_step = os.environ.get("LLM_STEP_NUMBER")
+            if env_step and str(env_step).isdigit():
+                step_val = int(env_step)
+
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "type": "interaction",
@@ -601,6 +616,8 @@ class LLMLogger:
             "metadata": {},
             "model_info": {},
         }
+        if step_val is not None:
+            log_entry["agent_step"] = step_val
         self._write_log_entry(log_entry)
     
     def increment_action_count(self, count: int = 1):
