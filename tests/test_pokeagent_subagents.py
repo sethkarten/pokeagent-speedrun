@@ -173,7 +173,7 @@ def _build_adapter(states=None):
                     },
                 },
             }
-        if name == "get_knowledge_summary":
+        if name in ("get_memory_summary", "get_knowledge_summary"):
             return {"success": True, "summary": "Saved Birch on Route 101."}
         if name == "press_buttons":
             return {"success": True}
@@ -210,23 +210,31 @@ def _build_adapter(states=None):
 
 
 def _write_trajectory_window(run_manager: RunDataManager, steps: int = 4):
-    trajectory_file = run_manager.get_run_directory() / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
-    trajectory_file.parent.mkdir(parents=True, exist_ok=True)
-    with trajectory_file.open("w", encoding="utf-8") as handle:
-        for step in range(1, steps + 1):
-            handle.write(
-                json.dumps(
-                    {
-                        "step": step,
-                        "reasoning": f"step {step} reasoning",
-                        "action": {"tool": "press_buttons", "buttons": ["A"]},
-                        "pre_state": {"location": "Route 101", "player_coords": [4, 8]},
-                        "post_state": {"location": "Route 101", "player_coords": [5, 8]},
-                        "outcome": {"success": True},
-                    }
+    # Write to legacy path (for backward-compat tests)
+    legacy_file = run_manager.get_run_directory() / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
+    legacy_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Also write to the cache path that the updated reader checks first
+    base_dir = Path(run_manager.get_run_directory()).parent
+    cache_file = base_dir / "trajectory_history.jsonl"
+
+    for trajectory_file in (legacy_file, cache_file):
+        with trajectory_file.open("w", encoding="utf-8") as handle:
+            for step in range(1, steps + 1):
+                handle.write(
+                    json.dumps(
+                        {
+                            "step": step,
+                            "reasoning": f"step {step} reasoning",
+                            "action": {"tool": "press_buttons", "buttons": ["A"]},
+                            "location": "Route 101",
+                            "player_coords": [4, 8],
+                            "objective_context": None,
+                            "outcome": {"success": True},
+                        }
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
 
 
 def _make_agent(tmp_path, vlm_cls=RecordingVLM, adapter=None):
@@ -235,22 +243,29 @@ def _make_agent(tmp_path, vlm_cls=RecordingVLM, adapter=None):
     _write_trajectory_window(run_manager)
     adapter = adapter or _build_adapter()
 
+    cache_base = Path(run_manager.get_run_directory()).parent
+
+    def _test_cache_path(relative_path):
+        return cache_base / relative_path
+
     with patch.object(PokeAgent, "_load_system_instructions", return_value="SYS_BODY"), patch.object(
         _POKE_MODULE, "MCPToolAdapter", return_value=adapter
     ), patch.object(_POKE_MODULE, "VLM", vlm_cls), patch.object(
         _POKE_MODULE, "get_run_data_manager", return_value=run_manager
-    ):
+    ), patch("utils.data_persistence.run_data_manager.get_cache_path", side_effect=_test_cache_path):
         agent = PokeAgent(server_url="http://localhost:8000", backend="gemini", model="gemini-2.5-flash")
         agent._local_subagent_vlm = vlm_cls(model_name=agent.model, backend=agent.backend, tools=None)
 
     agent.step_count = 7
     agent.runtime.sync_step(7)
+    agent._test_cache_path = _test_cache_path
     return agent, run_manager
 
 
 def test_reflect_uses_toolless_local_subagent_and_trajectory_window(tmp_path):
     agent, run_manager = _make_agent(tmp_path)
-    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager), \
+         patch("utils.data_persistence.run_data_manager.get_cache_path", side_effect=agent._test_cache_path):
         result = json.loads(agent._execute_subagent_reflect({"situation": "I keep pressing A", "last_n_steps": 99}))
 
     assert result["success"] is True
@@ -281,7 +296,8 @@ def test_parse_verify_response_strips_markdown_json_fence():
 
 def test_verify_returns_structured_verdict_for_categorized_objective(tmp_path):
     agent, run_manager = _make_agent(tmp_path)
-    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager), \
+         patch("utils.data_persistence.run_data_manager.get_cache_path", side_effect=agent._test_cache_path):
         result = json.loads(agent._execute_subagent_verify({"reasoning": "Birch event seems finished", "category": "story"}))
 
     assert result["success"] is True
@@ -295,7 +311,8 @@ def test_verify_returns_structured_verdict_for_categorized_objective(tmp_path):
 
 def test_summarize_returns_summary_and_claims_step(tmp_path):
     agent, run_manager = _make_agent(tmp_path)
-    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager):
+    with patch.object(_POKE_MODULE, "get_run_data_manager", return_value=run_manager), \
+         patch("utils.data_persistence.run_data_manager.get_cache_path", side_effect=agent._test_cache_path):
         result = json.loads(agent._execute_subagent_summarize({}))
 
     assert result["success"] is True
@@ -432,7 +449,7 @@ def test_battler_vlm_inherits_system_instructions(tmp_path):
 
     with patch.object(_POKE_MODULE, "VLM", SpyVLM):
         agent._subagent_vlm_cache.clear()
-        vlm = agent._get_subagent_vlm({"press_buttons", "add_knowledge"})
+        vlm = agent._get_subagent_vlm({"press_buttons", "add_memory"})
 
     assert len(created_vlms) == 1
     assert created_vlms[0].init_kwargs.get("system_instruction") == "SYS_BODY"
@@ -443,9 +460,9 @@ def test_battler_vlm_inherits_system_instructions(tmp_path):
 def test_battler_accumulates_inner_turn_history(tmp_path):
     """Each battler turn should see the history of prior turns in its prompt.
 
-    State consumption per battler turn: load_subagent_context (1) + _log_trajectory post-state (1) = 2.
-    Total: 1 initial + 1 handoff summarize + 2*N turns + 1 exit check + 1 exit summarize.
-    For 2 turns we need 2 + 4 + 2 = 8 states (6 battle, 2 overworld).
+    Post-M1B: no post_state get_game_state call, so per-turn consumption = 1 (context only).
+    Total: 1 initial + 1 handoff summarize + 1*N turns + 1 exit check + 1 exit summarize.
+    For 2 turns we need 2 + 2 + 2 = 6 states (4 battle, 2 overworld).
     """
     metrics_path = tmp_path / "cumulative_metrics.json"
     old_logger = llm_logger_module._llm_logger
@@ -456,8 +473,6 @@ def test_battler_accumulates_inner_turn_history(tmp_path):
         return tmp_path / relative_path
 
     battle_states = [
-        _state_payload(location="Route 101", in_battle=True, state_text="Battle active."),
-        _state_payload(location="Route 101", in_battle=True, state_text="Battle active."),
         _state_payload(location="Route 101", in_battle=True, state_text="Battle active."),
         _state_payload(location="Route 101", in_battle=True, state_text="Battle active."),
         _state_payload(location="Route 101", in_battle=True, state_text="Battle active."),

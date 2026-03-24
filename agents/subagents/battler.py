@@ -45,7 +45,7 @@ def build_battler_prompt(
     location: str,
     objective_state: Dict[str, Any],
     progress: Dict[str, Any],
-    knowledge_summary: str,
+    memory_summary: str,
     handoff_summary: str,
     battle_history: str,
     turn_index: int,
@@ -66,8 +66,8 @@ OBJECTIVE STATE:
 PROGRESS SUMMARY:
 {progress}
 
-KNOWLEDGE SUMMARY:
-{knowledge_summary or "No knowledge recorded yet."}
+LONG-TERM MEMORY:
+{memory_summary or "No memories recorded yet."}
 
 PRE-BATTLE CONTEXT HANDOFF:
 {handoff_summary}
@@ -79,7 +79,7 @@ DECISION PROCESS:
 1. Analyze the current battle state, menu state, and visible options.
 2. Review your battle history to avoid repeating mistakes.
 3. Choose the highest-value action for this turn.
-4. If useful, store battle-relevant knowledge before the final action.
+4. If useful, store battle-relevant information in memory before the final action.
 5. Finish with one tool call."""
 
 

@@ -3125,75 +3125,15 @@ class DirectObjectiveManager:
             logger.info(f"Added {len(objectives_data)} dynamic objectives to sequence")
     
     def save_completed_objectives(self, run_dir: Optional[str] = None):
-        """Save completed objectives history to file in run_data agent_scratch_space
-        
-        Args:
-            run_dir: Optional run directory path. If None, tries to use run_data manager.
-                     DEPRECATED: No longer falls back to .pokeagent_cache.
-        
-        Raises:
-            RuntimeError: If run_dir is not provided and run_data_manager is not available.
-        """
-        if not run_dir:
-            # Try to use run_data manager if available
-            try:
-                from utils.data_persistence.run_data_manager import get_run_data_manager
-                run_manager = get_run_data_manager()
-                if run_manager:
-                    run_dir = str(run_manager.get_scratch_space_dir())
-                else:
-                    raise RuntimeError(
-                        "Cannot save completed_objectives: run_data_manager not initialized. "
-                        "Please ensure run_data_manager is initialized before saving objectives. "
-                        "Saving to .pokeagent_cache is deprecated."
-                    )
-            except ImportError:
-                raise RuntimeError(
-                    "Cannot save completed_objectives: run_data_manager module not available. "
-                    "Saving to .pokeagent_cache is deprecated."
-                )
-        
-        os.makedirs(run_dir, exist_ok=True)
-        
-        filename = os.path.join(run_dir, "completed_objectives.json")
-        
-        completed_data = {
-            "sequence_name": self.sequence_name,
-            "completed_at": datetime.now().isoformat(),
-            "completed_objectives": [
-                {
-                    "id": obj.id,
-                    "description": obj.description,
-                    "target_location": obj.target_location,
-                    "action_type": obj.action_type,
-                    "completed_at": obj.completed_at.isoformat() if hasattr(obj, 'completed_at') and obj.completed_at else None
-                }
-                for obj in self.current_sequence if obj.completed
-            ],
-            "total_objectives_completed": sum(1 for obj in self.current_sequence if obj.completed),
-            "total_objectives": len(self.current_sequence)
-        }
-        
-        # Load existing history and append (preserving initial completed objectives if present)
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                history = json.load(f)
-            # Check if this sequence name already exists (from initial load)
-            existing_sequences = history.get("sequences", [])
-            # If there's already a sequence with the same name from initial load, we'll append to it
-            # Otherwise, just append the new completion data
-        else:
-            history = {"sequences": []}
-        
-        # Append the new completion data (this could be final completion or dynamic objectives)
-        history["sequences"].append(completed_data)
-        history["last_updated"] = datetime.now().isoformat()
-        
-        with open(filename, 'w') as f:
-            json.dump(history, f, indent=2)
-        
-        logger.info(f"Saved completed objectives to {filename}")
-        return filename
+        """DEPRECATED: Use auto_save() instead. Delegates to auto_save() for backward compat."""
+        import warnings
+        warnings.warn(
+            "save_completed_objectives() is deprecated; use auto_save() which persists "
+            "the full objectives state via objectives.json",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.auto_save()
         
     def get_sequence_status(self) -> Dict[str, Any]:
         """Get current status of the objective sequence"""
@@ -3358,27 +3298,8 @@ class DirectObjectiveManager:
         logger.info(f"   ⚔️  Battling: {len(self.battling_sequence)} objectives (starting at index {self.battling_index}, {battling_completed_count} pre-completed)")
         logger.info(f"   🎯 Dynamics: 0 objectives (agent will create as needed)")
 
-        # Save initial state
-        if run_dir:
-            try:
-                filename = os.path.join(run_dir, "categorized_objectives_state.json")
-                state = {
-                    "loaded_at": datetime.now().isoformat(),
-                    "mode": "categorized",
-                    "story_count": len(self.story_sequence),
-                    "story_index": self.story_index,
-                    "story_completed": story_completed_count,
-                    "battling_count": len(self.battling_sequence),
-                    "battling_index": self.battling_index,
-                    "battling_completed": battling_completed_count,
-                    "dynamics_count": 0,
-                    "dynamics_index": 0
-                }
-                with open(filename, 'w') as f:
-                    json.dump(state, f, indent=2)
-                logger.info(f"💾 Saved categorized objectives initial state to {filename}")
-            except Exception as e:
-                logger.warning(f"Failed to save initial state: {e}")
+        # Persist initial state via the unified objectives.json system
+        self.auto_save()
 
     def get_current_objectives_by_category(self) -> Dict[str, Optional[DirectObjective]]:
         """Get current objectives for all 3 categories
@@ -3556,6 +3477,8 @@ class DirectObjectiveManager:
         if category == "dynamics":
             self._save_dynamics_objectives_backup(run_dir)
 
+        self.auto_save()
+
     def _get_sequence_for_category(self, category: str) -> List[DirectObjective]:
         """Helper to get sequence list for a category"""
         if category == "story":
@@ -3598,6 +3521,8 @@ class DirectObjectiveManager:
 
         if reasoning:
             logger.info(f"   Reasoning: {reasoning}")
+
+        self.auto_save()
 
     def get_categorized_status(self) -> Dict[str, Any]:
         """Get status summary for all 3 categories
@@ -3825,6 +3750,8 @@ class DirectObjectiveManager:
             f"🔄 Replanned '{category}': {len(edits_applied)} edits applied, "
             f"sequence length {len(sequence)}, current_index {new_current}"
         )
+        self.auto_save()
+
         return {
             "success": True,
             "error": None,
@@ -3890,3 +3817,123 @@ class DirectObjectiveManager:
                 "completed": sum(1 for o in self.dynamics_sequence if o.completed),
             },
         }
+
+    # ------------------------------------------------------------------
+    # Full-state persistence (objectives.json)
+    # ------------------------------------------------------------------
+
+    _OBJECTIVES_JSON_VERSION = 1
+
+    def serialize_full_state(self) -> Dict[str, Any]:
+        """Serialize the complete manager state for persistence to objectives.json.
+
+        The output is sufficient to reconstruct the manager via ``restore_from_state``
+        without re-importing hardcoded sequences.
+        """
+        return {
+            "version": self._OBJECTIVES_JSON_VERSION,
+            "mode": self.mode,
+            "sequence_name": self.sequence_name,
+            "saved_at": datetime.now().isoformat(),
+            "story": {
+                "index": self.story_index,
+                "sequence": [obj.to_dict() for obj in self.story_sequence],
+            },
+            "battling": {
+                "index": self.battling_index,
+                "sequence": [obj.to_dict() for obj in self.battling_sequence],
+            },
+            "dynamics": {
+                "index": self.dynamics_index,
+                "sequence": [obj.to_dict() for obj in self.dynamics_sequence],
+            },
+            "legacy": {
+                "index": self.current_index,
+                "sequence": [obj.to_dict() for obj in self.current_sequence],
+            },
+        }
+
+    def restore_from_state(self, data: Dict[str, Any]) -> None:
+        """Reconstruct manager state from a dict produced by ``serialize_full_state``."""
+        version = data.get("version", 0)
+        if version > self._OBJECTIVES_JSON_VERSION:
+            logger.warning(
+                f"objectives.json version {version} is newer than supported "
+                f"({self._OBJECTIVES_JSON_VERSION}); attempting best-effort restore"
+            )
+
+        self.mode = data.get("mode", "legacy")
+        self.sequence_name = data.get("sequence_name", "")
+
+        # Restore categorized sequences
+        for category in ("story", "battling", "dynamics"):
+            cat_data = data.get(category, {})
+            seq = [DirectObjective.from_dict(d) for d in cat_data.get("sequence", [])]
+            idx = cat_data.get("index", 0)
+            if category == "story":
+                self.story_sequence = seq
+                self.story_index = min(idx, len(seq))
+            elif category == "battling":
+                self.battling_sequence = seq
+                self.battling_index = min(idx, len(seq))
+            elif category == "dynamics":
+                self.dynamics_sequence = seq
+                self.dynamics_index = min(idx, len(seq))
+
+        # Restore legacy sequence
+        legacy_data = data.get("legacy", {})
+        self.current_sequence = [DirectObjective.from_dict(d) for d in legacy_data.get("sequence", [])]
+        self.current_index = min(legacy_data.get("index", 0), max(len(self.current_sequence), 0))
+
+        logger.info(
+            f"Restored objectives state: mode={self.mode}, "
+            f"story={self.story_index}/{len(self.story_sequence)}, "
+            f"battling={self.battling_index}/{len(self.battling_sequence)}, "
+            f"dynamics={self.dynamics_index}/{len(self.dynamics_sequence)}"
+        )
+
+    def save_to_file(self, path: str) -> None:
+        """Serialize full state and write to *path* atomically."""
+        state = self.serialize_full_state()
+        tmp_path = path + ".tmp"
+        try:
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, path)
+            logger.debug(f"Saved objectives state to {path}")
+        except Exception as e:
+            logger.warning(f"Failed to save objectives state to {path}: {e}")
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+    @classmethod
+    def load_from_file(cls, path: str) -> "DirectObjectiveManager":
+        """Create a new manager restored from a previously saved objectives.json."""
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        manager = cls()
+        manager.restore_from_state(data)
+        return manager
+
+    def auto_save(self) -> None:
+        """Persist current state to the standard cache and run_data locations.
+
+        Called automatically after every mutation (complete, replan, add, etc.).
+        Silently no-ops if the cache system is not yet initialized.
+        """
+        try:
+            from utils.data_persistence.run_data_manager import get_cache_path, get_run_data_manager
+
+            cache_path = str(get_cache_path("objectives.json"))
+            self.save_to_file(cache_path)
+
+            run_manager = get_run_data_manager()
+            if run_manager:
+                scratch_path = str(run_manager.get_scratch_space_dir() / "objectives.json")
+                self.save_to_file(scratch_path)
+        except Exception as e:
+            logger.debug(f"auto_save skipped: {e}")

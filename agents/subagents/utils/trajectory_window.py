@@ -25,21 +25,29 @@ def clamp_trajectory_window(last_n_steps: Optional[int]) -> int:
     return max(1, min(requested, MAX_TRAJECTORY_WINDOW))
 
 
-def _trajectory_file_for_run(run_data_manager: Any) -> Optional[Path]:
-    """Resolve the trajectories.jsonl path from the run manager."""
-    if run_data_manager is None:
-        return None
+def _trajectory_file_for_run(run_data_manager: Any = None) -> Optional[Path]:
+    """Resolve trajectory_history.jsonl, preferring the cache location."""
+    try:
+        from utils.data_persistence.run_data_manager import get_cache_path
+        cache_file = get_cache_path("trajectory_history.jsonl")
+        if cache_file.exists():
+            return cache_file
+    except Exception:
+        pass
 
-    run_dir = None
-    if hasattr(run_data_manager, "get_run_directory"):
-        run_dir = run_data_manager.get_run_directory()
-    elif hasattr(run_data_manager, "run_dir"):
-        run_dir = run_data_manager.run_dir
+    # Fallback to legacy run_data path for older runs
+    if run_data_manager is not None:
+        run_dir = None
+        if hasattr(run_data_manager, "get_run_directory"):
+            run_dir = run_data_manager.get_run_directory()
+        elif hasattr(run_data_manager, "run_dir"):
+            run_dir = run_data_manager.run_dir
+        if run_dir:
+            legacy = Path(run_dir) / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
+            if legacy.exists():
+                return legacy
 
-    if not run_dir:
-        return None
-
-    return Path(run_dir) / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
+    return None
 
 
 def _read_last_jsonl_lines(path: Path, max_lines: int) -> List[str]:
@@ -139,16 +147,31 @@ def format_trajectory_window(trajectories: List[Dict[str, Any]]) -> str:
         step = entry.get("step", "?")
         action = _summarize_action(entry.get("action"))
         pre_state = entry.get("pre_state") or {}
-        post_state = entry.get("post_state") or {}
         reasoning = (entry.get("reasoning") or "").strip()
         outcome = _summarize_outcome(entry.get("outcome"))
 
-        lines.append(
-            f"Step {step}: {action} | "
-            f"{pre_state.get('location', 'Unknown')} {_format_coords(pre_state)} -> "
-            f"{post_state.get('location', 'Unknown')} {_format_coords(post_state)} | "
-            f"Outcome: {outcome}"
-        )
+        # New schema: location/player_coords are top-level fields
+        location = entry.get("location") or pre_state.get("location", "Unknown")
+        coords_raw = entry.get("player_coords") or pre_state.get("player_coords")
+        if isinstance(coords_raw, (list, tuple)) and len(coords_raw) >= 2:
+            coords_str = f"({coords_raw[0]}, {coords_raw[1]})"
+        else:
+            coords_str = _format_coords(pre_state)
+
+        # Legacy compat: if post_state exists, show transition; otherwise just show location
+        post_state = entry.get("post_state")
+        if post_state:
+            loc_info = (
+                f"{location} {coords_str} -> "
+                f"{post_state.get('location', 'Unknown')} {_format_coords(post_state)}"
+            )
+        else:
+            loc_info = f"{location} {coords_str}"
+
+        obj_context = entry.get("objective_context")
+        obj_str = f" | Obj: {obj_context}" if obj_context else ""
+
+        lines.append(f"Step {step}: {action} | {loc_info} | Outcome: {outcome}{obj_str}")
         if reasoning:
             lines.append(f"  Reasoning: {reasoning[:280]}")
 

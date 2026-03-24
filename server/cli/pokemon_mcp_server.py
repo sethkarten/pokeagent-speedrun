@@ -190,7 +190,7 @@ def navigate_to(
 
 # ---------------------------------------------------------------------------
 # Removed tools for CLI agent experiments:
-# - Knowledge tools (add_knowledge, search_knowledge, get_knowledge_summary)
+# - Memory tools (add_memory, search_memory, get_memory_summary)
 #   CLI agents may implement their own internal memory systems
 # - Wiki tools (lookup_pokemon_info, list_wiki_sources, get_walkthrough)
 #   CLI agents may access web information through their native capabilities
@@ -344,14 +344,14 @@ def create_direct_objectives(
 # @mcp.tool()
 def get_progress_summary() -> dict:
     """
-    Get comprehensive progress summary including milestones, completed objectives, and knowledge.
+    Get comprehensive progress summary including milestones, completed objectives, and memory.
     Use this to review your overall progress and plan next steps.
 
     Returns:
         Dictionary with success status and progress data including:
         - Milestones completed
         - Direct objectives status
-        - Knowledge base summary
+        - Memory summary
         - Current location and coordinates
     """
     return _post("/mcp/get_progress_summary", timeout=_TIMEOUT_SHORT)
@@ -411,7 +411,7 @@ if __name__ == "__main__":
     logger.info("Available tools (3 total, CLI agent minimal set):")
     logger.info("  Game: get_game_state, press_buttons, navigate_to")
     logger.info("")
-    logger.info("Note: Knowledge, Wiki, Objectives, and Reflection tools removed for CLI experiments.")
+    logger.info("Note: Memory, Wiki, Objectives, and Reflection tools removed for CLI experiments.")
     logger.info("      CLI agents implement their own internal memory and planning systems.")
 
     # Check for transport mode (used when running in containerized environment)

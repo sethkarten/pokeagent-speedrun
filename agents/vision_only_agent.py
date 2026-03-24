@@ -69,9 +69,9 @@ class MCPToolAdapter:
                 "get_game_state": "/mcp/get_game_state",
                 "press_buttons": "/mcp/press_buttons",
                 # navigate_to REMOVED - no pathfinding in this version
-                "add_knowledge": "/mcp/add_knowledge",
-                "search_knowledge": "/mcp/search_knowledge",
-                "get_knowledge_summary": "/mcp/get_knowledge_summary",
+                "add_memory": "/mcp/add_memory",
+                "search_memory": "/mcp/search_memory",
+                "get_memory_summary": "/mcp/get_memory_summary",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
@@ -301,10 +301,10 @@ class VisionOnlyAgent:
             #     }
             # },
 
-            # Knowledge & Information Tools
+            # Long-Term Memory Tools
             {
-                "name": "add_knowledge",
-                "description": "Store information in the persistent knowledge base for later recall.",
+                "name": "add_memory",
+                "description": "Store information in persistent long-term memory for later recall.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -316,8 +316,8 @@ class VisionOnlyAgent:
                 }
             },
             {
-                "name": "search_knowledge",
-                "description": "Search the knowledge base for previously stored information.",
+                "name": "search_memory",
+                "description": "Search long-term memory for previously stored information.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -327,8 +327,8 @@ class VisionOnlyAgent:
                 }
             },
             {
-                "name": "get_knowledge_summary",
-                "description": "Get a summary of all knowledge stored in the database.",
+                "name": "get_memory_summary",
+                "description": "Get a summary of all entries stored in long-term memory.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {},
