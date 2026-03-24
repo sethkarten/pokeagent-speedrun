@@ -3274,16 +3274,37 @@ class DirectObjectiveManager:
             "dynamics": self._get_current_objective_for_category("dynamics")
         }
 
-    _STORY_EXHAUSTION_FALLBACK = DirectObjective(
-        id="auto_plan_objectives",
-        description=(
-            "The current story sequence is complete. Use subagent_plan_objectives "
-            "to plan future objectives based on your progress and the walkthrough."
-        ),
-        action_type="create_new_objectives",
-        category="story",
-        completion_condition="story_objectives_created",
-    )
+    def _build_story_exhaustion_fallback(self) -> DirectObjective:
+        """Build scaffold-aware guidance for continuing objectives planning."""
+        if os.environ.get("EXCLUDE_BUILTIN_SUBAGENTS") == "1":
+            return DirectObjective(
+                id="auto_plan_objectives",
+                description=(
+                    "You have reached the end of the story objectives currently available. "
+                    "Create more objectives to keep progressing through the game."
+                ),
+                action_type="create_new_objectives",
+                category="story",
+                navigation_hint=(
+                    "Review your current progress and create new objectives.."
+                ),
+                completion_condition="objectives_created",
+            )
+
+        return DirectObjective(
+            id="auto_plan_objectives",
+            description=(
+                "The current story sequence is complete. Use subagent_plan_objectives "
+                "to create more objectives based on your progress and the walkthrough."
+            ),
+            action_type="create_new_objectives",
+            category="story",
+            navigation_hint=(
+                "Call subagent_plan_objectives with a brief reason explaining that "
+                "the current objectives are exhausted and more objectives are needed."
+            ),
+            completion_condition="objectives_created",
+        )
 
     def _get_current_objective_for_category(self, category: str) -> Optional[DirectObjective]:
         """Get current objective for a specific category
@@ -3298,7 +3319,7 @@ class DirectObjectiveManager:
             if self.story_index < len(self.story_sequence):
                 return self.story_sequence[self.story_index]
             if self.story_sequence:
-                self.story_sequence.append(self._STORY_EXHAUSTION_FALLBACK)
+                self.story_sequence.append(self._build_story_exhaustion_fallback())
                 logger.info("📋 Story sequence exhausted — appended planning fallback objective.")
                 return self.story_sequence[self.story_index]
         elif category == "battling":
