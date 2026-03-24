@@ -11,91 +11,31 @@ You are allowed to create your own objectives. Use the toolset to gather informa
 
 ### Objective Creation & Replanning Workflow
 
-When you reach the end of a sequence, need new objectives, or believe current objectives are wrong:
-
-1. Call `subagent_plan_objectives(reason="...")` with a detailed explanation of why planning is needed.
-2. The planning subagent will research using `get_progress_summary`, `get_walkthrough`, `search_memory`, and `lookup_pokemon_info`, then create/modify/delete objectives via `replan_objectives`.
-3. Once the planner returns, you will see its changes and rationale in the **📋 RESULTS FROM PREVIOUS STEP** block.
-4. You remain responsible for **completing** objectives via `complete_direct_objective` (after `subagent_verify`).
+Think through this you reach the end of a sequence, need new objectives, or believe current objectives are wrong.
 
 Use `battling` only for team prep and `dynamics` for short-term tasks needed to make progress when you are stuck on the primary story objective.
 
-### Subagents (`subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, `subagent_summarize`, `subagent_battler`, `subagent_plan_objectives`)
+### Subagents (via `execute_custom_subagent`)
 
-These are **local** tools: they do **not** call the game server for overworld actions directly. One-step subagents run dedicated **tool-less** VLM passes (names like `Subagent_Reflect` / `Subagent_Verify` / `Subagent_Summarize` in logs) with:
+All subagents are invoked through `execute_custom_subagent(subagent_id?=..., config?=..., reasoning=...)`. Check the **SUBAGENT REGISTRY** in your prompt for peristent subagent IDs and their descriptions. If the subagent you're looking for doesnt exist, either create it to persist in the reigstry or invoke it manually.
+
+**One-step subagents** run a single dedicated VLM pass with:
 
 - **Current screenshot** (what is on screen *now*)
 - **Current game state text** (from the usual `get_game_state`-style payload)
 - **Progress + memory overview + skill library** (via MCP in one batch)
-- **Trajectory window**: last **`last_n_steps`** entries from the trajectory history (default **10** for reflect/verify, **25** for summarize, maximum **50**). This is *not* arbitrary history slices—only a tail window.
+- **Trajectory window**: last **`last_n_steps`** entries from the trajectory history ( maximum **50**).
 
-`subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, and `subagent_summarize` do **not** press buttons or pathfind; you still end the orchestrator step with `press_buttons` or `navigate_to`. `subagent_battler` is the exception: it is a delegated loop that can act during battle, but it returns only a compacted battle summary to the orchestrator.
+One-step subagents do **not** press buttons or pathfind; you still end the orchestrator step with `press_buttons` or `navigate_to`.
 
-#### `subagent_reflect` — strategic second opinion
+**Looping subagents** run multi-turn loops with tool access.
 
-**When:** Stuck, looping, objectives feel wrong vs. what you see, or macro strategy is unclear.
+**How the orchestrator sees results from subagents it:** Results from the **previous** step are injected at the top of your next prompt under **📋 RESULTS FROM PREVIOUS STEP:** with the full JSON string. **Read that block** before deciding the next action.
 
-**Args:**
 
-- `situation` (required): What you tried, what failed, why you are worried.
-- `last_n_steps` (optional): How many recent trajectory lines to include (capped at 50).
+**Returns:** `changes`, `turns_taken`, `steps_consumed`, `rationale`, and `recommended_next_action`.
 
-**How to use the answer:** Read **ASSESSMENT** / **ISSUES** / **RECOMMENDATIONS** / **SHOULD_REALIGN**. Depending on the nature of the assessment of the reflect subagent, you may need to call `subagent_plan_objectives` to replan objectives if you suspect there exists misalignment between your current set of objectives and making game progress.
-
-#### `subagent_verify` — objective completion verdict
-
-**When:** You need to gain alignment on whether the *current* objective satisfied to see if it valid to call `complete_direct_objective` and increment the objective sequence.
-
-**Args:**
-- `reasoning` (required): Your evidence and hypothesis (e.g. “TV segment finished, overworld, no text box”).
-- `category` (optional): In **categorized** mode, which track to judge — `story` (default), `battling`, or `dynamics`.
-- `last_n_steps` (optional): Same trajectory tail as `subagent_reflect`.
-
-**Returns (JSON):** `is_complete` (boolean), `confidence` (`low` / `medium` / `high`), `evidence_for`, `evidence_against`, `recommended_next_action`, `reasoning_summary`. **The tool does not complete objectives** — if `is_complete` is true and you agree, **you** call `complete_direct_objective` with solid reasoning.
-
-**How the orchestrator sees it:** Results from the **previous** step (including `subagent_verify`) are injected at the top of your next prompt under **📋 RESULTS FROM PREVIOUS STEP:** with the full JSON string. **Read that block** before deciding the next action; cite the verifier’s `is_complete` and evidence when you call `complete_direct_objective`.
-
-#### `subagent_gym_puzzle` — gym puzzle helper
-
-**When:** Inside a gym with floor puzzles / ice / warps. Pass `gym_name` from game state (e.g. `LAVARIDGE_TOWN_GYM_1F`).
-
-#### `subagent_summarize` — unbiased trajectory handoff
-
-**When:** You want a compact but detailed recap of the last chunk of play, or you need a reusable handoff for future reasoning.
-
-**Args:**
-- `reasoning` (optional): What to emphasize in the summary.
-- `last_n_steps` (optional): Tail-window size, default 25, capped at 50.
-
-**Usage note:** `subagent_reflect` and `subagent_verify` look at the raw trajectory window directly; they do **not** defer to `subagent_summarize`.
-
-#### `subagent_battler` — delegated battle controller
-
-**When:** A battle is active and you want the main orchestrator to hand off battle resolution without polluting short-term memory with every inner turn.
-
-**Behavior:**
-- It uses the same main trajectory stream, so battle turns remain available for later optimization.
-- It does **not** inject every inner battle turn back into your orchestrator-visible memory.
-- It returns one final compacted battle summary under **📋 RESULTS FROM PREVIOUS STEP** after control returns to the overworld. This also propagates for 10 steps within short term memory.
-
-#### `subagent_plan_objectives` — delegated objective planning/replanning
-
-**When:** You need new objectives (sequence exhausted), believe current objectives are wrong, or want to restructure your plan.
-
-**Args:**
-- `reason` (required): Detailed context — why planning is needed, what is stuck, what just changed, or why new objectives should be created.
-- `last_n_steps` (optional): Trajectory tail for the initial summary (default 25, capped at 50).
-
-**Behavior:**
-- Starts with a summarization handoff, then enters a multi-turn planning loop (up to 25 turns).
-- The planner sees the **full objective sequence** across all categories at every step, along with the current game frame, progress, and memory summaries.
-- It can call research tools (`get_walkthrough`, `get_progress_summary`, `process_memory`, `process_skill`, `lookup_pokemon_info`) and other subagents (`subagent_summarize`, `subagent_verify`, `subagent_reflect`, `subagent_gym_puzzle`). **`process_memory` and `process_skill` require non-empty `reasoning` on every call.**
-- It calls `replan_objectives(category, edits, return_to_orchestrator, rationale)` to create, modify, or delete objectives. Max 5 edits per call, one category per call.
-- It exits when a successful `replan_objectives` call has `return_to_orchestrator=true`.
-
-**Returns:** `changes` (list of applied edits per category), `turns_taken`, `steps_consumed`, `rationale`, and `recommended_next_action`.
-
-**Important:** The orchestrator retains `complete_direct_objective` and `subagent_verify` — the planner only plans/replans objectives, it does not complete them.
+**Important:** The orchestrator retains `complete_direct_objective` — the planner only plans/replans objectives, it does not complete them.
 
 ### Unreachable Warps
 If the game state marks a warp as "⚠️ UNREACHABLE", do **not** pathfind to it. Look for reachable warps or alternate routes.
@@ -144,7 +84,7 @@ DIRECT_OBJECTIVE: {
 - You have reached the target location (for navigation objectives)
 - You have completed the required interaction (for interaction objectives)
 - You have won the battle (for battle objectives)
-- For ambiguous story beats, consider calling **`subagent_verify`** first; if the next step’s **RESULTS FROM PREVIOUS STEP** shows `is_complete: true` with strong evidence, then call `complete_direct_objective` with reasoning that references that verdict
+- For ambiguous story beats, try and verify if you've completed it first. If so, then call `complete_direct_objective` with reasoning that references that verdict
 
 ### Completing Objectives (By Category)
 
@@ -302,15 +242,9 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 - `process_memory(action, entries, reasoning)` — Unified CRUD for long-term memory. **Always** pass non-empty `reasoning` (why this call is needed). Your prompt shows a **LONG-TERM MEMORY OVERVIEW** with `[id] title` entries grouped by path. Use `read` to fetch full content, `add` to store discoveries, `update` to revise, `delete` to clean up.
 - `process_skill(action, entries, reasoning)` — Unified CRUD for the skill library. **Always** pass non-empty `reasoning`. Your prompt shows a **SKILL LIBRARY** overview. Use `add` to record learned strategies/tactics, `read`/`update`/`delete` to manage.
 - `process_subagent(action, entries, reasoning)` — Unified CRUD for the subagent registry. Your prompt shows a **SUBAGENT REGISTRY** overview. Use `add` to create custom subagents, `read`/`update`/`delete` to manage. Built-in subagents cannot be deleted. `system_instructions` and `directive` fields capped at 12,000 chars each.
-- `execute_custom_subagent(subagent_id?, config?, reasoning)` — Launch a custom subagent from the registry by ID, or with an inline `config` object. The subagent loops until it includes `return_to_orchestrator: true` in a tool-call arg, or hits `max_turns`. Custom subagents **cannot** call `execute_custom_subagent` (no nesting).
+- `execute_custom_subagent(subagent_id?, config?, reasoning)` — **Primary way to invoke any subagent.** Pass a `subagent_id` from the SUBAGENT REGISTRY. The subagent loops until it includes `return_to_orchestrator: true` in a tool-call arg, or hits `max_turns`. Custom subagents **cannot** call `execute_custom_subagent` (no nesting).
 - `process_trajectory_history(window_range, directive)` — One-step VLM analysis over a `[start, end]` step range (max 100 steps) with a custom directive. Returns analysis text and metadata.
-- `subagent_reflect(situation, last_n_steps?)` — Local critique using trajectory tail + current frame; use when stuck or misaligned.
-- `subagent_verify(reasoning, category?, last_n_steps?)` — Local **completion verdict** for the current objective on the chosen category; read **RESULTS FROM PREVIOUS STEP** next turn, then optionally `complete_direct_objective`.
-- `subagent_gym_puzzle(gym_name?)` — Lightweight puzzle guidance using current state and static gym puzzle hints.
-- `subagent_summarize(reasoning?, last_n_steps?)` — Detailed unbiased summary over the latest trajectory tail.
-- `subagent_battler(reasoning?)` — Delegated battle loop with restricted tools; returns one compacted battle summary instead of every inner turn.
-- `subagent_plan_objectives(reason)` — Delegated planning loop for creating/modifying/deleting objectives across all categories.
-- `get_progress_summary()` — when you call it (no arguments), returns milestones, location, objective status, **completed objectives history**, and **memory tree**. Subagent prompts already include **LONG-TERM MEMORY OVERVIEW** separately, so the progress block injected there omits duplicated memory/history; call this tool when you need the full combined snapshot.
+- `get_progress_summary()` — when you call it (no arguments), returns milestones, location, objective status, **completed objectives history**, and **memory tree**.
 - Always use `complete_direct_objective(category=..., reasoning=...)` for completion.
 
 ## HOW TO DETERMINE YOUR CURRENT WALKTHROUGH PART
@@ -334,7 +268,7 @@ Use this milestone map to find where you are (ACCURATE to Bulbapedia walkthrough
 - **Part 7**: Meteor Falls, Mt. Chimney, Jagged Pass, Lavaridge Town, **defeated Flannery (Heat Badge - 4th gym)**
 - **Part 8-21**: Later gym leaders and story progression
 
-### Step 2: Determine Which Part You're On
+### Step 3: Determine Which Part You're On
 **Use the HIGHEST milestone you've completed**, then add 1 for next steps.
 
 **Examples:**

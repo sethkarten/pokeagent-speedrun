@@ -97,6 +97,15 @@ class TestDirectObjectiveManager:
         assert manager.battling_sequence == []
         assert manager.dynamics_sequence == []
 
+    def test_load_autonomous_sequence_mentions_execute_custom_when_no_builtins_env(self, manager, monkeypatch):
+        monkeypatch.setenv("EXCLUDE_BUILTIN_SUBAGENTS", "1")
+        manager.load_autonomous_objective_creation_sequence()
+        desc = manager.story_sequence[0].description
+        hint = manager.story_sequence[0].navigation_hint or ""
+        assert "execute_custom_subagent" in desc
+        assert "get_progress_summary" in hint
+        assert "subagent_plan_objectives" not in desc
+
     def test_get_first_objective_info_for_supported_sequences(self):
         autonomous = get_first_objective_info("autonomous_objective_creation")
         categorized = get_first_objective_info("categorized_full_game")

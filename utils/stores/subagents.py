@@ -174,7 +174,16 @@ class SubagentStore(BaseStore[SubagentEntry]):
         self._seed_builtins()
 
     def _seed_builtins(self) -> None:
-        """Populate built-in entries if none exist yet."""
+        """Populate built-in entries if none exist yet.
+
+        Skipped entirely when ``EXCLUDE_BUILTIN_SUBAGENTS=1`` so the registry
+        starts empty and the model must create subagents from scratch.
+        """
+        import os
+        if os.environ.get("EXCLUDE_BUILTIN_SUBAGENTS") == "1":
+            logger.info("EXCLUDE_BUILTIN_SUBAGENTS is set — skipping built-in seeding")
+            return
+
         has_builtins = any(
             getattr(e, "is_builtin", False)
             for e in self.entries.values()

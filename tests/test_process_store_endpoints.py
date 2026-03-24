@@ -94,19 +94,27 @@ class TestProcessMemoryRead:
 
     def test_read_missing_id(self, game_tools_memory):
         result = game_tools_memory.process_memory_direct("read", [{"id": "mem_9999"}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
     def test_read_no_id_field(self, game_tools_memory):
         result = game_tools_memory.process_memory_direct("read", [{}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
         assert "Missing" in result["results"][0]["error"]
 
 
 class TestProcessMemoryAdd:
+    def test_entries_empty_rejected(self, game_tools_memory):
+        result = game_tools_memory.process_memory_direct("add", [], _PROC_REASON)
+        assert result["success"] is False
+        assert "non-empty" in result["error"].lower()
+        assert result["results"] == []
+
     def test_add_rejects_empty_title_and_content(self, game_tools_memory, memory_store):
         n_before = len(memory_store.entries)
         result = game_tools_memory.process_memory_direct("add", [{}], _PROC_REASON)
-        assert result["success"] is True
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
         assert "non-empty" in result["results"][0]["error"].lower()
         assert len(memory_store.entries) == n_before
@@ -125,6 +133,7 @@ class TestProcessMemoryAdd:
             {"path": "a", "title": "A", "content": "a"},
             {"path": "b", "title": "B", "content": "b"},
         ], _PROC_REASON)
+        assert result["success"] is True
         assert all(r["success"] for r in result["results"])
         assert len(memory_store.entries) == 4
 
@@ -132,6 +141,7 @@ class TestProcessMemoryAdd:
         result = game_tools_memory.process_memory_direct("add", [
             {"path": "loc", "title": "Gym", "content": "gym", "coordinates": "10, 20"}
         ], _PROC_REASON)
+        assert result["success"] is True
         entry_id = result["results"][0]["entry_id"]
         assert memory_store.get(entry_id).coordinates == (10, 20)
 
@@ -141,32 +151,38 @@ class TestProcessMemoryUpdate:
         result = game_tools_memory.process_memory_direct("update", [
             {"id": "mem_0001", "title": "Marshtomp"}
         ], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         assert memory_store.get("mem_0001").title == "Marshtomp"
 
     def test_update_missing(self, game_tools_memory):
         result = game_tools_memory.process_memory_direct("update", [{"id": "mem_9999", "title": "nope"}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
     def test_update_no_id(self, game_tools_memory):
         result = game_tools_memory.process_memory_direct("update", [{"title": "missing id"}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
 
 class TestProcessMemoryDelete:
     def test_delete_single(self, game_tools_memory, memory_store):
         result = game_tools_memory.process_memory_direct("delete", [{"id": "mem_0002"}], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         assert memory_store.get("mem_0002") is None
 
     def test_delete_missing(self, game_tools_memory):
         result = game_tools_memory.process_memory_direct("delete", [{"id": "mem_9999"}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
 
 class TestProcessMemoryUnknownAction:
     def test_unknown_action(self, game_tools_memory):
         result = game_tools_memory.process_memory_direct("explode", [{}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
         assert "Unknown action" in result["results"][0]["error"]
 
@@ -184,6 +200,7 @@ class TestProcessSkillRead:
 
     def test_read_missing(self, game_tools_skill):
         result = game_tools_skill.process_skill_direct("read", [{"id": "skill_9999"}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
 
@@ -192,9 +209,18 @@ class TestProcessSkillAdd:
         result = game_tools_skill.process_skill_direct("add", [
             {"path": "battle", "name": "Type Chart", "description": "Matchups", "effectiveness": "high"}
         ], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         eid = result["results"][0]["entry_id"]
         assert skill_store.get(eid).name == "Type Chart"
+
+    def test_add_rejects_empty_name_or_description(self, game_tools_skill, skill_store):
+        n_before = len(skill_store.entries)
+        result = game_tools_skill.process_skill_direct("add", [{}], _PROC_REASON)
+        assert result["success"] is False
+        assert result["results"][0]["success"] is False
+        assert "non-empty" in result["results"][0]["error"].lower()
+        assert len(skill_store.entries) == n_before
 
 
 class TestProcessSkillUpdate:
@@ -202,6 +228,7 @@ class TestProcessSkillUpdate:
         result = game_tools_skill.process_skill_direct("update", [
             {"id": "skill_0001", "effectiveness": "low"}
         ], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         assert skill_store.get("skill_0001").effectiveness == "low"
 
@@ -209,6 +236,7 @@ class TestProcessSkillUpdate:
 class TestProcessSkillDelete:
     def test_delete(self, game_tools_skill, skill_store):
         result = game_tools_skill.process_skill_direct("delete", [{"id": "skill_0001"}], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         assert skill_store.get("skill_0001") is None
 
@@ -326,12 +354,14 @@ class TestProcessSubagentRead:
         result = game_tools_subagent.process_subagent_direct(
             "read", [{"id": "sa_9999"}], _PROC_REASON,
         )
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
     def test_read_no_id(self, game_tools_subagent):
         result = game_tools_subagent.process_subagent_direct(
             "read", [{}], _PROC_REASON,
         )
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
 
@@ -341,14 +371,28 @@ class TestProcessSubagentAdd:
         result = game_tools_subagent.process_subagent_direct("add", [
             {"path": "custom/new", "name": "NewAgent", "description": "Brand new"},
         ], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         assert len(subagent_store.entries) == n_before + 1
+
+    def test_add_rejects_empty_name_or_description(self, game_tools_subagent, subagent_store):
+        n_before = len(subagent_store.entries)
+        result = game_tools_subagent.process_subagent_direct("add", [{}], _PROC_REASON)
+        assert result["success"] is False
+        assert result["results"][0]["success"] is False
+        assert "non-empty" in result["results"][0]["error"].lower()
+        assert len(subagent_store.entries) == n_before
 
     def test_add_rejects_oversized_instructions(self, game_tools_subagent, subagent_store):
         n_before = len(subagent_store.entries)
         result = game_tools_subagent.process_subagent_direct("add", [
-            {"name": "Huge", "system_instructions": "x" * 13000},
+            {
+                "name": "Huge",
+                "description": "d",
+                "system_instructions": "x" * 13000,
+            },
         ], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
         assert len(subagent_store.entries) == n_before
 
@@ -363,6 +407,7 @@ class TestProcessSubagentUpdate:
         result = game_tools_subagent.process_subagent_direct("update", [
             {"id": eid, "description": "Updated desc"},
         ], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         assert subagent_store.get(eid).description == "Updated desc"
 
@@ -370,6 +415,7 @@ class TestProcessSubagentUpdate:
         result = game_tools_subagent.process_subagent_direct("update", [
             {"id": "sa_9999", "description": "nope"},
         ], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
 
@@ -383,6 +429,7 @@ class TestProcessSubagentDelete:
         result = game_tools_subagent.process_subagent_direct("delete", [
             {"id": eid},
         ], _PROC_REASON)
+        assert result["success"] is True
         assert result["results"][0]["success"] is True
         assert subagent_store.get(eid) is None
 
@@ -393,6 +440,7 @@ class TestProcessSubagentDelete:
         result = game_tools_subagent.process_subagent_direct("delete", [
             {"id": builtin_id},
         ], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
         assert subagent_store.get(builtin_id) is not None
 
@@ -400,6 +448,7 @@ class TestProcessSubagentDelete:
 class TestProcessSubagentUnknownAction:
     def test_unknown_action(self, game_tools_subagent):
         result = game_tools_subagent.process_subagent_direct("explode", [{}], _PROC_REASON)
+        assert result["success"] is False
         assert result["results"][0]["success"] is False
 
 

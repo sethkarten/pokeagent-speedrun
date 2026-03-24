@@ -87,7 +87,11 @@ def start_server(args, run_id=None):
 
     # Single-writer metrics: server is the only writer
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
-    
+
+    # Align server-loaded objectives with client PokeAgent(include_builtins=False)
+    if getattr(args, "exclude_builtin_subagents", False):
+        server_env["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
+
     # Pass through server-relevant arguments
     if args.record:
         server_cmd.append("--record")

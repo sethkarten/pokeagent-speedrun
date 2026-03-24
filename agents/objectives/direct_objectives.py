@@ -2823,77 +2823,37 @@ class DirectObjectiveManager:
         # Categorized mode: use dynamics for autonomous objective creation
         self.dynamics_sequence = []
         self.battling_sequence = []
-        self.story_sequence = [
-            # DirectObjective(
-            #     id="dynamic_01_reach_route_102",
-            #     description="Head south from route 103 to enter Route 102",
-            #     action_type="navigate",
-            #     target_location="route 102",
-            #     navigation_hint="In route 103, go to the south (down) exit to reach Route 102.",
-            #     completion_condition="location_contains_route_102",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="dynamic_01_travel_to_route_104",
-            #     description="Head south from petalburg to enter Route 104",
-            #     action_type="navigate",
-            #     target_location="route 104",
-            #     navigation_hint="In petalburg, go to exit to reach Route 104.",
-            #     completion_condition="location_contains_route_104",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="dynamic_01_exit_rustboro_gym",
-            #     description="I have just defeated Gym Leader Roxanne at Rustboro Gym. I need to exit the gym and continue my journey.",
-            #     action_type="navigate",
-            #     target_location="Rustboro City",
-            #     navigation_hint="Travel to the exit of the gym and continue my journey.",
-            #     completion_condition="location_contains_rustboro_city",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="dynamic_03_find_briney",
-            #     description="Travel to Mr. Briney's Cottage",
-            #     action_type="navigate",
-            #     target_location="Route 104",
-            #     navigation_hint="Go south from Rustboro, through Petalburg Woods, to reach the cottage on the south side of Route 104.",
-            #     completion_condition="location_map_is_route_104_south",
-            #     priority=1
-            # ),
 
-
-
-
-            # ------------------------------
-            # gemini 2.5 - flash
-            # DirectObjective(
-            #     id="battle_rival_in_route_103",
-            #     description="Battle your rival May in Route 103",
-            #     action_type="battle",
-            #     target_location="Route 103",
-            #     navigation_hint="Navigate to Route 103 and battle your rival May/Brendan. Use your starter's basic attack move to defeat them. This should be an easy first battle.",
-            #     completion_condition="battle_ends_and_rival_says_theyre_returning_to_lab",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="visit_birch_lab_to_collect_pokedex",
-            #     description="Visit Professor Birch's Lab to collect the Pokedex",
-            #     action_type="navigate",
-            #     target_location="Professor Birch's Lab",
-            #     navigation_hint="Navigate to Professor Birch's Lab and collect the Pokedex. The Pokedex is located in the Lab.",
-            #     completion_condition="pokedex_collected",
-            #     priority=1
-            # ),
-            # DirectObjective(
-            #     id="visit_petalbug_city_gym",
-            #     description="Enter the Petalburg City Gym",
-            #     action_type="interact",
-            #     target_location="Petalburg City Gym",
-            #     navigation_hint="Navigate to Petalburg City Gym and enter through the front door. Talk to Norman who is currently standing in the lobby at (4, 107). Align youself to face him by looking at the visual frame and interact with him by pressing A.",
-            #     completion_condition="location_contains_petalburg_city_gym_and_talked_to_norman",
-            #     priority=1
-            # ),
-            DirectObjective(
+        # When EXCLUDE_BUILTIN_SUBAGENTS=1 the registry starts empty and built-in
+        # subagent tools are stripped.  The model must bootstrap from scratch:
+        # use get_walkthrough + get_progress_summary to research, then create its
+        # own planning subagent via process_subagent(action="add") if desired, or
+        # simply create objectives directly.
+        if os.environ.get("EXCLUDE_BUILTIN_SUBAGENTS") == "1":
+            _initial_plan = DirectObjective(
+                id="autonomous_01_plan_objectives",
+                description=(
+                    "Plan the initial set of objectives. Built-in subagent tools are disabled "
+                    "and the SUBAGENT REGISTRY starts empty. Use get_walkthrough and "
+                    "get_progress_summary to research your current progress, then create "
+                    "objectives yourself. You may also create a custom planning subagent via "
+                    "process_subagent(action='add') and invoke it with execute_custom_subagent "
+                    "if you want to delegate planning."
+                ),
+                action_type="create_new_objectives",
+                category="story",
+                target_location=None,
+                navigation_hint=(
+                    "1. Call get_progress_summary() to see current state. "
+                    "2. Call get_walkthrough(part=...) to find what comes next. "
+                    "3. Optionally create a planning subagent via process_subagent. "
+                    "4. Complete this objective once you have a plan for next steps."
+                ),
+                completion_condition="story_objectives_created",
+                priority=1,
+            )
+        else:
+            _initial_plan = DirectObjective(
                 id="autonomous_01_plan_objectives",
                 description=(
                     "Call subagent_plan_objectives to plan the initial set of objectives. "
@@ -2912,9 +2872,9 @@ class DirectObjectiveManager:
                 ),
                 completion_condition="story_objectives_created",
                 priority=1,
-            ),
+            )
 
-        ]
+        self.story_sequence = [_initial_plan]
         self.dynamics_index = 0
         self.battling_index = 0
         self.story_index = min(start_index, len(self.story_sequence))
