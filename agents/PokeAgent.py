@@ -94,9 +94,9 @@ class MCPToolAdapter:
                 "get_game_state": "/mcp/get_game_state",
                 "press_buttons": "/mcp/press_buttons",
                 "navigate_to": "/mcp/navigate_to",
-                "add_knowledge": "/mcp/add_knowledge",
-                "search_knowledge": "/mcp/search_knowledge",
-                "get_knowledge_summary": "/mcp/get_knowledge_summary",
+                "add_memory": "/mcp/add_memory",
+                "search_memory": "/mcp/search_memory",
+                "get_memory_summary": "/mcp/get_memory_summary",
                 "lookup_pokemon_info": "/mcp/lookup_pokemon_info",
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
@@ -123,7 +123,7 @@ class MCPToolAdapter:
             logger.info(f"   Args: {args_for_log}")
 
             # Use longer timeout for initial MCP calls that may need to load data from disk
-            # (knowledge base, porymap data, etc.)
+            # (memory, porymap data, etc.)
             timeout = 90  # Increased from 30 to handle startup initialization
             response = requests.post(url, json=arguments, timeout=timeout)
             response.raise_for_status()
@@ -279,7 +279,7 @@ class PokeAgent:
 ## Make intelligent decisions to progress through Pokemon Emerald.
 - Think step-by-step
 - Use tools effectively
-- Store knowledge
+- Store memories
 - Complete objectives"""
         
         with open(filepath, 'r') as f:
@@ -362,17 +362,17 @@ class PokeAgent:
                     "required": ["reasoning"]
                 }
             },
-            # Knowledge Base Tools - NOW ENABLED
+            # Long-Term Memory Tools
             {
-                "name": "add_knowledge",
-                "description": "Store important discoveries in your knowledge base.",
+                "name": "add_memory",
+                "description": "Store important discoveries in your long-term memory.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
                         "category": {
                             "type_": "STRING",
                             "enum": ["location", "npc", "item", "pokemon", "strategy", "custom"],
-                            "description": "Category of knowledge"
+                            "description": "Category of memory"
                         },
                         "title": {"type_": "STRING", "description": "Short title"},
                         "content": {"type_": "STRING", "description": "Detailed content"},
@@ -387,8 +387,8 @@ class PokeAgent:
                 }
             },
             {
-                "name": "search_knowledge",
-                "description": "Search your knowledge base for stored information.",
+                "name": "search_memory",
+                "description": "Search your long-term memory for stored information.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -401,7 +401,7 @@ class PokeAgent:
                 }
             },
             {
-                "name": "get_knowledge_summary",
+                "name": "get_memory_summary",
                 "description": "Get a summary of the most important things you've learned.",
                 "parameters": {
                     "type_": "OBJECT",
@@ -453,7 +453,7 @@ class PokeAgent:
             # },
             {
                 "name": "get_progress_summary",
-                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and knowledge base summary.",
+                "description": "Get comprehensive progress summary including completed milestones, objectives, current location, and memory summary.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {},
@@ -822,7 +822,7 @@ class PokeAgent:
                 location=current_context.get("current_state", {}).get("location", "Unknown"),
                 objective_state=current_context.get("objective_state", {}),
                 progress=current_context.get("progress", {}),
-                knowledge_summary=current_context.get("knowledge_summary", ""),
+                memory_summary=current_context.get("memory_summary", ""),
                 handoff_summary=handoff_summary,
                 battle_history=format_battler_history(battle_history),
                 turn_index=turns_taken + 1,
@@ -991,7 +991,7 @@ class PokeAgent:
                 current_state_text=current_context.get("current_state", {}).get("state_text", ""),
                 location=current_context.get("current_state", {}).get("location", "Unknown"),
                 progress=current_context.get("progress", {}),
-                knowledge_summary=current_context.get("knowledge_summary", ""),
+                memory_summary=current_context.get("memory_summary", ""),
                 planner_history=format_planner_history(planner_history[-PLANNER_HISTORY_CAP:]),
                 handoff_summary=handoff_summary,
                 turn_index=turns_taken + 1,
@@ -1294,7 +1294,7 @@ class PokeAgent:
             except requests.exceptions.RequestException as e:
                 if attempt < max_retries - 1:
                     logger.info(f"⏳ Server not ready yet (attempt {attempt + 1}/{max_retries}), waiting {retry_delay}s...")
-                    logger.info(f"   (Server may be loading porymap data, knowledge base, etc.)")
+                    logger.info(f"   (Server may be loading porymap data, memory, etc.)")
                     time.sleep(retry_delay)
                 else:
                     logger.error(f"Game server not running at {self.server_url} after {max_retries * retry_delay}s: {e}")
@@ -1904,43 +1904,27 @@ class PokeAgent:
 
         return "\n".join(lines)
 
-    def _get_knowledge_base_context(self, max_entries: int = 15, min_importance: int = 3) -> str:
-        """
-        Fetch and format knowledge base entries for inclusion in the prompt.
-        Returns the N most recent entries (by importance first, then recency).
-
-        Args:
-            max_entries: Maximum number of entries to include (default 15)
-            min_importance: Minimum importance level (1-5, default 3)
-
-        Returns:
-            Formatted knowledge base string for prompt injection
-        """
+    def _get_memory_context(self, max_entries: int = 15, min_importance: int = 3) -> str:
+        """Fetch and format long-term memory entries for inclusion in the prompt."""
         try:
-            # Call the get_knowledge_summary tool via MCP
-            kb_result = self.mcp_adapter.call_tool("get_knowledge_summary", {"min_importance": min_importance})
+            mem_result = self.mcp_adapter.call_tool("get_memory_summary", {"min_importance": min_importance})
 
-            if not kb_result.get("success"):
-                logger.debug("Knowledge base summary not available")
-                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+            if not mem_result.get("success"):
+                logger.debug("Memory summary not available")
+                return "No memory entries yet. Use add_memory() to store important discoveries!"
 
-            summary = kb_result.get("summary", "")
+            summary = mem_result.get("summary", "")
 
-            if not summary or summary.strip() == "No knowledge entries yet.":
-                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+            if not summary or summary.strip() in ("No memory entries yet.", "No knowledge entries yet."):
+                return "No memory entries yet. Use add_memory() to store important discoveries!"
 
-            # Parse the summary to limit entries
             lines = summary.split("\n")
-
-            # Count actual entries (lines starting with "  • ")
             entry_count = sum(1 for line in lines if line.strip().startswith("•"))
 
             if entry_count == 0:
-                return "No knowledge entries yet. Use add_knowledge() to store important discoveries!"
+                return "No memory entries yet. Use add_memory() to store important discoveries!"
 
-            # If we have too many entries, keep only the most recent N entries
             if entry_count > max_entries:
-                # Collect all entries with their content
                 entries = []
                 current_entry = []
                 in_entry = False
@@ -1948,49 +1932,42 @@ class PokeAgent:
                 header_lines = []
 
                 for line in lines:
-                    # Save header/preamble lines
                     if not line.strip().startswith("•") and not in_entry and not line.strip().startswith("["):
                         if "===" in line or "Total:" in line:
-                            continue  # Skip header/footer lines
+                            continue
                         header_lines.append(line)
-                    # Category header
                     elif line.strip().startswith("["):
                         if current_entry:
                             entries.append("\n".join(current_entry))
                             current_entry = []
                         category_headers.append(line)
                         in_entry = False
-                    # Start of new entry
                     elif line.strip().startswith("•"):
                         if current_entry:
                             entries.append("\n".join(current_entry))
                         current_entry = [line]
                         in_entry = True
-                    # Entry content line
                     elif in_entry:
                         current_entry.append(line)
 
-                # Add last entry
                 if current_entry:
                     entries.append("\n".join(current_entry))
 
-                # Keep only the last N entries (most recent)
                 recent_entries = entries[-max_entries:]
 
-                # Rebuild summary with recent entries
                 result_lines = []
                 if header_lines:
                     result_lines.extend([h for h in header_lines if h.strip()])
                 result_lines.extend(recent_entries)
-                result_lines.append(f"\n(Showing {len(recent_entries)} most recent entries - {entry_count - len(recent_entries)} older entries available via get_knowledge_summary())")
+                result_lines.append(f"\n(Showing {len(recent_entries)} most recent entries - {entry_count - len(recent_entries)} older entries available via get_memory_summary())")
 
                 return "\n".join(result_lines)
 
             return summary
 
         except Exception as e:
-            logger.warning(f"Failed to fetch knowledge base for prompt: {e}")
-            return "Knowledge base temporarily unavailable."
+            logger.warning(f"Failed to fetch memory for prompt: {e}")
+            return "Long-term memory temporarily unavailable."
 
     def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build optimized prompt by combining base_prompt.md with current game context.
@@ -2152,8 +2129,7 @@ class PokeAgent:
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
-        # Get knowledge base summary for context
-        knowledge_context = self._get_knowledge_base_context(max_entries=15, min_importance=3)
+        memory_context = self._get_memory_context(max_entries=15, min_importance=3)
 
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
@@ -2164,7 +2140,7 @@ class PokeAgent:
         logger.info(f"   state_text: {len(state_text):,} chars")
         logger.info(f"   action_history: {len(action_history):,} chars")
         logger.info(f"   function_results: {len(function_results_context):,} chars")
-        logger.info(f"   knowledge_base: {len(knowledge_context):,} chars")
+        logger.info(f"   memory: {len(memory_context):,} chars")
         logger.info(f"   direct_objective: {len(str(direct_objective)):,} chars")
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
@@ -2193,8 +2169,8 @@ class PokeAgent:
 ### CURRENT GAME STATE:
 {state_text}
 
-### KNOWLEDGE BASE - What You've Learned:
-{knowledge_context}
+### LONG-TERM MEMORY:
+{memory_context}
 
 Step {step_count}"""
 
@@ -2389,8 +2365,7 @@ Step {step_count}"""
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
-        # Get knowledge base summary for context
-        knowledge_context = self._get_knowledge_base_context(max_entries=15, min_importance=3)
+        memory_context = self._get_memory_context(max_entries=15, min_importance=3)
 
         # Build autonomous prompt
         prompt = f"""# Step: {step_count}
@@ -2403,8 +2378,8 @@ Step {step_count}"""
 {direct_objective_status}
 ### STATE
 {state_text}
-### KNOWLEDGE BASE
-{knowledge_context}
+### LONG-TERM MEMORY
+{memory_context}
 """
 
         return prompt
@@ -2498,74 +2473,41 @@ Step {step_count}"""
 
     def _log_trajectory_for_step(self, run_manager, step_num: int, pre_state: dict, 
                                   prompt: str, reasoning: str, tool_calls: list, response: str):
-        """Log trajectory for a CLI agent step
-        
-        Args:
-            run_manager: RunDataManager instance
-            step_num: Step number
-            pre_state: Pre-state snapshot
-            prompt: Prompt sent to LLM
-            reasoning: Reasoning from LLM
-            tool_calls: List of tool calls made
-            response: Full response from LLM
+        """Log trajectory for a CLI agent step.
+
+        Writes a single entry to trajectory_history.jsonl via run_manager.
+        The new schema drops ``post_state`` (inferable from the next step's
+        pre_state) and promotes location / player_coords / objective_context
+        to top-level fields for efficient querying.
         """
         try:
-            # Get post-state after tool calls
-            try:
-                game_state_result = self.mcp_adapter.call_tool("get_game_state", {})
-                if isinstance(game_state_result, str):
-                    game_state_result = json.loads(game_state_result)
-                if game_state_result.get("success"):
-                    raw_state = game_state_result.get("raw_state", {})
-                    post_state = run_manager.create_state_snapshot(raw_state)
-                else:
-                    post_state = pre_state  # Fallback to pre-state
-            except Exception as e:
-                logger.debug(f"Could not capture post-state: {e}")
-                post_state = pre_state  # Fallback to pre-state
-            
-            # Build action dict from tool calls
             action = {
                 "type": "tool_calls",
                 "tool_calls": [
                     {
                         "name": tc.get("name"),
-                        "args": {k: v for k, v in tc.get("args", {}).items() 
-                                if k not in ["screenshot_base64"]}  # Exclude large base64 data
+                        "args": {k: v for k, v in tc.get("args", {}).items()
+                                if k not in ["screenshot_base64"]}
                     }
                     for tc in tool_calls
                 ],
                 "total_tool_calls": len(tool_calls)
             }
-            
-            # Determine outcome
-            outcome = {
-                "success": True,
-                "objectives_completed": []
-            }
-            
-            # Check if location/coordinates changed
-            if pre_state.get("location") != post_state.get("location"):
-                outcome["observations"] = f"Moved from {pre_state.get('location')} to {post_state.get('location')}"
-            elif pre_state.get("player_coords") != post_state.get("player_coords"):
-                outcome["observations"] = f"Position changed from {pre_state.get('player_coords')} to {post_state.get('player_coords')}"
-            else:
-                outcome["observations"] = "No significant state change"
-            
-            # Log trajectory
-            logger.debug(f"🔍 [DEBUG] Calling run_manager.log_trajectory for step {step_num}")
+
+            outcome = {"success": True, "objectives_completed": []}
+
             run_manager.log_trajectory(
                 step=step_num,
                 reasoning=reasoning,
                 action=action,
                 pre_state=pre_state,
-                post_state=post_state,
+                post_state={},
                 outcome=outcome,
-                llm_prompt=prompt
+                llm_prompt=prompt,
             )
-            logger.info(f"🔍 [DEBUG] Successfully logged trajectory for step {step_num}")
+            logger.debug(f"Logged trajectory for step {step_num}")
         except Exception as e:
-            logger.error(f"🔍 [DEBUG] Failed to log trajectory at step {step_num}: {e}")
+            logger.error(f"Failed to log trajectory at step {step_num}: {e}")
             logger.error(traceback.format_exc())
 
     def _format_action_history(self) -> str:

@@ -19,9 +19,9 @@ class LocalSubagentSpec:
 
 BATTLE_ALLOWED_TOOL_NAMES = (
     "press_buttons",
-    "add_knowledge",
-    "search_knowledge",
-    "get_knowledge_summary",
+    "add_memory",
+    "search_memory",
+    "get_memory_summary",
     "get_progress_summary",
     "lookup_pokemon_info",
 )
@@ -29,9 +29,9 @@ BATTLE_ALLOWED_TOOL_NAMES = (
 PLANNER_ALLOWED_TOOL_NAMES = (
     "get_progress_summary",
     "get_walkthrough",
-    "search_knowledge",
-    "get_knowledge_summary",
-    "add_knowledge",
+    "search_memory",
+    "get_memory_summary",
+    "add_memory",
     "lookup_pokemon_info",
     "subagent_summarize",
     "subagent_verify",

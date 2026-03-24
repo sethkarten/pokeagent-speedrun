@@ -57,7 +57,7 @@ def build_verify_prompt(
     """Build the verify-subagent prompt."""
     current_state = context.get("current_state", {})
     objective = target.get("objective", {})
-    knowledge_summary = context.get("knowledge_summary") or "No knowledge recorded yet."
+    memory_summary = context.get("memory_summary") or "No memories recorded yet."
 
     return f"""You are the verify subagent for a Pokemon Emerald speedrun agent.
 Your only job is to decide whether the current objective has already been completed.
@@ -82,14 +82,14 @@ Location: {current_state.get('location')}
 Coordinates: ({current_state.get('coordinates', {}).get('x')}, {current_state.get('coordinates', {}).get('y')})
 {current_state.get('state_text', '')}
 
-KNOWLEDGE SUMMARY:
-{knowledge_summary}
+LONG-TERM MEMORY:
+{memory_summary}
 
 RECENT TRAJECTORY WINDOW (last {last_n_steps} steps):
 {context.get('trajectory_summary', 'No prior trajectories recorded.')}
 
 RULES:
-1. Use only evidence present in current state, screenshot, knowledge summary, and trajectory window.
+1. Use only evidence present in current state, screenshot, memory, and trajectory window.
 2. Do not mark the objective complete just because progress seems likely.
 3. If the objective is ambiguous, incomplete, or contradicted by evidence, set is_complete to false.
 4. Keep evidence bullets short and specific.

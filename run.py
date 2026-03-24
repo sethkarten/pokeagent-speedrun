@@ -260,8 +260,11 @@ def main():
                        help="Start index for story objectives in legacy mode, or story objectives in categorized mode")
     parser.add_argument("--direct-objectives-battling-start", type=int, default=0,
                        help="Start index for battling objectives (only used in categorized mode)")
+    parser.add_argument("--clear-memory", action="store_true",
+                       help="Clear the memory.json file before starting the run")
     parser.add_argument("--clear-knowledge-base", action="store_true",
-                       help="Clear the knowledge_base.json file before starting the run")
+                       dest="clear_memory",
+                       help="Deprecated alias for --clear-memory")
     parser.add_argument("--run-name", type=str, default=None,
                        help="Optional name to append to run directory (e.g., 'test_run' -> 'run_20251129_191503_test_run')")
     parser.add_argument("--enable-prompt-optimization", action="store_true",
@@ -350,22 +353,21 @@ def main():
             else:
                 print(f"❌ Failed to restore backup, continuing with fresh state")
         
-        # Clear knowledge base if requested
-        if args.clear_knowledge_base:
+        if args.clear_memory:
             from utils.data_persistence.run_data_manager import get_cache_path
-            knowledge_base_file = get_cache_path("knowledge_base.json")
-            if knowledge_base_file.exists():
-                # Clear the file by writing empty JSON structure
-                import json
-                empty_data = {
-                    "next_id": 1,
-                    "entries": {}
-                }
-                with open(knowledge_base_file, 'w') as f:
-                    json.dump(empty_data, f, indent=2)
-                print(f"🧹 Cleared knowledge base: {knowledge_base_file}")
-            else:
-                print(f"ℹ️  Knowledge base file does not exist yet: {knowledge_base_file}")
+            import json
+            memory_file = get_cache_path("memory.json")
+            legacy_file = get_cache_path("knowledge_base.json")
+            cleared = False
+            for f in (memory_file, legacy_file):
+                if f.exists():
+                    empty_data = {"next_id": 1, "entries": {}}
+                    with open(f, 'w') as fh:
+                        json.dump(empty_data, fh, indent=2)
+                    print(f"🧹 Cleared memory: {f}")
+                    cleared = True
+            if not cleared:
+                print(f"ℹ️  Memory file does not exist yet: {memory_file}")
         
         # Auto-start server if requested
         if args.agent_auto or args.manual or args.scaffold in SERVER_MANAGED_SCAFFOLDS:

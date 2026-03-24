@@ -95,10 +95,10 @@ def load_subagent_context(
     progress_result = mcp_adapter.call_tool("get_progress_summary", {})
     progress = progress_result.get("progress", {}) if progress_result.get("success") else {}
 
-    knowledge_result = mcp_adapter.call_tool("get_knowledge_summary", {"min_importance": 3})
-    knowledge_summary = ""
-    if knowledge_result.get("success"):
-        knowledge_summary = knowledge_result.get("summary", "") or ""
+    memory_result = mcp_adapter.call_tool("get_memory_summary", {"min_importance": 3})
+    memory_summary = ""
+    if memory_result.get("success"):
+        memory_summary = memory_result.get("summary", "") or ""
 
     trajectory_window = load_recent_trajectories(run_data_manager, last_n_steps=last_n_steps)
     current_image = None
@@ -109,7 +109,7 @@ def load_subagent_context(
         "current_state": _extract_current_state(game_state_result),
         "objective_state": _extract_objective_state(game_state_result),
         "progress": progress,
-        "knowledge_summary": knowledge_summary.strip(),
+        "memory_summary": memory_summary.strip(),
         "trajectory_window": trajectory_window,
         "trajectory_summary": format_trajectory_window(trajectory_window),
         "current_image": current_image,

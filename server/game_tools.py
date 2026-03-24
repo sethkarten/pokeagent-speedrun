@@ -14,13 +14,13 @@ from typing import List, Optional, Tuple
 
 from utils.json_utils import serialize_for_json
 from utils.mapping.pathfinding import Pathfinder
-from utils.knowledge_base import get_knowledge_base
+from utils.memory import get_memory_store
 
 logger = logging.getLogger(__name__)
 
 # Module-level singletons (lazy on first import of this module)
 pathfinder = Pathfinder()
-knowledge_base = get_knowledge_base()
+memory_store = get_memory_store()
 
 
 # ---------------------------------------------------------------------------
@@ -388,13 +388,13 @@ def navigate_to_direct(
 
 
 # ---------------------------------------------------------------------------
-# Knowledge base helpers
+# Memory (long-term) helpers — formerly "knowledge base"
 # ---------------------------------------------------------------------------
 
-def add_knowledge_direct(category, title, content, location=None, coordinates=None, importance=3) -> dict:
-    """Add knowledge to knowledge base - for use by server endpoints."""
+def add_memory_direct(category, title, content, location=None, coordinates=None, importance=3) -> dict:
+    """Add an entry to long-term memory."""
     try:
-        entry_id = knowledge_base.add(
+        entry_id = memory_store.add(
             category=category,
             title=title,
             content=content,
@@ -402,30 +402,37 @@ def add_knowledge_direct(category, title, content, location=None, coordinates=No
             coordinates=coordinates,
             importance=importance,
         )
-        logger.info(f"📝 Added knowledge: {title} ({category})")
-        return {"success": True, "entry_id": entry_id, "message": f"Stored knowledge: {title}"}
+        logger.info(f"📝 Added memory: {title} ({category})")
+        return {"success": True, "entry_id": entry_id, "message": f"Stored memory: {title}"}
     except Exception as e:
-        logger.error(f"Failed to add knowledge: {e}")
+        logger.error(f"Failed to add memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-def search_knowledge_direct(category=None, query="", location="", min_importance=1) -> dict:
-    """Search knowledge base - for use by server endpoints."""
+def search_memory_direct(category=None, query="", location="", min_importance=1) -> dict:
+    """Search long-term memory."""
     try:
-        results = knowledge_base.search(
+        results = memory_store.search(
             category=category, location=location or None, query=query or None, min_importance=min_importance
         )
         return {"success": True, "count": len(results), "results": results}
     except Exception as e:
-        logger.error(f"Failed to search knowledge: {e}")
+        logger.error(f"Failed to search memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-def get_knowledge_summary_direct(min_importance=3) -> dict:
-    """Get knowledge summary - for use by server endpoints."""
+def get_memory_summary_direct(min_importance=3) -> dict:
+    """Get long-term memory summary."""
     try:
-        summary = knowledge_base.get_summary(min_importance=min_importance)
+        summary = memory_store.get_summary(min_importance=min_importance)
         return {"success": True, "summary": summary}
     except Exception as e:
-        logger.error(f"Failed to get knowledge summary: {e}")
+        logger.error(f"Failed to get memory summary: {e}")
         return {"success": False, "error": str(e)}
+
+
+# Backward-compat aliases
+add_knowledge_direct = add_memory_direct
+search_knowledge_direct = search_memory_direct
+get_knowledge_summary_direct = get_memory_summary_direct
+get_knowledge_base = lambda: memory_store

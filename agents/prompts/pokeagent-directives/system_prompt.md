@@ -47,20 +47,20 @@ These tools run as **local subagents** inside PokeAgent. One-step subagents (`su
 **`subagent_plan_objectives`**  
 - **Required:** `reason` (string) — why planning is needed (stuck, sequence exhausted, replanning required)  
 - **Optional:** `last_n_steps` (integer) — trajectory window for the initial summary (default 25, capped at 50)  
-- Loops with its own short-term memory (up to 25 turns). Has access to research tools (`get_walkthrough`, `search_knowledge`, etc.), other subagents, and a planner-exclusive `replan_objectives` tool. Returns when `return_to_orchestrator` is set on a successful replan.
+- Loops with its own short-term memory (up to 25 turns). Has access to research tools (`get_walkthrough`, `search_memory`, etc.), other subagents, and a planner-exclusive `replan_objectives` tool. Returns when `return_to_orchestrator` is set on a successful replan.
 
 **Seeing subagent output:** On the **next** step, the harness injects a **📋 RESULTS FROM PREVIOUS STEP** block with the full tool result (including `subagent_verify` JSON, a compacted `subagent_battler` summary, or `subagent_plan_objectives` changes).
 
-### Knowledge
+### Long-Term Memory
 
-**add_knowledge**  
+**add_memory**  
 - **Required:** `category` (`location` | `npc` | `item` | `pokemon` | `strategy` | `custom`), `title` (string), `content` (string), `importance` (integer 1–5)  
 - **Optional:** `location` (string), `coordinates` (string, e.g. `"x,y"`)
 
-**search_knowledge**  
+**search_memory**  
 - **Optional:** `category`, `query`, `location`, `min_importance` (integer)
 
-**get_knowledge_summary**  
+**get_memory_summary**  
 - **Optional:** `min_importance` (integer; default 3)
 
 **get_walkthrough**  
