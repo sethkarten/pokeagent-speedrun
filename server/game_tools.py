@@ -525,11 +525,15 @@ def process_memory_direct(action: str, entries: list, reasoning: object) -> dict
                         coordinates = (int(parts[0].strip()), int(parts[1].strip()))
                     except (ValueError, IndexError):
                         coordinates = None
-                entry_id = memory_store.add(
+                add_kwargs = dict(
                     path=path, title=title or "", content=content or "",
                     importance=importance, location=location,
                     coordinates=coordinates,
                 )
+                custom_id = entry_data.get("id", "")
+                if custom_id and isinstance(custom_id, str) and custom_id.strip():
+                    add_kwargs["id"] = custom_id.strip()
+                entry_id = memory_store.add(**add_kwargs)
                 results.append({"success": True, "entry_id": entry_id})
 
             elif action == "update":
@@ -620,10 +624,17 @@ def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
                 path = entry_data.get("path", "general")
                 effectiveness = entry_data.get("effectiveness", "medium")
                 importance = int(entry_data.get("importance", 3))
-                entry_id = skill_store.add(
+                code = entry_data.get("code", "")
+                # Allow agent to specify a custom ID (human-readable name)
+                custom_id = entry_data.get("id", "")
+                add_kwargs = dict(
                     path=path, name=name, title=name, description=description,
                     effectiveness=effectiveness, importance=importance,
+                    code=code if isinstance(code, str) else "",
                 )
+                if custom_id and isinstance(custom_id, str) and custom_id.strip():
+                    add_kwargs["id"] = custom_id.strip()
+                entry_id = skill_store.add(**add_kwargs)
                 results.append({"success": True, "entry_id": entry_id})
 
             elif action == "update":
@@ -722,7 +733,7 @@ def process_subagent_direct(action: str, entries: list, reasoning: object) -> di
                 return_condition = entry_data.get("return_condition", "")
                 importance = int(entry_data.get("importance", 3))
                 try:
-                    entry_id = subagent_store.add(
+                    add_kwargs = dict(
                         path=path, name=name, title=name, description=description,
                         handler_type=handler_type, max_turns=max_turns,
                         available_tools=available_tools,
@@ -730,6 +741,10 @@ def process_subagent_direct(action: str, entries: list, reasoning: object) -> di
                         directive=directive, return_condition=return_condition,
                         importance=importance,
                     )
+                    custom_id = entry_data.get("id", "")
+                    if custom_id and isinstance(custom_id, str) and custom_id.strip():
+                        add_kwargs["id"] = custom_id.strip()
+                    entry_id = subagent_store.add(**add_kwargs)
                     results.append({"success": True, "entry_id": entry_id})
                 except ValueError as ve:
                     results.append({"success": False, "error": str(ve)})
