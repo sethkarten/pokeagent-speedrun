@@ -253,6 +253,17 @@ IMPROVED BASE PROMPT:
                     action_names = [tc.get('name', 'unknown') for tc in tool_calls]
                     action_str = ', '.join(action_names)
                     step_text += f"**Action:** {action_str}\n"
+                    # Include tool args and results for non-trivial calls
+                    for tc in tool_calls:
+                        tc_name = tc.get('name', '')
+                        tc_args = tc.get('args', {})
+                        tc_result = tc.get('result', '')
+                        if tc_name in ('run_skill', 'execute_custom_subagent', 'process_subagent', 'process_skill', 'process_memory'):
+                            args_str = json.dumps(tc_args, default=str)[:300]
+                            step_text += f"  - `{tc_name}` args: {args_str}\n"
+                            if tc_result:
+                                result_str = str(tc_result)[:300]
+                                step_text += f"  - result: {result_str}\n"
                 else:
                     step_text += f"**Action:** {action.get('type', 'N/A')}\n"
             else:
