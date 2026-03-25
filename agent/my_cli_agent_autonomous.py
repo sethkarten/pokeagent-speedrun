@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Autonomous CLI Agent for Pokemon Emerald
+Autonomous CLI Agent for Pokemon Emerald / Red
 This version creates its own objectives and has access to all available tools.
 Uses Gemini API (or VertexAI) directly with MCP tools exposed as function declarations.
 Maintains conversation history with automatic compaction over time.
@@ -214,7 +214,9 @@ class AutonomousCLIAgent:
         filepath = Path(__file__).resolve().parent.parent / filename
         if not filepath.exists():
             logger.warning(f"System instructions file not found: {filepath}")
-            return "You are an AI agent playing Pokemon Emerald. Use the available tools to progress through the game."
+            _gt = os.environ.get("GAME_TYPE", "emerald").lower()
+            _gl = "Pokemon Red" if _gt == "red" else "Pokemon Emerald"
+            return f"You are an AI agent playing {_gl}. Use the available tools to progress through the game."
 
         with open(filepath, 'r') as f:
             content = f.read()
@@ -315,7 +317,7 @@ class AutonomousCLIAgent:
                         },
                         "reason": {
                             "type_": "STRING",
-                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current location, objective, destination details]' and 'PLAN: [why navigating here, what to do when arrive]'. Example: 'ANALYZE: Currently at Littleroot (8,10). Objective: Meet Prof Birch. Destination: Route 101 entrance at (15,5). PLAN: Navigate to encounter Birch being attacked. Will save him to progress story.'"
+                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current location, objective, destination details]' and 'PLAN: [why navigating here, what to do when arrive]'. Example: 'ANALYZE: Currently at (8,10). Objective: reach next route. Destination: exit at (15,5). PLAN: Navigate to exit to progress story.'"
                         },
                         "consider_npcs": {
                             "type_": "BOOLEAN",
@@ -358,7 +360,27 @@ class AutonomousCLIAgent:
                     "required": ["situation"]
                 }
             },
-            {
+        ]
+
+        # Puzzle agent: game-type conditional
+        _game_type = os.environ.get("GAME_TYPE", "emerald").lower()
+        if _game_type == "red":
+            tools.append({
+                "name": "red_puzzle_agent",
+                "description": "Get expert guidance on solving puzzles in Pokemon Red. Use this when you're in a location with a puzzle (spinner mazes, warp mazes, etc.) and need help understanding the mechanics or finding the solution. Works for puzzle locations like Rocket Hideout, gyms with puzzles, and other tricky areas.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "location_name": {
+                            "type_": "STRING",
+                            "description": "Name of the location you're currently in (e.g., 'RocketHideoutB2f', 'RocketHideoutB3f'). Use the exact location name shown in your game state."
+                        }
+                    },
+                    "required": ["location_name"]
+                }
+            })
+        else:
+            tools.append({
                 "name": "gym_puzzle_agent",
                 "description": "Get expert guidance on solving gym puzzles. Use this when you're in a gym and need help understanding the puzzle mechanics or finding the solution. Provides specific strategies for floor puzzles, ice puzzles, warp mazes, etc. Works for all 8 Pokemon Emerald gyms.",
                 "parameters": {
@@ -371,8 +393,9 @@ class AutonomousCLIAgent:
                     },
                     "required": ["gym_name"]
                 }
-            },
+            })
 
+        tools += [
             # Knowledge Base Tools - NOW ENABLED
             {
                 "name": "add_knowledge",
@@ -472,13 +495,24 @@ class AutonomousCLIAgent:
             },
             {
                 "name": "get_walkthrough",
-                "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+                "description": (
+                    "Get Pokemon Red walkthrough (Parts 1-16). "
+                    "1:Pallet Town 2:Viridian City 3:Viridian Forest/Pewter City "
+                    "4:Mt.Moon 5:Cerulean City 6:Vermilion City/S.S.Anne "
+                    "7:Diglett's Cave/Route9-10 8:Rock Tunnel/Lavender Town "
+                    "9:Celadon City/Rocket Hideout/Pokemon Tower "
+                    "10:Saffron City/Silph Co 11:Fuchsia City/Safari Zone "
+                    "12:Seafoam Islands 13:Cinnabar Island/Pokemon Mansion "
+                    "14:Power Plant/Viridian City 15:Victory Road 16:Indigo Plateau"
+                ) if os.environ.get("GAME_TYPE", "emerald").lower() == "red" else (
+                    "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four."
+                ),
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
                         "part": {
                             "type_": "INTEGER",
-                            "description": "Walkthrough part 1-21"
+                            "description": "Walkthrough part 1-16" if os.environ.get("GAME_TYPE", "emerald").lower() == "red" else "Walkthrough part 1-21"
                         }
                     },
                     "required": ["part"]
@@ -517,6 +551,10 @@ class AutonomousCLIAgent:
         # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
         if function_name == "gym_puzzle_agent":
             return self._execute_gym_puzzle_agent(arguments)
+
+        # Special handling for red_puzzle_agent - use agent's own VLM for analysis
+        if function_name == "red_puzzle_agent":
+            return self._execute_red_puzzle_agent(arguments)
 
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -628,7 +666,40 @@ class AutonomousCLIAgent:
                 progress_text = f"""- Milestones: {progress.get('milestones_completed', 0)}
 - Objectives: {progress.get('objectives_completed', 0)}/{progress.get('total_objectives', 0)} in current sequence"""
 
-            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing Pokemon Emerald in an attempt to speedrun the game. Provide direct, actionable guidance. 
+            _ref_game_type = os.environ.get("GAME_TYPE", "emerald").lower()
+            _ref_game_label = "Pokemon Red" if _ref_game_type == "red" else "Pokemon Emerald"
+            _ref_map_source = "map data" if _ref_game_type == "red" else "porymap"
+            if _ref_game_type == "red":
+                _ref_walkthrough_parts = (
+                    "      → Part 1: Pallet Town, get starter, rival battle\n"
+                    "      → Part 2: Route 1, Viridian City, Route 2\n"
+                    "      → Part 3: Viridian Forest, Pewter City, Brock (Boulder Badge - 1st gym)\n"
+                    "      → Part 4: Route 3, Mt. Moon, Route 4\n"
+                    "      → Part 5: Cerulean City, Misty (Cascade Badge - 2nd gym), Routes 24-25\n"
+                    "      → Part 6: Vermilion City, S.S. Anne, Lt. Surge (Thunder Badge - 3rd gym)\n"
+                    "      → Part 7: Diglett's Cave, Route 9-10\n"
+                    "      → Part 8: Rock Tunnel, Lavender Town\n"
+                    "      → Part 9: Celadon City, Erika (Rainbow Badge - 4th gym), Rocket Hideout, Pokemon Tower\n"
+                    "      → Part 10: Saffron City, Silph Co., Sabrina (Marsh Badge - 5th gym)\n"
+                    "      → Part 11: Fuchsia City, Koga (Soul Badge - 6th gym), Safari Zone\n"
+                    "      → Part 12: Seafoam Islands\n"
+                    "      → Part 13: Cinnabar Island, Pokemon Mansion, Blaine (Volcano Badge - 7th gym)\n"
+                    "      → Part 14: Power Plant, Giovanni (Earth Badge - 8th gym)\n"
+                    "      → Part 15: Victory Road\n"
+                    "      → Part 16: Indigo Plateau (Elite Four + Champion)"
+                )
+            else:
+                _ref_walkthrough_parts = (
+                    "      → Part 1: Got starter Pokemon, met Norman at Petalburg\n"
+                    "      → Part 2: Roxanne (Stone Badge - 1st gym)\n"
+                    "      → Part 3: Brawly (Knuckle Badge - 2nd gym)\n"
+                    "      → Part 4: Slateport Museum, Team Aqua\n"
+                    "      → Part 5: Wattson (Dynamo Badge - 3rd gym)\n"
+                    "      → Part 6: Routes 111-114, Fallarbor (NO gym)\n"
+                    "      → Part 7: Flannery (Heat Badge - 4th gym)"
+                )
+
+            reflection_prompt = f"""You are a strategic advisor analyzing an AI agent playing {_ref_game_label} in an attempt to speedrun the game. Provide direct, actionable guidance.
 Look for mistakes in logic, erroneous decision-making, or bad macro strategy (e.g., puzzles, going the wrong direction, not sufficiently traning and catching pokemon based on game progress).
 
 
@@ -652,7 +723,7 @@ RECENT ACTIONS (last 20 steps):
 {history_str}
 
 GROUND TRUTH SOURCES (trust these in priority order):
-1. PORYMAP - Map layout, tile walkability (navigation ground truth)
+1. {_ref_map_source.upper()} - Map layout, tile walkability (navigation ground truth)
 2. KNOWLEDGE BASE - What agent has actually accomplished (never outdated, always correct)
 3. WALKTHROUGH - Correct sequence of steps for the game (strategic ground truth)
 4. Current objectives - May be WRONG if they conflict with above sources
@@ -663,7 +734,7 @@ OBJECTIVE MISMATCH
 ANALYZE (use ground truth sources to verify):
 1. Is the agent stuck or repeating actions?
 2. Does the objective match the game state?
-3. Are target coordinates reachable based on porymap?
+3. Are target coordinates reachable based on {_ref_map_source}?
 4. **CRITICAL**: Does the objective conflict with knowledge base? (If YES, objective is WRONG)
 5. Is the agent trying to do something already accomplished (check knowledge base)?
 6. Has the agent already learned information that makes the current objective obsolete?
@@ -680,20 +751,13 @@ PROVIDE (in this exact format):
 ⚠️ NEVER say "knowledge base is outdated" - knowledge base is ALWAYS correct. If there's conflict, the objectives are wrong.
 
 **RECOMMENDATIONS**:
-[Numbered list of specific actions to take - reference porymap AND knowledge base if relevant]
+[Numbered list of specific actions to take - reference {_ref_map_source} AND knowledge base if relevant]
 ⚠️ IMPORTANT: If the agent is stuck/looping or the objective seems wrong:
    1. Check if knowledge base shows this task is already done - if YES, the objective may have been prematurely marked completed
    2. Recommend calling get_knowledge_summary() to review actual accomplishments
    3. DETERMINE THE CORRECT WALKTHROUGH PART by matching knowledge to milestones:
-      → Part 1: Got starter Pokemon, met Norman at Petalburg
-      → Part 2: Roxanne (Stone Badge - 1st gym)
-      → Part 3: Brawly (Knuckle Badge - 2nd gym)
-      → Part 4: Slateport Museum, Team Aqua
-      → Part 5: Wattson (Dynamo Badge - 3rd gym)
-      → Part 6: Routes 111-114, Fallarbor (NO gym)
-      → Part 7: Flannery (Heat Badge - 4th gym)
+{_ref_walkthrough_parts}
       → Use HIGHEST milestone completed + 1
-      → Example: Knowledge shows "Defeated Roxanne, Stone Badge" → Use Part 3
    4. Recommend calling get_walkthrough(part=X) with SPECIFIC part number from step 3
    5. Remind agent to VERIFY: Compare walkthrough to knowledge base before creating objectives
    6. If walkthrough describes tasks already in knowledge base → Recommend NEXT part number
@@ -701,7 +765,7 @@ PROVIDE (in this exact format):
 
 **SHOULD_REALIGN**: [YES or NO - whether to create new objectives]
 
-Be direct and actionable. Trust the ground truth sources (porymap, walkthrough) over current objectives.
+Be direct and actionable. Trust the ground truth sources ({_ref_map_source}, walkthrough) over current objectives.
 ALWAYS BE QUESTIONABLE OF RECENT OBJECTIVES. THEY ARE LIKELY TO HAVE NOT ACTUALLY BEEN COMPLETED.
 NEVER dismiss knowledge base as "outdated" -- rather it may be prematurely marked completed. Trust the in-game features and NPC dialogue to learn what is happening.
 If stuck or looping, ALWAYS recommend checking the walkthrough to verify objectives are correct."""
@@ -893,6 +957,141 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
+    def _execute_red_puzzle_agent(self, arguments: dict) -> str:
+        """Execute Red puzzle solving using agent's own VLM to analyze puzzle."""
+        try:
+            # Get current game state directly
+            game_state = self.mcp_adapter.call_tool("get_game_state", {})
+            if not game_state.get("success"):
+                return json.dumps({"success": False, "error": "Failed to get game state"})
+
+            state_text = game_state.get("state_text", "")
+
+            # Extract location name from arguments or current location
+            location_name = arguments.get("location_name")
+            if not location_name:
+                import re
+                location_match = re.search(r'Current Location: ([^\n]+)', state_text)
+                location_name = location_match.group(1) if location_match else "Unknown"
+
+            # Load Red puzzle knowledge
+            from agent.red_puzzle_solver import RED_PUZZLES
+            puzzle_info = RED_PUZZLES.get(location_name, {
+                "type": "unknown",
+                "description": "Unknown location - no specific puzzle guidance available",
+                "strategy": "Explore the area carefully and look for patterns in tile arrangements."
+            })
+
+            puzzle_type = puzzle_info.get("type", "unknown")
+            description = puzzle_info.get("description", "")
+            base_strategy = puzzle_info.get("strategy", "")
+
+            # Get action history and function results for context
+            action_history = self._format_action_history()
+            function_results = self._get_function_results_context()
+
+            puzzle_prompt = f"""You are analyzing a Pokemon Red puzzle to help the agent solve it.
+
+LOCATION: {location_name}
+TYPE: {puzzle_type}
+DESCRIPTION: {description}
+
+GENERAL STRATEGY:
+{base_strategy}
+
+RECENT ACTION HISTORY:
+{action_history}
+
+{function_results}
+
+CURRENT GAME STATE:
+{state_text}
+
+Provide your analysis in this format:
+
+**PUZZLE ANALYSIS**:
+[Explain how this specific puzzle works based on the map and your current position]
+
+**WHAT WE'VE TRIED**:
+[Based on the action history above, summarize what approaches have been attempted and what worked/didn't work]
+
+**SPECIFIC SOLUTION STEPS**:
+1. [First concrete action with coordinates if applicable]
+2. [Second action]
+3. [Continue...]
+
+**NAVIGATION TIPS**:
+[Any important details about tile types, warps, or obstacles to watch for]
+
+**IMPORTANT**:
+- Look at the map in the game state. Tiles marked '#' are walls, '.' are walkable, 'D' are doors/warps, 'S' are stairs, '*' are spinner stop tiles, and arrow symbols (←→↑↓) are spinner tiles that push the player in that direction.
+- Review the action history to avoid repeating failed attempts.
+- Learn from previous outputs and function results to refine your strategy.
+- **USE press_buttons() FOR PUZZLE AREAS**: Do NOT use navigate_to() in spinner mazes or puzzle areas - it doesn't work well with forced movement tiles. Instead, use press_buttons() with explicit directional inputs (UP, DOWN, LEFT, RIGHT) to solve puzzles step by step.
+Be specific and actionable. Reference actual coordinates from the map when possible."""
+
+            logger.info(f"🧩 Agent analyzing Red puzzle: {location_name}")
+
+            # Get current frame from game state
+            frame_b64 = game_state.get("screenshot_base64")
+            if not frame_b64:
+                return json.dumps({"success": False, "error": "No frame available in game state"})
+
+            # Convert base64 string to PIL Image for VLM
+            try:
+                frame_bytes = base64.b64decode(frame_b64)
+                frame_image = PILImage.open(io.BytesIO(frame_bytes))
+                logger.info(f"   Screenshot: <{len(frame_bytes)} bytes>")
+            except Exception as e:
+                logger.error(f"Failed to decode screenshot: {e}")
+                return json.dumps({"success": False, "error": f"Failed to decode screenshot: {e}"})
+
+            # Create a separate VLM instance WITHOUT tools to avoid recursive function calling
+            puzzle_vlm = VLM(
+                model_name=self.model,
+                backend=self.backend,
+                tools=None  # No function calling - pure text analysis
+            )
+
+            puzzle_response = puzzle_vlm.get_query(frame_image, puzzle_prompt, "Red_Puzzle_Analysis")
+
+            # Extract text from response
+            puzzle_text = ""
+            if hasattr(puzzle_response, 'candidates') and puzzle_response.candidates:
+                candidate = puzzle_response.candidates[0]
+                if hasattr(candidate, 'content') and candidate.content:
+                    content = candidate.content
+                    if hasattr(content, 'parts'):
+                        text_parts = []
+                        for part in content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                text_parts.append(part.text)
+                            elif hasattr(part, 'function_call'):
+                                logger.warning(f"⚠️ VLM returned function call for puzzle analysis: {part.function_call.name}")
+                        puzzle_text = "\n".join(text_parts)
+            elif isinstance(puzzle_response, str):
+                puzzle_text = puzzle_response
+            elif hasattr(puzzle_response, 'text'):
+                puzzle_text = puzzle_response.text
+
+            if not puzzle_text:
+                logger.error(f"❌ No text extracted from VLM response")
+                logger.error(f"   Response type: {type(puzzle_response)}")
+                return json.dumps({"success": False, "error": "VLM did not return text analysis"}, indent=2)
+
+            logger.info(f"✅ Red puzzle analysis complete ({len(puzzle_text)} chars)")
+
+            return json.dumps({
+                "success": True,
+                "location": location_name,
+                "analysis": puzzle_text
+            }, indent=2)
+
+        except Exception as e:
+            logger.error(f"Error in red_puzzle_agent execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
     def _convert_protobuf_value(self, value):
         """Recursively convert a protobuf value to JSON-serializable Python types."""
         # Handle None
@@ -1030,6 +1229,10 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         # Special handling for gym_puzzle_agent - use agent's own VLM for analysis
         if function_name == "gym_puzzle_agent":
             return self._execute_gym_puzzle_agent(arguments)
+
+        # Special handling for red_puzzle_agent - use agent's own VLM for analysis
+        if function_name == "red_puzzle_agent":
+            return self._execute_red_puzzle_agent(arguments)
 
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -1469,6 +1672,19 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
                     except Exception as e:
                         logger.debug(f"Could not extract gym_puzzle_agent details: {e}")
                         action_details = "Executed gym_puzzle_agent"
+                elif last_tool_call['name'] == "red_puzzle_agent":
+                    # Extract Red puzzle analysis to include in history
+                    try:
+                        result_data = json_module.loads(last_tool_call['result'])
+                        if result_data.get("success"):
+                            loc = result_data.get("location", "Unknown")
+                            analysis = result_data.get("analysis", "")
+                            action_details = f"red_puzzle_agent({loc})\nAnalysis: {analysis}"
+                        else:
+                            action_details = f"red_puzzle_agent failed: {result_data.get('error', 'Unknown error')}"
+                    except Exception as e:
+                        logger.debug(f"Could not extract red_puzzle_agent details: {e}")
+                        action_details = "Executed red_puzzle_agent"
                 else:
                     action_details = f"Executed {last_tool_call['name']}"
 
@@ -1964,6 +2180,22 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
 
+        # Generate completion detection hint based on current story objective type
+        completion_hint = ""
+        # In categorized mode, story_obj is a dict; in legacy mode, use direct_objective dict
+        _obj_for_hint = story_obj if objectives_mode == "categorized" and story_obj else None
+        if _obj_for_hint is None and objectives_mode != "categorized":
+            # Legacy: direct_objective may have been a dict before formatting
+            _obj_for_hint = game_state_data.get("direct_objective") if isinstance(game_state_data.get("direct_objective"), dict) else None
+        if _obj_for_hint and isinstance(_obj_for_hint, dict):
+            _action_type = _obj_for_hint.get("action_type", "")
+            if _action_type == "battle":
+                completion_hint = "\n💡 This is a BATTLE objective. After winning the battle, press A/B through ALL dialogue to receive any rewards. Then immediately call add_knowledge() for items/rewards received and complete_direct_objective()."
+            elif _action_type == "navigate":
+                completion_hint = "\n💡 This is a NAVIGATION objective. Check your current location — if you've reached the target, call complete_direct_objective()."
+            elif _action_type == "interact":
+                completion_hint = "\n💡 This is an INTERACTION objective. After the dialogue/interaction ends and you return to normal gameplay, call complete_direct_objective()."
+
         # Build complete prompt by combining base prompt with context
         prompt = f"""# Current Step: {step_count}
 
@@ -1983,7 +2215,7 @@ Be specific and actionable. Reference actual coordinates from the porymap when p
 {direct_objective_status}
 
 ⚠️ **CRITICAL**: When you complete the objective, IMMEDIATELY call:
-   complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>")
+   complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>"){completion_hint}
 
 ### CURRENT GAME STATE:
 {state_text}
@@ -2447,7 +2679,8 @@ Step {step_count}"""
         logger.info("🧹 Cleared conversation history (fresh start)")
 
         logger.info("=" * 70)
-        logger.info("🎮 Pokemon Emerald Autonomous CLI Agent")
+        _game_label = "Red" if os.environ.get("GAME_TYPE", "emerald").lower() == "red" else "Emerald"
+        logger.info(f"🎮 Pokemon {_game_label} Autonomous CLI Agent")
         logger.info("=" * 70)
         logger.info(f"Model: {self.model}")
         logger.info(f"Backend: {self.backend}")
@@ -2709,7 +2942,7 @@ def main():
     """Main entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Pokemon Emerald Autonomous CLI Agent")
+    parser = argparse.ArgumentParser(description="Pokemon Autonomous CLI Agent")
     parser.add_argument(
         "--server-url",
         type=str,

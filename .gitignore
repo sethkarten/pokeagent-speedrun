@@ -1,3 +1,6 @@
+*.mkv
+*.out
+*.js
 *.log
 *.gba
 *.pyc
@@ -6,10 +9,12 @@
 *.gba
 llm_log_*
 .cursor/*
+.claude/*
 CLAUDE.md
 agents.md
 .pokeagent_cache*
 .DS_Store
+node_modules/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -207,4 +212,4 @@ server/agent_thinking.txt
 PokemonRed-GBC/test_states/*
 pokemon_red_env/test/output/*
 tests/output/*
-
+pokemon_red_env/data/img/*

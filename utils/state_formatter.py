@@ -10,7 +10,7 @@ import json
 import logging
 import numpy as np
 from PIL import Image
-from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol
+from utils.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol, _get_behavior_enum
 import base64
 import io
 import os, sys
@@ -239,10 +239,12 @@ def _format_state_summary(state_data):
     if position and isinstance(position, dict):
         summary_parts.append(f"Pos: ({position.get('x', '?')}, {position.get('y', '?')})")
     
-    # Facing direction - removed as it's often unreliable
-    # facing = player_data.get('facing')
-    # if facing:
-    #     summary_parts.append(f"Facing: {facing}")
+    # Facing direction (Red only — Emerald's is unreliable)
+    _game_type_facing = os.environ.get("GAME_TYPE", "emerald")
+    if _game_type_facing == "red":
+        facing = player_data.get('facing')
+        if facing:
+            summary_parts.append(f"Facing: {facing}")
     
     # Game state
     game_state = game_data.get('game_state')
@@ -289,9 +291,13 @@ def _format_state_summary(state_data):
             badge_count = badges
         summary_parts.append(f"Badges: {badge_count}")
     
-    # Items
+    # Items (Gen 1 bag holds max 20 unique item types)
+    items = game_data.get('items')
     item_count = game_data.get('item_count')
-    if item_count is not None:
+    if items and len(items) > 0:
+        item_names = [f"{it['name']}×{it['quantity']}" for it in items[:20]]
+        summary_parts.append(f"Items ({len(items)}): {', '.join(item_names)}")
+    elif item_count is not None:
         summary_parts.append(f"Items: {item_count}")
     
     # Game time
@@ -1588,42 +1594,58 @@ def _format_red_map_info(location_name: Optional[str], player_coords: Optional[T
     context_parts.append(f"Location: {location_name}")
     context_parts.append(f"Dimensions: {w}x{h}")
 
-    # Build ASCII map string with player marked as 'P'
+    # Build ASCII map string: Poké Balls as 'O', other NPCs as 'N', player as 'I' (wins ties)
+    objects = whole_map.get('objects', [])
+    # Map (y, x) → display symbol; Poké Balls get 'O', everything else gets 'N'
+    obj_symbol: dict = {}
+    for obj in objects:
+        ny, nx = obj.get('y'), obj.get('x')
+        if ny is None or nx is None:
+            continue
+        is_pokeball = "POKE_BALL" in obj.get('sprite_name', '').upper()
+        obj_symbol[(int(ny), int(nx))] = 'O' if is_pokeball else 'N'
+
     ascii_lines = []
     for y, row in enumerate(grid):
         line = list(row)
+        # Overlay objects first (Poké Balls as 'O', NPCs as 'N')
+        for (oy, ox), sym in obj_symbol.items():
+            if oy == y and 0 <= ox < len(line):
+                line[ox] = sym
+        # Player always on top
         if player_coords and y == player_coords[1]:
             px = player_coords[0]
             if 0 <= px < len(line):
-                line[px] = 'P'
+                line[px] = 'I'
         ascii_lines.append(''.join(line))
     ascii_map = '\n'.join(ascii_lines)
 
     context_parts.append("\nASCII Map:")
     context_parts.append(ascii_map)
-    context_parts.append("(Legend: 'P'=Player '.'=walkable '#'=wall 'G'=grass '~'=water 'W'=warp 'N'=NPC 's'=sign 'v'/'<'/'>'=ledge)")
+    context_parts.append("(Legend: I=Player .=walkable #=wall t=cuttable tree (use HM01 Cut) ~=grass W=water D=door G=Card Key gate (blocked, walk into and press A) !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC *=spinner stop)")
 
-    # Compact JSON summary (warps, objects)
+    # Compact JSON summary (warp_events, bg_events, objects)
     compact_json = {
         "name": location_name,
         "dimensions": dims,
-        "warps": whole_map.get('warps', []),
-        "objects": whole_map.get('objects', []),
-        "special_tiles": whole_map.get('special_tiles', {}),
+        "warp_events": whole_map.get('warp_events', []),
+        "bg_events":   whole_map.get('bg_events', []),
+        "objects":     whole_map.get('objects', []),
     }
     context_parts.append("\nMap Data (JSON):")
     context_parts.append(json.dumps(compact_json, indent=2))
 
     # Return same tuple shape as _format_porymap_info
+    # map_data['warps'] is populated from warp_events for pathfinder compat
     map_data = {
-        'grid': grid,
-        'raw_tiles': whole_map.get('raw_tiles'),
+        'grid':       grid,
+        'raw_tiles':  whole_map.get('raw_tiles'),
         'dimensions': dims,
-        'objects': whole_map.get('objects', []),
-        'warps': whole_map.get('warps', []),
+        'objects':    whole_map.get('objects', []),
+        'warps':      whole_map.get('warp_events', []),
     }
 
-    logger.info(f"Red map: formatted '{location_name}' ({w}x{h}) with {len(whole_map.get('warps', []))} warps, {len(whole_map.get('objects', []))} objects")
+    logger.info(f"Red map: formatted '{location_name}' ({w}x{h}) with {len(whole_map.get('warp_events', []))} warps, {len(whole_map.get('objects', []))} objects")
     return context_parts, map_data
 
 
@@ -2217,8 +2239,11 @@ def get_movement_preview(state_data):
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
-    # Get NPCs from map info
-    npcs = map_info.get('object_events', [])
+    # Get NPCs from map info.
+    # Emerald stores NPCs in map_info['object_events']; Red stores them in
+    # porymap['objects'] (set by game_tools.py).  Fall back to porymap objects
+    # so Red NPC blocking works correctly.
+    npcs = map_info.get('object_events', []) or porymap.get('objects', [])
     
     directions = {
         'UP': (0, -1),
@@ -2276,8 +2301,16 @@ def get_movement_preview(state_data):
                 tile_symbol = porymap_grid[new_world_y][new_world_x]
                 target_tile = None  # Don't have the raw tile data when using porymap grid
 
-                # Determine if movement is blocked by terrain (using porymap symbols)
-                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'X']  # Walls, water, out of bounds
+                # Determine if movement is blocked by terrain (using porymap symbols).
+                # Whitelist of all symbols that are passable in either Emerald or Red.
+                # Everything else — furniture, interactables, walls — is blocked.
+                # '?' = hidden item in Red (walkable); '!' = sign (blocked); 'O' = Poké Ball (blocked).
+                _PASSABLE_SYMBOLS = {
+                    ".", "~", "D", "S",
+                    "↓", "←", "→", "↑", "↗", "↖", "↘", "↙",
+                    "&", "?",
+                }
+                is_blocked_by_terrain = tile_symbol not in _PASSABLE_SYMBOLS
 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
@@ -2300,6 +2333,14 @@ def get_movement_preview(state_data):
                     tile_description = 'Wall'
                 elif tile_symbol == 'W':
                     tile_description = 'Water'
+                elif tile_symbol == '!':
+                    tile_description = 'Sign/Signpost (cannot walk through)'
+                elif tile_symbol == '?':
+                    tile_description = 'Hidden item (walkable)'
+                elif tile_symbol == 'O':
+                    tile_description = 'Poké Ball (interact from adjacent tile)'
+                elif tile_symbol == 't':
+                    tile_description = 'Cuttable tree (use HM Cut)'
                 else:
                     tile_description = f'Tile ({tile_symbol})'
 
@@ -2332,7 +2373,7 @@ def get_movement_preview(state_data):
                 tile_symbol = format_tile_to_symbol(target_tile)
                 
                 # Determine if movement is blocked by terrain
-                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N']  # Walls, water, and NPCs block movement
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N', 't']  # Walls, water, NPCs, and cuttable trees block movement
                 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
@@ -2381,7 +2422,9 @@ def get_movement_preview(state_data):
                         behavior_name = behavior.name
                     elif isinstance(behavior, int):
                         try:
-                            behavior_enum = MetatileBehavior(behavior)
+                            # Use Red's enum for Red maps so that RedMetatileBehavior
+                            # integer codes resolve to the correct names.
+                            behavior_enum = _get_behavior_enum()(behavior)
                             behavior_name = behavior_enum.name
                         except (ValueError, ImportError):
                             behavior_name = f"BEHAVIOR_{behavior}"
@@ -2402,6 +2445,8 @@ def get_movement_preview(state_data):
                         tile_description = f"Walkable path (ID: {tile_id})"
                     elif tile_symbol == '#':
                         tile_description = f"BLOCKED - Wall/Obstacle (ID: {tile_id}, {behavior_name})"
+                    elif tile_symbol == 't':
+                        tile_description = f"BLOCKED - Cuttable tree (use HM Cut) (ID: {tile_id})"
                     elif tile_symbol == 'W':
                         tile_description = f"BLOCKED - Water (need Surf) (ID: {tile_id})"
                     elif tile_symbol == '~':
@@ -2484,10 +2529,11 @@ def format_movement_preview_for_llm(state_data):
             symbol = info['tile_symbol']
             status = "BLOCKED" if info['blocked'] else "WALKABLE"
             
-            # Special override: if description contains "Stairs" or "Warp", show 'W' instead of any other symbol
+            # Special override: if description confirms Stairs/Warp, show 'S' symbol.
+            # ('W' must NOT be used here — it means Water in both Emerald and Red grids.)
             desc = info.get('tile_description', '')
             if not info['blocked'] and ('Stairs' in desc or 'Warp' in desc):
-                symbol = 'W'
+                symbol = 'S'
             
             lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
             
