@@ -1,12 +1,95 @@
 # map_preprocess.py
 
+import json
 import os
 import re
+import sys
 import glob
 from collections import defaultdict
+from typing import Optional, Dict, List, Tuple, Any, Callable
+
+# Allow sibling-module imports when run as __main__
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from red_metatile_behavior import (  # noqa: E402
+    RedMetatileBehavior,
+    BEHAVIOR_COLLISION,
+    HIDDEN_SYMBOL_TO_BEHAVIOR,
+)
+from map_overrides import MAP_GRID_OVERRIDES, MAP_ELEVATION_OVERRIDES  # noqa: E402
 
 env_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 game_code_dir = os.path.join(env_dir, "data")
+
+# Maps every possible grid symbol to its RedMetatileBehavior.
+# Used both by the grid-override logic and as a single source of truth for
+# symbol → behavior across the whole pipeline.
+_GRID_SYMBOL_TO_BEHAVIOR: Dict[str, "RedMetatileBehavior"] = {
+    ".":  RedMetatileBehavior.NORMAL,           # walkable floor
+    "~":  RedMetatileBehavior.TALL_GRASS,       # tall grass
+    "W":  RedMetatileBehavior.DEEP_WATER,       # water (Surf required)
+    "D":  RedMetatileBehavior.LADDER,           # door / warp tile (walkable, triggers exit)
+    "S":  RedMetatileBehavior.LADDER,           # staircase warp (same behavior as door)
+    "↓":  RedMetatileBehavior.JUMP_SOUTH,       # ledge — jump southward
+    "←":  RedMetatileBehavior.JUMP_WEST,        # ledge — jump westward
+    "→":  RedMetatileBehavior.JUMP_EAST,        # ledge — jump eastward
+    "↑":  RedMetatileBehavior.JUMP_NORTH,       # ledge — jump northward
+    "&":  RedMetatileBehavior.NORMAL,           # generic walkable overlay
+    "#":  RedMetatileBehavior.IMPASSABLE,       # wall / blocked
+    "C":  RedMetatileBehavior.COUNTER,          # counter / desk
+    "P":  RedMetatileBehavior.PC,               # hidden PC event
+    "T":  RedMetatileBehavior.TELEVISION,       # hidden TV event
+    "B":  RedMetatileBehavior.BOOKSHELF,        # hidden bookshelf event
+    "^":  RedMetatileBehavior.BLUEPRINT,        # hidden poster/painting event
+    "U":  RedMetatileBehavior.TRASH_CAN,        # hidden trash-can event
+    "?":  RedMetatileBehavior.NORMAL,           # hidden item / uncategorized bg_event (walkable)
+    "!":  RedMetatileBehavior.IMPASSABLE,       # road sign / signpost (blocked)
+    "=":  RedMetatileBehavior.IMPASSABLE,       # bench (no Emerald equivalent)
+    "*":  RedMetatileBehavior.NORMAL,           # spinner stop tile (walkable landing position)
+    "G":  RedMetatileBehavior.IMPASSABLE,       # Card Key gate (blocked until opened)
+    # Note: "O" (Poké Ball) is an overlay-only symbol — never placed in the static grid.
+}
+
+
+# Mapping from ASM map constants to processed_map names (Silph Co. only)
+_CARD_KEY_MAP_CONST_TO_NAME: Dict[str, str] = {
+    "SILPH_CO_2F":  "SilphCo2F",
+    "SILPH_CO_3F":  "SilphCo3F",
+    "SILPH_CO_4F":  "SilphCo4F",
+    "SILPH_CO_5F":  "SilphCo5F",
+    "SILPH_CO_6F":  "SilphCo6F",
+    "SILPH_CO_7F":  "SilphCo7F",
+    "SILPH_CO_8F":  "SilphCo8F",
+    "SILPH_CO_9F":  "SilphCo9F",
+    "SILPH_CO_10F": "SilphCo10F",
+    "SILPH_CO_11F": "SilphCo11F",
+}
+
+# Warp positions to skip when marking 'D' on the grid.
+# These are warp pads / teleporters that should keep their underlying tile symbol
+# so the pathfinder doesn't route through them by accident.
+_WARP_EXCLUSIONS: set = {
+    ("SilphCo11F", 5, 5),   # warp pad to LAST_MAP — avoid accidental teleport
+}
+
+def parse_card_key_coords_asm(path: str) -> Dict[str, List[Tuple[int, int]]]:
+    """Parse card_key_coords.asm → {map_name: [(x, y), ...]}."""
+    result: Dict[str, List[Tuple[int, int]]] = defaultdict(list)
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith(";") or line.endswith(":") or line == "db -1 ; end":
+                continue
+            # Format: db MAP_CONST, $Y, $X, gate_id
+            m = re.match(r"db\s+(SILPH_CO_\w+)\s*,\s*\$([0-9A-Fa-f]+)\s*,\s*\$([0-9A-Fa-f]+)\s*,\s*\d+", line)
+            if m:
+                map_const = m.group(1)
+                y = int(m.group(2), 16)
+                x = int(m.group(3), 16)
+                map_name = _CARD_KEY_MAP_CONST_TO_NAME.get(map_const)
+                if map_name:
+                    result[map_name].append((x, y))
+    return dict(result)
+
 
 def parse_collision_tile_ids_asm(collision_asm_path):
     """
@@ -92,11 +175,61 @@ def parse_hidden_objects(asm_text):
             x = int(event_match.group(1))
             y = int(event_match.group(2))
             func_name = event_match.group(3)  # e.g. "OpenRedsPC", "PrintRedSNESText"
-            hidden_dict[(x, y)] = "TalkTo" + func_name
+            hidden_dict[(x, y)] = func_name
 
         result[map_label] = hidden_dict
 
     return result
+
+def classify_hidden_object(func_name: str) -> str:
+    """Map hidden event function name to grid symbol (matching map_formatter.py)."""
+    upper = func_name.upper()
+    if "PC" in upper:
+        return "P"
+    if any(k in upper for k in ("SNES", "GAMEBOY", "SLOTMACHINE", "QUIZ", "BINOCULARS")):
+        return "T"
+    if any(k in upper for k in ("BOOKCASE", "NOTEBOOK", "MAGAZINE", "BLACKBOARD", "BIKE")):
+        return "B"
+    if any(k in upper for k in ("POSTER", "EMAIL")):
+        return "^"
+    if "TRASH" in upper:
+        return "U"
+    if "STATUE" in upper:
+        return "#"  # treat gymStatue as wall
+    if "BENCH" in upper:
+        return "="
+    return "?"
+
+
+def classify_sign(text_id: str) -> str:
+    """Map a sign text_id (from bg_event TEXT_xxx) to a grid symbol.
+
+    Uses the same symbol set as classify_hidden_object() so that the grid
+    and raw_tile behavior are consistent regardless of whether an interactive
+    object was registered as a bg_event or a hidden_event.
+
+    Note: "BIKE" is intentionally omitted here — a text_id like
+    CERULEANCITY_BIKESHOP_SIGN refers to a street sign, not a bicycle object,
+    so it should remain '?'.  The BIKE keyword only applies to the hidden
+    PrintNewBikeText handler (classify_hidden_object).
+    """
+    upper = text_id.upper()
+    if "PC" in upper:                                               # PC / computer
+        return "P"
+    if any(k in upper for k in ("SNES", "_TV", "GAMEBOY")):        # television / console
+        return "T"
+    if any(k in upper for k in ("BOOK", "NOTEBOOK", "MAGAZINE",    # bookshelf / reading material
+                                  "BOOKCASE", "BLACKBOARD")):
+        return "B"
+    if any(k in upper for k in ("POSTER", "PHOTO", "DISPLAY",      # wall display / blueprint
+                                  "EMAIL")):
+        return "^"
+    if "TRASH" in upper:                                            # trash can
+        return "U"
+    if "_SIGN" in upper or "TIPS" in upper:                         # road signpost (non-walkable)
+        return "!"
+    return "!"                                                      # uncategorized bg_event/sign
+
 
 def parse_ledge_tiles_asm(ledge_tiles_asm_path):
     """
@@ -122,9 +255,9 @@ def parse_ledge_tiles_asm(ledge_tiles_asm_path):
     )
 
     dir_map = {
-        "PAD_DOWN": "D",
-        "PAD_LEFT": "L",
-        "PAD_RIGHT": "R",
+        "PAD_DOWN": "↓",
+        "PAD_LEFT": "←",
+        "PAD_RIGHT": "→",
     }
 
     with open(ledge_tiles_asm_path, "r", encoding="utf-8") as f:
@@ -198,6 +331,204 @@ def parse_pair_collision_tile_ids_asm(path):
 
     return pair_dict
 
+# ---------------------------------------------------------------------------
+# Shared helper: normalize a tileset name (ASM constant or CamelCase label
+# prefix) to the canonical tile_type key used by main().
+# Mirrors the alias logic in main() and parse_collision_tile_ids_asm().
+# ---------------------------------------------------------------------------
+_HEX_RE = re.compile(r'\$([0-9A-Fa-f]{1,2})')
+
+
+def _norm_tileset(raw: str) -> str:
+    stripped = re.sub(r'[_\d]+$', '', raw.lower())   # drop trailing _ and digits
+    s = stripped.replace('_', '')                      # collapse internal underscores for comparison
+    if s == 'dojo':
+        return 'gym'
+    if s in ('mart', 'pokecenter'):
+        return 'pokecenter'
+    if s in ('forestgate', 'museum', 'gate'):
+        return 'gate'
+    if 'reds' in s:
+        return 'reds_house'
+    return stripped  # preserve underscores for multi-word names (e.g. ship_port)
+
+
+# ---------------------------------------------------------------------------
+# Additional ASM parsers for tile behavior data not used by the original
+# map_preprocess.py (door, warp, warp_pad/hole, bookshelf, warp_carpet).
+# ---------------------------------------------------------------------------
+
+def parse_door_tile_ids_asm(path):
+    """
+    Parse data/tilesets/door_tile_ids.asm.
+
+    Format:
+        Pointer table:  dbw TILESET_CONST, .LabelName
+        Label bodies:   door_tiles $xx, $yy, ...   (macro emits db N; db 0 end)
+
+    Returns: {normalized_tileset: set(tile_ids)}
+    """
+    ptr_re  = re.compile(r'dbw\s+([A-Z0-9_]+)\s*,\s*\.(\w+DoorTileIDs)')
+    lbl_re  = re.compile(r'^\s*\.(\w+DoorTileIDs)\s*:')
+
+    label_to_tilesets: dict = defaultdict(set)   # label → {normalized_tileset}
+    label_tiles:       dict = {}                  # label → set(tile_ids)
+    current_label            = None
+
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            stripped = line.strip()
+
+            m = ptr_re.search(stripped)
+            if m:
+                ts  = _norm_tileset(m.group(1))
+                lbl = m.group(2)
+                label_to_tilesets[lbl].add(ts)
+                continue
+
+            m = lbl_re.match(stripped)
+            if m:
+                current_label = m.group(1)
+                label_tiles.setdefault(current_label, set())
+                continue
+
+            if current_label and stripped.startswith('door_tiles'):
+                rest = stripped[len('door_tiles'):].split(';')[0]
+                ids  = [int(h, 16) for h in _HEX_RE.findall(rest)]
+                label_tiles[current_label].update(ids)
+                current_label = None   # macro includes db 0; section done
+
+    result: dict = {}
+    for lbl, tilesets in label_to_tilesets.items():
+        ids = label_tiles.get(lbl, set())
+        for ts in tilesets:
+            result.setdefault(ts, set()).update(ids)
+    return result
+
+
+def parse_warp_tile_ids_asm(path):
+    """
+    Parse data/tilesets/warp_tile_ids.asm.
+
+    Format: pointer table (dw entries, one per tileset) + label bodies with
+    fallthrough semantics.  Each label reads bytes up to the next -1.
+    We simulate fallthroughs: a label collects all TILE events after it
+    until the next END event.
+
+    Returns: {normalized_tileset: set(tile_ids)}
+    """
+    lbl_re = re.compile(r'^\s*\.([A-Za-z0-9]+)WarpTileIDs\s*:')
+    db_re  = re.compile(r'^db\s+(.*)')
+
+    events = []   # ('LABEL', ts) | ('TILE', int) | ('END',)
+
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            stripped = line.strip()
+
+            m = lbl_re.match(stripped)
+            if m:
+                events.append(('LABEL', _norm_tileset(m.group(1))))
+                continue
+
+            if stripped.startswith('warp_tiles'):
+                rest = stripped[len('warp_tiles'):].split(';')[0]
+                ids  = [int(h, 16) for h in _HEX_RE.findall(rest)]
+                for tid in ids:
+                    events.append(('TILE', tid))
+                events.append(('END',))
+                continue
+
+            m = db_re.match(stripped)
+            if m:
+                rest  = m.group(1).split(';')[0].strip()
+                parts = [p.strip() for p in rest.split(',')]
+                for p in parts:
+                    if p in ('-1', '255', '$FF', '$ff'):
+                        events.append(('END',))
+                        break
+                    hm = _HEX_RE.match(p)
+                    if hm:
+                        events.append(('TILE', int(hm.group(1), 16)))
+
+    # Simulate fallthrough: each open label collects all tiles until END
+    result: dict = {}
+    active = []   # currently open tilesets
+    for ev in events:
+        if ev[0] == 'LABEL':
+            ts = ev[1]
+            active.append(ts)
+            result.setdefault(ts, set())
+        elif ev[0] == 'TILE':
+            for ts in active:
+                result[ts].add(ev[1])
+        elif ev[0] == 'END':
+            active = []
+    return result
+
+
+def parse_warp_pad_hole_tile_ids_asm(path):
+    """
+    Parse data/tilesets/warp_pad_hole_tile_ids.asm.
+
+    Format: db TILESET, $TILE_ID, VALUE
+        VALUE 1 → warp pad (WARP_PAD)
+        VALUE 2 → hole    (CRACKED_FLOOR_HOLE)
+
+    Returns: {normalized_tileset: {tile_id: 1_or_2}}
+    """
+    row_re = re.compile(r'db\s+([A-Z0-9_]+)\s*,\s*\$([0-9A-Fa-f]+)\s*,\s*([12])')
+    result: dict = {}
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            m = row_re.search(line.split(';')[0])
+            if m:
+                ts  = _norm_tileset(m.group(1))
+                tid = int(m.group(2), 16)
+                val = int(m.group(3))
+                result.setdefault(ts, {})[tid] = val
+    return result
+
+
+def parse_bookshelf_tile_ids_asm(path):
+    """
+    Parse data/tilesets/bookshelf_tile_ids.asm.
+
+    Format: bookshelf_tile TILESET, $TILE_ID, TEXT_LABEL
+
+    Returns: {normalized_tileset: set(tile_ids)}
+    """
+    row_re = re.compile(r'bookshelf_tile\s+([A-Z0-9_]+)\s*,\s*\$([0-9A-Fa-f]+)')
+    result: dict = {}
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            m = row_re.search(line.split(';')[0])
+            if m:
+                ts  = _norm_tileset(m.group(1))
+                tid = int(m.group(2), 16)
+                result.setdefault(ts, set()).add(tid)
+    return result
+
+
+def parse_warp_carpet_tile_ids_asm(path):
+    """
+    Parse data/tilesets/warp_carpet_tile_ids.asm.
+
+    Global tile IDs (not per-tileset) organized into 4 direction groups.
+    Any listed tile ID is a warp carpet tile regardless of direction.
+
+    Returns: set(tile_ids)
+    """
+    tile_re = re.compile(r'warp_carpet_tiles\s+(.*)')
+    result: set = set()
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            m = tile_re.search(line.split(';')[0])
+            if m:
+                result.update(int(h, 16) for h in _HEX_RE.findall(m.group(1)))
+    return result
+
+
 def load_map_constants_constants_asm(constants_asm_path):
     label_to_size = {}
     pattern = re.compile(r"map_const\s+([A-Z0-9_]+)\s*,\s*(\d+)\s*,\s*(\d+)")
@@ -250,13 +581,15 @@ def build_tile_id_map(blk, blocks, map_width_blocks, map_height_blocks):
 def parse_map_objects_asm(root_dir, map_name):
     objects_asm_path = os.path.join(root_dir, "data", "maps", "objects", f"{map_name}.asm")
     if not os.path.exists(objects_asm_path):
-        return set(), set(), []
+        return [], [], []
 
-    warp_coords = set()
-    sign_coords = {}
+    warp_data = []
+    signs_data = []
     npc_data = []
 
-    warp_pattern = re.compile(r"warp_event\s+(\d+)\s*,\s*(\d+)\s*,")
+    warp_pattern = re.compile(
+        r"warp_event\s+(\d+)\s*,\s*(\d+)\s*,\s*(\w+)\s*,\s*(\d+)"
+    )
     bg_pattern = re.compile(r"bg_event\s+(\d+)\s*,\s*(\d+)\s*,\s*TEXT_(\w+)")
     obj_pattern = re.compile(
         r'object_event\s+(\d+)\s*,\s*(\d+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)'
@@ -267,16 +600,20 @@ def parse_map_objects_asm(root_dir, map_name):
             line = line.strip()
             wmatch = warp_pattern.search(line)
             if wmatch:
-                x = int(wmatch.group(1))
-                y = int(wmatch.group(2))
-                warp_coords.add((x, y))
+                warp_data.append({
+                    "x": int(wmatch.group(1)),
+                    "y": int(wmatch.group(2)),
+                    "dest_map": wmatch.group(3),
+                    "dest_warp_id": int(wmatch.group(4)),
+                })
                 continue
             smatch = bg_pattern.search(line)
             if smatch:
-                x = int(smatch.group(1))
-                y = int(smatch.group(2))
-                bg_description = str(smatch.group(3))
-                sign_coords[(x, y)]  = "SIGN_" + bg_description
+                signs_data.append({
+                    "x": int(smatch.group(1)),
+                    "y": int(smatch.group(2)),
+                    "text_id": smatch.group(3),
+                })
                 continue
             omatch = obj_pattern.search(line)
             if omatch:
@@ -290,7 +627,7 @@ def parse_map_objects_asm(root_dir, map_name):
                 })
                 continue
 
-    return warp_coords, sign_coords, npc_data
+    return warp_data, signs_data, npc_data
 
 def main():
     root_dir = os.path.join(game_code_dir, "pokered")
@@ -299,6 +636,9 @@ def main():
         asm_text = f.read()
 
     hidden_objects_dict = parse_hidden_objects(asm_text)
+
+    card_key_coords_path = os.path.join(root_dir, "data", "events", "card_key_coords.asm")
+    card_key_dict = parse_card_key_coords_asm(card_key_coords_path)
 
     map_constants_asm_path = os.path.join(root_dir, "constants", "map_constants.asm")
     label_to_size = load_map_constants_constants_asm(map_constants_asm_path)
@@ -311,6 +651,18 @@ def main():
 
     pair_collisions_asm_path = os.path.join(root_dir, "data", "tilesets", "pair_collision_tile_ids.asm")
     pair_collisions_dict = parse_pair_collision_tile_ids_asm(pair_collisions_asm_path)
+
+    # Additional ASM files for raw_tile behavior computation
+    door_tile_dict    = parse_door_tile_ids_asm(
+        os.path.join(root_dir, "data", "tilesets", "door_tile_ids.asm"))
+    warp_tile_dict    = parse_warp_tile_ids_asm(
+        os.path.join(root_dir, "data", "tilesets", "warp_tile_ids.asm"))
+    warppad_tile_dict = parse_warp_pad_hole_tile_ids_asm(
+        os.path.join(root_dir, "data", "tilesets", "warp_pad_hole_tile_ids.asm"))
+    bookshelf_tile_dict = parse_bookshelf_tile_ids_asm(
+        os.path.join(root_dir, "data", "tilesets", "bookshelf_tile_ids.asm"))
+    carpet_tile_ids   = parse_warp_carpet_tile_ids_asm(
+        os.path.join(root_dir, "data", "tilesets", "warp_carpet_tile_ids.asm"))
 
     text_dict = {
         'plateau': {48: 'IndigoPlateauStatues'},
@@ -354,6 +706,11 @@ def main():
         'facility': {18},
         'club': {7, 23},
     }
+
+    # Warp-carpet tiles are only meaningful in outdoor tilesets where building
+    # entrance mats exist.  Applying them globally would mis-classify common
+    # low-numbered tile IDs in indoor tilesets.
+    _CARPET_TILESETS = {"overworld", "plateau", "forest"}
 
     header_files = glob.glob(os.path.join(root_dir, "data", "maps", "headers", "*.asm"))
 
@@ -416,7 +773,15 @@ def main():
 
         tile_id_map = build_tile_id_map(blk, blocks, mw, mh)
 
-        warp_coords, sign_coords, npc_data = parse_map_objects_asm(root_dir, map_name)
+        warp_data, signs_data, npc_data = parse_map_objects_asm(root_dir, map_name)
+
+        # Build lookup sets for warps and signs
+        warp_positions = {(w["x"], w["y"]) for w in warp_data}
+        sign_positions = {(s["x"], s["y"]): s["text_id"] for s in signs_data}
+        # Classify each sign to a grid symbol and enrich signs_data for JSON output
+        sign_symbol_lookup = {pos: classify_sign(tid) for pos, tid in sign_positions.items()}
+        for s in signs_data:
+            s["symbol"] = sign_symbol_lookup.get((s["x"], s["y"]), "?")
 
         coll_set = collision_dict.get(tile_type, set())
         cut_set = cut_dict.get(tile_type, set())
@@ -430,7 +795,34 @@ def main():
         tile_map_h = mh * 4
         tile_map_w = mw * 4
 
-        coll_map = []
+        # Build hidden_objects list with classified symbols
+        hidden_obj_list = []
+        if hidden_dict:
+            for (hx, hy), func_name in hidden_dict.items():
+                symbol = classify_hidden_object(func_name)
+                hidden_obj_list.append({
+                    "x": hx, "y": hy,
+                    "script": func_name,
+                    "symbol": symbol,
+                })
+
+        # Build hidden position → symbol lookup
+        hidden_symbol_lookup = {(h["x"], h["y"]): h["symbol"] for h in hidden_obj_list}
+
+        # Per-tileset raw_tile behavior lookups (from new ASM parsers)
+        door_tile_set      = door_tile_dict.get(tile_type, set())
+        warp_tile_set      = warp_tile_dict.get(tile_type, set())
+        warppad_tile_map   = warppad_tile_dict.get(tile_type, {})   # {tile_id: 1 or 2}
+        bookshelf_tile_set = bookshelf_tile_dict.get(tile_type, set())
+        # carpet_tile_ids is global (not per-tileset)
+
+        # behaviour_map[cy][cx]: RedMetatileBehavior for each collision-map cell
+        behavior_map = [
+            [RedMetatileBehavior.IMPASSABLE] * coll_map_w
+            for _ in range(coll_map_h)
+        ]
+
+        grid = []
         for cy in range(coll_map_h):
             row = []
             tile_y = 2 * cy + 1
@@ -444,47 +836,93 @@ def main():
                     is_water = (tid in water_set)
                     is_cut = (tid in cut_set)
                     is_counter = (tid in counter_set)
-                    if (not hidden_dict is None) and (hidden_dict != []):
-                        is_hidden = (cx, cy) in hidden_dict.keys()
-                    else:
-                        is_hidden = False
+                    is_hidden = (cx, cy) in hidden_symbol_lookup
+                    is_sign   = (cx, cy) in sign_symbol_lookup
                 else:
                     tid = 0
                     is_collision = False
                     is_cut = False
+                    is_text = False
+                    is_grass = False
+                    is_water = False
+                    is_counter = False
+                    is_hidden = False
+                    is_sign   = (cx, cy) in sign_symbol_lookup
 
+                # Classification priority — symbols match map_formatter.py
                 if is_text:
-                    cell_char = 'TalkTo' + text_set[tid]
+                    cell_char = '#'
                 elif is_hidden:
-                    cell_char = hidden_dict[(cx, cy)]
+                    cell_char = hidden_symbol_lookup[(cx, cy)]
                 elif is_grass:
-                    cell_char = 'G'
-                elif is_water:
                     cell_char = '~'
+                elif is_water:
+                    cell_char = 'W'
                 elif is_collision:
-                    cell_char = 'O'
+                    cell_char = '.'
                 else:
-                    cell_char = 'X'
+                    cell_char = '#'
 
                 if is_cut:
-                    cell_char = 'Cut'
+                    cell_char = 't'
                 elif is_counter:
                     cell_char = 'C'
 
-                if (cx, cy) in warp_coords:
-                    cell_char = 'WarpPoint'
-                elif (cx, cy) in sign_coords.keys():
-                    cell_char = sign_coords[(cx, cy)]
+                if (cx, cy) in warp_positions and (map_name, cx, cy) not in _WARP_EXCLUSIONS:
+                    cell_char = 'D'
+                elif is_sign:
+                    cell_char = sign_symbol_lookup[(cx, cy)]
 
                 row.append(cell_char)
-            coll_map.append(row)
+
+                # --- Compute raw_tile behavior (tile-based, no event overlay) ---
+                # Base: highest-priority tile classification
+                if is_text:
+                    raw_behavior = RedMetatileBehavior.IMPASSABLE
+                elif is_grass:
+                    raw_behavior = RedMetatileBehavior.TALL_GRASS
+                elif is_water:
+                    raw_behavior = RedMetatileBehavior.DEEP_WATER
+                elif is_collision:
+                    raw_behavior = RedMetatileBehavior.NORMAL
+                else:
+                    raw_behavior = RedMetatileBehavior.IMPASSABLE
+                # Overrides in priority order
+                if is_cut:
+                    raw_behavior = RedMetatileBehavior.CUT_TREE
+                elif is_hidden:
+                    hidden_sym = hidden_symbol_lookup[(cx, cy)]
+                    raw_behavior = HIDDEN_SYMBOL_TO_BEHAVIOR.get(
+                        hidden_sym, RedMetatileBehavior.IMPASSABLE)
+                elif is_sign:
+                    raw_behavior = HIDDEN_SYMBOL_TO_BEHAVIOR.get(
+                        sign_symbol_lookup[(cx, cy)], RedMetatileBehavior.QUESTIONNAIRE)
+                elif is_counter:
+                    raw_behavior = RedMetatileBehavior.COUNTER
+                elif tid in bookshelf_tile_set:
+                    raw_behavior = RedMetatileBehavior.BOOKSHELF
+                elif tid in door_tile_set:
+                    raw_behavior = RedMetatileBehavior.NON_ANIMATED_DOOR
+                elif tid in warppad_tile_map:
+                    raw_behavior = (
+                        RedMetatileBehavior.CRACKED_FLOOR_HOLE
+                        if warppad_tile_map[tid] == 2
+                        else RedMetatileBehavior.WARP_PAD)
+                elif tid in carpet_tile_ids and tile_type in _CARPET_TILESETS:
+                    raw_behavior = RedMetatileBehavior.WARP_CARPET
+                elif tid in warp_tile_set:
+                    raw_behavior = RedMetatileBehavior.LADDER
+                behavior_map[cy][cx] = raw_behavior
+
+            grid.append(row)
 
         def in_bounds(cx_, cy_):
             return (0 <= cx_ < coll_map_w) and (0 <= cy_ < coll_map_h)
 
+        # Ledge detection — only on blocked tiles
         for cy in range(coll_map_h):
             for cx in range(coll_map_w):
-                if coll_map[cy][cx] not in ('X', ' '):
+                if grid[cy][cx] != '#':
                     continue
 
                 tile_x = 2 * cx
@@ -495,11 +933,11 @@ def main():
                 tile_id = tile_id_map[tile_y][tile_x]
                 for (stand_tile, ledge_tile, dir_char) in ledge_rules:
                     if tile_id == ledge_tile:
-                        if dir_char == 'D':
+                        if dir_char == '↓':
                             nx, ny = cx, cy - 1
-                        elif dir_char == 'L':
+                        elif dir_char == '←':
                             nx, ny = cx + 1, cy
-                        elif dir_char == 'R':
+                        elif dir_char == '→':
                             nx, ny = cx - 1, cy
                         else:
                             continue
@@ -510,17 +948,25 @@ def main():
                             if n_tile_x < tile_map_w and n_tile_y < tile_map_h:
                                 neighbor_tile_id = tile_id_map[n_tile_y][n_tile_x]
                                 if neighbor_tile_id == stand_tile:
-                                    coll_map[cy][cx] = dir_char
+                                    grid[cy][cx] = dir_char
                                     break
 
+        # Second pass: sync behavior_map with ledge grid symbols (↓ ← →)
+        _ARROW_TO_BEHAVIOR = {
+            "↓": RedMetatileBehavior.JUMP_SOUTH,
+            "←": RedMetatileBehavior.JUMP_WEST,
+            "→": RedMetatileBehavior.JUMP_EAST,
+            "↑": RedMetatileBehavior.JUMP_NORTH,
+        }
+        for cy in range(coll_map_h):
+            for cx in range(coll_map_w):
+                ch = grid[cy][cx]
+                if ch in _ARROW_TO_BEHAVIOR:
+                    behavior_map[cy][cx] = _ARROW_TO_BEHAVIOR[ch]
+
+        # Pair collisions — mark as blocked wall
         pair_collisions = pair_collisions_dict.get(tile_type, set())
         if pair_collisions:
-            dir_to_arrow = {
-                (0, -1): '-',
-                (0,  1): '-',
-                (-1, 0): '|',
-                ( 1, 0): '|',
-            }
             for cy in range(coll_map_h):
                 for cx in range(coll_map_w):
                     tile_x = 2 * cx
@@ -541,39 +987,101 @@ def main():
 
                         tile_id2 = tile_id_map[n_tile_y][n_tile_x]
                         if (tile_id1, tile_id2) in pair_collisions:
-                            arrow_char = dir_to_arrow.get((dcx, dcy))
-                            if arrow_char:
-                                if coll_map[ny][nx] in (' ', 'Cut'):
-                                    coll_map[ny][nx] = arrow_char
+                            if grid[ny][nx] == '#':
+                                grid[ny][nx] = '#'  # already blocked
 
-        py_path = os.path.join(output_dir, f"{map_name}.py")
-        with open(py_path, "w", encoding="utf-8") as f:
-            f.write(f'tile_type = "{tile_type}"\n')
-            f.write(f'map_connection = "{connect_direction}"\n\n')
+        # Overlay Card Key gate symbols for Silph Co. maps.
+        if map_name in card_key_dict:
+            for gx, gy in card_key_dict[map_name]:
+                if 0 <= gy < coll_map_h and 0 <= gx < coll_map_w:
+                    grid[gy][gx] = 'G'
+                    behavior_map[gy][gx] = RedMetatileBehavior.IMPASSABLE
+            print(f"[{map_name}] Applied {len(card_key_dict[map_name])} Card Key gate(s).")
 
-            # tile_map
-            f.write("tile_map = [\n")
-            for row in tile_id_map:
-                row_str = ", ".join(str(x) for x in row)
-                f.write(f"    [{row_str}],\n")
-            f.write("]\n\n")
+        # Apply manual grid override (MAP_GRID_OVERRIDES), if present.
+        # The override is applied AFTER all automated passes so it is the
+        # final authority on grid symbols and metatile behaviors.
+        if map_name in MAP_GRID_OVERRIDES:
+            override_rows = MAP_GRID_OVERRIDES[map_name]
+            if len(override_rows) != coll_map_h:
+                print(
+                    f"[{map_name}] WARNING: MAP_GRID_OVERRIDES height "
+                    f"{len(override_rows)} != map height {coll_map_h}; skipping override."
+                )
+            else:
+                for cy, override_row in enumerate(override_rows):
+                    if len(override_row) != coll_map_w:
+                        print(
+                            f"[{map_name}] WARNING: MAP_GRID_OVERRIDES row {cy} width "
+                            f"{len(override_row)} != map width {coll_map_w}; skipping row."
+                        )
+                        continue
+                    for cx, sym in enumerate(override_row):
+                        if grid[cy][cx] == sym:
+                            continue  # no change needed
+                        grid[cy][cx] = sym
+                        beh = _GRID_SYMBOL_TO_BEHAVIOR.get(sym, RedMetatileBehavior.IMPASSABLE)
+                        behavior_map[cy][cx] = beh
+                print(f"[{map_name}] Applied MAP_GRID_OVERRIDES grid.")
 
-            # coll_map
-            f.write("coll_map = [\n")
-            for row in coll_map:
-                row_str = ", ".join(f'"{c}"' for c in row)
-                f.write(f"    [{row_str}],\n")
-            f.write("]\n\n")
+        # Build raw_tile_map: [[tile_id, behavior_int, collision, elevation], ...]
+        # tile_id = bottom-left tile of the 2×2 block (tile_id_map[2*cy+1][2*cx])
+        raw_tile_map = []
+        for cy in range(coll_map_h):
+            raw_row = []
+            for cx in range(coll_map_w):
+                tile_y = 2 * cy + 1
+                tile_x = 2 * cx
+                t = (tile_id_map[tile_y][tile_x]
+                     if tile_y < tile_map_h and tile_x < tile_map_w else 0)
+                beh = behavior_map[cy][cx]
+                col = BEHAVIOR_COLLISION[beh]
+                raw_row.append([t, int(beh), col, 0])   # elevation defaults to 0
+            raw_tile_map.append(raw_row)
 
-            # npc_data
-            f.write("npc_data = [\n")
-            for npc in npc_data:
-                f.write(f'    {{"x": {npc["x"]}, "y": {npc["y"]}, "sprite": "{npc["sprite"]}", '
-                        f'"movement": "{npc["movement"]}", "direction": "{npc["direction"]}", '
-                        f'"text_id": "{npc["text_id"]}"}},\n')
-            f.write("]\n")
+        # Apply elevation overrides (single-digit strings, same dims as grid).
+        if map_name in MAP_ELEVATION_OVERRIDES:
+            elev_rows = MAP_ELEVATION_OVERRIDES[map_name]
+            if len(elev_rows) != coll_map_h:
+                print(
+                    f"[{map_name}] WARNING: MAP_ELEVATION_OVERRIDES height "
+                    f"{len(elev_rows)} != map height {coll_map_h}; skipping."
+                )
+            else:
+                for cy, elev_row in enumerate(elev_rows):
+                    if len(elev_row) != coll_map_w:
+                        print(
+                            f"[{map_name}] WARNING: MAP_ELEVATION_OVERRIDES row {cy} width "
+                            f"{len(elev_row)} != map width {coll_map_w}; skipping row."
+                        )
+                        continue
+                    for cx, ch in enumerate(elev_row):
+                        raw_tile_map[cy][cx][3] = int(ch)
+                print(f"[{map_name}] Applied MAP_ELEVATION_OVERRIDES.")
 
-        print(f"[{map_name}] -> Successfully Saved: {py_path}")
+        # compress grid rows into strings
+        grid_json = []
+        for row in grid:
+            grid_json.append("".join(row))
+
+        # Write JSON output
+        json_path = os.path.join(output_dir, f"{map_name}.json")
+        map_data = {
+            "tile_type": tile_type,
+            "map_connection": connect_direction,
+            "dimensions": {"width": coll_map_w, "height": coll_map_h},
+            "tile_map": tile_id_map,
+            "grid": grid_json,
+            "raw_tile": raw_tile_map,
+            "warps": warp_data,
+            "signs": signs_data,
+            "hidden_objects": hidden_obj_list,
+            "npc_data": npc_data,
+        }
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(map_data, f, indent=2, ensure_ascii=False)
+
+        print(f"[{map_name}] -> Successfully Saved: {json_path}")
 
 if __name__ == "__main__":
     main()

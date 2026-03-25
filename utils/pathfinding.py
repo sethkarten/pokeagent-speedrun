@@ -10,6 +10,7 @@ import logging
 import random
 from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass, field
+import os
 
 # Try to import MetatileBehavior, but don't fail if not available
 try:
@@ -136,6 +137,7 @@ class Pathfinder:
 
         # Get current location for debugging
         location_name = game_state.get("player", {}).get("location", "Unknown")
+        game_type = os.environ.get("GAME_TYPE", "emerald").upper()
 
         # Get blocked positions (walls, NPCs, water, etc.)
         # CRITICAL: Exclude start position - player is there so it must be walkable
@@ -151,25 +153,35 @@ class Pathfinder:
                     logger.info(f"🚫 Pathfinding: Manually blocked {coord}")
 
         # Get warp positions and ensure they're walkable (doors/stairs)
-
         warps = self._get_warp_positions(game_state, map_data)
         logger.debug(f"Found {len(warps)} warp positions: {list(warps)[:10]}")  # Show first 10
         for warp_pos in warps:
+            if game_type == "RED":
+                # Red: only unblock the goal warp. Stepping on any other door/stair
+                # tile warps the player into an undesired building.
+                if warp_pos == goal:
+                    was_blocked = warp_pos in blocked
+                    blocked.discard(warp_pos)
+                    if was_blocked:
+                        logger.info(f"🚪 Unblocked goal warp at {warp_pos}")
+                continue
+            # Emerald: unblock all warps (original behavior)
             was_blocked = warp_pos in blocked
             blocked.discard(warp_pos)  # Warps are always walkable
             if was_blocked:
                 logger.info(f"🚪 Unblocked warp at {warp_pos} (was blocked)")
-            # IMPORTANT: Also unblock the tile ABOVE the warp (in case warp was moved down from a D/S tile)
-            # This handles the case where porymap_json_builder adjusted the warp position down by 1
-            above_pos = (warp_pos[0], warp_pos[1] - 1)
-            if above_pos[1] >= 0:  # Check it's not out of bounds
-                was_above_blocked = above_pos in blocked
-                blocked.discard(above_pos)
-                if was_above_blocked:
-                    logger.info(f"🚪 Unblocked position above warp: {above_pos} (warp at {warp_pos}, was blocked)")
+            # Emerald-only: unblock tile ABOVE warp (porymap_json_builder shifts warp coords down by 1)
+            if game_type == "EMERALD":
+                above_pos = (warp_pos[0], warp_pos[1] - 1)
+                if above_pos[1] >= 0:  # Check it's not out of bounds
+                    was_above_blocked = above_pos in blocked
+                    blocked.discard(above_pos)
+                    if was_above_blocked:
+                        logger.info(f"🚪 Unblocked position above warp: {above_pos} (warp at {warp_pos}, was blocked)")
 
         # SAFEGUARD: Explicitly unblock all 'D' (door) and 'S' (stairs) tiles in the grid
-        if "grid" in map_data and map_data.get("type") == "porymap":
+        # Red: skip — D/S are intentionally blocked (stepping on them warps the player)
+        if game_type != "RED" and "grid" in map_data and map_data.get("type") == "porymap":
             grid = map_data["grid"]
             doors_and_stairs = []
             for y, row in enumerate(grid):
@@ -182,6 +194,20 @@ class Pathfinder:
                         doors_and_stairs.append(pos)
             if doors_and_stairs:
                 logger.debug(f"Explicitly unblocked {len(doors_and_stairs)} door/stairs tiles: {doors_and_stairs[:5]}")
+
+        # Red: unblock cuttable trees ('t') adjacent to the player (they can use Cut)
+        if game_type == "RED" and "grid" in map_data:
+            grid = map_data["grid"]
+            for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                adj_pos = (start[0] + dx, start[1] + dy)
+                ax, ay = adj_pos
+                if 0 <= ay < len(grid) and isinstance(grid[ay], (list, str)):
+                    row = grid[ay]
+                    if 0 <= ax < len(row) and row[ax] == "t":
+                        was_blocked = adj_pos in blocked
+                        blocked.discard(adj_pos)
+                        if was_blocked:
+                            logger.info(f"🌳 Unblocked cuttable tree at {adj_pos} (adjacent to player at {start})")
 
         # Ensure start is never blocked
         blocked.discard(start)
@@ -436,6 +462,10 @@ class Pathfinder:
             start_row = grid[start_pos[1]]
             if start_pos[0] < len(start_row):
                 player_in_water = start_row[start_pos[0]] == "W"
+        
+        game_type = os.environ.get("GAME_TYPE", "emerald")
+        red_block_symbols = {"#", "X", "!", "P", "T", "B", "^", "U", "C", "=", "t", "D", "S", "G"}  # "!": sign (blocked); "?": hidden item (walkable); "t": cuttable tree; "D"/"S": doors/stairs (warp player out of map); "G": Card Key gate
+        block_symbols = red_block_symbols if game_type.upper() == "RED" else {"#", "X"}
 
         for y, row in enumerate(grid):
             if isinstance(row, list):
@@ -449,7 +479,7 @@ class Pathfinder:
                     pos = (x, y)
 
                     # Always block walls and out of bounds
-                    if cell in ["#", "X"]:
+                    if cell in block_symbols:
                         # CRITICAL: Never block the starting position - player is there so it must be walkable
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
@@ -564,7 +594,7 @@ class Pathfinder:
                     pos = (x, y)
 
                     # Always block walls and out of bounds
-                    if cell in ["#", "X"]:
+                    if cell in block_symbols:
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
@@ -688,6 +718,8 @@ class Pathfinder:
                     or "WANDER" in movement_type_upper  # WANDER_AROUND
                     or "LOOK" in movement_type_upper  # LOOK_AROUND, LOOK_AROUND_EX
                     or "BERRY" in movement_type_upper  # BERRY_TREE_GROWTH
+                    or "STAY" in movement_type_upper  # pokemon red npc movement
+                    or "WALK" in movement_type_upper  # pokemon red walking npc (position corrected from RAM)
                     or not movement_type
                 ):
                     obj_pos = (obj_x, obj_y)
@@ -824,7 +856,7 @@ class Pathfinder:
         # which already handled elevation connectivity. This allows pathfinding through
         # ladders and slopes that connect different elevations.
         # ========================================================================
-        walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&"]
+        walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&", "*"]
         both_walkable = from_symbol in walkable_symbols and dest_symbol in walkable_symbols
 
         # Skip elevation blocking if both tiles are walkable - trust the filtered grid
@@ -873,17 +905,26 @@ class Pathfinder:
                             to_behavior = to_tile[1] if len(to_tile) > 1 else 0
                             from_behavior = from_tile[1] if len(from_tile) > 1 else 0
 
-                            # Get behavior names
+                            # Get behavior names — use Red's enum for Red maps so that
+                            # RedMetatileBehavior integer codes resolve to the correct names.
+                            # RedMetatileBehavior values deliberately match Emerald's for the
+                            # connector behaviours (LADDER, NON_ANIMATED_DOOR, WARP_*), so
+                            # the substring checks below work identically for both games.
                             to_behavior_name = ""
                             from_behavior_name = ""
                             try:
-                                from pokemon_env.enums import MetatileBehavior
+                                if os.environ.get("GAME_TYPE", "emerald").upper() == "RED":
+                                    from pokemon_red_env.utils.red_metatile_behavior import (
+                                        RedMetatileBehavior as _BehaviorEnum,
+                                    )
+                                else:
+                                    from pokemon_env.enums import MetatileBehavior as _BehaviorEnum
 
                                 if isinstance(to_behavior, int):
-                                    to_behavior_name = MetatileBehavior(to_behavior).name
+                                    to_behavior_name = _BehaviorEnum(to_behavior).name
                                 if isinstance(from_behavior, int):
-                                    from_behavior_name = MetatileBehavior(from_behavior).name
-                            except:
+                                    from_behavior_name = _BehaviorEnum(from_behavior).name
+                            except Exception:
                                 pass
 
                             # Check if destination has stair/ladder/door behavior

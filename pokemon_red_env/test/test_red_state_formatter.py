@@ -138,10 +138,10 @@ def make_red_map_info(visual_map=None, map_source=None, include_whole_map=False,
             "raw_tiles": raw_tiles_wm,
             "elevation_map": [[0] * len(tiles[0])] * len(tiles),
             "behavior_map": [[t[1] for t in row] for row in tiles],
-            "special_tiles": {"WARP": [{"x": 2, "y": 9, "elevation": 0},
-                                       {"x": 3, "y": 9, "elevation": 0}]},
-            "warps": warps,
-            "objects": [{"x": 5, "y": 2, "sprite_name": "SPRITE_OAK",
+            "warp_events": [{"x": 2, "y": 9, "elevation": 0, "dest_map": "", "dest_warp_id": 0},
+                            {"x": 3, "y": 9, "elevation": 0, "dest_map": "", "dest_warp_id": 0}],
+            "bg_events": [],
+            "objects": [{"x": 5, "y": 2, "elevation": 0, "sprite_name": "SPRITE_OAK",
                          "facing": "down", "graphics_id": 3}],
         }
 
@@ -571,9 +571,9 @@ def test_with_real_states():
                                        "height": len(tiles)},
                         "grid": grid,
                         "raw_tiles": raw_tiles_wm,
-                        "warps": [],
+                        "warp_events": [],
+                        "bg_events": [],
                         "objects": [],
-                        "special_tiles": {},
                     }
                 # Also keep visual_map as fallback
                 if "visual_map" not in data["map"]:

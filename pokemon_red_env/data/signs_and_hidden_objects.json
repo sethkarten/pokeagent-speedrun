@@ -1,0 +1,870 @@
+{
+  "signs": {
+    "CeladonCity": [
+      "CELADONCITY_DEPTSTORE_SIGN",
+      "CELADONCITY_GAMECORNER_SIGN",
+      "CELADONCITY_GYM_SIGN",
+      "CELADONCITY_MANSION_SIGN",
+      "CELADONCITY_POKECENTER_SIGN",
+      "CELADONCITY_PRIZEEXCHANGE_SIGN",
+      "CELADONCITY_SIGN",
+      "CELADONCITY_TRAINER_TIPS1",
+      "CELADONCITY_TRAINER_TIPS2"
+    ],
+    "CeladonMansion1F": [
+      "CELADONMANSION1F_MANAGERS_SUITE_SIGN"
+    ],
+    "CeladonMansion2F": [
+      "CELADONMANSION2F_MEETING_ROOM_SIGN"
+    ],
+    "CeladonMansion3F": [
+      "CELADONMANSION3F_DEV_ROOM_SIGN",
+      "CELADONMANSION3F_GAME_PROGRAM_PC",
+      "CELADONMANSION3F_GAME_SCRIPT_PC",
+      "CELADONMANSION3F_PLAYING_GAME_PC"
+    ],
+    "CeladonMansionRoof": [
+      "CELADONMANSIONROOF_HOUSE_SIGN"
+    ],
+    "CeladonMart1F": [
+      "CELADONMART1F_CURRENT_FLOOR_SIGN",
+      "CELADONMART1F_DIRECTORY_SIGN"
+    ],
+    "CeladonMart2F": [
+      "CELADONMART2F_CURRENT_FLOOR_SIGN"
+    ],
+    "CeladonMart3F": [
+      "CELADONMART3F_CURRENT_FLOOR_SIGN",
+      "CELADONMART3F_FIGHTING_GAME",
+      "CELADONMART3F_POKEMON_POSTER1",
+      "CELADONMART3F_POKEMON_POSTER2",
+      "CELADONMART3F_POKEMON_POSTER3",
+      "CELADONMART3F_PUZZLE_GAME",
+      "CELADONMART3F_RPG",
+      "CELADONMART3F_SNES1",
+      "CELADONMART3F_SNES2",
+      "CELADONMART3F_SNES3",
+      "CELADONMART3F_SNES4",
+      "CELADONMART3F_SPORTS_GAME"
+    ],
+    "CeladonMart4F": [
+      "CELADONMART4F_CURRENT_FLOOR_SIGN"
+    ],
+    "CeladonMart5F": [
+      "CELADONMART5F_CURRENT_FLOOR_SIGN"
+    ],
+    "CeladonMartElevator": [
+      "CELADONMARTELEVATOR"
+    ],
+    "CeladonMartRoof": [
+      "CELADONMARTROOF_CURRENT_FLOOR_SIGN",
+      "CELADONMARTROOF_VENDING_MACHINE1",
+      "CELADONMARTROOF_VENDING_MACHINE2",
+      "CELADONMARTROOF_VENDING_MACHINE3"
+    ],
+    "CeruleanCity": [
+      "CERULEANCITY_BIKESHOP_SIGN",
+      "CERULEANCITY_GYM_SIGN",
+      "CERULEANCITY_MART_SIGN",
+      "CERULEANCITY_POKECENTER_SIGN",
+      "CERULEANCITY_SIGN",
+      "CERULEANCITY_TRAINER_TIPS"
+    ],
+    "CeruleanTrashedHouse": [
+      "CERULEANTRASHEDHOUSE_WALL_HOLE"
+    ],
+    "CinnabarIsland": [
+      "CINNABARISLAND_GYM_SIGN",
+      "CINNABARISLAND_MART_SIGN",
+      "CINNABARISLAND_POKECENTER_SIGN",
+      "CINNABARISLAND_POKEMONLAB_SIGN",
+      "CINNABARISLAND_SIGN"
+    ],
+    "CinnabarLab": [
+      "CINNABARLAB_MEETING_ROOM_SIGN",
+      "CINNABARLAB_PHOTO",
+      "CINNABARLAB_R_AND_D_SIGN",
+      "CINNABARLAB_TESTING_ROOM_SIGN"
+    ],
+    "CinnabarLabMetronomeRoom": [
+      "CINNABARLABMETRONOMEROOM_AMBER_PIPE",
+      "CINNABARLABMETRONOMEROOM_PC_KEYBOARD",
+      "CINNABARLABMETRONOMEROOM_PC_MONITOR"
+    ],
+    "CopycatsHouse2F": [
+      "COPYCATSHOUSE2F_PC",
+      "COPYCATSHOUSE2F_SNES"
+    ],
+    "FuchsiaCity": [
+      "FUCHSIACITY_CHANSEY_SIGN",
+      "FUCHSIACITY_FOSSIL_SIGN",
+      "FUCHSIACITY_GYM_SIGN",
+      "FUCHSIACITY_KANGASKHAN_SIGN",
+      "FUCHSIACITY_LAPRAS_SIGN",
+      "FUCHSIACITY_MART_SIGN",
+      "FUCHSIACITY_POKECENTER_SIGN",
+      "FUCHSIACITY_SAFARI_GAME_SIGN",
+      "FUCHSIACITY_SAFARI_ZONE_SIGN",
+      "FUCHSIACITY_SIGN1",
+      "FUCHSIACITY_SIGN2",
+      "FUCHSIACITY_SLOWPOKE_SIGN",
+      "FUCHSIACITY_VOLTORB_SIGN",
+      "FUCHSIACITY_WARDENS_HOME_SIGN"
+    ],
+    "GameCorner": [
+      "GAMECORNER_POSTER"
+    ],
+    "GameCornerPrizeRoom": [
+      "GAMECORNERPRIZEROOM_PRIZE_VENDOR_1",
+      "GAMECORNERPRIZEROOM_PRIZE_VENDOR_2",
+      "GAMECORNERPRIZEROOM_PRIZE_VENDOR_3"
+    ],
+    "LavenderTown": [
+      "LAVENDERTOWN_MART_SIGN",
+      "LAVENDERTOWN_POKECENTER_SIGN",
+      "LAVENDERTOWN_POKEMON_HOUSE_SIGN",
+      "LAVENDERTOWN_POKEMON_TOWER_SIGN",
+      "LAVENDERTOWN_SIGN",
+      "LAVENDERTOWN_SILPH_SCOPE_SIGN"
+    ],
+    "MtMoon1F": [
+      "MTMOON1F_BEWARE_ZUBAT_SIGN"
+    ],
+    "Museum2F": [
+      "MUSEUM2F_MOON_STONE_SIGN",
+      "MUSEUM2F_SPACE_SHUTTLE_SIGN"
+    ],
+    "PalletTown": [
+      "PALLETTOWN_OAKSLAB_SIGN",
+      "PALLETTOWN_PLAYERSHOUSE_SIGN",
+      "PALLETTOWN_RIVALSHOUSE_SIGN",
+      "PALLETTOWN_SIGN"
+    ],
+    "PewterCity": [
+      "PEWTERCITY_GYM_SIGN",
+      "PEWTERCITY_MART_SIGN",
+      "PEWTERCITY_MUSEUM_SIGN",
+      "PEWTERCITY_POKECENTER_SIGN",
+      "PEWTERCITY_POLICE_NOTICE_SIGN",
+      "PEWTERCITY_SIGN",
+      "PEWTERCITY_TRAINER_TIPS"
+    ],
+    "PokemonFanClub": [
+      "POKEMONFANCLUB_SIGN_1",
+      "POKEMONFANCLUB_SIGN_2"
+    ],
+    "RedsHouse1F": [
+      "REDSHOUSE1F_TV"
+    ],
+    "RockTunnel1F": [
+      "ROCKTUNNEL1F_SIGN"
+    ],
+    "RocketHideoutElevator": [
+      "ROCKETHIDEOUTELEVATOR"
+    ],
+    "Route1": [
+      "ROUTE1_SIGN"
+    ],
+    "Route10": [
+      "ROUTE10_POKECENTER_SIGN",
+      "ROUTE10_POWERPLANT_SIGN",
+      "ROUTE10_ROCKTUNNEL_NORTH_SIGN",
+      "ROUTE10_ROCKTUNNEL_SOUTH_SIGN"
+    ],
+    "Route11": [
+      "ROUTE11_DIGLETTSCAVE_SIGN"
+    ],
+    "Route11Gate2F": [
+      "ROUTE11GATE2F_LEFT_BINOCULARS",
+      "ROUTE11GATE2F_RIGHT_BINOCULARS"
+    ],
+    "Route12": [
+      "ROUTE12_SIGN",
+      "ROUTE12_SPORT_FISHING_SIGN"
+    ],
+    "Route12Gate2F": [
+      "ROUTE12GATE2F_LEFT_BINOCULARS",
+      "ROUTE12GATE2F_RIGHT_BINOCULARS"
+    ],
+    "Route13": [
+      "ROUTE13_SIGN",
+      "ROUTE13_TRAINER_TIPS1",
+      "ROUTE13_TRAINER_TIPS2"
+    ],
+    "Route14": [
+      "ROUTE14_SIGN"
+    ],
+    "Route15": [
+      "ROUTE15_SIGN"
+    ],
+    "Route15Gate2F": [
+      "ROUTE15GATE2F_BINOCULARS"
+    ],
+    "Route16": [
+      "ROUTE16_CYCLING_ROAD_SIGN",
+      "ROUTE16_SIGN"
+    ],
+    "Route16Gate2F": [
+      "ROUTE16GATE2F_LEFT_BINOCULARS",
+      "ROUTE16GATE2F_RIGHT_BINOCULARS"
+    ],
+    "Route17": [
+      "ROUTE17_CYCLING_ROAD_ENDS_SIGN",
+      "ROUTE17_NOTICE_SIGN1",
+      "ROUTE17_NOTICE_SIGN2",
+      "ROUTE17_SIGN",
+      "ROUTE17_TRAINER_TIPS1",
+      "ROUTE17_TRAINER_TIPS2"
+    ],
+    "Route18": [
+      "ROUTE18_CYCLING_ROAD_SIGN",
+      "ROUTE18_SIGN"
+    ],
+    "Route18Gate2F": [
+      "ROUTE18GATE2F_LEFT_BINOCULARS",
+      "ROUTE18GATE2F_RIGHT_BINOCULARS"
+    ],
+    "Route19": [
+      "ROUTE19_SIGN"
+    ],
+    "Route2": [
+      "ROUTE2_DIGLETTS_CAVE_SIGN",
+      "ROUTE2_SIGN"
+    ],
+    "Route20": [
+      "ROUTE20_SEAFOAM_ISLANDS_EAST_SIGN",
+      "ROUTE20_SEAFOAM_ISLANDS_WEST_SIGN"
+    ],
+    "Route22": [
+      "ROUTE22_POKEMON_LEAGUE_SIGN"
+    ],
+    "Route23": [
+      "ROUTE23_VICTORY_ROAD_GATE_SIGN"
+    ],
+    "Route25": [
+      "ROUTE25_BILL_SIGN"
+    ],
+    "Route3": [
+      "ROUTE3_SIGN"
+    ],
+    "Route4": [
+      "ROUTE4_MT_MOON_SIGN",
+      "ROUTE4_POKECENTER_SIGN",
+      "ROUTE4_SIGN"
+    ],
+    "Route5": [
+      "ROUTE5_UNDERGROUND_PATH_SIGN"
+    ],
+    "Route6": [
+      "ROUTE6_UNDERGROUND_PATH_SIGN"
+    ],
+    "Route7": [
+      "ROUTE7_UNDERGROUND_PATH_SIGN"
+    ],
+    "Route8": [
+      "ROUTE8_UNDERGROUND_SIGN"
+    ],
+    "Route9": [
+      "ROUTE9_SIGN"
+    ],
+    "SSAnneCaptainsRoom": [
+      "SSANNECAPTAINSROOM_SEASICK_BOOK",
+      "SSANNECAPTAINSROOM_TRASH"
+    ],
+    "SafariZoneCenter": [
+      "SAFARIZONECENTER_REST_HOUSE_SIGN",
+      "SAFARIZONECENTER_TRAINER_TIPS_SIGN"
+    ],
+    "SafariZoneEast": [
+      "SAFARIZONEEAST_REST_HOUSE_SIGN",
+      "SAFARIZONEEAST_SIGN",
+      "SAFARIZONEEAST_TRAINER_TIPS"
+    ],
+    "SafariZoneNorth": [
+      "SAFARIZONENORTH_REST_HOUSE_SIGN",
+      "SAFARIZONENORTH_SIGN",
+      "SAFARIZONENORTH_TRAINER_TIPS_1",
+      "SAFARIZONENORTH_TRAINER_TIPS_2",
+      "SAFARIZONENORTH_TRAINER_TIPS_3"
+    ],
+    "SafariZoneWest": [
+      "SAFARIZONEWEST_FIND_WARDENS_TEETH_SIGN",
+      "SAFARIZONEWEST_REST_HOUSE_SIGN",
+      "SAFARIZONEWEST_SIGN",
+      "SAFARIZONEWEST_TRAINER_TIPS"
+    ],
+    "SaffronCity": [
+      "SAFFRONCITY_FIGHTING_DOJO_SIGN",
+      "SAFFRONCITY_GYM_SIGN",
+      "SAFFRONCITY_MART_SIGN",
+      "SAFFRONCITY_MR_PSYCHICS_HOUSE_SIGN",
+      "SAFFRONCITY_POKECENTER_SIGN",
+      "SAFFRONCITY_SIGN",
+      "SAFFRONCITY_SILPH_CO_LATEST_PRODUCT_SIGN",
+      "SAFFRONCITY_SILPH_CO_SIGN",
+      "SAFFRONCITY_TRAINER_TIPS1",
+      "SAFFRONCITY_TRAINER_TIPS2"
+    ],
+    "SeafoamIslandsB4F": [
+      "SEAFOAMISLANDSB4F_BOULDERS_SIGN",
+      "SEAFOAMISLANDSB4F_DANGER_SIGN"
+    ],
+    "SilphCoElevator": [
+      "SILPHCOELEVATOR_ELEVATOR"
+    ],
+    "VermilionCity": [
+      "VERMILIONCITY_GYM_SIGN",
+      "VERMILIONCITY_HARBOR_SIGN",
+      "VERMILIONCITY_MART_SIGN",
+      "VERMILIONCITY_NOTICE_SIGN",
+      "VERMILIONCITY_POKECENTER_SIGN",
+      "VERMILIONCITY_POKEMON_FAN_CLUB_SIGN",
+      "VERMILIONCITY_SIGN"
+    ],
+    "ViridianCity": [
+      "VIRIDIANCITY_GYM_SIGN",
+      "VIRIDIANCITY_MART_SIGN",
+      "VIRIDIANCITY_POKECENTER_SIGN",
+      "VIRIDIANCITY_SIGN",
+      "VIRIDIANCITY_TRAINER_TIPS1",
+      "VIRIDIANCITY_TRAINER_TIPS2"
+    ],
+    "ViridianForest": [
+      "VIRIDIANFOREST_LEAVING_SIGN",
+      "VIRIDIANFOREST_TRAINER_TIPS1",
+      "VIRIDIANFOREST_TRAINER_TIPS2",
+      "VIRIDIANFOREST_TRAINER_TIPS3",
+      "VIRIDIANFOREST_TRAINER_TIPS4",
+      "VIRIDIANFOREST_USE_ANTIDOTE_SIGN"
+    ],
+    "WardensHouse": [
+      "WARDENSHOUSE_DISPLAY_LEFT",
+      "WARDENSHOUSE_DISPLAY_RIGHT"
+    ]
+  },
+  "all_sign_text_ids": [
+    "CELADONCITY_DEPTSTORE_SIGN",
+    "CELADONCITY_GAMECORNER_SIGN",
+    "CELADONCITY_GYM_SIGN",
+    "CELADONCITY_MANSION_SIGN",
+    "CELADONCITY_POKECENTER_SIGN",
+    "CELADONCITY_PRIZEEXCHANGE_SIGN",
+    "CELADONCITY_SIGN",
+    "CELADONCITY_TRAINER_TIPS1",
+    "CELADONCITY_TRAINER_TIPS2",
+    "CELADONMANSION1F_MANAGERS_SUITE_SIGN",
+    "CELADONMANSION2F_MEETING_ROOM_SIGN",
+    "CELADONMANSION3F_DEV_ROOM_SIGN",
+    "CELADONMANSION3F_GAME_PROGRAM_PC",
+    "CELADONMANSION3F_GAME_SCRIPT_PC",
+    "CELADONMANSION3F_PLAYING_GAME_PC",
+    "CELADONMANSIONROOF_HOUSE_SIGN",
+    "CELADONMART1F_CURRENT_FLOOR_SIGN",
+    "CELADONMART1F_DIRECTORY_SIGN",
+    "CELADONMART2F_CURRENT_FLOOR_SIGN",
+    "CELADONMART3F_CURRENT_FLOOR_SIGN",
+    "CELADONMART3F_FIGHTING_GAME",
+    "CELADONMART3F_POKEMON_POSTER1",
+    "CELADONMART3F_POKEMON_POSTER2",
+    "CELADONMART3F_POKEMON_POSTER3",
+    "CELADONMART3F_PUZZLE_GAME",
+    "CELADONMART3F_RPG",
+    "CELADONMART3F_SNES1",
+    "CELADONMART3F_SNES2",
+    "CELADONMART3F_SNES3",
+    "CELADONMART3F_SNES4",
+    "CELADONMART3F_SPORTS_GAME",
+    "CELADONMART4F_CURRENT_FLOOR_SIGN",
+    "CELADONMART5F_CURRENT_FLOOR_SIGN",
+    "CELADONMARTELEVATOR",
+    "CELADONMARTROOF_CURRENT_FLOOR_SIGN",
+    "CELADONMARTROOF_VENDING_MACHINE1",
+    "CELADONMARTROOF_VENDING_MACHINE2",
+    "CELADONMARTROOF_VENDING_MACHINE3",
+    "CERULEANCITY_BIKESHOP_SIGN",
+    "CERULEANCITY_GYM_SIGN",
+    "CERULEANCITY_MART_SIGN",
+    "CERULEANCITY_POKECENTER_SIGN",
+    "CERULEANCITY_SIGN",
+    "CERULEANCITY_TRAINER_TIPS",
+    "CERULEANTRASHEDHOUSE_WALL_HOLE",
+    "CINNABARISLAND_GYM_SIGN",
+    "CINNABARISLAND_MART_SIGN",
+    "CINNABARISLAND_POKECENTER_SIGN",
+    "CINNABARISLAND_POKEMONLAB_SIGN",
+    "CINNABARISLAND_SIGN",
+    "CINNABARLABMETRONOMEROOM_AMBER_PIPE",
+    "CINNABARLABMETRONOMEROOM_PC_KEYBOARD",
+    "CINNABARLABMETRONOMEROOM_PC_MONITOR",
+    "CINNABARLAB_MEETING_ROOM_SIGN",
+    "CINNABARLAB_PHOTO",
+    "CINNABARLAB_R_AND_D_SIGN",
+    "CINNABARLAB_TESTING_ROOM_SIGN",
+    "COPYCATSHOUSE2F_PC",
+    "COPYCATSHOUSE2F_SNES",
+    "FUCHSIACITY_CHANSEY_SIGN",
+    "FUCHSIACITY_FOSSIL_SIGN",
+    "FUCHSIACITY_GYM_SIGN",
+    "FUCHSIACITY_KANGASKHAN_SIGN",
+    "FUCHSIACITY_LAPRAS_SIGN",
+    "FUCHSIACITY_MART_SIGN",
+    "FUCHSIACITY_POKECENTER_SIGN",
+    "FUCHSIACITY_SAFARI_GAME_SIGN",
+    "FUCHSIACITY_SAFARI_ZONE_SIGN",
+    "FUCHSIACITY_SIGN1",
+    "FUCHSIACITY_SIGN2",
+    "FUCHSIACITY_SLOWPOKE_SIGN",
+    "FUCHSIACITY_VOLTORB_SIGN",
+    "FUCHSIACITY_WARDENS_HOME_SIGN",
+    "GAMECORNERPRIZEROOM_PRIZE_VENDOR_1",
+    "GAMECORNERPRIZEROOM_PRIZE_VENDOR_2",
+    "GAMECORNERPRIZEROOM_PRIZE_VENDOR_3",
+    "GAMECORNER_POSTER",
+    "LAVENDERTOWN_MART_SIGN",
+    "LAVENDERTOWN_POKECENTER_SIGN",
+    "LAVENDERTOWN_POKEMON_HOUSE_SIGN",
+    "LAVENDERTOWN_POKEMON_TOWER_SIGN",
+    "LAVENDERTOWN_SIGN",
+    "LAVENDERTOWN_SILPH_SCOPE_SIGN",
+    "MTMOON1F_BEWARE_ZUBAT_SIGN",
+    "MUSEUM2F_MOON_STONE_SIGN",
+    "MUSEUM2F_SPACE_SHUTTLE_SIGN",
+    "PALLETTOWN_OAKSLAB_SIGN",
+    "PALLETTOWN_PLAYERSHOUSE_SIGN",
+    "PALLETTOWN_RIVALSHOUSE_SIGN",
+    "PALLETTOWN_SIGN",
+    "PEWTERCITY_GYM_SIGN",
+    "PEWTERCITY_MART_SIGN",
+    "PEWTERCITY_MUSEUM_SIGN",
+    "PEWTERCITY_POKECENTER_SIGN",
+    "PEWTERCITY_POLICE_NOTICE_SIGN",
+    "PEWTERCITY_SIGN",
+    "PEWTERCITY_TRAINER_TIPS",
+    "POKEMONFANCLUB_SIGN_1",
+    "POKEMONFANCLUB_SIGN_2",
+    "REDSHOUSE1F_TV",
+    "ROCKETHIDEOUTELEVATOR",
+    "ROCKTUNNEL1F_SIGN",
+    "ROUTE10_POKECENTER_SIGN",
+    "ROUTE10_POWERPLANT_SIGN",
+    "ROUTE10_ROCKTUNNEL_NORTH_SIGN",
+    "ROUTE10_ROCKTUNNEL_SOUTH_SIGN",
+    "ROUTE11GATE2F_LEFT_BINOCULARS",
+    "ROUTE11GATE2F_RIGHT_BINOCULARS",
+    "ROUTE11_DIGLETTSCAVE_SIGN",
+    "ROUTE12GATE2F_LEFT_BINOCULARS",
+    "ROUTE12GATE2F_RIGHT_BINOCULARS",
+    "ROUTE12_SIGN",
+    "ROUTE12_SPORT_FISHING_SIGN",
+    "ROUTE13_SIGN",
+    "ROUTE13_TRAINER_TIPS1",
+    "ROUTE13_TRAINER_TIPS2",
+    "ROUTE14_SIGN",
+    "ROUTE15GATE2F_BINOCULARS",
+    "ROUTE15_SIGN",
+    "ROUTE16GATE2F_LEFT_BINOCULARS",
+    "ROUTE16GATE2F_RIGHT_BINOCULARS",
+    "ROUTE16_CYCLING_ROAD_SIGN",
+    "ROUTE16_SIGN",
+    "ROUTE17_CYCLING_ROAD_ENDS_SIGN",
+    "ROUTE17_NOTICE_SIGN1",
+    "ROUTE17_NOTICE_SIGN2",
+    "ROUTE17_SIGN",
+    "ROUTE17_TRAINER_TIPS1",
+    "ROUTE17_TRAINER_TIPS2",
+    "ROUTE18GATE2F_LEFT_BINOCULARS",
+    "ROUTE18GATE2F_RIGHT_BINOCULARS",
+    "ROUTE18_CYCLING_ROAD_SIGN",
+    "ROUTE18_SIGN",
+    "ROUTE19_SIGN",
+    "ROUTE1_SIGN",
+    "ROUTE20_SEAFOAM_ISLANDS_EAST_SIGN",
+    "ROUTE20_SEAFOAM_ISLANDS_WEST_SIGN",
+    "ROUTE22_POKEMON_LEAGUE_SIGN",
+    "ROUTE23_VICTORY_ROAD_GATE_SIGN",
+    "ROUTE25_BILL_SIGN",
+    "ROUTE2_DIGLETTS_CAVE_SIGN",
+    "ROUTE2_SIGN",
+    "ROUTE3_SIGN",
+    "ROUTE4_MT_MOON_SIGN",
+    "ROUTE4_POKECENTER_SIGN",
+    "ROUTE4_SIGN",
+    "ROUTE5_UNDERGROUND_PATH_SIGN",
+    "ROUTE6_UNDERGROUND_PATH_SIGN",
+    "ROUTE7_UNDERGROUND_PATH_SIGN",
+    "ROUTE8_UNDERGROUND_SIGN",
+    "ROUTE9_SIGN",
+    "SAFARIZONECENTER_REST_HOUSE_SIGN",
+    "SAFARIZONECENTER_TRAINER_TIPS_SIGN",
+    "SAFARIZONEEAST_REST_HOUSE_SIGN",
+    "SAFARIZONEEAST_SIGN",
+    "SAFARIZONEEAST_TRAINER_TIPS",
+    "SAFARIZONENORTH_REST_HOUSE_SIGN",
+    "SAFARIZONENORTH_SIGN",
+    "SAFARIZONENORTH_TRAINER_TIPS_1",
+    "SAFARIZONENORTH_TRAINER_TIPS_2",
+    "SAFARIZONENORTH_TRAINER_TIPS_3",
+    "SAFARIZONEWEST_FIND_WARDENS_TEETH_SIGN",
+    "SAFARIZONEWEST_REST_HOUSE_SIGN",
+    "SAFARIZONEWEST_SIGN",
+    "SAFARIZONEWEST_TRAINER_TIPS",
+    "SAFFRONCITY_FIGHTING_DOJO_SIGN",
+    "SAFFRONCITY_GYM_SIGN",
+    "SAFFRONCITY_MART_SIGN",
+    "SAFFRONCITY_MR_PSYCHICS_HOUSE_SIGN",
+    "SAFFRONCITY_POKECENTER_SIGN",
+    "SAFFRONCITY_SIGN",
+    "SAFFRONCITY_SILPH_CO_LATEST_PRODUCT_SIGN",
+    "SAFFRONCITY_SILPH_CO_SIGN",
+    "SAFFRONCITY_TRAINER_TIPS1",
+    "SAFFRONCITY_TRAINER_TIPS2",
+    "SEAFOAMISLANDSB4F_BOULDERS_SIGN",
+    "SEAFOAMISLANDSB4F_DANGER_SIGN",
+    "SILPHCOELEVATOR_ELEVATOR",
+    "SSANNECAPTAINSROOM_SEASICK_BOOK",
+    "SSANNECAPTAINSROOM_TRASH",
+    "VERMILIONCITY_GYM_SIGN",
+    "VERMILIONCITY_HARBOR_SIGN",
+    "VERMILIONCITY_MART_SIGN",
+    "VERMILIONCITY_NOTICE_SIGN",
+    "VERMILIONCITY_POKECENTER_SIGN",
+    "VERMILIONCITY_POKEMON_FAN_CLUB_SIGN",
+    "VERMILIONCITY_SIGN",
+    "VIRIDIANCITY_GYM_SIGN",
+    "VIRIDIANCITY_MART_SIGN",
+    "VIRIDIANCITY_POKECENTER_SIGN",
+    "VIRIDIANCITY_SIGN",
+    "VIRIDIANCITY_TRAINER_TIPS1",
+    "VIRIDIANCITY_TRAINER_TIPS2",
+    "VIRIDIANFOREST_LEAVING_SIGN",
+    "VIRIDIANFOREST_TRAINER_TIPS1",
+    "VIRIDIANFOREST_TRAINER_TIPS2",
+    "VIRIDIANFOREST_TRAINER_TIPS3",
+    "VIRIDIANFOREST_TRAINER_TIPS4",
+    "VIRIDIANFOREST_USE_ANTIDOTE_SIGN",
+    "WARDENSHOUSE_DISPLAY_LEFT",
+    "WARDENSHOUSE_DISPLAY_RIGHT"
+  ],
+  "hidden_objects": {
+    "TRADE_CENTER": [
+      "CableClubLeftGameboy",
+      "CableClubRightGameboy"
+    ],
+    "COLOSSEUM": [
+      "CableClubLeftGameboy",
+      "CableClubRightGameboy"
+    ],
+    "REDS_HOUSE_2F": [
+      "OpenRedsPC",
+      "PrintRedSNESText"
+    ],
+    "BLUES_HOUSE": [
+      "PrintBookcaseText"
+    ],
+    "OAKS_LAB": [
+      "DisplayOakLabEmailText",
+      "DisplayOakLabLeftPoster",
+      "DisplayOakLabRightPoster"
+    ],
+    "VIRIDIAN_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "VIRIDIAN_SCHOOL_HOUSE": [
+      "PrintBlackboardLinkCableText",
+      "PrintNotebookText"
+    ],
+    "VIRIDIAN_GYM": [
+      "GymStatues"
+    ],
+    "MUSEUM_1F": [
+      "AerodactylFossil",
+      "KabutopsFossil"
+    ],
+    "PEWTER_GYM": [
+      "GymStatues"
+    ],
+    "PEWTER_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "CERULEAN_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "CERULEAN_GYM": [
+      "GymStatues"
+    ],
+    "LAVENDER_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "VERMILION_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "VERMILION_GYM": [
+      "GymStatues",
+      "GymTrashScript",
+      "PrintTrashText"
+    ],
+    "CELADON_MANSION_2F": [
+      "OpenPokemonCenterPC"
+    ],
+    "CELADON_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "CELADON_GYM": [
+      "GymStatues"
+    ],
+    "GAME_CORNER": [
+      "HiddenCoins",
+      "StartSlotMachine"
+    ],
+    "CELADON_HOTEL": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "FUCHSIA_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "FUCHSIA_GYM": [
+      "GymStatues"
+    ],
+    "CINNABAR_GYM": [
+      "GymStatues",
+      "PrintCinnabarQuiz"
+    ],
+    "CINNABAR_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "SAFFRON_GYM": [
+      "GymStatues"
+    ],
+    "MT_MOON_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "ROCK_TUNNEL_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "VIRIDIAN_FOREST": [
+      "HiddenItems"
+    ],
+    "MT_MOON_B2F": [
+      "HiddenItems"
+    ],
+    "INDIGO_PLATEAU": [
+      "PrintIndigoPlateauHQText"
+    ],
+    "ROUTE_25": [
+      "HiddenItems"
+    ],
+    "ROUTE_9": [
+      "HiddenItems"
+    ],
+    "SS_ANNE_KITCHEN": [
+      "HiddenItems",
+      "PrintTrashText"
+    ],
+    "SS_ANNE_B1F_ROOMS": [
+      "HiddenItems"
+    ],
+    "ROUTE_10": [
+      "HiddenItems"
+    ],
+    "ROCKET_HIDEOUT_B1F": [
+      "HiddenItems"
+    ],
+    "ROCKET_HIDEOUT_B3F": [
+      "HiddenItems"
+    ],
+    "ROCKET_HIDEOUT_B4F": [
+      "HiddenItems"
+    ],
+    "SAFFRON_POKECENTER": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "POKEMON_TOWER_5F": [
+      "HiddenItems"
+    ],
+    "ROUTE_13": [
+      "HiddenItems"
+    ],
+    "SAFARI_ZONE_GATE": [
+      "HiddenItems"
+    ],
+    "SAFARI_ZONE_WEST": [
+      "HiddenItems"
+    ],
+    "SILPH_CO_5F": [
+      "HiddenItems"
+    ],
+    "SILPH_CO_9F": [
+      "HiddenItems"
+    ],
+    "COPYCATS_HOUSE_2F": [
+      "HiddenItems"
+    ],
+    "CERULEAN_CAVE_1F": [
+      "HiddenItems"
+    ],
+    "CERULEAN_CAVE_B1F": [
+      "HiddenItems"
+    ],
+    "POWER_PLANT": [
+      "HiddenItems"
+    ],
+    "SEAFOAM_ISLANDS_B2F": [
+      "HiddenItems"
+    ],
+    "SEAFOAM_ISLANDS_B4F": [
+      "HiddenItems"
+    ],
+    "POKEMON_MANSION_1F": [
+      "HiddenItems",
+      "Mansion1Script_Switches"
+    ],
+    "POKEMON_MANSION_2F": [
+      "Mansion2Script_Switches"
+    ],
+    "POKEMON_MANSION_3F": [
+      "HiddenItems",
+      "Mansion3Script_Switches"
+    ],
+    "POKEMON_MANSION_B1F": [
+      "HiddenItems",
+      "Mansion4Script_Switches"
+    ],
+    "ROUTE_23": [
+      "HiddenItems"
+    ],
+    "VICTORY_ROAD_2F": [
+      "HiddenItems"
+    ],
+    "UNUSED_MAP_6F": [
+      "HiddenItems"
+    ],
+    "BILLS_HOUSE": [
+      "BillsHousePC"
+    ],
+    "VIRIDIAN_CITY": [
+      "HiddenItems"
+    ],
+    "SAFARI_ZONE_WEST_REST_HOUSE": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "SAFARI_ZONE_EAST_REST_HOUSE": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "SAFARI_ZONE_NORTH_REST_HOUSE": [
+      "OpenPokemonCenterPC",
+      "PrintBenchGuyText"
+    ],
+    "ROUTE_15_GATE_2F": [
+      "Route15GateLeftBinoculars"
+    ],
+    "MR_FUJIS_HOUSE": [
+      "PrintMagazinesText"
+    ],
+    "CELADON_MANSION_ROOF_HOUSE": [
+      "PrintBlackboardLinkCableText",
+      "PrintNotebookText"
+    ],
+    "FIGHTING_DOJO": [
+      "PrintFightingDojoText",
+      "PrintFightingDojoText2",
+      "PrintFightingDojoText3"
+    ],
+    "INDIGO_PLATEAU_LOBBY": [
+      "OpenPokemonCenterPC"
+    ],
+    "CINNABAR_LAB_FOSSIL_ROOM": [
+      "OpenPokemonCenterPC"
+    ],
+    "BIKE_SHOP": [
+      "PrintNewBikeText"
+    ],
+    "ROUTE_11": [
+      "HiddenItems"
+    ],
+    "ROUTE_12": [
+      "HiddenItems"
+    ],
+    "SILPH_CO_11F": [
+      "OpenPokemonCenterPC"
+    ],
+    "ROUTE_17": [
+      "HiddenItems"
+    ],
+    "UNDERGROUND_PATH_NORTH_SOUTH": [
+      "HiddenItems"
+    ],
+    "UNDERGROUND_PATH_WEST_EAST": [
+      "HiddenItems"
+    ],
+    "CELADON_CITY": [
+      "HiddenItems"
+    ],
+    "SEAFOAM_ISLANDS_B3F": [
+      "HiddenItems"
+    ],
+    "VERMILION_CITY": [
+      "HiddenItems"
+    ],
+    "CERULEAN_CITY": [
+      "HiddenItems"
+    ],
+    "ROUTE_4": [
+      "HiddenItems"
+    ]
+  },
+  "all_hidden_object_functions": [
+    "AerodactylFossil",
+    "BillsHousePC",
+    "CableClubLeftGameboy",
+    "CableClubRightGameboy",
+    "DisplayOakLabEmailText",
+    "DisplayOakLabLeftPoster",
+    "DisplayOakLabRightPoster",
+    "GymStatues",
+    "GymTrashScript",
+    "HiddenCoins",
+    "HiddenItems",
+    "KabutopsFossil",
+    "Mansion1Script_Switches",
+    "Mansion2Script_Switches",
+    "Mansion3Script_Switches",
+    "Mansion4Script_Switches",
+    "OpenPokemonCenterPC",
+    "OpenRedsPC",
+    "PrintBenchGuyText",
+    "PrintBlackboardLinkCableText",
+    "PrintBookcaseText",
+    "PrintCinnabarQuiz",
+    "PrintFightingDojoText",
+    "PrintFightingDojoText2",
+    "PrintFightingDojoText3",
+    "PrintIndigoPlateauHQText",
+    "PrintMagazinesText",
+    "PrintNewBikeText",
+    "PrintNotebookText",
+    "PrintRedSNESText",
+    "PrintTrashText",
+    "Route15GateLeftBinoculars",
+    "StartSlotMachine"
+  ],
+  "_stats": {
+    "maps_with_signs": 70,
+    "total_unique_sign_text_ids": 201,
+    "maps_with_hidden_objects": 82,
+    "total_unique_hidden_functions": 33
+  }
+}

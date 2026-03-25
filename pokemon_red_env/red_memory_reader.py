@@ -376,7 +376,7 @@ class RedMemoryReader:
     def read_direction(self) -> str:
         """Return player facing direction as a cardinal string."""
         byte = self._read_u8(RED_ADDR["player_dir"])
-        return {0: "South", 4: "North", 8: "West", 12: "East"}.get(byte, "South")
+        return {0: "down", 4: "up", 8: "left", 12: "right"}.get(byte, "down")
 
     def read_item_count(self) -> int:
         return self._read_u8(RED_ADDR["inventory_count"])
@@ -617,6 +617,7 @@ class RedMemoryReader:
             coords = self.read_coordinates()
             state["player"]["position"] = {"x": coords[0], "y": coords[1]}
             state["player"]["location"] = self.read_location()
+            state["player"]["facing"]   = self.read_direction()
             state["player"]["name"]     = self.read_player_name()
             party = self.read_party_pokemon()
             state["player"]["party"]    = party

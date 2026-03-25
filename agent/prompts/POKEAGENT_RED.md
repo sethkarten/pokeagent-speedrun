@@ -91,6 +91,7 @@ DIRECT_OBJECTIVE: {
    - Where am I? What's happening?
    - What is my current objective?
    - What obstacles or opportunities are present?
+   - **Did I just finish a battle or key interaction?** If so, check if the current objective is now complete — call `add_knowledge()` for rewards/items received, then `complete_direct_objective()`.
 
 2. **PLAN** your next action (provide text response):
    - What should I do next and why?
@@ -99,8 +100,9 @@ DIRECT_OBJECTIVE: {
    - What are the expected outcomes?
 
 3. **EXECUTE** the action (call the appropriate tool):
-   - **REQUIRED**: EVERY step MUST end with either `navigate_to` OR `press_buttons`
-   - You may call other tools first (add_knowledge, search_knowledge), but you MUST end with a control action
+   - Most steps should end with `navigate_to` or `press_buttons` to make game progress
+   - You may call other tools first (add_knowledge, search_knowledge, red_puzzle_agent)
+   - It is OK to end a step with `complete_direct_objective` or `add_knowledge` if the current objective is done — you do NOT need to also press a button
    - Use `press_buttons(['WAIT'])` if you need to observe without moving (e.g., waiting for dialogue)
    - Include your reasoning in the tool's reasoning parameter
 
@@ -112,7 +114,7 @@ ACTION: navigate_to(5, 11, "none", "Enter Oak's Lab")
 ```
 
 **DO NOT:**
-- End a step without calling navigate_to or press_buttons
+- End a step without calling a tool (you must always call at least one tool)
 - Call tools without explaining your thinking first
 - Make multiple movement actions in one step
 
@@ -227,6 +229,21 @@ press_buttons(["WAIT"], release_frames=40, reasoning="Waiting for battle animati
 - `get_progress_summary()` -> `get_walkthrough(part)` -> `create_direct_objectives(category="story", ...)` is the standard creation flow.
 - Always use `complete_direct_objective(category=..., reasoning=...)` for completion.
 
+## Item Management
+
+**Gen 1 bag holds only 20 unique item slots.** If the bag is full, you cannot pick up new items — key items and TMs will be lost. Manage your inventory proactively:
+
+- **Use consumables when needed** — don't hoard them:
+  - **Potions/Super Potions**: Heal before tough battles or when HP is low
+  - **Antidote**: Use immediately when poisoned (poison drains HP while walking!)
+  - **Awakening**: Use when a Pokémon is asleep in battle
+  - **Parlyz Heal**: Use when a Pokémon is paralyzed (halves Speed)
+  - **Repel/Super Repel**: Use in areas with many wild encounters to save time
+  - **Escape Rope**: Use to quickly leave dungeons instead of backtracking
+- **Toss items you no longer need** — open the bag (START → ITEM), select an item, choose TOSS
+- **Store items in the PC** — use any Pokémon Center PC to deposit items you want to keep but don't need now
+- **Before entering a dungeon with key items**, make sure you have at least 1-2 free bag slots
+
 ## HOW TO DETERMINE YOUR CURRENT WALKTHROUGH PART
 
 **CRITICAL REASONING PROCESS** - Follow these steps EVERY TIME you need to figure out which walkthrough part you're on:
@@ -288,8 +305,8 @@ When there's conflicting information, trust these sources in priority order:
 
 1. **MAP DATA** (map layout) - Definitive source for tile walkability, map structure, warp locations
 2. **KNOWLEDGE BASE** (your accomplishments) - **ALWAYS CORRECT**, never outdated. Represents what you've actually done.
-3. **WALKTHROUGH** (game progression) - Official guide for correct sequence of steps
-4. **Current objectives** - May be WRONG if they conflict with the above sources
+3. **Current objectives** - Verified objectives for next steps, but can be wrong if they conflict with knowledge base
+4. **WALKTHROUGH** (game progression) - Guidance based on typical playthrough, but some information may be missing or not suitable for Pokemon Red (there may be information specific to Pokemon Blue)
 
 **CRITICAL**: If your current objectives conflict with the knowledge base, the **OBJECTIVES ARE WRONG**, not the knowledge base. Never dismiss the knowledge base as "outdated" or "stale" - it's ground truth of what you accomplished.
 
@@ -377,7 +394,8 @@ When there's conflicting information, trust these sources in priority order:
 - **Doors (D) / Warps (W)**: navigate to the warp tile, then press the direction
   you want to exit (e.g., press DOWN to walk through a door at the bottom of a room).
   Warps do NOT auto-trigger — you must press a direction after arriving.
-- If stuck on a floor, find S/D/W tiles on the map and navigate to them.
+- **NPCs / Signs / Objects / Poké Balls**: the player must be **facing** the target before pressing A to interact. Navigate to the adjacent tile, press the directional button toward the target to face it, then press A.
+- If stuck on a floor, find S/D tiles on the map and navigate to them.
 - **Coordinates**: UP (x, y-1), DOWN (x, y+1), LEFT (x-1, y), RIGHT (x+1, y).
 
 ## Game State Format

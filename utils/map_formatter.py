@@ -5,6 +5,8 @@ Centralized Map Formatting Utility
 Single source of truth for all map formatting across the codebase.
 """
 
+import os
+
 try:
     from pokemon_env.enums import MetatileBehavior
 except ImportError:  # Allow usage in builder scripts without mgba
@@ -21,6 +23,25 @@ except ImportError:  # Allow usage in builder scripts without mgba
             return self._name
 
     MetatileBehavior = type("MetatileBehavior", (), {"NORMAL": _FallbackEnum(0)})
+
+
+def _get_behavior_enum():
+    """Return the appropriate behavior enum for the current game type.
+
+    For Red maps the raw_tile behavior integers are ``RedMetatileBehavior``
+    codes, not Emerald's ``MetatileBehavior`` codes.  Both enums share the
+    same integer values for common behaviours (LADDER, DOOR, WARP_*, …) so
+    all existing name-substring checks work without modification.
+    """
+    if os.environ.get("GAME_TYPE", "emerald").upper() == "RED":
+        try:
+            from pokemon_red_env.utils.red_metatile_behavior import (
+                RedMetatileBehavior,
+            )
+            return RedMetatileBehavior
+        except ImportError:
+            pass
+    return MetatileBehavior
 
 
 def is_tile_walkable(tile) -> bool:
@@ -62,15 +83,11 @@ def is_tile_walkable(tile) -> bool:
             import numpy as np
             if isinstance(behavior, (int, np.integer)):
                 behavior_int = int(behavior)
-                behavior_enum = MetatileBehavior(behavior_int)
+                behavior_enum = _get_behavior_enum()(behavior_int)
                 behavior_name = behavior_enum.name
         except (ValueError, TypeError, AttributeError):
-            # MetatileBehavior might be fallback that doesn't accept args
-            if hasattr(MetatileBehavior, 'NORMAL'):
-                behavior_name = "UNKNOWN"
-            else:
-                behavior_name = "UNKNOWN"
-    
+            behavior_name = "UNKNOWN"
+
     # Special case for Brendan's House - stairs and doors are reversed
     # NON_ANIMATED_DOOR (96) appears at top and should be stairs (walkable)
     # SOUTH_ARROW_WARP (101) appears at bottom and should be door (walkable)
@@ -170,7 +187,7 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
     
     # Convert behavior to symbol using unified logic
     if isinstance(behavior, str):
-        # Red uses string behavior names directly (e.g. "WALL", "WALKABLE", "GRASS")
+        # Legacy path: behaviour stored as a plain string (not used by current Red/Emerald pipelines)
         behavior_name = behavior.upper()
     elif hasattr(behavior, 'name'):
         behavior_name = behavior.name
@@ -180,10 +197,9 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
             import numpy as np
             if isinstance(behavior, (int, np.integer)):
                 behavior_int = int(behavior)
-                behavior_enum = MetatileBehavior(behavior_int)
+                behavior_enum = _get_behavior_enum()(behavior_int)
                 behavior_name = behavior_enum.name
         except (ValueError, TypeError, AttributeError):
-            # MetatileBehavior might be fallback that doesn't accept args
             behavior_name = "UNKNOWN"
     
     # Special handling for Brendan's House 2F wall clock
@@ -283,6 +299,8 @@ def format_tile_to_symbol(tile, x=None, y=None, location_name=None, player_pos=N
         return "↓"  # One-way slide down
     elif "BRIDGE" in behavior_name:
         return "&"  # Bridge tiles are walkable
+    elif "CUT_TREE" in behavior_name:
+        return "t"  # Cuttable tree (blocked until player uses HM Cut)
     elif "IMPASSABLE" in behavior_name or "SEALED" in behavior_name:
         return "#"  # Blocked
     elif "WALL" in behavior_name:
@@ -470,14 +488,15 @@ def get_symbol_legend():
         "PC": "PC/Computer",
         "T": "Television",
         "B": "Bookshelf", 
-        "?": "Unexplored area",
+        "?": "Hidden item/uncategorized event (walkable in Gen 1)",
+        "!": "Sign/Signpost (blocked)",
         "F": "Flowers/Plants",
         "C": "Counter/Desk",
         "=": "Bed",
         "&": "Bridge (walkable)",
         "t": "Table/Chair",
         "K": "Clock (Wall)",
-        "O": "Clock",
+        "O": "Poké Ball (Gen 1) / Clock (Gen 3)",
         "^": "Picture/Painting",
         "U": "Trash can",
         "V": "Pot/Vase",
@@ -492,7 +511,9 @@ def get_symbol_legend():
         "↘": "Jump Southeast",
         "↙": "Jump Southwest",
         "N": "NPC",
-        "@": "Trainer"
+        "@": "Trainer",
+        "*": "Spinner stop tile",
+        "G": "Card Key gate (blocked, walk into and press A)",
     }
 
 
@@ -523,7 +544,7 @@ def generate_dynamic_legend(grid):
     # Group symbols by category for better organization
     player_symbols = ["P"]
     terrain_symbols = [".", "#", "W", "~", "?"] 
-    structure_symbols = ["D", "S"]
+    structure_symbols = ["D", "S", "G"]
     jump_symbols = ["J", "↓", "↑", "←", "→", "↗", "↖", "↘", "↙"]
     furniture_symbols = ["PC", "T", "B", "F", "C", "=", "t", "K", "O", "^", "U", "V", "M"]
     npc_symbols = ["N", "@"]
