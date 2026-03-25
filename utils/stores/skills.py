@@ -21,6 +21,7 @@ class SkillEntry:
     path: str = "general"
     name: str = ""
     description: str = ""
+    code: str = ""  # Optional executable Python code for the skill
     effectiveness: str = "medium"  # low / medium / high
     source: str = "orchestrator" # "evolved" | "orchestrator"
     created_at: str = None  # type: ignore[assignment]
@@ -59,6 +60,7 @@ class SkillStore(BaseStore[SkillEntry]):
         entry_dict.setdefault("source", "orchestrator")
         entry_dict.setdefault("effectiveness", "medium")
         entry_dict.setdefault("importance", 3)
+        entry_dict.setdefault("code", "")
         if entry_dict.get("name") and not entry_dict.get("title"):
             entry_dict["title"] = entry_dict["name"]
         elif entry_dict.get("title") and not entry_dict.get("name"):
