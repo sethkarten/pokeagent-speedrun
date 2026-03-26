@@ -3391,12 +3391,6 @@
       "dest_warp_id": 1
     },
     {
-      "x": 5,
-      "y": 5,
-      "dest_map": "LAST_MAP",
-      "dest_warp_id": 10
-    },
-    {
       "x": 3,
       "y": 2,
       "dest_map": "SILPH_CO_7F",
