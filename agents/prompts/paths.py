@@ -1,6 +1,5 @@
 """Canonical prompt paths used across the agents package."""
 
-from collections import defaultdict
 from pathlib import Path
 import os
 
@@ -18,9 +17,14 @@ GAME_NAMES = {
 
 
 def render_prompt(content: str) -> str:
-    """Substitute {game_name} in prompt content based on GAME_TYPE env var."""
-    ctx = {"game_name": GAME_NAMES.get(game_type, "Pokemon Emerald")}
-    return content.format_map(defaultdict(str, ctx))
+    """Substitute {game_name} in prompt content based on GAME_TYPE env var.
+
+    Uses plain str.replace() instead of str.format_map() so that literal
+    curly braces in prompt files (JSON examples, code blocks) don't cause
+    ValueError.
+    """
+    game_name = GAME_NAMES.get(game_type, "Pokemon Emerald")
+    return content.replace("{game_name}", game_name)
 
 
 # ---------------------------------------------------------------------------
