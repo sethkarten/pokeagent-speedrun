@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from agents.prompts.paths import POKEAGENT_BASE_PROMPT_PATH, POKEAGENT_SYSTEM_PROMPT_PATH, render_prompt, resolve_repo_path
+from agents.prompts.paths import GAME_NAME, POKEAGENT_BASE_PROMPT_PATH, POKEAGENT_SYSTEM_PROMPT_PATH, render_prompt, resolve_repo_path
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +168,7 @@ The main agent receives this as its **system** message every step. You must **no
 """
         
         # Create optimization prompt
-        optimization_prompt = f"""You are a prompt optimization expert. Your task is to improve an AI agent's strategic guidance prompt based on its recent performance in playing Pokemon Emerald.
+        optimization_prompt = f"""You are a prompt optimization expert. Your task is to improve an AI agent's strategic guidance prompt based on its recent performance in playing {GAME_NAME}.
 {system_prompt_section}## Current Base Prompt (Strategic Guidance):
 This is the optimizable strategic guidance that gets combined with runtime context (action history, objectives, game state) and sent to the main agent. You can modify this to improve the agent's decision-making.
 

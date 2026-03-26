@@ -14,6 +14,7 @@ GAME_NAMES = {
     "emerald": "Pokemon Emerald",
     "red": "Pokemon Red",
 }
+GAME_NAME = GAME_NAMES.get(game_type, "Pokemon Emerald")
 
 
 def render_prompt(content: str) -> str:
@@ -55,7 +56,11 @@ CLI_AGENT_DIRECTIVE_PATH = f"{PROMPTS_ROOT}/cli-agent-directives/pokemon_directi
 
 # AutoEvolve directory (renamed from prompt-optimization/)
 POKEAGENT_BASE_PROMPT_PATH = f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/orchestrator_policy.md"
-AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH = f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/base_system_prompt.md"
+_autoevolve_base_system_prompts = {
+    "red": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/base_system_prompt_red.md",
+    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/base_system_prompt.md",
+}
+AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH = _autoevolve_base_system_prompts[game_type]
 
 
 def resolve_repo_path(relative_path: str) -> Path:

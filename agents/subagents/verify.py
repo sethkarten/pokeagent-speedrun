@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
+from agents.prompts.paths import GAME_NAME
+
 
 def resolve_verification_target(objective_state: Dict[str, Any], category: Optional[str] = None) -> Dict[str, Any]:
     """Resolve the authoritative objective that verify should judge."""
@@ -60,7 +62,7 @@ def build_verify_prompt(
     memory_summary = context.get("memory_summary") or "No memories recorded yet."
     skill_overview = context.get("skill_overview") or "No skills learned yet."
 
-    return f"""You are the verify subagent for a Pokemon Emerald speedrun agent.
+    return f"""You are the verify subagent for a {GAME_NAME} speedrun agent.
 Your only job is to decide whether the current objective has already been completed.
 
 The current screenshot is attached when available. Use it as CURRENT visual evidence only.
