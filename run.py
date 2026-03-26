@@ -168,9 +168,6 @@ def start_server(args, run_id=None):
         if args.direct_objectives_battling_start > 0:
             server_cmd.extend(["--direct-objectives-battling-start", str(args.direct_objectives_battling_start)])
 
-    if args.debug_state:
-        server_cmd.append("--debug-state")
-
     # Server always runs headless - display handled by client
     
     # Start server as subprocess
