@@ -706,6 +706,10 @@ class PokeAgent:
         def _tool_caller(tool_name):
             def call(**kwargs):
                 result = self.mcp_adapter.call_tool(tool_name, kwargs)
+                # After pressing buttons, wait for the emulator to process them
+                # so subsequent get_game_state() calls return updated positions
+                if tool_name == "press_buttons":
+                    self._wait_for_actions_complete()
                 return result
             return call
 
