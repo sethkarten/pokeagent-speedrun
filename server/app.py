@@ -3064,7 +3064,7 @@ async def mcp_get_game_state():
         if debug_state_enabled:
             global _debug_state_counter, _debug_state_log
             try:
-                from utils.run_data_manager import get_cache_path
+                from utils.data_persistence.run_data_manager import get_cache_path
                 _debug_state_log.append({"step": _debug_state_counter, "timestamp": time.time(), "state": serialized})
                 _debug_state_counter += 1
                 debug_file = get_cache_path("debug_states.json")

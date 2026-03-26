@@ -17,7 +17,7 @@ class RedMilestoneTracker:
 
     def __init__(self, filename: str = None):
         # Setup cache directory
-        from utils.run_data_manager import get_cache_directory
+        from utils.data_persistence.run_data_manager import get_cache_directory
         self.cache_dir = str(get_cache_directory())
         os.makedirs(self.cache_dir, exist_ok=True)
 
