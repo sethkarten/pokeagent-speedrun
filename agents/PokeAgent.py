@@ -719,6 +719,8 @@ class PokeAgent:
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
         import random as _random_mod
+        import collections as _collections_mod
+        import math as _math_mod
         sandbox_globals = {
             "__builtins__": {
                 "range": range, "len": len, "int": int, "float": float,
@@ -729,19 +731,23 @@ class PokeAgent:
                 "True": True, "False": False, "None": None,
             },
             "random": _random_mod,
+            "collections": _collections_mod,
+            "math": _math_mod,
             "tools": sandbox_tools,
             "args": skill_args or {},
         }
 
         logger.info(f"Running skill {skill_id} ({entry.name}): {reasoning}")
+        logger.info(f"  Skill code length: {len(code)} chars, args: {skill_args}")
 
         try:
             exec(code, sandbox_globals)  # noqa: S102
             # Check if the code defined a result
             result = sandbox_globals.get("result", "Skill executed successfully")
+            logger.info(f"  Skill {skill_id} completed: {json.dumps(result, default=str)[:200]}")
             return json.dumps({"success": True, "skill_id": skill_id, "result": result})
         except Exception as e:
-            logger.error(f"Skill {skill_id} execution failed: {e}", exc_info=True)
+            logger.error(f"Skill {skill_id} execution FAILED: {e}", exc_info=True)
             return json.dumps({"success": False, "skill_id": skill_id, "error": str(e)})
 
     # Built-in tool-set keys are pinned in the LRU cache (never evicted).
