@@ -12,11 +12,13 @@ uv run python run.py --game red --backend gemini --model-name gemini-3-flash-pre
 # Simple scaffold (H_min: empty registry, no evolution)
 uv run python run.py --game red --backend gemini --model-name gemini-3-flash-preview \
   --port 2878 --agent-auto --scaffold simple \
+  --backup-state PokemonRed-GBC/red_init.zip \
   --direct-objectives autonomous_objective_creation \
-  --run-name ae_simple
+  --direct-objectives-start 7 --run-name ae_simple
 
 # PokeAgent scaffold (H_expert: full built-in subagents + walkthrough)
 uv run python run.py --game red --backend gemini --model-name gemini-3-flash-preview \
   --port 2978 --agent-auto --scaffold pokeagent \
+  --backup-state PokemonRed-GBC/red_init.zip \
   --direct-objectives autonomous_objective_creation \
-  --run-name ae_pokeagent
+  --direct-objectives-start 7 --run-name ae_pokeagent
