@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Entry point for external CLI agent experiments (Claude Code, GPT Codex, etc.).
+Entry point for external CLI agent experiments (Claude Code, Codex CLI, Gemini CLI, etc.).
 
 This script:
-1. Spawns the Pokemon Emerald server with MCP endpoints
-2. Launches an external CLI agent (e.g., claude, codex) as a subprocess
+1. Spawns the game server (Pokemon Emerald or Red) with MCP endpoints
+2. Launches an external CLI agent (e.g., claude, codex, gemini) as a subprocess
 3. Monitors termination conditions (e.g., gym badge count) and terminates when met
 
 The CLI agent interacts with the game via MCP tools exposed by the server.
@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import argparse
+import socket
 import subprocess
 import signal
 import threading
@@ -22,20 +23,20 @@ import shutil
 import json
 import secrets
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
-
 import requests
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from utils.cli_agent_backends import (
+from utils.agent_infrastructure.cli_agent_backends import (
+    CliAgentBackend,
     CliSession,
     CliSessionMetrics,
     get_backend,
-    log_session_to_llm_logger,
 )
+from agents.prompts.paths import CLI_AGENT_DIRECTIVE_PATH
 
 # Configure logging
 logging.basicConfig(
@@ -96,9 +97,23 @@ def _cleanup_cli_session(session: CliSession | None, log_file=None):
 
 def preflight_cli(args) -> bool:
     """Validate CLI availability and show actionable setup errors."""
-    if args.cli_type != "claude":
-        return True
+    if args.api_gateway == "openrouter" and args.backend in ("claude", "codex"):
+        if not os.environ.get("OPENROUTER_API_KEY"):
+            print("❌ --api-gateway openrouter requires OPENROUTER_API_KEY to be set.")
+            return False
+    if args.backend == "claude":
+        return _preflight_claude()
+    if args.backend == "gemini":
+        return _preflight_gemini()
+    if args.backend == "codex":
+        return _preflight_codex()
+    if args.backend == "hermes":
+        return _preflight_hermes()
+    return True
 
+
+def _preflight_claude() -> bool:
+    """Preflight checks for Claude Code CLI."""
     claude_path = shutil.which("claude")
     if not claude_path:
         print("❌ Claude Code CLI not found on PATH.")
@@ -131,6 +146,151 @@ def preflight_cli(args) -> bool:
     return True
 
 
+def _preflight_gemini() -> bool:
+    """Preflight checks for Gemini CLI."""
+    if not os.environ.get("GEMINI_API_KEY"):
+        print("❌ GEMINI_API_KEY not set in environment.")
+        print("   Export your API key: export GEMINI_API_KEY=<your-key>")
+        return False
+
+    gemini_path = shutil.which("gemini")
+    if not gemini_path:
+        print("❌ Gemini CLI not found on PATH.")
+        print("   Install: npm install -g @google/gemini-cli  (or check Google's docs)")
+        return False
+
+    try:
+        result = subprocess.run(
+            ["gemini", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            print("❌ Gemini CLI is installed but --version failed.")
+            print(f"   stdout: {result.stdout.strip()}")
+            print(f"   stderr: {result.stderr.strip()}")
+            return False
+    except Exception as e:
+        print(f"❌ Failed to run 'gemini --version': {e}")
+        return False
+
+    return True
+
+
+def _preflight_codex() -> bool:
+    """Preflight checks for Codex CLI."""
+    codex_path = shutil.which("codex")
+    if not codex_path:
+        print("❌ Codex CLI not found on PATH.")
+        print("   Install: npm install -g @openai/codex")
+        print("   Or: https://github.com/openai/codex/releases")
+        return False
+
+    try:
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            # codex may use different version flag
+            result = subprocess.run(
+                ["codex", "exec", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if result.returncode != 0:
+                print("❌ Codex CLI is installed but --version/exec failed.")
+                print(f"   stdout: {result.stdout.strip()}")
+                print(f"   stderr: {result.stderr.strip()}")
+                return False
+    except Exception as e:
+        print(f"❌ Failed to run 'codex --version': {e}")
+        return False
+
+    if not os.environ.get("OPENROUTER_API_KEY") and not (Path.home() / ".codex").exists():
+        print("ℹ️  OPENROUTER_API_KEY not set and ~/.codex not found.")
+        print("   For OpenRouter: set OPENROUTER_API_KEY and configure ~/.codex/config.toml")
+        print("   Or run 'codex login' for ChatGPT auth.")
+
+    return True
+
+
+def _preflight_hermes() -> bool:
+    """Preflight checks for Hermes CLI.
+
+    Hermes runs inside its own container for normal experiments, so the host CLI
+    is only required when the user explicitly wants to run interactive setup or
+    login flows on the host.
+    """
+    hermes_path = shutil.which("hermes")
+    if not hermes_path:
+        print("ℹ️  Hermes CLI not found on the host PATH.")
+        print("   This is fine for containerized runs because the Docker image installs Hermes.")
+        print("   Install Hermes locally only if you want to use --login / interactive host setup.")
+        return True
+
+    try:
+        result = subprocess.run(
+            ["hermes", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        if result.returncode != 0:
+            print("⚠️  Hermes CLI is installed but '--help' returned a non-zero status.")
+            print("   Containerized runs may still work, but host-side login/setup could fail.")
+    except Exception as e:
+        print(f"⚠️  Failed to run 'hermes --help': {e}")
+        print("   Containerized runs may still work because Hermes is installed inside the image.")
+    return True
+
+
+def _build_container_image(backend) -> bool:
+    """Build the container image for the given backend. Returns True on success."""
+    project_root = Path(__file__).resolve().parent
+    ctx = backend.devcontainer_build_context
+    ctx_path = project_root / ctx
+    dockerfile = ctx_path / "Dockerfile"
+    if not ctx_path.is_dir() or not dockerfile.exists():
+        print(f"❌ Devcontainer build context not found: {ctx_path}")
+        return False
+    print(f"🐳 Building container image: {backend.container_image}")
+    print(f"   Context: {ctx_path}")
+    try:
+        # Match container user UID/GID to host so bind-mounted files are readable both ways
+        uid, gid = os.getuid(), os.getgid()
+        result = subprocess.run(
+            [
+                "docker", "build",
+                "-t", backend.container_image,
+                "--build-arg", f"USER_UID={uid}",
+                "--build-arg", f"USER_GID={gid}",
+                "-f", str(dockerfile),
+                str(ctx_path),
+            ],
+            check=False,
+        )
+        if result.returncode != 0:
+            print(f"❌ Docker build failed (exit code {result.returncode})")
+            return False
+        print(f"✅ Container image built: {backend.container_image}")
+        return True
+    except FileNotFoundError:
+        print("❌ Docker not found. Install Docker and retry.")
+        return False
+    except Exception as e:
+        print(f"❌ Docker build error: {e}")
+        return False
+
+
 def start_server(args, run_id=None):
     """Start the server process with appropriate arguments.
     
@@ -150,7 +310,14 @@ def start_server(args, run_id=None):
     server_env = os.environ.copy()
     if run_id:
         server_env["RUN_DATA_ID"] = run_id
-    
+    server_env["POKEAGENT_CLI_MODE"] = "1"  # Enable CLI-specific behavior (milestone backups, skip objectives)
+
+    # Pass game type to server
+    if hasattr(args, 'game') and args.game:
+        server_cmd.extend(["--game", args.game])
+        server_env["GAME_TYPE"] = args.game
+        os.environ["GAME_TYPE"] = args.game  # Also set in client process for prompt resolution
+
     # Pass LLM session_id if available
     llm_session_id = os.environ.get("LLM_SESSION_ID")
     if llm_session_id:
@@ -167,7 +334,7 @@ def start_server(args, run_id=None):
         server_cmd.append("--record")
     
     if hasattr(args, 'load_checkpoint') and args.load_checkpoint:
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         checkpoint_state = get_cache_path("checkpoint.state")
         if checkpoint_state.exists():
             server_cmd.extend(["--load-state", str(checkpoint_state)])
@@ -222,6 +389,72 @@ def start_frame_server(port):
         return None
 
 
+def start_mcp_sse_server(
+    server_url: str,
+    mcp_port: int,
+    project_root: str | None = None,
+    log_path: Path | None = None,
+) -> "subprocess.Popen | None":
+    """Start the MCP SSE server used by containerized agents.
+
+    Args:
+        server_url:   Game server URL the MCP proxy forwards to.
+        mcp_port:     Port to bind the SSE server on.
+        project_root: Added to PYTHONPATH so server modules resolve.
+        log_path:     File to capture server stdout/stderr (avoids pipe-buffer deadlock).
+
+    Returns:
+        Running Popen handle, or None on failure.
+    """
+    try:
+        mcp_env = os.environ.copy()
+        mcp_env["MCP_TRANSPORT"] = "sse"
+        mcp_env["MCP_PORT"] = str(mcp_port)
+        mcp_env["POKEMON_SERVER_URL"] = server_url
+        if project_root:
+            mcp_env["PYTHONPATH"] = project_root
+
+        # Route output to a log file (avoids pipe-buffer deadlock when uvicorn is verbose)
+        log_fh = open(log_path, "w") if log_path else subprocess.DEVNULL
+        mcp_process = subprocess.Popen(
+            [sys.executable, "-m", "server.cli.pokemon_mcp_server"],
+            env=mcp_env,
+            stdout=log_fh,
+            stderr=subprocess.STDOUT,
+        )
+        print(f"🌐 MCP SSE server started (PID {mcp_process.pid}, port {mcp_port})")
+
+        # Poll until the port is accepting connections (up to 5 s)
+        deadline = time.monotonic() + 5.0
+        port_up = False
+        while time.monotonic() < deadline:
+            if mcp_process.poll() is not None:
+                break
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.5)
+                    if s.connect_ex(("127.0.0.1", mcp_port)) == 0:
+                        port_up = True
+                        break
+            except OSError:
+                pass
+            time.sleep(0.2)
+
+        if not port_up:
+            hint = f" (see {log_path})" if log_path else ""
+            if mcp_process.poll() is not None:
+                print(f"   ❌ MCP server exited early (code {mcp_process.poll()}){hint}")
+            else:
+                print(f"   ⚠️  MCP server port {mcp_port} not responding after 5 s{hint}")
+            return None
+
+        print(f"   ✓ MCP server listening on port {mcp_port}")
+        return mcp_process
+    except Exception as e:
+        print(f"❌ Failed to start MCP SSE server: {e}")
+        return None
+
+
 def check_termination_condition(server_url: str, condition_type: str = "gym_badge_count", threshold: int = 1) -> dict:
     """Check if termination condition is met by polling the server.
     
@@ -266,6 +499,139 @@ def termination_monitor(
         time.sleep(poll_interval)
 
 
+@dataclass
+class Services:
+    """Running services (server, frame server, MCP) and URLs."""
+    server: subprocess.Popen | None
+    frame_server: subprocess.Popen | None
+    mcp_process: subprocess.Popen | None
+    server_url: str
+
+
+LAST_CLI_SESSION_ID_FILENAME = "last_cli_session_id"
+
+
+def _load_last_session_id(backend: CliAgentBackend, agent_memory_dir: Path) -> str | None:
+    """Load persisted CLI session ID from cache (for --resume across runs/restores)."""
+    try:
+        from utils.data_persistence.run_data_manager import get_cache_path
+        path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
+        if path.exists():
+            sid = path.read_text().strip()
+            if sid:
+                return sid
+        # Backend-specific fallback
+        return backend.get_resume_session_id(agent_memory_dir)
+    except Exception as e:
+        logger.debug("Could not load last_session_id: %s", e)
+    return None
+
+
+def _write_last_session_id(session_id: str) -> None:
+    """Persist CLI session ID to cache (included in backups for restore)."""
+    try:
+        from utils.data_persistence.run_data_manager import get_cache_path
+        path = get_cache_path(LAST_CLI_SESSION_ID_FILENAME)
+        path.write_text(session_id)
+        logger.debug("Persisted last_session_id: %s", session_id)
+    except Exception as e:
+        logger.warning("Could not persist last_session_id: %s", e)
+
+
+def _restore_from_backup(backup_path: str) -> bool:
+    """Restore cache from backup zip. Returns True if successful."""
+    from utils.data_persistence.backup_manager import restore_cache_from_backup
+    from utils.data_persistence.run_data_manager import get_cache_directory
+
+    print(f"\n📦 Restoring from backup: {backup_path}")
+    success = restore_cache_from_backup(
+        backup_file=backup_path,
+        create_backup_of_current=False,
+    )
+    if success:
+        print(f"✅ Backup restored to: {get_cache_directory()}")
+    else:
+        print("❌ Failed to restore backup, continuing with fresh state")
+    return success
+
+
+def _start_services(args, run_manager) -> Services | None:
+    """Start server, frame server, and optionally MCP SSE server. Returns Services or None if server failed."""
+    server_process = start_server(args, run_manager.run_id)
+    if not server_process:
+        return None
+
+    frame_server_process = start_frame_server(args.port)
+    server_url = f"http://localhost:{args.port}"
+
+    mcp_process = None
+    if args.mcp_sse_port is None:
+        args.mcp_sse_port = args.port + 2
+    print(f"\n🐳 Containerized mode (MCP SSE port {args.mcp_sse_port})")
+    project_root_for_mcp = str(Path(__file__).resolve().parent)
+    log_dir = Path(run_manager.get_run_directory()) / "agent_logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    mcp_log = log_dir / "mcp_server.log"
+    mcp_process = start_mcp_sse_server(
+        server_url, args.mcp_sse_port, project_root_for_mcp, log_path=mcp_log
+    )
+    if not mcp_process:
+        return None
+
+    return Services(
+        server=server_process,
+        frame_server=frame_server_process,
+        mcp_process=mcp_process,
+        server_url=server_url,
+    )
+
+
+def _cleanup_services(
+    services: Services | None,
+    cli_session: CliSession | None,
+    cli_log_file,
+    args,
+    graceful_timeout: int = 30,
+) -> None:
+    """Clean up server, frame server, MCP server, and CLI agent."""
+    if cli_session is not None and cli_session.process.poll() is None:
+        _terminate_process(
+            process=cli_session.process,
+            graceful_timeout=graceful_timeout,
+            label="🤖 Stopping CLI agent",
+            use_process_group=True,
+        )
+    if cli_log_file and not cli_log_file.closed:
+        try:
+            cli_log_file.close()
+        except OSError:
+            pass
+    if services:
+        if services.server:
+            print("📡 Stopping server process...")
+            services.server.terminate()
+            try:
+                services.server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                print("   Force killing server...")
+                services.server.kill()
+        if services.frame_server:
+            print("🖼️  Stopping frame server...")
+            services.frame_server.terminate()
+            try:
+                services.frame_server.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                services.frame_server.kill()
+        if services.mcp_process:
+            print("🌐 Stopping MCP SSE server...")
+            services.mcp_process.terminate()
+            try:
+                services.mcp_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                services.mcp_process.kill()
+    print("👋 Goodbye!")
+
+
 def launch_cli_agent(
     backend,
     server_url: str,
@@ -276,7 +642,13 @@ def launch_cli_agent(
     dangerously_skip_permissions: bool = True,
     log_file=None,
     metrics: CliSessionMetrics | None = None,
-    snapshot_path=None,
+    containerized: bool = False,
+    session_number: int = 1,
+    resume_session_id: str | None = None,
+    thinking_effort: str | None = None,
+    mcp_sse_port: int | None = None,
+    run_id: str | None = None,
+    agent_memory_dir: str | None = None,
 ) -> CliSession:
     """Launch an external CLI agent session as subprocess using the given backend."""
     cmd, env, bootstrap, temp_mcp_config_path = backend.build_launch_cmd(
@@ -285,11 +657,18 @@ def launch_cli_agent(
         working_dir,
         dangerously_skip_permissions=dangerously_skip_permissions,
         project_root=project_root,
+        containerized=containerized,
+        session_number=session_number,
+        resume_session_id=resume_session_id,
+        thinking_effort=thinking_effort,
+        mcp_sse_port=mcp_sse_port,
+        run_id=run_id,
+        agent_memory_dir=agent_memory_dir,
     )
     if directive_path:
         print(f"📜 Loaded directive from: {directive_path}")
     print(f"🤖 Launching {backend.name} CLI agent...")
-    print(f"   Command: {' '.join(cmd)}")
+    # Note: do not print the command here so as to not expose API Key
     print(f"   Working directory: {working_dir}")
     print(f"   MCP Server: {server_url}")
 
@@ -303,21 +682,18 @@ def launch_cli_agent(
         preexec_fn=os.setsid,
         bufsize=0,
     )
-    if bootstrap:
-        process.stdin.write(bootstrap.encode())
+    # Bootstrap is now passed as a command argument, not via stdin
+    # (Claude Code --print mode doesn't read from stdin)
     process.stdin.close()
 
-    logger.info("[cli-debug] launch_cli_agent: subprocess spawned pid=%s, stdin fed+closed", process.pid)
     stream_stop_event = threading.Event()
-    snapshot_path_arg = Path(snapshot_path) if snapshot_path else None
     stream_thread = threading.Thread(
         target=backend.run_stream_reader,
-        args=(process.stdout, stream_stop_event, log_file, metrics, server_url, snapshot_path_arg),
+        args=(process.stdout, stream_stop_event, log_file, metrics, server_url),
         daemon=True,
     )
     stream_thread.start()
-    logger.info("[cli-debug] launch_cli_agent: stream thread started")
-    print(f"✅ CLI agent started with PID {process.pid}")
+    print(f"✅ CLI agent started (PID {process.pid})")
     return CliSession(
         process=process,
         stop_event=stream_stop_event,
@@ -326,34 +702,219 @@ def launch_cli_agent(
     )
 
 
+def _run_agent_loop(
+    services: Services,
+    args,
+    run_manager,
+    agent_memory_dir: Path,
+    backend: CliAgentBackend,
+) -> tuple[str | None, CliSession | None, object]:
+    """Run the agent loop until termination. Returns (termination_reason, last_cli_session, cli_log_file)."""
+    from utils.data_persistence.run_data_manager import get_cache_path
+
+    run_id = run_manager.run_id
+    server_url = services.server_url
+    termination_triggered = threading.Event()
+    termination_reason: str | None = None
+
+    print(f"\n🎥 Stream View: http://127.0.0.1:{args.port}/stream")
+    try:
+        health_response = requests.get(f"{server_url}/health", timeout=5)
+        if health_response.status_code != 200:
+            print(f"⚠️ Server health check failed: {health_response.status_code}")
+    except Exception as e:
+        print(f"⚠️ Could not verify server health: {e}")
+
+    print(f"\n Starting termination monitor...")
+    print(f"   Condition: {args.termination_condition} >= {args.termination_threshold}")
+    print(f"   Poll interval: {args.poll_interval}s")
+    monitor_thread = threading.Thread(
+        target=termination_monitor,
+        args=(
+            server_url,
+            termination_triggered,
+            args.termination_condition,
+            args.termination_threshold,
+            args.poll_interval,
+        ),
+        daemon=True,
+    )
+    monitor_thread.start()
+
+    # Use agent_scratch_space for both local and containerized (matches pre-refactor 05602465)
+    agent_scratch_space = run_manager.get_scratch_space_dir()
+    agent_scratch_space.mkdir(parents=True, exist_ok=True)
+    working_dir = str(agent_scratch_space)
+    project_root = str(Path(__file__).resolve().parent)
+    log_dir = os.path.join(str(run_manager.get_run_directory()), "agent_logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    logger.info("CLI agent working_dir=%s project_root=%s", working_dir, project_root)
+
+    print(f"   MCP: bridge network, host.docker.internal:{args.mcp_sse_port}")
+
+    cli_session: CliSession | None = None
+    cli_log_file = None
+    iteration = 0
+    last_session_id: str | None = _load_last_session_id(backend, agent_memory_dir)
+    if last_session_id:
+        print(f"   📌 Resuming session: {last_session_id}")
+    consecutive_failures = 0
+
+    # JSONL step tracking – persists across agent session restarts within one run
+    processed_hashes: set[str] = set()
+    from utils.data_persistence.llm_logger import get_llm_logger as _get_llm_logger
+    _existing_steps = _get_llm_logger().cumulative_metrics.get("steps", [])
+    last_cli_step: int = max((s["step"] for s in _existing_steps), default=-1)
+    del _existing_steps, _get_llm_logger
+
+    while not termination_triggered.is_set():
+        iteration += 1
+        logger.info(f"--- Agent session #{iteration} ---")
+
+        session_metrics = CliSessionMetrics()
+        log_path = os.path.join(log_dir, f"session_{iteration:03d}.jsonl")
+        cli_log_file = open(log_path, "w")
+        logger.info("Agent JSONL log: %s", log_path)
+
+        cli_session = launch_cli_agent(
+            backend,
+            server_url=server_url,
+            directive_path=args.directive,
+            working_dir=working_dir,
+            project_root=project_root,
+            dangerously_skip_permissions=True,
+            log_file=cli_log_file,
+            metrics=session_metrics,
+            containerized=True,
+            session_number=iteration,
+            resume_session_id=last_session_id,
+            thinking_effort=args.agent_thinking_effort,
+            mcp_sse_port=args.mcp_sse_port,
+            run_id=run_id,
+            agent_memory_dir=str(agent_memory_dir),
+        )
+
+        wait_start = time.monotonic()
+        last_heartbeat = 0.0
+        last_checkpoint_time = time.monotonic()
+
+        while cli_session.process.poll() is None:
+            if services.server and services.server.poll() is not None:
+                logger.error("Server died, aborting")
+                _terminate_process(cli_session.process, 10, "Stopping agent", use_process_group=True)
+                _cleanup_cli_session(cli_session, cli_log_file)
+                return ("server_died", cli_session, None)
+            now = time.monotonic()
+
+            if now - last_checkpoint_time >= 60.0:
+                try:
+                    requests.post(f"{server_url}/checkpoint", timeout=5)
+                    requests.post(f"{server_url}/save_agent_history", timeout=5)
+                    logger.debug("Saved checkpoint and agent history")
+                except Exception as e:
+                    logger.warning(f"Failed to save checkpoint: {e}")
+                last_checkpoint_time = now
+
+            if now - last_heartbeat >= 15.0:
+                elapsed = int(now - wait_start)
+                logger.info("Agent running (pid=%s, elapsed=%ds)", cli_session.process.pid, elapsed)
+                last_heartbeat = now
+                processed_hashes, last_cli_step = backend.log_cli_interaction(
+                    agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
+                )
+
+            time.sleep(1)
+
+        _cleanup_cli_session(cli_session, cli_log_file)
+        cli_log_file = None
+
+        if session_metrics.session_id:
+            last_session_id = session_metrics.session_id
+            _write_last_session_id(last_session_id)
+
+        logger.info(
+            "Session #%d metrics: cost=$%.4f tokens=%d/%d turns=%d tools=%d session_id=%s",
+            iteration,
+            session_metrics.total_cost_usd,
+            session_metrics.input_tokens,
+            session_metrics.output_tokens,
+            session_metrics.num_turns,
+            session_metrics.tool_use_count,
+            last_session_id or "none",
+        )
+        processed_hashes, last_cli_step = backend.log_cli_interaction(
+            agent_memory_dir, processed_hashes, last_cli_step, server_url=server_url
+        )
+
+        returncode = cli_session.process.returncode
+        if returncode == 0:
+            consecutive_failures = 0
+        else:
+            consecutive_failures += 1
+            if consecutive_failures >= 5:
+                logger.error(
+                    "Agent exited with failure code %d five times in a row (likely session/usage limit), stopping.",
+                    returncode,
+                )
+                termination_reason = "consecutive_failures"
+                break
+
+        if termination_triggered.is_set():
+            logger.info("Termination condition met, not restarting agent.")
+            termination_reason = "termination_condition_met"
+            break
+        if session_metrics.auth_fatal_error:
+            logger.error("Auth fatal error detected, stopping (do not restart).")
+            termination_reason = "auth_error"
+            break
+        if (
+            cli_session.process.returncode == 0
+            and not session_metrics.session_id
+            and session_metrics.num_turns == 0
+            and session_metrics.tool_use_count == 0
+        ):
+            logger.error(
+                "Agent exited with code 0 but produced no output (no session, turns, or tools). "
+                "Likely MCP connection failure. Check MCP SSE server is running and reachable at host.docker.internal."
+            )
+            termination_reason = "mcp_connection_failure"
+            break
+        logger.info(
+            "Agent session #%d exited (code=%s), restarting...",
+            iteration,
+            cli_session.process.returncode,
+        )
+        time.sleep(3)
+
+    if termination_triggered.is_set():
+        print("\n✅ Task complete (termination condition met).")
+    elif termination_reason == "consecutive_failures":
+        print("\n⏹️ Agent failed 5 times in a row (likely usage limit). Stopping.")
+    return (termination_reason, cli_session, cli_log_file)
+
+
 def main():
     """Main entry point for CLI agent experiments."""
     parser = argparse.ArgumentParser(
-        description="Run external CLI agents (Claude Code, Codex) for Pokemon Emerald experiments"
+        description="Run external CLI agents (Claude Code, Codex) for Pokemon experiments"
     )
-    
-    # CLI agent configuration
-    parser.add_argument("--cli-type", type=str, default="claude",
-                       choices=["claude", "codex"],
-                       help="Type of CLI agent to launch (default: claude)")
-    parser.add_argument("--directive", type=str, 
-                       default="agent/prompts/cli_directives/pokemon_directive.md",
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
+                       help="Which game to run: 'red' (Pokemon Red) or 'emerald' (Pokemon Emerald, default)")
+    parser.add_argument("--backend", type=str, default="claude", choices=["claude", "gemini", "codex", "hermes"],
+                       help="Backend to use for the CLI agent (default: claude)")
+    parser.add_argument("--api-gateway", type=str, default="login", choices=["login", "openrouter"],
+                       help="Auth gateway: 'login' (OAuth/subscription, default) or 'openrouter' (requires OPENROUTER_API_KEY)")
+    parser.add_argument("--login", action="store_true",
+                       help="Run backend-specific auth login before starting (e.g. 'claude auth login')")
+    parser.add_argument("--directive", type=str,
+                       default=CLI_AGENT_DIRECTIVE_PATH,
                        help="Path to system prompt/directive file for CLI agent")
-    
-    # Server configuration
-    parser.add_argument("--port", type=int, default=8000,
-                       help="Port for the game server (default: 8000)")
-    parser.add_argument("--load-state", type=str,
-                       help="Load a saved state file on startup")
-    parser.add_argument("--load-checkpoint", action="store_true",
-                       help="Load from checkpoint files")
-    parser.add_argument(
-        "--backup-state",
-        type=str,
-        help="Load from a backup zip file (extracts into run cache and auto-enables --load-checkpoint).",
-    )
-    
-    # Termination condition
+    parser.add_argument("--port", type=int, default=8000, help="Port for the game server (default: 8000)")
+    parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
+    parser.add_argument("--load-checkpoint", action="store_true", help="Load from checkpoint files")
+    parser.add_argument("--backup-state", type=str,
+                       help="Load from a backup zip file (extracts into run cache and auto-enables --load-checkpoint).")
     parser.add_argument("--termination-condition", type=str, default="gym_badge_count",
                        help="Termination condition type (default: gym_badge_count)")
     parser.add_argument("--termination-threshold", type=int, default=1,
@@ -362,271 +923,123 @@ def main():
                        help="Seconds between termination condition polls (default: 10)")
     parser.add_argument("--graceful-timeout", type=int, default=30,
                        help="Graceful shutdown timeout in seconds before force kill (default: 30)")
-    parser.add_argument(
-        "--dangerously-skip-permissions",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Run Claude in YOLO mode (default: enabled). Use --no-dangerously-skip-permissions to disable.",
-    )
-    
-    # Features
-    parser.add_argument("--record", action="store_true",
-                       help="Record video of the gameplay")
-    parser.add_argument("--no-ocr", action="store_true", default=True,
-                       help="Disable OCR dialogue detection")
-    parser.add_argument("--direct-objectives", type=str,
-                       help="Load a specific direct objective sequence")
-    parser.add_argument("--direct-objectives-start", type=int, default=0,
-                       help="Start index for direct objectives")
-    parser.add_argument("--run-name", type=str, default=None,
-                       help="Optional name for the run directory")
-    
+    parser.add_argument("--record", action="store_true", help="Record video of the gameplay")
+    parser.add_argument("--no-ocr", action="store_true", default=True, help="Disable OCR dialogue detection")
+    parser.add_argument("--direct-objectives", type=str, help="Load a specific direct objective sequence")
+    parser.add_argument("--direct-objectives-start", type=int, default=0, help="Start index for direct objectives")
+    parser.add_argument("--run-name", type=str, default=None, help="Optional name for the run directory")
+    parser.add_argument("--build", action="store_true",
+                       help="Build the container image before running")
+    parser.add_argument("--mcp-sse-port", type=int, default=None,
+                       help="Port for MCP SSE server (default: game_port + 2)")
+    parser.add_argument("--agent-thinking-effort", type=str, choices=["low", "medium", "high"],
+                       help="Thinking effort level for CLI agent (low/medium/high)")
+
     args = parser.parse_args()
-    
+
     print("=" * 60)
-    print("🎮 Pokemon Emerald - External CLI Agent Experiment")
+    game_label = "Red" if args.game == "red" else "Emerald"
+    print(f"🎮 Pokemon {game_label} - External CLI Agent Experiment")
     print("=" * 60)
-    
-    # Initialize run data manager
-    from utils.run_data_manager import initialize_run_data_manager
-    
-    run_manager = initialize_run_data_manager(
-        run_name=args.run_name or f"cli_{args.cli_type}"
-    )
+
+    from utils.data_persistence.run_data_manager import initialize_run_data_manager
+
+    run_manager = initialize_run_data_manager(run_name=args.run_name or f"cli_{args.backend}")
     run_id = run_manager.run_id
     print(f"📁 Run data directory: {run_manager.get_run_directory()}")
-    
-    # Generate LLM session_id
+
     llm_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     os.environ["LLM_SESSION_ID"] = llm_session_id
     os.environ["RUN_DATA_ID"] = run_id
+    os.environ["LLM_METRICS_WRITE_ENABLED"] = "false"  # server is the single writer; run_cli syncs via /sync_llm_metrics
     print(f"📝 Session ID: {llm_session_id}")
-    
-    # Save metadata
+
     run_manager.save_metadata(
         command_args=vars(args),
         sys_argv=sys.argv,
         additional_info={
             "entry_point": "run_cli.py",
-            "cli_type": args.cli_type,
+            "backend": args.backend,
             "termination_condition": args.termination_condition,
-            "termination_threshold": args.termination_threshold
-        }
+            "termination_threshold": args.termination_threshold,
+        },
     )
-    
+
     if not preflight_cli(args):
         return 1
 
-    server_process = None
-    frame_server_process = None
-    cli_session = None
-    cli_log_file = None
-    monitor_thread = None
-    termination_triggered = threading.Event()
-    
-    try:
-        # Restore from backup if requested (same behavior as run.py)
-        if args.backup_state:
-            from utils.backup_manager import restore_cache_from_backup
-            from utils.run_data_manager import get_cache_directory
+    backend = get_backend(args.backend)
+    backend.api_gateway = args.api_gateway
 
-            print(f"\n📦 Restoring from backup: {args.backup_state}")
-            success = restore_cache_from_backup(
-                backup_file=args.backup_state,
-                create_backup_of_current=False,
-            )
-
-            if success:
-                print(f"✅ Backup restored to: {get_cache_directory()}")
-                args.load_checkpoint = True
-            else:
-                print("❌ Failed to restore backup, continuing with fresh state")
-
-        # Start server
-        print("\n📡 Starting server process...")
-        server_process = start_server(args, run_id)
-        
-        if not server_process:
-            print("❌ Failed to start server, exiting...")
+    if args.login:
+        if not backend.run_login():
             return 1
-        
-        # Start frame server for visualization
-        frame_server_process = start_frame_server(args.port)
-        
-        server_url = f"http://localhost:{args.port}"
-        print(f"\n🎥 Stream View: http://127.0.0.1:{args.port}/stream")
-        
-        # Verify server is healthy
-        try:
-            health_response = requests.get(f"{server_url}/health", timeout=5)
-            if health_response.status_code != 200:
-                print(f"⚠️ Server health check failed: {health_response.status_code}")
-        except Exception as e:
-            print(f"⚠️ Could not verify server health: {e}")
-        
-        # Start termination monitor thread (flag-only; does not kill process)
-        print(f"\n Starting termination monitor...")
-        print(f"   Condition: {args.termination_condition} >= {args.termination_threshold}")
-        print(f"   Poll interval: {args.poll_interval}s")
-        monitor_thread = threading.Thread(
-            target=termination_monitor,
-            args=(
-                server_url,
-                termination_triggered,
-                args.termination_condition,
-                args.termination_threshold,
-                args.poll_interval,
-            ),
-            daemon=True,
+
+    if args.backup_state:
+        if _restore_from_backup(args.backup_state):
+            args.load_checkpoint = True
+
+    services = _start_services(args, run_manager)
+    if not services:
+        print("❌ Failed to start services, exiting...")
+        return 1
+
+    from utils.data_persistence.run_data_manager import get_cache_path
+    agent_memory_dir = get_cache_path(backend.agent_memory_subdir)
+    agent_memory_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n💾 Agent memory directory: {agent_memory_dir}")
+
+    if args.build:
+        if not _build_container_image(backend):
+            return 1
+
+    backend.seed_agent_auth(agent_memory_dir)
+
+    termination_reason: str | None = None
+    cli_session: CliSession | None = None
+    cli_log_file = None
+
+    def _sigterm_handler(signum, frame):
+        """So timeout(1) or kill sends SIGTERM → same cleanup as Ctrl+C (stop container)."""
+        raise KeyboardInterrupt()
+
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+
+    try:
+        termination_reason, cli_session, cli_log_file = _run_agent_loop(
+            services, args, run_manager, agent_memory_dir, backend
         )
-        monitor_thread.start()
+        if termination_reason == "server_died":
+            return 1
+        if termination_reason == "auth_error":
+            print("\n❌ Auth error: Ensure credentials are valid (run --login or check API key env vars).")
+            return 1
+        if termination_reason == "mcp_connection_failure":
+            print("\n❌ MCP connection failure: Agent could not connect to MCP server.")
+            print("   MCP server must be reachable at host.docker.internal on the configured port.")
+            print("   Ensure --add-host=host.docker.internal:host-gateway resolves on this host.")
 
-        cli_session = None
-        cli_log_file = None
-        iteration = 0
-        backend = get_backend(args.cli_type)
-
-        # CLI agent cwd = run's agent_scratch_space so generated files stay per-run
-        agent_scratch_space = run_manager.get_scratch_space_dir()
-        agent_scratch_space.mkdir(parents=True, exist_ok=True)
-        working_dir = str(agent_scratch_space)
-        # Project root for MCP server PYTHONPATH (so it can import server.*, utils.*)
-        project_root = str(Path(__file__).resolve().parent)
-        logger.info("CLI agent working_dir=%s project_root=%s", working_dir, project_root)
-
-        log_dir = os.path.join(str(run_manager.get_run_directory()), "agent_logs")
-        os.makedirs(log_dir, exist_ok=True)
-
-        while not termination_triggered.is_set():
-            iteration += 1
-            logger.info(f"--- Agent session #{iteration} ---")
-
-            session_metrics = CliSessionMetrics()
-            log_path = os.path.join(log_dir, f"session_{iteration:03d}.jsonl")
-            cli_log_file = open(log_path, "w")
-            logger.info("Agent JSONL log: %s", log_path)
-
-            from utils.run_data_manager import get_cache_path
-            snapshot_path = get_cache_path("cli_metrics_snapshot.json")
-
-            cli_session = launch_cli_agent(
-                backend,
-                server_url=server_url,
-                directive_path=args.directive,
-                working_dir=working_dir,
-                project_root=project_root,
-                dangerously_skip_permissions=args.dangerously_skip_permissions,
-                log_file=cli_log_file,
-                metrics=session_metrics,
-                snapshot_path=snapshot_path,
-            )
-
-            logger.info("[cli-debug] main: entered wait loop for CLI pid=%s", cli_session.process.pid)
-            wait_start = time.monotonic()
-            last_debug_log = 0.0
-            last_checkpoint_time = time.monotonic()
-
-            while cli_session.process.poll() is None:
-                if server_process.poll() is not None:
-                    logger.error("Server died, aborting")
-                    _terminate_process(
-                        cli_session.process, 10, "Stopping agent", use_process_group=True
-                    )
-                    return 1
-                now = time.monotonic()
-                
-                # Checkpoint every 60 seconds
-                if now - last_checkpoint_time >= 60.0:
-                    try:
-                        # Save checkpoint (game state + milestones)
-                        requests.post(f"{server_url}/checkpoint", timeout=5)
-                        # Save agent history (LLM logs)
-                        requests.post(f"{server_url}/save_agent_history", timeout=5)
-                        logger.info("[cli-debug] Saved checkpoint and agent history")
-                    except Exception as e:
-                        logger.warning(f"Failed to save checkpoint: {e}")
-                    last_checkpoint_time = now
-
-                if now - last_debug_log >= 15.0:
-                    elapsed = int(now - wait_start)
-                    logger.info(
-                        "[cli-debug] main: still waiting for CLI agent to exit (pid=%s, elapsed=%ds)",
-                        cli_session.process.pid,
-                        elapsed,
-                    )
-                    last_debug_log = now
-                    
-                    # Save intermediate metrics snapshot
-                    try:
-                        with open(snapshot_path, "w") as f:
-                            json.dump(asdict(session_metrics), f, indent=2)
-                    except Exception as e:
-                        logger.warning(f"Failed to save metrics snapshot: {e}")
-                        
-                time.sleep(1)
-
-            _cleanup_cli_session(cli_session, cli_log_file)
-            cli_log_file = None
-
-            logger.info(
-                "Session #%d metrics: cost=$%.4f tokens=%d/%d turns=%d tools=%d",
-                iteration,
-                session_metrics.total_cost_usd,
-                session_metrics.input_tokens,
-                session_metrics.output_tokens,
-                session_metrics.num_turns,
-                session_metrics.tool_use_count,
-            )
-            log_session_to_llm_logger(session_metrics, iteration, backend.name)
-
-            if termination_triggered.is_set():
-                logger.info("Termination condition met, not restarting agent.")
-                break
-            logger.info(
-                "Agent session #%d exited (code=%s), restarting...",
-                iteration,
-                cli_session.process.returncode,
-            )
-            time.sleep(3)
-
-        if termination_triggered.is_set():
-            print("\n✅ Task complete (termination condition met).")
+            return 1
         return 0
-        
     except KeyboardInterrupt:
+        termination_reason = "user_interrupt"
         print("\n\n🛑 Shutdown requested by user")
         return 0
-        
     finally:
-        if cli_session is not None and cli_session.process.poll() is None:
-            _terminate_process(
-                process=cli_session.process,
-                graceful_timeout=args.graceful_timeout if "args" in locals() else 30,
-                label="🤖 Stopping CLI agent",
-                use_process_group=True,
-            )
-        if cli_log_file and not cli_log_file.closed:
-            cli_log_file.close()
-        # Clean up server
-        if server_process:
-            print("📡 Stopping server process...")
-            server_process.terminate()
-            try:
-                server_process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                print("   Force killing server...")
-                server_process.kill()
-        
-        # Clean up frame server
-        if frame_server_process:
-            print("🖼️  Stopping frame server...")
-            frame_server_process.terminate()
-            try:
-                frame_server_process.wait(timeout=2)
-            except:
-                frame_server_process.kill()
-        
-        print("👋 Goodbye!")
+        try: # Always backup on termination
+            from utils.data_persistence.backup_manager import create_cli_agent_termination_backup
+            backup_path = create_cli_agent_termination_backup(run_id, termination_reason)
+            if backup_path:
+                print(f"📦 Termination backup: {backup_path}")
+        except Exception as e:
+            logger.warning("Failed to create termination backup: %s", e)
+        _cleanup_services(
+            services,
+            cli_session,
+            cli_log_file,
+            args,
+            graceful_timeout=args.graceful_timeout,
+        )
 
 
 if __name__ == "__main__":

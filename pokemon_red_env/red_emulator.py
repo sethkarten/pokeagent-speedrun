@@ -144,7 +144,7 @@ class RedEmulator:
     @staticmethod
     def _get_cache_dir() -> str:
         try:
-            from utils.run_data_manager import get_cache_directory
+            from utils.data_persistence.run_data_manager import get_cache_directory
             return str(get_cache_directory())
         except Exception:
             d = os.path.join(str(Path.home()), ".cache", "pokeagent")
