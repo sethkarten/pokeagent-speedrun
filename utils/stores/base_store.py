@@ -221,8 +221,7 @@ class BaseStore(Generic[T]):
             for seg in segments:
                 node = node.setdefault(seg, {})
             leaves = node.setdefault("__entries__", [])
-            title = getattr(entry, "title", "") or getattr(entry, "name", "")
-            leaves.append(f"[{entry.id}] {title}")
+            leaves.append(self._format_tree_leaf(entry))
 
         lines = [f"=== {self.store_label} OVERVIEW ==="]
         self._render_tree(tree, lines, indent=0)
@@ -232,6 +231,11 @@ class BaseStore(Generic[T]):
 
         self._cached_tree = "\n".join(lines)
         return self._cached_tree
+
+    def _format_tree_leaf(self, entry: T) -> str:
+        """Format a single entry for the tree overview. Override in subclasses."""
+        title = getattr(entry, "title", "") or getattr(entry, "name", "")
+        return f"[{entry.id}] {title}"
 
     def _render_tree(self, node: dict, lines: list, indent: int) -> None:
         prefix = "  " * indent

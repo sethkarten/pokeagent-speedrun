@@ -55,22 +55,48 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
   - `tools['get_progress_summary']()` — get progress info
 - Set a `result` variable in the code to return data to yourself.
 
-**Example executable skill (coordinate-based movement):**
+**`get_game_state()` return format** (key fields for skill code):
+```
+state['player_position'] = {'x': int, 'y': int}
+state['location'] = 'ROUTE 101'
+state['state_text'] = '...'  (full formatted game state)
+```
+
+**Example executable skill (coordinate-based pathfinding with loop):**
 ```python
 target_x, target_y = args.get('x', 0), args.get('y', 0)
-state = tools['get_game_state']()
-player = state.get('player', {})
-px, py = player.get('x', 0), player.get('y', 0)
+max_moves = args.get('max_moves', 30)
+moves_made = 0
+stuck_count = 0
+last_pos = None
 
-buttons = []
-if px < target_x: buttons.append('RIGHT')
-elif px > target_x: buttons.append('LEFT')
-if py < target_y: buttons.append('DOWN')
-elif py > target_y: buttons.append('UP')
+for _ in range(max_moves):
+    state = tools['get_game_state']()
+    pos = state.get('player_position', {})
+    px, py = pos.get('x', 0), pos.get('y', 0)
 
-if buttons:
-    tools['press_buttons'](buttons=buttons, reasoning=f'Moving toward ({target_x},{target_y})')
-result = {'moved_from': (px, py), 'direction': buttons}
+    if px == target_x and py == target_y:
+        break
+
+    # Detect being stuck (same position after a move)
+    if last_pos == (px, py):
+        stuck_count += 1
+        if stuck_count >= 3:
+            break  # Can't make progress, return to orchestrator
+    else:
+        stuck_count = 0
+    last_pos = (px, py)
+
+    # Move toward target
+    if abs(px - target_x) >= abs(py - target_y):
+        btn = 'RIGHT' if px < target_x else 'LEFT'
+    else:
+        btn = 'DOWN' if py < target_y else 'UP'
+
+    tools['press_buttons'](buttons=[btn], reasoning=f'Step {moves_made}: moving toward ({target_x},{target_y})')
+    moves_made += 1
+
+result = {'arrived': (px == target_x and py == target_y), 'moves': moves_made, 'final_pos': (px, py)}
 ```
 
 ### Subagent Registry
@@ -86,6 +112,8 @@ result = {'moved_from': (px, py), 'direction': buttons}
 **execute_custom_subagent**
 - **Required:** `reasoning` (string)
 - **One of:** `subagent_id` (ID or name from registry, e.g. `"battle_handler"`) **OR** `config` (inline: `{max_turns, available_tools, system_instructions, directive, return_condition, name}`)
+- **Optional:** `max_steps` (integer) — override how many actions the subagent can take (default: registry value or 25)
+- The subagent runs **autonomously** — it loops internally, receiving fresh game state and screenshots each turn. You do NOT need to call it multiple times. It returns when done or when it hits `max_steps`.
 - Subagent signals completion via `return_to_orchestrator: true` in a tool-call argument.
 - Custom subagents **cannot** call `execute_custom_subagent` (no nesting).
 

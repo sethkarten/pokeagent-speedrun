@@ -282,7 +282,9 @@ class SubagentExecutor:
                          "Custom subagents cannot spawn other subagents.",
             }, indent=2)
 
-        max_turns = int(config.get("max_turns", 25))
+        # Per-call max_steps override takes priority over registry config
+        max_steps_override = arguments.get("max_steps")
+        max_turns = int(max_steps_override or config.get("max_turns", 25))
         instructions = config.get("system_instructions", "")
         directive = config.get("directive", "")
         return_condition = config.get("return_condition", "")
@@ -329,10 +331,12 @@ class SubagentExecutor:
                 parts.append(f"### TURN {turn_index} — No previous actions.")
 
             parts.append(
-                "### INSTRUCTIONS\n"
-                "Call tools to accomplish your directive. "
-                "When finished, include return_to_orchestrator in your final "
-                "tool call args to hand control back."
+                f"### INSTRUCTIONS\n"
+                f"You are an autonomous subagent with up to {max_turns} actions. "
+                f"Each action you take gives you fresh game state and a screenshot. "
+                f"Call tools to accomplish your directive. "
+                f"When your task is complete, include return_to_orchestrator: true "
+                f"in your final tool call args to hand control back to the orchestrator."
             )
             return "\n\n".join(parts)
 
