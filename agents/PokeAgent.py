@@ -2072,6 +2072,7 @@ class PokeAgent:
                                     num_trajectory_steps=self.optimization_frequency,
                                 )
                                 logger.info(f"✅ Harness evolved at step {active_step}: {results}")
+                                self._inject_evolution_summary(results)
                             except Exception as e:
                                 logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
                     elif self.prompt_optimizer:
@@ -2132,6 +2133,7 @@ class PokeAgent:
                                     num_trajectory_steps=self.optimization_frequency,
                                 )
                                 logger.info(f"✅ Harness evolved at step {active_step}: {results}")
+                                self._inject_evolution_summary(results)
                             except Exception as e:
                                 logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
                     elif self.prompt_optimizer:
@@ -2245,6 +2247,35 @@ class PokeAgent:
             logger.debug("✅ Logged to LLM logger")
         except Exception as e:
             logger.debug(f"Could not log to LLM logger: {e}")
+
+    def _inject_evolution_summary(self, results: dict):
+        """Inject a human-readable evolution summary so the orchestrator sees what changed."""
+        lines = ["🧬 HARNESS EVOLUTION completed. Changes to your toolkit:"]
+        for pass_name, label in [("subagents", "Subagents"), ("skills", "Skills"), ("memory", "Memory")]:
+            data = results.get(pass_name, {})
+            if isinstance(data, dict) and data.get("error"):
+                continue
+            created = data.get("created", [])
+            updated = data.get("updated", [])
+            retired = data.get("retired", [])
+            analysis = data.get("analysis", "")
+            if created or updated or retired or analysis:
+                parts = []
+                if created:
+                    parts.append(f"new: {created}")
+                if updated:
+                    parts.append(f"updated: {updated}")
+                if retired:
+                    parts.append(f"retired: {retired}")
+                lines.append(f"  {label}: {', '.join(parts)}")
+                if analysis:
+                    lines.append(f"    Reason: {analysis[:200]}")
+        prompt_data = results.get("prompt", {})
+        if isinstance(prompt_data, dict) and prompt_data.get("rewritten"):
+            lines.append("  Strategic prompt: rewritten based on trajectory analysis")
+        if len(lines) > 1:
+            lines.append("Review the updated SKILL LIBRARY, SUBAGENT REGISTRY, and MEMORY OVERVIEW below.")
+            self._store_function_result_for_context("harness_evolution", "\n".join(lines))
 
     def _store_function_result_for_context(self, function_name: str, result_json: str):
         """Store function result to include in next step's context."""
