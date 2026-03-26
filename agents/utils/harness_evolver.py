@@ -99,7 +99,11 @@ class HarnessEvolver:
         return self.prompt_optimizer.get_current_prompt()
 
     def evolve(self, current_step: int, num_trajectory_steps: int = 50) -> Dict[str, Any]:
-        """Run all evolution passes and return a summary."""
+        """Run all evolution passes and return a summary.
+
+        Each pass is independent — if one fails, the others still run and
+        the evolution log is always saved.
+        """
         logger.info(
             "=== HarnessEvolver generation %d at step %d ===",
             self.generation, current_step,
@@ -112,17 +116,18 @@ class HarnessEvolver:
 
         results: Dict[str, Any] = {}
 
-        # 1. Prompt evolution (reuse PromptOptimizer, enriched with store context)
-        results["prompt"] = self._evolve_prompt(current_step, num_trajectory_steps)
-
-        # 2. Subagent evolution
-        results["subagents"] = self._evolve_subagents(trajectories, current_step)
-
-        # 3. Skill evolution
-        results["skills"] = self._evolve_skills(trajectories, current_step)
-
-        # 4. Memory curation (lightweight)
-        results["memory"] = self._evolve_memory(trajectories, current_step)
+        # Each pass is wrapped independently so failures don't block others
+        for name, fn in [
+            ("prompt", lambda: self._evolve_prompt(current_step, num_trajectory_steps)),
+            ("subagents", lambda: self._evolve_subagents(trajectories, current_step)),
+            ("skills", lambda: self._evolve_skills(trajectories, current_step)),
+            ("memory", lambda: self._evolve_memory(trajectories, current_step)),
+        ]:
+            try:
+                results[name] = fn()
+            except Exception as e:
+                logger.error("Evolution pass '%s' failed: %s", name, e, exc_info=True)
+                results[name] = {"error": str(e)}
 
         self.generation += 1
         self._save_evolution_log(current_step, results)
