@@ -39,10 +39,14 @@ POKEAGENT_PROMPT_PATH = _default_system_prompts[game_type]
 POKEAGENT_SYSTEM_PROMPT_PATH = _optimization_enabled_prompts[game_type]
 SLAM_INSTRUCTIONS_PATH = f"{PROMPTS_ROOT}/pokeagent-directives/SLAM_INSTRUCTIONS.md"
 
+_no_builtins_prompts = {
+    "red": f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT_NO_BUILTINS_RED.md",
+    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT_NO_BUILTINS.md",
+}
+POKEAGENT_NO_BUILTINS_PROMPT_PATH = _no_builtins_prompts[game_type]
 # ---------------------------------------------------------------------------
 # Templated files: single file with {game_name}, rendered at load time
 # ---------------------------------------------------------------------------
-POKEAGENT_NO_BUILTINS_PROMPT_PATH = f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT_NO_BUILTINS.md"
 CLI_AGENT_DIRECTIVE_PATH = f"{PROMPTS_ROOT}/cli-agent-directives/pokemon_directive.md"
 
 # AutoEvolve directory (renamed from prompt-optimization/)

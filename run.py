@@ -26,10 +26,10 @@ CUSTOM_AGENT_CONFIGS = {
         "use_backend": True,
         "supports_prompt_optimization": True,
     },
-    "simplest": {
+    "simple": {
         "name": "PokeAgent",
         "details": [
-            "Minimal PokeAgent scaffold for AutoEvolve baseline experiments",
+            "Minimal PokeAgent scaffold (H_min baseline)",
             "No built-in subagent tools; orchestrator owns replan_objectives directly",
             "Empty subagent registry (agent must create its own)",
         ],
@@ -37,6 +37,28 @@ CUSTOM_AGENT_CONFIGS = {
         "class": "PokeAgent",
         "use_backend": True,
         "supports_prompt_optimization": False,
+    },
+    "simplest": {  # Legacy alias for simple
+        "name": "PokeAgent",
+        "details": [
+            "Legacy alias for 'simple' scaffold",
+        ],
+        "module": "agents.PokeAgent",
+        "class": "PokeAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": False,
+    },
+    "autoevolve": {
+        "name": "PokeAgent",
+        "details": [
+            "AutoEvolve scaffold (H_auto): starts from H_min + evolutionary optimization",
+            "No built-in subagent tools; empty registry (agent creates its own)",
+            "Reset-free prompt evolution from trajectory segments",
+        ],
+        "module": "agents.PokeAgent",
+        "class": "PokeAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": True,
     },
     "autonomous_cli": {
         "name": "PokeAgent",
@@ -67,7 +89,9 @@ CUSTOM_AGENT_CONFIGS = {
 
 SCAFFOLD_DESCRIPTIONS = {
     "pokeagent": "PokeAgent (VLM benchmark agent with tool scaffolding)",
-    "simplest": "PokeAgent-Simplest (no built-in subagents, direct replan, empty registry)",
+    "simple": "PokeAgent-Simple (H_min: no built-in subagents, direct replan, empty registry)",
+    "simplest": "PokeAgent-Simple (legacy alias for 'simple')",
+    "autoevolve": "AutoEvolve (H_auto: H_min + reset-free evolutionary optimization)",
     "autonomous_cli": "PokeAgent (legacy alias)",
     "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",
 }
@@ -101,8 +125,8 @@ def start_server(args, run_id=None):
     # Single-writer metrics: server is the only writer
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
 
-    # The 'simplest' scaffold starts with an empty subagent registry
-    if getattr(args, "scaffold", "pokeagent") == "simplest":
+    # simple/simplest/autoevolve scaffolds start with an empty subagent registry
+    if getattr(args, "scaffold", "pokeagent") in ("simple", "simplest", "autoevolve"):
         server_env["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
 
     # Pass through server-relevant arguments
@@ -202,6 +226,10 @@ def start_custom_agent(agent_config, args):
     for detail in agent_config.get('details', []):
         print(f"   {detail}")
     print("")
+
+    # Ensure EXCLUDE_BUILTIN_SUBAGENTS is visible in the agent process too
+    if getattr(args, "scaffold", "pokeagent") in ("simple", "simplest", "autoevolve"):
+        os.environ["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
 
     # Dynamic import
     module = __import__(agent_config['module'], fromlist=[agent_config['class']])

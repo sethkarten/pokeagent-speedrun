@@ -298,10 +298,11 @@ LOCAL_SUBAGENT_SPECS = (
         interaction_name="Execute_Custom_Subagent",
         handler_method="_execute_custom_subagent",
         description=(
-            "Execute a custom subagent from the subagent registry by ID, or run "
-            "an ad-hoc subagent with an inline config. The subagent runs in a "
-            "looping mode with its own tool access and exits via "
-            "return_to_orchestrator. Cannot be called from within another subagent."
+            "Launch an autonomous subagent that runs multiple actions on its own, "
+            "receiving fresh game state each turn. The subagent runs until it "
+            "signals return_to_orchestrator or hits max_steps. You do NOT need to "
+            "call it multiple times — it loops internally. Use subagent_id for "
+            "registry entries or config for ad-hoc. Cannot nest subagents."
         ),
         parameters={
             "type_": "OBJECT",
@@ -335,6 +336,16 @@ LOCAL_SUBAGENT_SPECS = (
                 "reasoning": {
                     "type_": "STRING",
                     "description": "Why you are launching this subagent now.",
+                },
+                "max_steps": {
+                    "type_": "INTEGER",
+                    "description": (
+                        "Maximum number of actions the subagent can take before "
+                        "returning control. Overrides the registry's max_turns. "
+                        "The subagent runs autonomously, receiving fresh game state "
+                        "each turn, until it signals return_to_orchestrator or hits "
+                        "this limit. Default: registry value or 25."
+                    ),
                 },
             },
             "required": ["reasoning"],
