@@ -718,21 +718,29 @@ class PokeAgent:
                           "process_memory", "get_progress_summary"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
-        import random as _random_mod
-        import collections as _collections_mod
-        import math as _math_mod
+        import random, collections, math, json as _json_mod, re as _re_mod, heapq, itertools, functools
+        import numpy as np
         sandbox_globals = {
             "__builtins__": {
                 "range": range, "len": len, "int": int, "float": float,
                 "str": str, "list": list, "dict": dict, "tuple": tuple,
+                "set": set, "frozenset": frozenset,
                 "bool": bool, "print": print, "abs": abs, "min": min,
                 "max": max, "sum": sum, "enumerate": enumerate, "zip": zip,
                 "sorted": sorted, "reversed": reversed, "isinstance": isinstance,
+                "map": map, "filter": filter, "any": any, "all": all,
                 "True": True, "False": False, "None": None,
             },
-            "random": _random_mod,
-            "collections": _collections_mod,
-            "math": _math_mod,
+            "random": random,
+            "collections": collections,
+            "math": math,
+            "json": _json_mod,
+            "re": _re_mod,
+            "heapq": heapq,
+            "itertools": itertools,
+            "functools": functools,
+            "np": np,
+            "numpy": np,
             "tools": sandbox_tools,
             "args": skill_args or {},
         }
