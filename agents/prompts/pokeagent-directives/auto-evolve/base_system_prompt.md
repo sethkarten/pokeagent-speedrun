@@ -59,8 +59,16 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
 ```
 state['player_position'] = {'x': int, 'y': int}
 state['location'] = 'ROUTE 101'
-state['state_text'] = '...'  (full formatted game state)
+state['state_text'] = '...'  (full formatted text including ASCII map, party, warps, NPCs)
+state['raw_state']['player']['position'] = {'x': int, 'y': int}
 ```
+
+The `state_text` contains an **ASCII map** every step with the legend:
+- `P` = Player, `.` = walkable, `#` = blocked, `~` = tall grass
+- `D` = Door, `S` = Stairs/Warp, `I` = item, `X` = out of bounds
+- Map dimensions and warp destinations are also included
+
+Skill code can parse `state_text` to read the ASCII map for pathfinding, or use `player_position` for simple coordinate-based movement.
 
 **Example executable skill (coordinate-based pathfinding with loop):**
 ```python
@@ -98,6 +106,8 @@ for _ in range(max_moves):
 
 result = {'arrived': (px == target_x and py == target_y), 'moves': moves_made, 'final_pos': (px, py)}
 ```
+
+**Advanced: You can parse the ASCII map from `state_text` for obstacle-aware pathfinding.** The map grid lines start after "ASCII Map:" in `state_text`. Each character is a tile at that (x, y) coordinate. Use `#` to detect blocked tiles and route around them.
 
 ### Subagent Registry
 
