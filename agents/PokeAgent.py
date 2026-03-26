@@ -473,11 +473,14 @@ class PokeAgent:
                         },
                         "args": {
                             "type_": "OBJECT",
-                            "description": "Optional arguments passed to the skill code as the `args` dict",
-                            "properties": {}
+                            "description": "REQUIRED for executable skills. Key-value arguments passed to the skill code. Example for move_to_coords: {\"x\": 5, \"y\": 12}. Check the skill's description for what args it expects.",
+                            "properties": {
+                                "x": {"type_": "INTEGER", "description": "Target X coordinate (for navigation skills)"},
+                                "y": {"type_": "INTEGER", "description": "Target Y coordinate (for navigation skills)"}
+                            }
                         }
                     },
-                    "required": ["skill_id", "reasoning"]
+                    "required": ["skill_id", "reasoning", "args"]
                 }
             },
             {
@@ -676,7 +679,18 @@ class PokeAgent:
                 "error": f"Skill {skill_id} has no executable code. It is a behavioral description only — read it with process_skill and follow its guidance manually.",
             })
 
-        # Validate that required args are provided
+        # If args is empty, try to extract coordinates from reasoning as fallback
+        if not skill_args and reasoning:
+            import re
+            # Look for patterns like "x=5, y=12" or "(5, 12)" or "target (5,12)"
+            coord_match = re.search(r'(?:x\s*=\s*(\d+).*?y\s*=\s*(\d+))|(?:\((\d+)\s*,\s*(\d+)\))', reasoning)
+            if coord_match:
+                x = coord_match.group(1) or coord_match.group(3)
+                y = coord_match.group(2) or coord_match.group(4)
+                if x and y:
+                    skill_args = {"x": int(x), "y": int(y)}
+                    logger.info(f"Extracted args from reasoning: {skill_args}")
+
         if not skill_args:
             return json.dumps({
                 "success": False,
@@ -700,6 +714,7 @@ class PokeAgent:
                           "process_memory", "get_progress_summary"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
+        import random as _random_mod
         sandbox_globals = {
             "__builtins__": {
                 "range": range, "len": len, "int": int, "float": float,
@@ -709,6 +724,7 @@ class PokeAgent:
                 "sorted": sorted, "reversed": reversed, "isinstance": isinstance,
                 "True": True, "False": False, "None": None,
             },
+            "random": _random_mod,
             "tools": sandbox_tools,
             "args": skill_args or {},
         }
