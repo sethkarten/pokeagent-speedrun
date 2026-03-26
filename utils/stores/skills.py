@@ -55,6 +55,13 @@ class SkillStore(BaseStore[SkillEntry]):
         super().__init__(cache_dir)
         self.load()
 
+    def _format_tree_leaf(self, entry: SkillEntry) -> str:
+        """Annotate executable skills so the agent knows to call run_skill."""
+        title = entry.title or entry.name
+        if entry.code and entry.code.strip():
+            return f"[{entry.id}] {title} (run with: run_skill)"
+        return f"[{entry.id}] {title}"
+
     def _deserialize_entry(self, entry_dict: dict) -> SkillEntry:
         entry_dict.setdefault("mutation_history", [])
         entry_dict.setdefault("source", "orchestrator")
