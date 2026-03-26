@@ -139,7 +139,7 @@ test_outputs/*
 test_gemini.py
 out.txt
 out_2.txt
-*.sh
+run.sh
 llm_logs/*
 
 # Agent backups

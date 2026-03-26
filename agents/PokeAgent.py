@@ -72,6 +72,7 @@ from agents.subagents.planner import (
     format_planner_history,
 )
 from agents.prompts.paths import (
+    AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
     POKEAGENT_BASE_PROMPT_PATH,
     POKEAGENT_NO_BUILTINS_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
@@ -79,6 +80,9 @@ from agents.prompts.paths import (
     render_prompt,
     resolve_repo_path,
 )
+
+# Scaffolds that start with an empty subagent registry (no built-in subagents)
+_NO_BUILTINS_SCAFFOLDS = {"simple", "simplest", "autoevolve"}
 from utils.json_utils import convert_protobuf_value, convert_protobuf_args, normalize_replan_edits
 
 # Configure logging
@@ -194,7 +198,7 @@ class PokeAgent:
         self.optimization_enabled = enable_prompt_optimization
         self.optimization_frequency = optimization_frequency
         self.scaffold = scaffold
-        self.include_builtins = scaffold != "simplest"
+        self.include_builtins = scaffold not in _NO_BUILTINS_SCAFFOLDS
 
         # Conversation history for tracking and compaction
         self.conversation_history = []
@@ -214,9 +218,11 @@ class PokeAgent:
 
         # Determine which system instructions file to use
         if system_instructions_file is None:
-            if self.optimization_enabled:
-                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH # game type handled by paths.py
-            elif self.scaffold == "simplest":
+            if self.scaffold == "autoevolve":
+                system_instructions_file = AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH
+            elif self.optimization_enabled:
+                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH
+            elif self.scaffold in _NO_BUILTINS_SCAFFOLDS:
                 system_instructions_file = POKEAGENT_NO_BUILTINS_PROMPT_PATH
             else:
                 system_instructions_file = POKEAGENT_PROMPT_PATH
@@ -257,8 +263,9 @@ class PokeAgent:
             wait_for_actions_fn=self._wait_for_actions_complete,
         )
 
-        # Initialize prompt optimizer if enabled
+        # Initialize prompt optimizer / harness evolver if enabled
         self.prompt_optimizer = None
+        self.harness_evolver = None
         if self.optimization_enabled:
             run_manager = get_run_data_manager()
             if not run_manager:
@@ -267,12 +274,23 @@ class PokeAgent:
                     "(experiment run directory). Use run.py (or equivalent) so run data is set up "
                     "before starting PokeAgent, or disable prompt optimization."
                 )
-            self.prompt_optimizer = create_prompt_optimizer(
-                vlm=self.vlm,
-                run_data_manager=run_manager,
-                base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
-            )
-            logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
+            if self.scaffold == "autoevolve":
+                from agents.utils.harness_evolver import create_harness_evolver
+                self.harness_evolver = create_harness_evolver(
+                    vlm=self.vlm,
+                    run_data_manager=run_manager,
+                    base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
+                    system_prompt_path=AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+                )
+                self.prompt_optimizer = self.harness_evolver.prompt_optimizer
+                logger.info(f"🧬 HarnessEvolver ENABLED (frequency: every {optimization_frequency} steps)")
+            else:
+                self.prompt_optimizer = create_prompt_optimizer(
+                    vlm=self.vlm,
+                    run_data_manager=run_manager,
+                    base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
+                )
+                logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
@@ -358,31 +376,6 @@ class PokeAgent:
                 }
             },
             {
-                "name": "navigate_to",
-                "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium', 'high', or 'extreme' to explore alternative paths.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "x": {"type_": "INTEGER", "description": "Target X coordinate"},
-                        "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
-                        "variance": {
-                            "type_": "STRING",
-                            "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if very stuck), 'extreme' (8-step variation, use as last resort). Default: 'none'",
-                            "enum": ["none", "low", "medium", "high", "extreme"]
-                        },
-                        "reason": {
-                            "type_": "STRING",
-                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current location, objective, destination details]' and 'PLAN: [why navigating here, what to do when arrive]'. Example: 'ANALYZE: Currently at (8,10). Objective: reach next route. Destination: exit at (15,5). PLAN: Navigate to exit to progress story.'"
-                        },
-                        "consider_npcs": {
-                            "type_": "BOOLEAN",
-                            "description": "Whether to treat NPCs as obstacles during pathfinding. Set to true to avoid NPCs (recommended for most navigation). Set to false only if NPCs are wandering/moving and you want to ignore them."
-                        }
-                    },
-                    "required": ["x", "y", "variance", "reason", "consider_npcs"]
-                }
-            },
-            {
                 "name": "complete_direct_objective",
                 "description": "Complete the current direct objective and advance to the next one. In CATEGORIZED mode, you must specify which category objective to complete (story, battling, or dynamics). In LEGACY mode, category is ignored.",
                 "parameters": {
@@ -418,7 +411,7 @@ class PokeAgent:
                             "items": {
                                 "type_": "OBJECT",
                                 "properties": {
-                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "id": {"type_": "STRING", "description": "Entry ID or name (required for read/update/delete). For add, optionally specify a descriptive ID (e.g. 'route_101_map'). You can look up entries by ID or title."},
                                     "path": {"type_": "STRING", "description": "Category path, e.g. 'navigation/routes'. Defaults to 'uncategorized'."},
                                     "title": {"type_": "STRING", "description": "Short descriptive title (required for add)."},
                                     "content": {"type_": "STRING", "description": "Detailed content text (required for add)."},
@@ -453,14 +446,15 @@ class PokeAgent:
                             "items": {
                                 "type_": "OBJECT",
                                 "properties": {
-                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete). For add, optionally specify a descriptive ID (e.g. 'move_to_coords'). You can look up entries by ID or name."},
                                     "name": {"type_": "STRING", "description": "Skill name (required for add)."},
                                     "description": {"type_": "STRING", "description": "What the skill does and when to use it (required for add)."},
                                     "path": {"type_": "STRING", "description": "Category path, e.g. 'battle/type_matchups'. Defaults to 'general'."},
                                     "effectiveness": {"type_": "STRING", "description": "'low', 'medium', or 'high'."},
+                                    "code": {"type_": "STRING", "description": "Optional executable Python code for the skill. The code receives a `tools` dict with callable functions (e.g. tools['press_buttons'](buttons=[...], reasoning=...), tools['get_game_state']()). Return value is sent back to you."},
                                 },
                             },
-                            "description": "For read: [{id}]. For add: [{name, description}] — both required. For update: [{id, ...fields}]. For delete: [{id}]."
+                            "description": "For read: [{id}]. For add: [{name, description}] — both required; optionally include 'code' for executable skills. For update: [{id, ...fields}]. For delete: [{id}]."
                         },
                         "reasoning": {
                             "type_": "STRING",
@@ -468,6 +462,32 @@ class PokeAgent:
                         },
                     },
                     "required": ["action", "entries", "reasoning"]
+                }
+            },
+            {
+                "name": "run_skill",
+                "description": "Execute a skill's code. The skill must have a 'code' field containing Python. The code runs in a sandbox with access to game tools via a `tools` dict (e.g. tools['press_buttons'](buttons=['A'], reasoning='...'), tools['get_game_state']()). Use this for executable skills like custom pathfinding or battle routines.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "skill_id": {
+                            "type_": "STRING",
+                            "description": "ID of the skill to execute (e.g. 'skill_0001')"
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Why you are running this skill now"
+                        },
+                        "args": {
+                            "type_": "OBJECT",
+                            "description": "REQUIRED for executable skills. Key-value arguments passed to the skill code. Example for move_to_coords: {\"x\": 5, \"y\": 12}. Check the skill's description for what args it expects.",
+                            "properties": {
+                                "x": {"type_": "INTEGER", "description": "Target X coordinate (for navigation skills)"},
+                                "y": {"type_": "INTEGER", "description": "Target Y coordinate (for navigation skills)"}
+                            }
+                        }
+                    },
+                    "required": ["skill_id", "reasoning", "args"]
                 }
             },
             {
@@ -486,7 +506,7 @@ class PokeAgent:
                             "items": {
                                 "type_": "OBJECT",
                                 "properties": {
-                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete)."},
+                                    "id": {"type_": "STRING", "description": "Entry ID or name (required for read/update/delete). For add, optionally specify a descriptive ID (e.g. 'battle_handler'). You can look up entries by ID or name."},
                                     "name": {"type_": "STRING", "description": "Subagent name (required for add)."},
                                     "description": {"type_": "STRING", "description": "What the subagent does (required for add)."},
                                     "system_instructions": {"type_": "STRING", "description": "System prompt for the subagent (max 12000 chars)."},
@@ -558,54 +578,74 @@ class PokeAgent:
                     "required": []
                 }
             },
-            {
-                "name": "get_walkthrough",
-                "description": (
-                    "Get Pokemon Red walkthrough (Parts 1-16). "
-                    "1:Pallet Town 2:Viridian City 3:Viridian Forest/Pewter City "
-                    "4:Mt.Moon 5:Cerulean City 6:Vermilion City/S.S.Anne "
-                    "7:Diglett's Cave/Route9-10 8:Rock Tunnel/Lavender Town "
-                    "9:Celadon City/Rocket Hideout/Pokemon Tower "
-                    "10:Saffron City/Silph Co 11:Fuchsia City/Safari Zone "
-                    "12:Seafoam Islands 13:Cinnabar Island/Pokemon Mansion "
-                    "14:Power Plant/Viridian City 15:Victory Road 16:Indigo Plateau"
-                ) if os.environ.get("GAME_TYPE", "emerald").lower() == "red" else (
-                    "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four."
-                ),
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "part": {
-                            "type_": "INTEGER",
-                            "description": "Walkthrough part 1-16" if os.environ.get("GAME_TYPE", "emerald").lower() == "red" else "Walkthrough part 1-21"
-                        }
-                    },
-                    "required": ["part"]
-                }
-            },
-            {
-                "name": "lookup_pokemon_info",
-                "description": "Look up Pokemon information from Bulbapedia (stats, moves, evolution, locations).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "topic": {
-                            "type_": "STRING",
-                            "description": "Pokemon name or topic to look up"
-                        },
-                        "source": {
-                            "type_": "STRING",
-                            "description": "Wiki source (default: bulbapedia)"
-                        }
-                    },
-                    "required": ["topic"]
-                }
-            },
         ]
+
+        # H_expert-only tools: pathfinding, walkthrough, wiki lookup
+        # H_min/H_auto agents must navigate with press_buttons and learn through gameplay
+        if self.scaffold not in _NO_BUILTINS_SCAFFOLDS:
+            tools.extend([
+                {
+                    "name": "navigate_to",
+                    "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium', 'high', or 'extreme' to explore alternative paths.",
+                    "parameters": {
+                        "type_": "OBJECT",
+                        "properties": {
+                            "x": {"type_": "INTEGER", "description": "Target X coordinate"},
+                            "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
+                            "variance": {
+                                "type_": "STRING",
+                                "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if very stuck), 'extreme' (8-step variation, use as last resort). Default: 'none'",
+                                "enum": ["none", "low", "medium", "high", "extreme"]
+                            },
+                            "reason": {
+                                "type_": "STRING",
+                                "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current location, objective, destination details]' and 'PLAN: [why navigating here, what to do when arrive]'. Example: 'ANALYZE: Currently at Littleroot (8,10). Objective: Meet Prof Birch. Destination: Route 101 entrance at (15,5). PLAN: Navigate to encounter Birch being attacked. Will save him to progress story.'"
+                            },
+                            "consider_npcs": {
+                                "type_": "BOOLEAN",
+                                "description": "Whether to treat NPCs as obstacles during pathfinding. Set to true to avoid NPCs (recommended for most navigation). Set to false only if NPCs are wandering/moving and you want to ignore them."
+                            }
+                        },
+                        "required": ["x", "y", "variance", "reason", "consider_npcs"]
+                    }
+                },
+                {
+                    "name": "get_walkthrough",
+                    "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
+                    "parameters": {
+                        "type_": "OBJECT",
+                        "properties": {
+                            "part": {
+                                "type_": "INTEGER",
+                                "description": "Walkthrough part 1-21"
+                            }
+                        },
+                        "required": ["part"]
+                    }
+                },
+                {
+                    "name": "lookup_pokemon_info",
+                    "description": "Look up Pokemon information from Bulbapedia (stats, moves, evolution, locations).",
+                    "parameters": {
+                        "type_": "OBJECT",
+                        "properties": {
+                            "topic": {
+                                "type_": "STRING",
+                                "description": "Pokemon name or topic to look up"
+                            },
+                            "source": {
+                                "type_": "STRING",
+                                "description": "Wiki source (default: bulbapedia)"
+                            }
+                        },
+                        "required": ["topic"]
+                    }
+                },
+            ])
 
         tools.extend(build_local_subagent_tool_declarations(include_builtins=self.include_builtins))
 
-        if self.scaffold == "simplest":
+        if self.scaffold in _NO_BUILTINS_SCAFFOLDS:
             tools.append(REPLAN_OBJECTIVES_TOOL_DECLARATION)
 
         logger.info(f"✅ Created {len(tools)} tool declarations (scaffold={self.scaffold})")
@@ -617,10 +657,99 @@ class PokeAgent:
             spec = get_local_subagent_spec(function_name)
             return getattr(self, spec.handler_method)(arguments)
 
+        # run_skill: execute skill code locally with tool access
+        if function_name == "run_skill":
+            return self._execute_run_skill(arguments)
+
         # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
         return json.dumps(result, indent=2)
+
+    def _execute_run_skill(self, arguments: dict) -> str:
+        """Execute a skill's code in a sandbox with access to game tools."""
+        skill_id = arguments.get("skill_id", "")
+        reasoning = arguments.get("reasoning", "")
+        skill_args = arguments.get("args", {})
+
+        from utils.stores.skills import get_skill_store
+        store = get_skill_store()
+        entry = store.get(skill_id)
+
+        if entry is None:
+            return json.dumps({"success": False, "error": f"Skill {skill_id} not found"})
+
+        code = getattr(entry, "code", "")
+        if not code or not code.strip():
+            return json.dumps({
+                "success": False,
+                "error": f"Skill {skill_id} has no executable code. It is a behavioral description only — read it with process_skill and follow its guidance manually.",
+            })
+
+        # If args is empty, try to extract coordinates from reasoning as fallback
+        if not skill_args and reasoning:
+            import re
+            # Look for patterns like "x=5, y=12" or "(5, 12)" or "target (5,12)"
+            coord_match = re.search(r'(?:x\s*=\s*(\d+).*?y\s*=\s*(\d+))|(?:\((\d+)\s*,\s*(\d+)\))', reasoning)
+            if coord_match:
+                x = coord_match.group(1) or coord_match.group(3)
+                y = coord_match.group(2) or coord_match.group(4)
+                if x and y:
+                    skill_args = {"x": int(x), "y": int(y)}
+                    logger.info(f"Extracted args from reasoning: {skill_args}")
+
+        if not skill_args:
+            return json.dumps({
+                "success": False,
+                "error": (
+                    f"Skill {skill_id} ({entry.name}) requires arguments in the 'args' field. "
+                    f"You passed empty args. Example: run_skill(skill_id='{skill_id}', "
+                    f"args={{\"x\": 5, \"y\": 3}}, reasoning='...'). "
+                    f"The 'args' parameter must be a JSON object with the values the skill code needs."
+                ),
+            })
+
+        # Build a tools dict that skill code can call
+        def _tool_caller(tool_name):
+            def call(**kwargs):
+                result = self.mcp_adapter.call_tool(tool_name, kwargs)
+                # After pressing buttons, wait for the emulator to process them
+                # so subsequent get_game_state() calls return updated positions
+                if tool_name == "press_buttons":
+                    self._wait_for_actions_complete()
+                return result
+            return call
+
+        sandbox_tools = {}
+        for tool_name in ("press_buttons", "get_game_state", "complete_direct_objective",
+                          "process_memory", "get_progress_summary"):
+            sandbox_tools[tool_name] = _tool_caller(tool_name)
+
+        import random as _random_mod
+        sandbox_globals = {
+            "__builtins__": {
+                "range": range, "len": len, "int": int, "float": float,
+                "str": str, "list": list, "dict": dict, "tuple": tuple,
+                "bool": bool, "print": print, "abs": abs, "min": min,
+                "max": max, "sum": sum, "enumerate": enumerate, "zip": zip,
+                "sorted": sorted, "reversed": reversed, "isinstance": isinstance,
+                "True": True, "False": False, "None": None,
+            },
+            "random": _random_mod,
+            "tools": sandbox_tools,
+            "args": skill_args or {},
+        }
+
+        logger.info(f"Running skill {skill_id} ({entry.name}): {reasoning}")
+
+        try:
+            exec(code, sandbox_globals)  # noqa: S102
+            # Check if the code defined a result
+            result = sandbox_globals.get("result", "Skill executed successfully")
+            return json.dumps({"success": True, "skill_id": skill_id, "result": result})
+        except Exception as e:
+            logger.error(f"Skill {skill_id} execution failed: {e}", exc_info=True)
+            return json.dumps({"success": False, "skill_id": skill_id, "error": str(e)})
 
     # Built-in tool-set keys are pinned in the LRU cache (never evicted).
     _BUILTIN_VLM_KEYS: set = set()
@@ -1999,18 +2128,30 @@ class PokeAgent:
                 else:
                     logger.warning(f"🔍 [DEBUG] Step {active_step}: Skipping trajectory logging (run_manager={run_manager is not None}, pre_state={pre_state is not None})")
 
-                # Check if prompt optimization should run
-                if self.optimization_enabled and self.prompt_optimizer:
-                    if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
-                        logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
-                        try:
-                            new_base_prompt = self.prompt_optimizer.optimize_prompt(
-                                current_step=active_step,
-                                num_trajectory_steps=self.optimization_frequency
-                            )
-                            logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
-                        except Exception as e:
-                            logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
+                # Check if harness evolution or prompt optimization should run
+                if self.optimization_enabled:
+                    if self.harness_evolver:
+                        if self.harness_evolver.should_evolve(active_step, self.optimization_frequency):
+                            logger.info(f"🧬 Triggering harness evolution at step {active_step}")
+                            try:
+                                results = self.harness_evolver.evolve(
+                                    current_step=active_step,
+                                    num_trajectory_steps=self.optimization_frequency,
+                                )
+                                logger.info(f"✅ Harness evolved at step {active_step}: {results}")
+                            except Exception as e:
+                                logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
+                    elif self.prompt_optimizer:
+                        if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
+                            logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
+                            try:
+                                new_base_prompt = self.prompt_optimizer.optimize_prompt(
+                                    current_step=active_step,
+                                    num_trajectory_steps=self.optimization_frequency
+                                )
+                                logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
+                            except Exception as e:
+                                logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
 
                 return True, full_response
             else:
@@ -2047,18 +2188,30 @@ class PokeAgent:
                 else:
                     logger.warning(f"🔍 [DEBUG] Step {active_step}: Skipping trajectory logging (text response, run_manager={run_manager is not None}, pre_state={pre_state is not None})")
 
-                # Check if prompt optimization should run
-                if self.optimization_enabled and self.prompt_optimizer:
-                    if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
-                        logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
-                        try:
-                            new_base_prompt = self.prompt_optimizer.optimize_prompt(
-                                current_step=active_step,
-                                num_trajectory_steps=self.optimization_frequency
-                            )
-                            logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
-                        except Exception as e:
-                            logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
+                # Check if harness evolution or prompt optimization should run
+                if self.optimization_enabled:
+                    if self.harness_evolver:
+                        if self.harness_evolver.should_evolve(active_step, self.optimization_frequency):
+                            logger.info(f"🧬 Triggering harness evolution at step {active_step}")
+                            try:
+                                results = self.harness_evolver.evolve(
+                                    current_step=active_step,
+                                    num_trajectory_steps=self.optimization_frequency,
+                                )
+                                logger.info(f"✅ Harness evolved at step {active_step}: {results}")
+                            except Exception as e:
+                                logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
+                    elif self.prompt_optimizer:
+                        if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
+                            logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
+                            try:
+                                new_base_prompt = self.prompt_optimizer.optimize_prompt(
+                                    current_step=active_step,
+                                    num_trajectory_steps=self.optimization_frequency
+                                )
+                                logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
+                            except Exception as e:
+                                logger.error(f"❌ Prompt optimization failed: {e}", exc_info=True)
 
                 return True, text_content
 

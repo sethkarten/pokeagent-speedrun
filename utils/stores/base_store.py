@@ -79,11 +79,20 @@ class BaseStore(Generic[T]):
     # ------------------------------------------------------------------
 
     def add(self, **fields) -> str:
-        """Create a new entry. Returns the generated entry ID."""
-        entry_id = f"{self.id_prefix}{self.next_id:04d}"
-        self.next_id += 1
+        """Create a new entry. Returns the entry ID.
 
-        fields.setdefault("id", entry_id)
+        If ``id`` is provided in *fields* and is not already taken, it is
+        used as-is (allows human-readable IDs like ``"move_to_coords"``).
+        Otherwise a numeric ID is auto-generated.
+        """
+        custom_id = fields.get("id")
+        if custom_id and custom_id not in self.entries:
+            entry_id = custom_id
+        else:
+            entry_id = f"{self.id_prefix}{self.next_id:04d}"
+            self.next_id += 1
+
+        fields["id"] = entry_id
         fields.setdefault("created_at", datetime.now().isoformat())
         fields.setdefault("updated_at", fields["created_at"])
         fields.setdefault("mutation_history", [])
@@ -94,7 +103,7 @@ class BaseStore(Generic[T]):
         self.save()
 
         title = getattr(entry, "title", "") or getattr(entry, "name", "")
-        logger.info(f"Added {self.id_prefix}entry: {title}")
+        logger.info(f"Added {self.id_prefix}entry: {entry_id} ({title})")
         return entry_id
 
     def update(self, entry_id: str, **fields) -> bool:
@@ -133,7 +142,18 @@ class BaseStore(Generic[T]):
         return True
 
     def get(self, entry_id: str) -> Optional[T]:
-        return self.entries.get(entry_id)
+        """Look up by ID first, then fall back to name/title match."""
+        entry = self.entries.get(entry_id)
+        if entry is not None:
+            return entry
+        # Fall back: search by name or title (case-insensitive)
+        lookup = entry_id.lower().strip()
+        for e in self.entries.values():
+            name = getattr(e, "name", "") or ""
+            title = getattr(e, "title", "") or ""
+            if name.lower().strip() == lookup or title.lower().strip() == lookup:
+                return e
+        return None
 
     def get_multiple(self, ids: List[str], max_count: int = 3) -> List[T]:
         """Return up to *max_count* entries by ID (order preserved)."""
@@ -201,8 +221,7 @@ class BaseStore(Generic[T]):
             for seg in segments:
                 node = node.setdefault(seg, {})
             leaves = node.setdefault("__entries__", [])
-            title = getattr(entry, "title", "") or getattr(entry, "name", "")
-            leaves.append(f"[{entry.id}] {title}")
+            leaves.append(self._format_tree_leaf(entry))
 
         lines = [f"=== {self.store_label} OVERVIEW ==="]
         self._render_tree(tree, lines, indent=0)
@@ -212,6 +231,11 @@ class BaseStore(Generic[T]):
 
         self._cached_tree = "\n".join(lines)
         return self._cached_tree
+
+    def _format_tree_leaf(self, entry: T) -> str:
+        """Format a single entry for the tree overview. Override in subclasses."""
+        title = getattr(entry, "title", "") or getattr(entry, "name", "")
+        return f"[{entry.id}] {title}"
 
     def _render_tree(self, node: dict, lines: list, indent: int) -> None:
         prefix = "  " * indent
