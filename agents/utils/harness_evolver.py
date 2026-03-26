@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from agents.prompts.paths import (
     AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+    GAME_NAME,
     POKEAGENT_BASE_PROMPT_PATH,
     resolve_repo_path,
 )
@@ -188,7 +189,7 @@ class HarnessEvolver:
         )
         tool_failures = self._extract_tool_failures(trajectories)
 
-        prompt = f"""You are a harness evolution system for an AI agent playing Pokemon Emerald.
+        prompt = f"""You are a harness evolution system for an AI agent playing {GAME_NAME}.
 The agent has NO walkthrough or wiki access — it learns entirely through gameplay.
 
 Your job: analyze recent trajectories and recommend changes to the agent's subagent library.
@@ -319,7 +320,7 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
         )
         tool_failures = self._extract_tool_failures(trajectories)
 
-        prompt = f"""You are a harness evolution system analyzing an AI agent's recent gameplay in Pokemon Emerald.
+        prompt = f"""You are a harness evolution system analyzing an AI agent's recent gameplay in {GAME_NAME}.
 
 Your job: identify reusable behavioral patterns (skills) from successful actions and evaluate existing skills.
 
@@ -425,7 +426,7 @@ Respond with ONLY a JSON object (no markdown fences):
             trajectories[-20:]  # Use last 20 for memory curation (lighter)
         )
 
-        prompt = f"""You are a memory curator for an AI agent playing Pokemon Emerald.
+        prompt = f"""You are a memory curator for an AI agent playing {GAME_NAME}.
 
 Your job: review the agent's memory store and recent trajectories, then recommend targeted improvements. Be conservative — the agent itself writes memory during gameplay. You fill gaps and clean up.
 

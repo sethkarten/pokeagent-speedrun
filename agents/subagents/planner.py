@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from agents.prompts.paths import GAME_NAME
 from .utils.registry import PLANNER_ALLOWED_TOOL_NAMES
 
 
@@ -192,7 +193,7 @@ def build_planner_prompt(
     handoff_summary: str,
     turn_index: int,
 ) -> str:
-    return f"""You are the objective-planning subagent for a Pokemon Emerald speedrun agent.
+    return f"""You are the objective-planning subagent for a {GAME_NAME} speedrun agent.
 Your job is to review, create, modify, or delete objectives in the agent's objective sequence
 so the orchestrator always has clear, achievable next steps.
 

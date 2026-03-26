@@ -17,6 +17,7 @@ from typing import Optional, Dict, List, Any
 import numpy as np
 
 import json as json_module
+from agents.prompts.paths import GAME_NAME
 
 import PIL.Image as PILImage
 import io
@@ -200,7 +201,7 @@ class VisionOnlyAgent:
         filepath = resolve_repo_path(filename)
         if not filepath.exists():
             logger.warning(f"System instructions file not found: {filepath}")
-            return "You are an AI agent playing Pokemon Emerald. Use the available tools to progress through the game."
+            return f"You are an AI agent playing {GAME_NAME}. Use the available tools to progress through the game."
 
         with open(filepath, 'r') as f:
             content = f.read()
@@ -1164,7 +1165,7 @@ class VisionOnlyAgent:
         logger.info(f"   saved_map_info: {len(saved_map_info):,} chars")
 
         # Build prompt WITHOUT navigation/pathfinding instructions
-        prompt = f"""You are an expert Pokemon player and battle strategist playing Pokémon Emerald on a Game Boy Advance emulator."""
+        prompt = f"""You are an expert Pokemon player and battle strategist playing {GAME_NAME} on an emulator."""
 
         # Add MANDATORY SLAM check at the very top if enabled
         if self.allow_slam:

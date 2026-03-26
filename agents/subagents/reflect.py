@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from agents.prompts.paths import GAME_NAME
+
 
 def _format_objective_summary(objective_state: Dict[str, Any]) -> str:
     if objective_state.get("mode") == "categorized":
@@ -83,7 +85,7 @@ def build_reflect_prompt(*, situation: str, context: Dict[str, Any], last_n_step
     memory_summary = context.get("memory_summary") or "No memories recorded yet."
     skill_overview = context.get("skill_overview") or "No skills learned yet."
 
-    return f"""You are the reflection subagent for a Pokemon Emerald speedrun agent.
+    return f"""You are the reflection subagent for a {GAME_NAME} speedrun agent.
 Your job is to diagnose whether the orchestrator is stuck, pursuing the wrong objective, or missing a simpler next move.
 
 The current screenshot is attached when available. Use it as CURRENT visual evidence only.
