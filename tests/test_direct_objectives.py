@@ -1,38 +1,23 @@
 #!/usr/bin/env python3
 """
-Tests for DirectObjectives Module
-==================================
-
-Tests the DirectObjectiveManager and DirectObjective classes with:
-- Objective sequence loading
-- Objective guidance retrieval
-- Objective completion tracking
-- Dynamic objective creation
-- Sequence status tracking
-- Objective context generation
+Focused tests for supported direct objective modes.
 """
 
-import pytest
 import json
-import sys
 import os
+import sys
 import tempfile
-import shutil
-from datetime import datetime
-from unittest.mock import Mock, MagicMock, patch
-from pathlib import Path
 
-# Add the project root to the path (when run from tests/ or as script)
+import pytest
+
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.objectives import DirectObjective, DirectObjectiveManager
+from agents.objectives import DirectObjective, DirectObjectiveManager, get_first_objective_info
 
 
 class TestDirectObjective:
-    """Test suite for DirectObjective dataclass"""
-    
     def test_direct_objective_creation(self):
-        """Test creating a DirectObjective with all fields"""
         obj = DirectObjective(
             id="test_01",
             description="Test objective",
@@ -42,9 +27,9 @@ class TestDirectObjective:
             navigation_hint="Go north",
             completion_condition="location_reached",
             priority=1,
-            completed=False
+            completed=False,
         )
-        
+
         assert obj.id == "test_01"
         assert obj.description == "Test objective"
         assert obj.action_type == "navigate"
@@ -54,18 +39,14 @@ class TestDirectObjective:
         assert obj.completion_condition == "location_reached"
         assert obj.priority == 1
         assert obj.completed is False
-    
+
     def test_direct_objective_defaults(self):
-        """Test DirectObjective with minimal required fields"""
         obj = DirectObjective(
             id="test_02",
             description="Minimal objective",
-            action_type="interact"
+            action_type="interact",
         )
-        
-        assert obj.id == "test_02"
-        assert obj.description == "Minimal objective"
-        assert obj.action_type == "interact"
+
         assert obj.target_location is None
         assert obj.target_coords is None
         assert obj.navigation_hint is None
@@ -75,469 +56,316 @@ class TestDirectObjective:
 
 
 class TestDirectObjectiveManager:
-    """Test suite for DirectObjectiveManager"""
-    
     @pytest.fixture
     def manager(self):
-        """Create a DirectObjectiveManager instance for testing"""
         return DirectObjectiveManager()
-    
+
     def test_manager_initialization(self, manager):
-        """Test that manager initializes with empty state"""
         assert manager.current_sequence == []
         assert manager.current_index == 0
         assert manager.sequence_name == ""
-    
-    def test_load_birch_to_rival_sequence(self, manager):
-        """Test loading the birch_to_rival sequence"""
-        manager.load_birch_to_rival_sequence()
-        
-        assert manager.sequence_name == "birch_to_rival"
-        assert len(manager.current_sequence) > 0  # Sequence has objectives
-        assert manager.current_index == 0
-        
-        # Check first objective
-        first_obj = manager.current_sequence[0]
-        assert first_obj.id == "birch_01_north_littleroot"
-        assert first_obj.action_type == "navigate"
-        assert first_obj.target_location == "Route 101"
-        
-        # Check last objective
-        last_obj = manager.current_sequence[-1]
-        assert last_obj.id == "birch_08_enter_lab"
-        assert last_obj.action_type == "interact"
-        assert last_obj.target_location == "Professor Birch's Lab"
-    
-    def test_load_hackathon_route102_to_petalburg_sequence(self, manager):
-        """Test loading the hackathon Route 102 to Petalburg sequence"""
-        manager.load_hackathon_route102_to_petalburg_sequence()
-        
-        assert manager.sequence_name == "hackathon_route102_to_petalburg"
-        assert len(manager.current_sequence) > 0  # Sequence has objectives
-        assert manager.current_index == 0
-        
-        # Check first objective
-        first_obj = manager.current_sequence[0]
-        assert first_obj.id == "hackathon_01_blue_hat_trainer"
-        assert "blue hat" in first_obj.description.lower()
-        
-        # Check last objective
-        last_obj = manager.current_sequence[-1]
-        assert last_obj.id == "hackathon_05_west_petalburg"
-        assert "Petalburg City" in last_obj.target_location
-    
-    def test_load_tutorial_to_rustboro_city_sequence(self, manager):
-        """Test loading the tutorial_to_rustboro_city sequence"""
-        manager.load_tutorial_to_rustboro_city_sequence()
-        
-        assert manager.sequence_name == "tutorial_to_rustboro_city"
-        assert len(manager.current_sequence) > 0  # Sequence has objectives
-        assert manager.current_index == 0
-        
-        # Check first objective
-        first_obj = manager.current_sequence[0]
-        assert first_obj.id == "tutorial_01_exit_truck"
-        assert "truck" in first_obj.description.lower()
-        
-        # Check last objective
-        last_obj = manager.current_sequence[-1]
-        assert last_obj.id == "go_to_rustboro_city_pokemon_center_and_heal_pokemon"
-        assert "rustboro" in last_obj.target_location.lower()
-    
-    def test_load_tutorial_to_rustboro_city_with_start_index(self, manager):
-        """Test loading sequence with start_index parameter"""
-        start_index = 5
-        manager.load_tutorial_to_rustboro_city_sequence(start_index=start_index)
-        
-        assert manager.current_index == start_index
-        # Check that objectives before start_index are marked as completed
-        for i in range(start_index):
-            assert manager.current_sequence[i].completed is True
-            assert hasattr(manager.current_sequence[i], 'completed_at')
-        
-        # Check that objectives after start_index are not completed
-        assert manager.current_sequence[start_index].completed is False
-    
-    def test_get_current_objective_empty(self, manager):
-        """Test getting current objective when no sequence is loaded"""
-        assert manager.get_current_objective() is None
-    
-    def test_get_current_objective_with_sequence(self, manager):
-        """Test getting current objective when sequence is loaded"""
-        manager.load_birch_to_rival_sequence()
-        
-        current = manager.get_current_objective()
-        assert current is not None
-        assert current.id == "birch_01_north_littleroot"
-        assert manager.current_index == 0
-    
-    def test_get_current_objective_guidance_empty(self, manager):
-        """Test getting guidance when no sequence is active"""
-        guidance = manager.get_current_objective_guidance()
-        assert guidance is None
-    
-    def test_get_current_objective_guidance_with_sequence(self, manager):
-        """Test getting guidance for current objective"""
-        manager.load_birch_to_rival_sequence()
-        
-        guidance = manager.get_current_objective_guidance()
+        assert manager.mode == "legacy"
+
+    def test_load_categorized_full_game_sequence(self, manager):
+        manager.load_categorized_full_game_sequence()
+
+        assert manager.mode == "categorized"
+        assert manager.sequence_name == "categorized_full_game"
+        assert len(manager.story_sequence) > 0
+        assert len(manager.battling_sequence) > 0
+        assert manager.story_index == 0
+        assert manager.battling_index == 0
+        assert manager.dynamics_sequence == []
+
+    def test_load_categorized_full_game_with_start_indexes(self, manager):
+        manager.load_categorized_full_game_sequence(start_story_index=3, start_battling_index=2)
+
+        assert manager.story_index == 3
+        assert manager.battling_index == 2
+        assert all(obj.completed for obj in manager.story_sequence[:3])
+        assert all(obj.completed for obj in manager.battling_sequence[:2])
+        assert manager.story_sequence[3].completed is False
+        assert manager.battling_sequence[2].completed is False
+
+    def test_load_autonomous_objective_creation_sequence(self, manager):
+        manager.load_autonomous_objective_creation_sequence()
+
+        assert manager.mode == "categorized"
+        assert manager.sequence_name == "autonomous_objective_creation"
+        assert len(manager.story_sequence) == 1
+        assert manager.story_sequence[0].id == "autonomous_01_plan_objectives"
+        assert manager.battling_sequence == []
+        assert manager.dynamics_sequence == []
+
+    def test_load_autonomous_sequence_mentions_replan_when_simplest_scaffold(self, manager, monkeypatch):
+        monkeypatch.setenv("EXCLUDE_BUILTIN_SUBAGENTS", "1")
+        manager.load_autonomous_objective_creation_sequence()
+        desc = manager.story_sequence[0].description
+        hint = manager.story_sequence[0].navigation_hint or ""
+        assert "replan_objectives" in desc or "replan_objectives" in hint
+        assert "get_progress_summary" in hint
+        assert "subagent_plan_objectives" not in desc
+
+    def test_get_first_objective_info_for_supported_sequences(self):
+        autonomous = get_first_objective_info("autonomous_objective_creation")
+        categorized = get_first_objective_info("categorized_full_game")
+        unsupported = get_first_objective_info("tutorial_to_rival")
+
+        assert autonomous == ("autonomous", "autonomous_objective_creation")
+        assert categorized[0] is not None
+        assert categorized[1] is not None
+        assert unsupported == (None, None)
+
+    def test_get_categorized_objective_guidance(self, manager):
+        manager.load_categorized_full_game_sequence()
+
+        guidance = manager.get_categorized_objective_guidance({})
+
         assert guidance is not None
-        assert guidance["id"] == "birch_01_north_littleroot"
-        assert guidance["description"] == "Move north from Littleroot Town to Route 101"
-        assert guidance["action_type"] == "navigate"
-        assert guidance["target_location"] == "Route 101"
-        assert "navigation_hint" in guidance
-        assert "completion_condition" in guidance
-    
-    def test_get_current_objective_guidance_no_auto_completion(self, manager):
-        """Test that get_current_objective_guidance does NOT auto-complete objectives"""
-        manager.load_birch_to_rival_sequence()
-        
-        # Get guidance multiple times - should return same objective
-        guidance1 = manager.get_current_objective_guidance()
-        guidance2 = manager.get_current_objective_guidance()
-        
-        assert guidance1["id"] == guidance2["id"]
-        assert manager.current_index == 0  # Should not advance
-    
-    def test_mark_objective_completed(self, manager):
-        """Test marking an objective as completed"""
-        manager.load_birch_to_rival_sequence()
-        obj = manager.get_current_objective()
-        
-        assert obj.completed is False
-        manager._mark_objective_completed(obj)
-        
-        assert obj.completed is True
-        assert hasattr(obj, 'completed_at')
-        assert isinstance(obj.completed_at, datetime)
-    
-    def test_advance_to_next_objective(self, manager):
-        """Test manually advancing to next objective"""
-        manager.load_birch_to_rival_sequence()
-        
-        # Complete first objective
-        obj1 = manager.get_current_objective()
-        manager._mark_objective_completed(obj1)
-        manager.current_index += 1
-        
-        # Get next objective
-        obj2 = manager.get_current_objective()
-        assert obj2 is not None
-        assert obj2.id == "birch_02_north_route101"
-        assert obj2.completed is False
-    
-    def test_is_sequence_active(self, manager):
-        """Test checking if sequence is active"""
-        assert manager.is_sequence_active() is False
-        
-        manager.load_birch_to_rival_sequence()
-        assert manager.is_sequence_active() is True
-        
-        # Advance past all objectives
-        manager.current_index = len(manager.current_sequence)
-        assert manager.is_sequence_active() is False
-    
-    def test_get_sequence_status(self, manager):
-        """Test getting sequence status"""
-        # Empty status
-        status = manager.get_sequence_status()
-        assert status["sequence_name"] == ""
-        assert status["total_objectives"] == 0
-        assert status["current_index"] == 0
-        assert status["completed_count"] == 0
-        assert status["current_objective"] is None
-        assert status["is_complete"] is True
-        
-        # Loaded sequence status
-        manager.load_birch_to_rival_sequence()
-        status = manager.get_sequence_status()
-        assert status["sequence_name"] == "birch_to_rival"
-        assert status["total_objectives"] > 0  # Sequence has objectives
-        assert status["current_index"] == 0
-        assert status["completed_count"] == 0
-        assert status["current_objective"] is not None
-        assert status["is_complete"] is False
-    
-    def test_get_sequence_status_with_completions(self, manager):
-        """Test sequence status with some objectives completed"""
-        manager.load_birch_to_rival_sequence()
-        
-        # Complete first 3 objectives
-        for i in range(3):
-            obj = manager.current_sequence[i]
-            manager._mark_objective_completed(obj)
-        manager.current_index = 3
-        
-        status = manager.get_sequence_status()
-        assert status["completed_count"] == 3
-        assert status["current_index"] == 3
-        assert status["is_complete"] is False
-    
+        assert guidance["story"]["id"] == manager.story_sequence[0].id
+        assert "recommended_battling_objectives" in guidance
+        assert "dynamics" in guidance
+
+    def test_add_dynamic_objectives_legacy_mode(self, manager):
+        manager.add_dynamic_objectives(
+            [
+                {
+                    "id": "dynamic_01",
+                    "description": "Navigate somewhere",
+                    "action_type": "navigate",
+                    "target_location": "Test Area",
+                },
+                {
+                    "id": "dynamic_02",
+                    "description": "Interact with NPC",
+                    "action_type": "interact",
+                },
+            ]
+        )
+
+        assert len(manager.current_sequence) == 2
+        assert manager.current_index == 0
+        assert manager.get_current_objective().id == "dynamic_01"
+
+    def test_add_objectives_to_category_updates_dynamics(self, manager):
+        manager.load_categorized_full_game_sequence()
+        manager.add_objectives_to_category(
+            "dynamics",
+            [
+                {
+                    "id": "dynamic_01",
+                    "description": "Temporary cleanup objective",
+                    "action_type": "navigate",
+                    "target_location": "Somewhere",
+                }
+            ],
+        )
+
+        current = manager.get_current_objectives_by_category()
+        assert len(manager.dynamics_sequence) == 1
+        assert current["dynamics"].id == "dynamic_01"
+
     def test_reset_sequence(self, manager):
-        """Test resetting the sequence"""
-        manager.load_birch_to_rival_sequence()
-        manager.current_index = 5
-        
+        manager.load_categorized_full_game_sequence()
         manager.reset_sequence()
-        
+
         assert manager.current_sequence == []
         assert manager.current_index == 0
         assert manager.sequence_name == ""
-    
-    def test_add_dynamic_objectives(self, manager):
-        """Test adding dynamic objectives to sequence"""
-        manager.load_birch_to_rival_sequence()
-        initial_count = len(manager.current_sequence)
-        
-        dynamic_objs = [
-            {
-                "id": "dynamic_01",
-                "description": "Dynamic objective 1",
-                "action_type": "navigate",
-                "target_location": "New Location",
-                "navigation_hint": "Go somewhere",
-                "completion_condition": "location_reached"
-            },
-            {
-                "id": "dynamic_02",
-                "description": "Dynamic objective 2",
-                "action_type": "interact"
-            }
-        ]
-        
-        manager.add_dynamic_objectives(dynamic_objs)
-        
-        assert len(manager.current_sequence) == initial_count + 2
-        assert manager.current_sequence[-2].id == "dynamic_01"
-        assert manager.current_sequence[-1].id == "dynamic_02"
-    
-    def test_add_dynamic_objectives_empty_sequence(self, manager):
-        """Test adding dynamic objectives to empty sequence"""
-        dynamic_objs = [
-            {
-                "id": "dynamic_01",
-                "description": "First dynamic objective",
-                "action_type": "navigate"
-            }
-        ]
-        
-        manager.add_dynamic_objectives(dynamic_objs)
-        
-        assert len(manager.current_sequence) == 1
-        assert manager.current_sequence[0].id == "dynamic_01"
-    
-    def test_get_objective_context_empty(self, manager):
-        """Test getting objective context when no sequence is active"""
-        context = manager.get_objective_context()
-        assert context == ""
-    
-    def test_get_objective_context_first_objective(self, manager):
-        """Test getting context for first objective (no previous)"""
-        manager.load_birch_to_rival_sequence()
-        
-        context = manager.get_objective_context()
-        assert context == ""  # No previous objective
-    
-    def test_get_objective_context_with_previous(self, manager):
-        """Test getting context with previous objective"""
-        manager.load_birch_to_rival_sequence()
-        
-        # Complete first objective and advance
-        obj1 = manager.get_current_objective()
-        manager._mark_objective_completed(obj1)
-        manager.current_index = 1
-        
-        context = manager.get_objective_context()
-        assert "PREVIOUS" in context
-        assert obj1.description in context
-        assert "✅" in context  # Completed status
-    
-    def test_get_objective_context_incomplete_previous(self, manager):
-        """Test context with incomplete previous objective"""
-        manager.load_birch_to_rival_sequence()
-        manager.current_index = 1  # Advance without completing first
-        
-        context = manager.get_objective_context()
-        assert "PREVIOUS" in context
-        assert "❌" in context  # Incomplete status
-    
-    def test_save_completed_objectives(self, manager):
-        """Test saving completed objectives to file"""
-        manager.load_birch_to_rival_sequence()
-        
-        # Complete first 2 objectives
-        for i in range(2):
-            obj = manager.current_sequence[i]
-            manager._mark_objective_completed(obj)
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            filename = manager.save_completed_objectives(run_dir=tmpdir)
-            
-            assert os.path.exists(filename)
-            
-            # Load and verify
-            with open(filename, 'r') as f:
-                data = json.load(f)
-            
-            assert "sequences" in data
-            assert len(data["sequences"]) == 1
-            assert data["sequences"][0]["total_objectives_completed"] == 2
-            assert len(data["sequences"][0]["completed_objectives"]) == 2
-    
-    def test_save_completed_objectives_auto_dir(self, manager):
-        """Test saving with auto-generated directory"""
-        manager.load_birch_to_rival_sequence()
-        manager._mark_objective_completed(manager.current_sequence[0])
-        
-        filename = manager.save_completed_objectives()
-        
-        assert os.path.exists(filename)
-        assert ".pokeagent_cache" in filename
-        assert "run_" in filename
-        
-        # Cleanup
-        os.remove(filename)
-        os.rmdir(os.path.dirname(filename))
-        if os.path.exists(".pokeagent_cache") and not os.listdir(".pokeagent_cache"):
-            os.rmdir(".pokeagent_cache")
-    
-    def test_save_completed_objectives_append(self, manager):
-        """Test that saving appends to existing file"""
-        manager.load_birch_to_rival_sequence()
-        
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # First save
-            manager._mark_objective_completed(manager.current_sequence[0])
-            filename1 = manager.save_completed_objectives(run_dir=tmpdir)
-            
-            # Second save (complete another objective)
-            manager.current_index = 1
-            manager._mark_objective_completed(manager.current_sequence[1])
-            filename2 = manager.save_completed_objectives(run_dir=tmpdir)
-            
-            assert filename1 == filename2  # Same file
-            
-            # Load and verify both saves are present
-            with open(filename1, 'r') as f:
-                data = json.load(f)
-            
-            assert len(data["sequences"]) == 2  # Two separate saves
-    
-    def test_load_tutorial_sequence_with_run_dir(self, manager):
-        """Test loading sequence with run_dir parameter"""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            start_index = 3
-            manager.load_tutorial_to_rustboro_city_sequence(
-                start_index=start_index,
-                run_dir=tmpdir
-            )
-            
-            # Check that file was created
-            filename = os.path.join(tmpdir, "completed_objectives.json")
-            assert os.path.exists(filename)
-            
-            # Load and verify
-            with open(filename, 'r') as f:
-                data = json.load(f)
-            
-            assert len(data["sequences"]) == 1
-            assert data["sequences"][0]["start_index"] == start_index
-            assert len(data["sequences"][0]["completed_objectives"]) == start_index
-    
-    def test_deprecated_is_objective_completed(self, manager):
-        """Test that _is_objective_completed is deprecated and returns False"""
+        assert manager.story_sequence == []
+        assert manager.battling_sequence == []
+        assert manager.dynamics_sequence == []
+
+    def test_save_completed_objectives_delegates_to_auto_save(self, manager):
+        """save_completed_objectives is deprecated and should delegate to auto_save."""
         import warnings
-        
-        manager.load_birch_to_rival_sequence()
-        obj = manager.current_sequence[0]
-        game_state = {}
-        
-        # Should issue deprecation warning
+        manager.add_dynamic_objectives(
+            [
+                {
+                    "id": "dynamic_01",
+                    "description": "Navigate somewhere",
+                    "action_type": "navigate",
+                }
+            ]
+        )
+        manager._mark_objective_completed(manager.current_sequence[0])
+
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            result = manager._is_objective_completed(obj, game_state)
-            
-            assert len(w) == 1
-            assert issubclass(w[0].category, DeprecationWarning)
-            assert "deprecated" in str(w[0].message).lower()
-        
-        # Should always return False (LLM determines completion)
-        assert result is False
+            manager.save_completed_objectives()
+            assert any(issubclass(x.category, DeprecationWarning) for x in w)
+
+
+class TestDirectObjectiveSerde:
+    """Tests for DirectObjective.to_dict / from_dict round-trip."""
+
+    def test_round_trip_full(self):
+        from datetime import datetime
+        obj = DirectObjective(
+            id="story_007",
+            description="Enter Petalburg City",
+            action_type="navigate",
+            category="story",
+            target_location="Petalburg City",
+            target_coords=(12, 34),
+            navigation_hint="Go west on Route 102",
+            completion_condition="location_reached",
+            priority=1,
+            completed=True,
+            completed_at=datetime(2026, 1, 15, 10, 30, 0),
+            optional=False,
+            recommended_battling_objectives=["battling_01", "battling_02"],
+            prerequisite_story_objective="story_006",
+        )
+        d = obj.to_dict()
+        restored = DirectObjective.from_dict(d)
+
+        assert restored.id == obj.id
+        assert restored.description == obj.description
+        assert restored.action_type == obj.action_type
+        assert restored.category == obj.category
+        assert restored.target_location == obj.target_location
+        assert restored.target_coords == obj.target_coords
+        assert restored.navigation_hint == obj.navigation_hint
+        assert restored.completion_condition == obj.completion_condition
+        assert restored.priority == obj.priority
+        assert restored.completed == obj.completed
+        assert restored.completed_at == obj.completed_at
+        assert restored.optional == obj.optional
+        assert restored.recommended_battling_objectives == obj.recommended_battling_objectives
+        assert restored.prerequisite_story_objective == obj.prerequisite_story_objective
+
+    def test_round_trip_minimal(self):
+        obj = DirectObjective(id="dyn_01", description="Quick task", action_type="interact")
+        d = obj.to_dict()
+        restored = DirectObjective.from_dict(d)
+
+        assert restored.id == "dyn_01"
+        assert restored.completed is False
+        assert restored.completed_at is None
+        assert restored.target_coords is None
+        assert restored.recommended_battling_objectives == []
+
+    def test_to_dict_coords_are_list(self):
+        obj = DirectObjective(
+            id="t", description="t", action_type="move", target_coords=(5, 10)
+        )
+        d = obj.to_dict()
+        assert isinstance(d["target_coords"], list)
+
+    def test_from_dict_coords_become_tuple(self):
+        d = {"id": "t", "description": "t", "action_type": "move", "target_coords": [5, 10]}
+        obj = DirectObjective.from_dict(d)
+        assert isinstance(obj.target_coords, tuple)
+        assert obj.target_coords == (5, 10)
+
+
+class TestDirectObjectiveManagerSerde:
+    """Tests for serialize_full_state / restore_from_state round-trip."""
+
+    @pytest.fixture
+    def populated_manager(self):
+        mgr = DirectObjectiveManager()
+        mgr.load_categorized_full_game_sequence(start_story_index=3, start_battling_index=2)
+        mgr.add_objectives_to_category(
+            "dynamics",
+            [{"id": "dyn_01", "description": "Temp task", "action_type": "navigate"}],
+        )
+        return mgr
+
+    def test_serialize_restore_round_trip(self, populated_manager):
+        state = populated_manager.serialize_full_state()
+        restored = DirectObjectiveManager()
+        restored.restore_from_state(state)
+
+        assert restored.mode == populated_manager.mode
+        assert restored.sequence_name == populated_manager.sequence_name
+        assert restored.story_index == populated_manager.story_index
+        assert restored.battling_index == populated_manager.battling_index
+        assert restored.dynamics_index == populated_manager.dynamics_index
+        assert len(restored.story_sequence) == len(populated_manager.story_sequence)
+        assert len(restored.battling_sequence) == len(populated_manager.battling_sequence)
+        assert len(restored.dynamics_sequence) == len(populated_manager.dynamics_sequence)
+
+    def test_serialize_restore_preserves_completion(self, populated_manager):
+        state = populated_manager.serialize_full_state()
+        restored = DirectObjectiveManager()
+        restored.restore_from_state(state)
+
+        for orig, rest in zip(populated_manager.story_sequence, restored.story_sequence):
+            assert orig.completed == rest.completed
+
+    def test_save_load_file_round_trip(self, populated_manager):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, "objectives.json")
+            populated_manager.save_to_file(path)
+
+            assert os.path.exists(path)
+
+            loaded = DirectObjectiveManager.load_from_file(path)
+            assert loaded.mode == populated_manager.mode
+            assert loaded.story_index == populated_manager.story_index
+            assert loaded.battling_index == populated_manager.battling_index
+            assert len(loaded.dynamics_sequence) == len(populated_manager.dynamics_sequence)
+
+    def test_current_objective_matches_after_restore(self, populated_manager):
+        orig_story = populated_manager._get_current_objective_for_category("story")
+        state = populated_manager.serialize_full_state()
+
+        restored = DirectObjectiveManager()
+        restored.restore_from_state(state)
+        rest_story = restored._get_current_objective_for_category("story")
+
+        assert rest_story is not None
+        assert rest_story.id == orig_story.id
+        assert rest_story.description == orig_story.description
+
+    def test_json_schema_version(self, populated_manager):
+        state = populated_manager.serialize_full_state()
+        assert state["version"] == 1
+        assert "saved_at" in state
+        assert "story" in state and "battling" in state and "dynamics" in state
 
 
 class TestDirectObjectiveIntegration:
-    """Integration tests for DirectObjectiveManager workflow"""
-    
     @pytest.fixture
     def manager(self):
-        """Create a DirectObjectiveManager instance for testing"""
         return DirectObjectiveManager()
-    
-    def test_full_workflow(self, manager):
-        """Test complete workflow: load, get guidance, complete, advance"""
-        # Load sequence
-        manager.load_birch_to_rival_sequence()
-        assert manager.is_sequence_active() is True
-        
-        # Get first objective guidance
-        guidance1 = manager.get_current_objective_guidance()
-        assert guidance1 is not None
-        assert guidance1["id"] == "birch_01_north_littleroot"
-        
-        # Manually complete (simulating LLM calling complete_direct_objective endpoint)
-        obj1 = manager.get_current_objective()
-        manager._mark_objective_completed(obj1)
-        manager.current_index += 1
-        
-        # Get second objective guidance
-        guidance2 = manager.get_current_objective_guidance()
-        assert guidance2 is not None
-        assert guidance2["id"] == "birch_02_north_route101"
-        
-        # Check status
-        status = manager.get_sequence_status()
-        assert status["completed_count"] == 1
-        assert status["current_index"] == 1
-        assert status["is_complete"] is False
-    
-    def test_dynamic_objectives_workflow(self, manager):
-        """Test workflow with dynamic objectives"""
-        # Start with empty sequence
-        assert manager.is_sequence_active() is False
-        
-        # Add dynamic objectives
-        dynamic_objs = [
-            {
-                "id": "dynamic_01",
-                "description": "Navigate to location A",
-                "action_type": "navigate",
-                "target_location": "Location A"
-            },
-            {
-                "id": "dynamic_02",
-                "description": "Interact with object B",
-                "action_type": "interact",
-                "target_location": "Location B"
-            }
-        ]
-        manager.add_dynamic_objectives(dynamic_objs)
-        
-        assert manager.is_sequence_active() is True
-        
-        # Get guidance
-        guidance = manager.get_current_objective_guidance()
-        assert guidance["id"] == "dynamic_01"
-        
-        # Complete and advance
-        obj = manager.get_current_objective()
-        manager._mark_objective_completed(obj)
-        manager.current_index += 1
-        
-        # Get next guidance
-        guidance2 = manager.get_current_objective_guidance()
-        assert guidance2["id"] == "dynamic_02"
 
+    def test_categorized_progression_workflow(self, manager):
+        manager.load_categorized_full_game_sequence()
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        current = manager.get_current_objectives_by_category()
+        first_story = current["story"]
+        assert first_story is not None
+
+        manager._mark_objective_completed(first_story)
+        manager.story_index += 1
+
+        next_current = manager.get_current_objectives_by_category()
+        assert next_current["story"] is not None
+        assert next_current["story"].id != first_story.id
+
+    def test_autonomous_sequence_can_seed_new_objectives(self, manager):
+        manager.load_autonomous_objective_creation_sequence()
+        manager.add_objectives_to_category(
+            "story",
+            [
+                {
+                    "id": "story_new_01",
+                    "description": "Move to Route 102",
+                    "action_type": "navigate",
+                    "target_location": "Route 102",
+                },
+                {
+                    "id": "story_new_02",
+                    "description": "Enter Petalburg City",
+                    "action_type": "navigate",
+                    "target_location": "Petalburg City",
+                },
+            ],
+        )
+
+        assert len(manager.story_sequence) >= 3
+        assert manager.story_sequence[-2].id == "story_new_01"
+        assert manager.story_sequence[-1].id == "story_new_02"

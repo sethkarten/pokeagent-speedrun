@@ -15,9 +15,7 @@ import os
 import re
 import sys
 
-# Allow import of sibling utils whether used as package or run from project root
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
-from red_metatile_behavior import RedMetatileBehavior  # noqa: E402
+from pokemon_red_env.utils.red_metatile_behavior import RedMetatileBehavior
 
 logger = logging.getLogger(__name__)
 

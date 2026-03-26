@@ -13,14 +13,18 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from utils.json_utils import serialize_for_json
-from utils.pathfinding import Pathfinder
-from utils.knowledge_base import get_knowledge_base
+from utils.mapping.pathfinding import Pathfinder
+from utils.stores.memory import get_memory_store
+from utils.stores.skills import get_skill_store
+from utils.stores.subagents import get_subagent_store
 
 logger = logging.getLogger(__name__)
 
 # Module-level singletons (lazy on first import of this module)
 pathfinder = Pathfinder()
-knowledge_base = get_knowledge_base()
+memory_store = get_memory_store()
+skill_store = get_skill_store()
+subagent_store = get_subagent_store()
 
 
 # ---------------------------------------------------------------------------
@@ -40,9 +44,9 @@ def load_porymap_for_pathfinding(state: dict) -> tuple:
         return coord_offset, state
 
     try:
-        from utils.porymap_json_builder import build_json_map_for_llm
+        from utils.mapping.porymap_json_builder import build_json_map_for_llm
         from utils.state_formatter import ROM_TO_PORYMAP_MAP
-        from utils.ascii_map_loader import get_effective_map_name, get_override
+        from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
 
         badge_count = 0
         badges = state.get("game", {}).get("badges", [])
@@ -51,7 +55,8 @@ def load_porymap_for_pathfinding(state: dict) -> tuple:
         elif isinstance(badges, int):
             badge_count = badges
 
-        pokeemerald_root = _resolve_pokeemerald_root()
+        from pokemon_env.porymap_paths import get_porymap_root
+        pokeemerald_root = get_porymap_root()
         if not pokeemerald_root:
             return coord_offset, state
 
@@ -102,32 +107,6 @@ def load_porymap_for_pathfinding(state: dict) -> tuple:
         logger.warning(f"Failed to load porymap data for pathfinding: {e}")
 
     return coord_offset, state
-
-
-def _resolve_pokeemerald_root() -> Optional[Path]:
-    """Find the pokeemerald / porymap_data root directory."""
-    root_env = os.environ.get("POKEEMERALD_ROOT")
-    if root_env:
-        root_path = Path(root_env).resolve()
-        if (root_path / "data" / "maps").exists():
-            return root_path
-
-    # server/ parent -> repo root
-    current_dir = Path(__file__).parent.parent
-    porymap_path = current_dir / "porymap_data"
-    if (porymap_path / "data" / "maps").exists():
-        return porymap_path.resolve()
-
-    for candidate in [
-        current_dir / "pokeemerald",
-        current_dir / "../pokeemerald",
-        current_dir / "../../pokeemerald",
-    ]:
-        resolved = candidate.resolve()
-        if (resolved / "data" / "maps").exists():
-            return resolved
-
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +165,20 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             except Exception as e:
                 logger.warning(f"Failed to inject red_whole_map in get_game_state_direct: {e}")
 
-        state_text = state_formatter(state, action_history=action_history)
+        try:
+            state_text = state_formatter(state, action_history=action_history)
+        except Exception as formatter_err:
+            logger.exception("State formatter failed; returning fallback text with screenshot preserved")
+            game_state_name = state.get("game", {}).get("game_state") or "unknown"
+            location = state.get("player", {}).get("location") or "Unknown"
+            position = state.get("player", {}).get("position") or {}
+            state_text = (
+                "State text formatter unavailable for this screen.\n"
+                f"Game State: {game_state_name}\n"
+                f"Location: {location}\n"
+                f"Position: X={position.get('x', 'unknown')}, Y={position.get('y', 'unknown')}\n"
+                "Use the attached screenshot as the source of truth for the current UI."
+            )
 
         screenshot_b64 = None
         if screenshot is not None:
@@ -274,8 +266,8 @@ def navigate_to_direct(
 
         elif location_name and location_name not in ("Unknown", "TITLE_SEQUENCE"):
             try:
-                from utils.porymap_json_builder import build_json_map_for_llm
-                from utils.ascii_map_loader import get_effective_map_name, get_override
+                from utils.mapping.porymap_json_builder import build_json_map_for_llm
+                from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
                 from utils.state_formatter import ROM_TO_PORYMAP_MAP
 
                 badge_count = 0
@@ -285,7 +277,8 @@ def navigate_to_direct(
                 elif isinstance(badges, int):
                     badge_count = badges
 
-                pokeemerald_root = _resolve_pokeemerald_root()
+                from pokemon_env.porymap_paths import get_porymap_root
+                pokeemerald_root = get_porymap_root()
 
                 if pokeemerald_root:
                     porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
@@ -445,44 +438,385 @@ def navigate_to_direct(
 
 
 # ---------------------------------------------------------------------------
-# Knowledge base helpers
+# Memory (long-term) helpers — formerly "knowledge base"
 # ---------------------------------------------------------------------------
 
-def add_knowledge_direct(category, title, content, location=None, coordinates=None, importance=3) -> dict:
-    """Add knowledge to knowledge base - for use by server endpoints."""
+def add_memory_direct(category=None, title="", content="", location=None, coordinates=None, importance=3, path=None) -> dict:
+    """Add an entry to long-term memory."""
     try:
-        entry_id = knowledge_base.add(
-            category=category,
-            title=title,
-            content=content,
+        title_s = (title or "").strip()
+        content_s = (content or "").strip()
+        if not title_s and not content_s:
+            return {
+                "success": False,
+                "error": "title and content cannot both be empty (refusing useless memory rows)",
+            }
+        effective_path = path or category or "uncategorized"
+        entry_id = memory_store.add(
+            path=effective_path,
+            title=title_s,
+            content=content_s,
             location=location,
             coordinates=coordinates,
             importance=importance,
         )
-        logger.info(f"📝 Added knowledge: {title} ({category})")
-        return {"success": True, "entry_id": entry_id, "message": f"Stored knowledge: {title}"}
+        logger.info(f"📝 Added memory: {title_s} ({effective_path})")
+        return {"success": True, "entry_id": entry_id, "message": f"Stored memory: {title_s}"}
     except Exception as e:
-        logger.error(f"Failed to add knowledge: {e}")
+        logger.error(f"Failed to add memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-def search_knowledge_direct(category=None, query="", location="", min_importance=1) -> dict:
-    """Search knowledge base - for use by server endpoints."""
+def search_memory_direct(category=None, query="", location="", min_importance=1, path=None) -> dict:
+    """Search long-term memory."""
     try:
-        results = knowledge_base.search(
-            category=category, location=location or None, query=query or None, min_importance=min_importance
+        results = memory_store.search(
+            path=path, category=category, location=location or None, query=query or None, min_importance=min_importance
         )
         return {"success": True, "count": len(results), "results": results}
     except Exception as e:
-        logger.error(f"Failed to search knowledge: {e}")
+        logger.error(f"Failed to search memory: {e}")
         return {"success": False, "error": str(e)}
 
 
-def get_knowledge_summary_direct(min_importance=3) -> dict:
-    """Get knowledge summary - for use by server endpoints."""
+def get_memory_summary_direct(min_importance=3) -> dict:
+    """Get long-term memory summary (legacy content dump)."""
     try:
-        summary = knowledge_base.get_summary(min_importance=min_importance)
+        summary = memory_store.get_summary(min_importance=min_importance)
         return {"success": True, "summary": summary}
     except Exception as e:
-        logger.error(f"Failed to get knowledge summary: {e}")
+        logger.error(f"Failed to get memory summary: {e}")
         return {"success": False, "error": str(e)}
+
+
+def get_memory_overview_direct() -> dict:
+    """Get compact tree overview of long-term memory ([id] title grouped by path)."""
+    try:
+        overview = memory_store.get_tree_overview()
+        return {"success": True, "overview": overview}
+    except Exception as e:
+        logger.error(f"Failed to get memory overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def _normalize_process_reasoning(reasoning: object) -> Optional[str]:
+    """Return stripped non-empty reasoning string, or None if missing/invalid."""
+    if reasoning is None:
+        return None
+    text = str(reasoning).strip()
+    return text if text else None
+
+
+def _validate_process_entries_list(entries: object) -> Optional[str]:
+    """Return an error message if *entries* is not a non-empty list."""
+    if not isinstance(entries, list):
+        return "entries must be a list"
+    if len(entries) == 0:
+        return "entries must be non-empty (provide at least one entry object for this action)"
+    return None
+
+
+def _batch_all_succeeded(results: list) -> bool:
+    """True only if every per-entry result reports success (batch semantics)."""
+    return bool(results) and all(r.get("success") for r in results)
+
+
+def process_memory_direct(action: str, entries: list, reasoning: object) -> dict:
+    """Unified CRUD dispatch for long-term memory.
+
+    ``action`` is one of: read, add, update, delete.
+    ``entries`` is a list of per-entry dicts with action-specific fields.
+    ``reasoning`` is required (non-empty): why this memory operation is appropriate.
+    """
+    try:
+        if _normalize_process_reasoning(reasoning) is None:
+            return {
+                "success": False,
+                "error": "reasoning is required (non-empty string explaining why this memory operation is needed)",
+            }
+        ent_err = _validate_process_entries_list(entries)
+        if ent_err:
+            return {"success": False, "error": ent_err, "results": []}
+        results = []
+        for entry_data in entries:
+            if action == "read":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for read"})
+                    continue
+                entry = memory_store.get(entry_id)
+                if entry is None:
+                    results.append({"success": False, "error": f"Entry {entry_id} not found"})
+                else:
+                    results.append({"success": True, "entry": memory_store.to_display_dict(entry)})
+
+            elif action == "add":
+                path = entry_data.get("path", entry_data.get("category", "uncategorized"))
+                title = (entry_data.get("title") or "").strip()
+                content = (entry_data.get("content") or "").strip()
+                if not title and not content:
+                    results.append(
+                        {
+                            "success": False,
+                            "error": "add requires non-empty title and/or content (empty entries create useless memory rows)",
+                        }
+                    )
+                    continue
+                importance = int(entry_data.get("importance", 3))
+                location = entry_data.get("location")
+                coordinates = entry_data.get("coordinates")
+                if isinstance(coordinates, str) and "," in coordinates:
+                    parts = coordinates.split(",")
+                    try:
+                        coordinates = (int(parts[0].strip()), int(parts[1].strip()))
+                    except (ValueError, IndexError):
+                        coordinates = None
+                entry_id = memory_store.add(
+                    path=path, title=title or "", content=content or "",
+                    importance=importance, location=location,
+                    coordinates=coordinates,
+                )
+                results.append({"success": True, "entry_id": entry_id})
+
+            elif action == "update":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for update"})
+                    continue
+                update_fields = {k: v for k, v in entry_data.items() if k != "id" and v is not None}
+                ok = memory_store.update(entry_id, **update_fields)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            elif action == "delete":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for delete"})
+                    continue
+                ok = memory_store.remove(entry_id)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            else:
+                results.append({"success": False, "error": f"Unknown action: {action}"})
+
+        return {"success": _batch_all_succeeded(results), "results": results}
+    except Exception as e:
+        logger.error(f"process_memory error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Skill library helpers
+# ---------------------------------------------------------------------------
+
+def get_skill_overview_direct() -> dict:
+    """Get compact tree overview of the skill library ([id] name grouped by path)."""
+    try:
+        overview = skill_store.get_tree_overview()
+        return {"success": True, "overview": overview}
+    except Exception as e:
+        logger.error(f"Failed to get skill overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
+    """Unified CRUD dispatch for the skill library.
+
+    ``reasoning`` is required (non-empty): why this skill operation is appropriate.
+    """
+    try:
+        if _normalize_process_reasoning(reasoning) is None:
+            return {
+                "success": False,
+                "error": "reasoning is required (non-empty string explaining why this skill operation is needed)",
+            }
+        ent_err = _validate_process_entries_list(entries)
+        if ent_err:
+            return {"success": False, "error": ent_err, "results": []}
+        results = []
+        for entry_data in entries:
+            if action == "read":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for read"})
+                    continue
+                entry = skill_store.get(entry_id)
+                if entry is None:
+                    results.append({"success": False, "error": f"Skill {entry_id} not found"})
+                else:
+                    results.append({"success": True, "entry": skill_store.to_display_dict(entry)})
+
+            elif action == "add":
+                raw_name = entry_data.get("name", entry_data.get("title", ""))
+                name = (raw_name or "").strip() if isinstance(raw_name, str) else str(raw_name or "").strip()
+                raw_desc = entry_data.get("description", "")
+                description = (
+                    (raw_desc or "").strip() if isinstance(raw_desc, str) else str(raw_desc or "").strip()
+                )
+                if not name or not description:
+                    results.append(
+                        {
+                            "success": False,
+                            "error": (
+                                "add requires non-empty name (or title) and description "
+                                "(empty objects {} are rejected; do not batch placeholder rows)"
+                            ),
+                        }
+                    )
+                    continue
+                path = entry_data.get("path", "general")
+                effectiveness = entry_data.get("effectiveness", "medium")
+                importance = int(entry_data.get("importance", 3))
+                entry_id = skill_store.add(
+                    path=path, name=name, title=name, description=description,
+                    effectiveness=effectiveness, importance=importance,
+                )
+                results.append({"success": True, "entry_id": entry_id})
+
+            elif action == "update":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for update"})
+                    continue
+                update_fields = {k: v for k, v in entry_data.items() if k != "id" and v is not None}
+                if "name" in update_fields:
+                    update_fields.setdefault("title", update_fields["name"])
+                ok = skill_store.update(entry_id, **update_fields)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            elif action == "delete":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for delete"})
+                    continue
+                ok = skill_store.remove(entry_id)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            else:
+                results.append({"success": False, "error": f"Unknown action: {action}"})
+
+        return {"success": _batch_all_succeeded(results), "results": results}
+    except Exception as e:
+        logger.error(f"process_skill error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Subagent registry helpers
+# ---------------------------------------------------------------------------
+
+def get_subagent_overview_direct() -> dict:
+    """Get compact tree overview of the subagent registry ([id] name grouped by path)."""
+    try:
+        overview = subagent_store.get_tree_overview()
+        return {"success": True, "overview": overview}
+    except Exception as e:
+        logger.error(f"Failed to get subagent overview: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def process_subagent_direct(action: str, entries: list, reasoning: object) -> dict:
+    """Unified CRUD dispatch for the subagent registry.
+
+    ``reasoning`` is required (non-empty): why this subagent operation is appropriate.
+    """
+    try:
+        if _normalize_process_reasoning(reasoning) is None:
+            return {
+                "success": False,
+                "error": "reasoning is required (non-empty string explaining why this subagent operation is needed)",
+            }
+        ent_err = _validate_process_entries_list(entries)
+        if ent_err:
+            return {"success": False, "error": ent_err, "results": []}
+        results = []
+        for entry_data in entries:
+            if action == "read":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for read"})
+                    continue
+                entry = subagent_store.get(entry_id)
+                if entry is None:
+                    results.append({"success": False, "error": f"Subagent {entry_id} not found"})
+                else:
+                    results.append({"success": True, "entry": subagent_store.to_display_dict(entry)})
+
+            elif action == "add":
+                raw_name = entry_data.get("name", entry_data.get("title", ""))
+                name = (raw_name or "").strip() if isinstance(raw_name, str) else str(raw_name or "").strip()
+                raw_desc = entry_data.get("description", "")
+                description = (
+                    (raw_desc or "").strip() if isinstance(raw_desc, str) else str(raw_desc or "").strip()
+                )
+                if not name or not description:
+                    results.append(
+                        {
+                            "success": False,
+                            "error": (
+                                "add requires non-empty name (or title) and description "
+                                "(empty objects {} are rejected; fill fields before calling)"
+                            ),
+                        }
+                    )
+                    continue
+                path = entry_data.get("path", "custom")
+                handler_type = entry_data.get("handler_type", "looping")
+                max_turns = int(entry_data.get("max_turns", 25))
+                available_tools = entry_data.get("available_tools", [])
+                system_instructions = entry_data.get("system_instructions", "")
+                directive = entry_data.get("directive", "")
+                return_condition = entry_data.get("return_condition", "")
+                importance = int(entry_data.get("importance", 3))
+                try:
+                    entry_id = subagent_store.add(
+                        path=path, name=name, title=name, description=description,
+                        handler_type=handler_type, max_turns=max_turns,
+                        available_tools=available_tools,
+                        system_instructions=system_instructions,
+                        directive=directive, return_condition=return_condition,
+                        importance=importance,
+                    )
+                    results.append({"success": True, "entry_id": entry_id})
+                except ValueError as ve:
+                    results.append({"success": False, "error": str(ve)})
+
+            elif action == "update":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for update"})
+                    continue
+                update_fields = {k: v for k, v in entry_data.items() if k != "id" and v is not None}
+                if "name" in update_fields:
+                    update_fields.setdefault("title", update_fields["name"])
+                try:
+                    ok = subagent_store.update(entry_id, **update_fields)
+                    results.append({"success": ok, "entry_id": entry_id})
+                except ValueError as ve:
+                    results.append({"success": False, "error": str(ve)})
+
+            elif action == "delete":
+                entry_id = entry_data.get("id")
+                if not entry_id:
+                    results.append({"success": False, "error": "Missing 'id' for delete"})
+                    continue
+                entry = subagent_store.get(entry_id)
+                if entry is not None and getattr(entry, "is_builtin", False):
+                    results.append({"success": False, "error": f"Cannot delete built-in subagent {entry_id}"})
+                    continue
+                ok = subagent_store.remove(entry_id)
+                results.append({"success": ok, "entry_id": entry_id})
+
+            else:
+                results.append({"success": False, "error": f"Unknown action: {action}"})
+
+        return {"success": _batch_all_succeeded(results), "results": results}
+    except Exception as e:
+        logger.error(f"process_subagent error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# Backward-compat aliases
+add_knowledge_direct = add_memory_direct
+search_knowledge_direct = search_memory_direct
+get_knowledge_summary_direct = get_memory_summary_direct
+get_knowledge_base = lambda: memory_store

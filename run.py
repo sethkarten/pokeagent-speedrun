@@ -13,7 +13,68 @@ import signal
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from server.client import run_multiprocess_client
+CUSTOM_AGENT_CONFIGS = {
+    "pokeagent": {
+        "name": "PokeAgent",
+        "details": [
+            "Custom VLM benchmark agent with tool scaffolding",
+            "All MCP tools enabled (built-in subagents + generic primitives)",
+            "Supports autonomous objective creation and prompt optimization",
+        ],
+        "module": "agents.PokeAgent",
+        "class": "PokeAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": True,
+    },
+    "simplest": {
+        "name": "PokeAgent",
+        "details": [
+            "Minimal PokeAgent scaffold for AutoEvolve baseline experiments",
+            "No built-in subagent tools; orchestrator owns replan_objectives directly",
+            "Empty subagent registry (agent must create its own)",
+        ],
+        "module": "agents.PokeAgent",
+        "class": "PokeAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": False,
+    },
+    "autonomous_cli": {
+        "name": "PokeAgent",
+        "details": [
+            "Legacy scaffold alias for PokeAgent",
+            "Custom VLM benchmark agent with tool scaffolding",
+            "Supports autonomous objective creation and prompt optimization",
+        ],
+        "module": "agents.PokeAgent",
+        "class": "PokeAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": True,
+    },
+    "vision_only": {
+        "name": "VisionOnlyAgent",
+        "details": [
+            "Relies purely on visual input (screenshots)",
+            "No map information or pathfinding assistance",
+            "Navigates using directional buttons only",
+        ],
+        "module": "agents.vision_only_agent",
+        "class": "VisionOnlyAgent",
+        "use_backend": True,
+        "supports_walkthrough": True,
+        "supports_slam": True,
+    },
+}
+
+SCAFFOLD_DESCRIPTIONS = {
+    "pokeagent": "PokeAgent (VLM benchmark agent with tool scaffolding)",
+    "simplest": "PokeAgent-Simplest (no built-in subagents, direct replan, empty registry)",
+    "autonomous_cli": "PokeAgent (legacy alias)",
+    "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",
+}
+
+SUPPORTED_SCAFFOLDS = list(CUSTOM_AGENT_CONFIGS.keys())
+
+SERVER_MANAGED_SCAFFOLDS = list(CUSTOM_AGENT_CONFIGS.keys())
 
 
 def start_server(args, run_id=None):
@@ -39,7 +100,11 @@ def start_server(args, run_id=None):
 
     # Single-writer metrics: server is the only writer
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
-    
+
+    # The 'simplest' scaffold starts with an empty subagent registry
+    if getattr(args, "scaffold", "pokeagent") == "simplest":
+        server_env["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
+
     # Pass through server-relevant arguments
     if args.game:
         server_cmd.extend(["--game", args.game])
@@ -52,15 +117,15 @@ def start_server(args, run_id=None):
     
     if args.load_checkpoint:
         # Auto-load checkpoint.state when --load-checkpoint is used
-        from utils.run_data_manager import get_cache_path
+        from utils.data_persistence.run_data_manager import get_cache_path
         checkpoint_state = get_cache_path("checkpoint.state")
         if checkpoint_state.exists():
             server_cmd.extend(["--load-state", str(checkpoint_state)])
             # Set environment variable to enable LLM checkpoint loading
             server_env["LOAD_CHECKPOINT_MODE"] = "true"
             print(f"🔄 Server will load checkpoint: {checkpoint_state}")
-            checkpoint_llm = get_cache_path("checkpoint_llm.txt")
-            print(f"🔄 LLM metrics will be restored from {checkpoint_llm}")
+            metrics_file = get_cache_path("cumulative_metrics.json")
+            print(f"🔄 LLM metrics will be restored from {metrics_file}")
         else:
             print(f"⚠️ Checkpoint file not found: {checkpoint_state}")
     elif args.load_state:
@@ -120,8 +185,8 @@ def start_frame_server(port):
         return None
 
 
-def start_cli_agent(agent_config, args):
-    """Generic helper to start any CLI-based agent
+def start_custom_agent(agent_config, args):
+    """Generic helper to start any custom benchmark agent.
 
     Args:
         agent_config: Dict with keys: 'name', 'description', 'details' (list), 'module', 'class'
@@ -169,6 +234,10 @@ def start_cli_agent(agent_config, args):
         agent_kwargs["enable_prompt_optimization"] = args.enable_prompt_optimization if hasattr(args, 'enable_prompt_optimization') else False
         agent_kwargs["optimization_frequency"] = args.optimization_frequency if hasattr(args, 'optimization_frequency') else 10
 
+    # Pass scaffold name to PokeAgent so it can select tool set and prompt
+    if agent_config.get("class") == "PokeAgent":
+        agent_kwargs["scaffold"] = args.scaffold
+
     agent = agent_class(**agent_kwargs)
     print("✅ Agent created", flush=True)
 
@@ -177,7 +246,7 @@ def start_cli_agent(agent_config, args):
 
 def main():
     """Main entry point for the Pokemon Agent"""
-    parser = argparse.ArgumentParser(description="Pokemon Emerald AI Agent")
+    parser = argparse.ArgumentParser(description="Pokemon AI Agent")
     
     # Core arguments
     parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
@@ -197,14 +266,12 @@ def main():
     
     # Agent configuration
     parser.add_argument("--backend", type=str, default="gemini", 
-                       help="VLM backend (openai, gemini, local, openrouter)")
+                       help="VLM backend (openai, gemini, openrouter, anthropic, auto)")
     parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
                        help="Model name to use")
-    parser.add_argument("--scaffold", type=str, default="my_cli_agent",
-                       choices=["fourmodule", "simple", "react", "claudeplays", "geminiplays", "my_cli_agent", "autonomous_cli", "vision_only"],
-                       help="Agent scaffold: my_cli_agent (default), simple, react, claudeplays, geminiplays, autonomous_cli, or vision_only")
-    parser.add_argument("--simple", action="store_true", 
-                       help="DEPRECATED: Use --scaffold simple instead")
+    parser.add_argument("--scaffold", type=str, default="pokeagent",
+                       choices=SUPPORTED_SCAFFOLDS,
+                       help="Agent scaffold: pokeagent (default)/autonomous_cli, or vision_only")
     
     # Operation modes
     parser.add_argument("--headless", action="store_true", 
@@ -220,13 +287,16 @@ def main():
     parser.add_argument("--no-ocr", action="store_true", default=True,
                        help="Disable OCR dialogue detection")
     parser.add_argument("--direct-objectives", type=str,
-                       help="Load a specific direct objective sequence (e.g., 'tutorial_to_rival', 'categorized_full_game')")
+                       help="Load a specific direct objective sequence ('categorized_full_game' or 'autonomous_objective_creation')")
     parser.add_argument("--direct-objectives-start", type=int, default=0,
                        help="Start index for story objectives in legacy mode, or story objectives in categorized mode")
     parser.add_argument("--direct-objectives-battling-start", type=int, default=0,
                        help="Start index for battling objectives (only used in categorized mode)")
+    parser.add_argument("--clear-memory", action="store_true",
+                       help="Clear the memory.json file before starting the run")
     parser.add_argument("--clear-knowledge-base", action="store_true",
-                       help="Clear the knowledge_base.json file before starting the run")
+                       dest="clear_memory",
+                       help="Deprecated alias for --clear-memory")
     parser.add_argument("--run-name", type=str, default=None,
                        help="Optional name to append to run directory (e.g., 'test_run' -> 'run_20251129_191503_test_run')")
     parser.add_argument("--enable-prompt-optimization", action="store_true",
@@ -237,9 +307,6 @@ def main():
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",
                        help="Enable SLAM (map building) for vision_only agent")
-    parser.add_argument("--debug-state", action="store_true",
-                       help="Save full game state to debug_states.json on each get_game_state call")
-
     args = parser.parse_args()
 
     # Fix ROM default for Red (parser default is Emerald ROM)
@@ -255,7 +322,7 @@ def main():
     first_objective_id = None
     first_objective_desc = None
     if args.direct_objectives:
-        from agent.objectives import get_first_objective_info
+        from agents.objectives import get_first_objective_info
         first_objective_id, first_objective_desc = get_first_objective_info(
             args.direct_objectives, 
             args.direct_objectives_start
@@ -267,7 +334,7 @@ def main():
             print(f"    Using timestamp-based run_id format instead")
     
     # Initialize run data manager for this run (client creates the run_id)
-    from utils.run_data_manager import initialize_run_data_manager
+    from utils.data_persistence.run_data_manager import initialize_run_data_manager
     
     run_manager = initialize_run_data_manager(
         run_name=args.run_name,
@@ -304,8 +371,8 @@ def main():
     try:
         # Restore from backup if requested
         if args.backup_state:
-            from utils.backup_manager import restore_cache_from_backup
-            from utils.run_data_manager import get_cache_directory
+            from utils.data_persistence.backup_manager import restore_cache_from_backup
+            from utils.data_persistence.run_data_manager import get_cache_directory
             
             print(f"\n📦 Restoring from backup: {args.backup_state}")
             
@@ -322,25 +389,24 @@ def main():
             else:
                 print(f"❌ Failed to restore backup, continuing with fresh state")
         
-        # Clear knowledge base if requested
-        if args.clear_knowledge_base:
-            from utils.run_data_manager import get_cache_path
-            knowledge_base_file = get_cache_path("knowledge_base.json")
-            if knowledge_base_file.exists():
-                # Clear the file by writing empty JSON structure
-                import json
-                empty_data = {
-                    "next_id": 1,
-                    "entries": {}
-                }
-                with open(knowledge_base_file, 'w') as f:
-                    json.dump(empty_data, f, indent=2)
-                print(f"🧹 Cleared knowledge base: {knowledge_base_file}")
-            else:
-                print(f"ℹ️  Knowledge base file does not exist yet: {knowledge_base_file}")
+        if args.clear_memory:
+            from utils.data_persistence.run_data_manager import get_cache_path
+            import json
+            memory_file = get_cache_path("memory.json")
+            legacy_file = get_cache_path("knowledge_base.json")
+            cleared = False
+            for f in (memory_file, legacy_file):
+                if f.exists():
+                    empty_data = {"next_id": 1, "entries": {}}
+                    with open(f, 'w') as fh:
+                        json.dump(empty_data, fh, indent=2)
+                    print(f"🧹 Cleared memory: {f}")
+                    cleared = True
+            if not cleared:
+                print(f"ℹ️  Memory file does not exist yet: {memory_file}")
         
         # Auto-start server if requested
-        if args.agent_auto or args.manual or args.scaffold in ["my_cli_agent", "autonomous_cli", "geminiplays", "vision_only"]:
+        if args.agent_auto or args.manual or args.scaffold in SERVER_MANAGED_SCAFFOLDS:
             print("\n📡 Starting server process...")
             server_process = start_server(args)
             
@@ -361,26 +427,11 @@ def main():
             print("\n⏳ Waiting 3 seconds for manual server startup...")
             time.sleep(3)
         
-        # Handle deprecated --simple flag
-        if args.simple:
-            print("⚠️ --simple is deprecated. Using --scaffold simple")
-            args.scaffold = "simple"
-        
         # Display configuration
         print("\n🤖 Agent Configuration:")
         print(f"   Backend: {args.backend}")
         print(f"   Model: {args.model_name}")
-        scaffold_descriptions = {
-            "fourmodule": "Four-module architecture (Perception→Planning→Memory→Action)",
-            "simple": "Simple mode (direct frame→action)",
-            "react": "ReAct agent (Thought→Action→Observation loop)",
-            "claudeplays": "ClaudePlaysPokemon (tool-based with history summarization)",
-            "geminiplays": "GeminiPlaysPokemon (hierarchical goals, meta-tools, self-critique)",
-            "my_cli_agent": "My Custom CLI Agent (customized Gemini API with MCP tools)",
-            "autonomous_cli": "Autonomous CLI Agent (creates own objectives, all tools enabled)",
-            "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)"
-        }
-        print(f"   Scaffold: {scaffold_descriptions.get(args.scaffold, args.scaffold)}")
+        print(f"   Scaffold: {SCAFFOLD_DESCRIPTIONS.get(args.scaffold, args.scaffold)}")
         if args.no_ocr:
             print("   OCR: Disabled")
         if args.record:
@@ -388,84 +439,13 @@ def main():
         
         print(f"🎥 Stream View: http://127.0.0.1:{args.port}/stream")
 
-        # Configuration for CLI-based agents
-        cli_agent_configs = {
-            "my_cli_agent": {
-                "name": "My Custom CLI Agent Mode - Customized Gemini API with MCP Tools",
-                "details": [
-                    "Using customized Gemini API implementation",
-                    "MCP tools exposed via HTTP endpoints"
-                ],
-                "module": "agent.my_cli_agent",
-                "class": "MyCLIAgent",
-                "use_backend": True,
-                "supports_prompt_optimization": True
-            },
-            "autonomous_cli": {
-                "name": "Autonomous CLI Agent Mode - Creates Own Objectives + All Tools",
-                "details": [
-                    "Using autonomous Gemini API implementation",
-                    "ALL MCP tools enabled (23 tools total)",
-                    "Agent creates its own objectives dynamically"
-                ],
-                "module": "agent.my_cli_agent_autonomous",
-                "class": "AutonomousCLIAgent",
-                "use_backend": True,
-                "supports_prompt_optimization": True
-            },
-            "vision_only": {
-                "name": "Vision-Only Agent Mode - No Map Info, No Pathfinding",
-                "details": [
-                    "Relies purely on visual input (screenshots)",
-                    "No map information or pathfinding assistance",
-                    "Navigates using directional buttons only"
-                ],
-                "module": "agent.vision_only_agent",
-                "class": "VisionOnlyAgent",
-                "use_backend": True,
-                "supports_walkthrough": True,
-                "supports_slam": True
-            }
-        }
-
-        # Check if this is a CLI-based agent
-        if args.scaffold in cli_agent_configs:
-            return start_cli_agent(cli_agent_configs[args.scaffold], args)
-        elif args.scaffold == "geminiplays":
-            print("\n🖥️  GeminiPlaysAgent Mode - Native Tools with MCP Integration")
-            print("=" * 60)
-            print("✅ Server is running")
-            print("🤖 Starting GeminiPlaysAgent...")
-            print("   Using native function calling with 15 tools")
-            print("   MCP tools: press_buttons, navigate_to, get_game_state")
-            print("   Native tools: goals, memory, self-critique, meta")
-            print("")
-
-            # Import and run GeminiPlaysAgent
-            from agent.gemini_plays import GeminiPlaysAgent
-            from agent import Agent
-            print("📦 GeminiPlaysAgent imported successfully", flush=True)
-
-            print(f"🔧 Creating agent with scaffold=geminiplays", flush=True)
-            agent_wrapper = Agent(args)
-            agent = agent_wrapper.agent_impl  # Get the actual GeminiPlaysAgent instance
-
-            if not isinstance(agent, GeminiPlaysAgent):
-                print(f"❌ Error: Expected GeminiPlaysAgent but got {type(agent)}")
-                return 1
-
-            print("✅ Agent created", flush=True)
-
-            max_steps = args.max_steps if hasattr(args, 'max_steps') else None
-            return agent.run(max_steps=max_steps)
+        # All supported scaffolds are custom benchmark agents
+        if args.scaffold in CUSTOM_AGENT_CONFIGS:
+            return start_custom_agent(CUSTOM_AGENT_CONFIGS[args.scaffold], args)
         else:
-            print("\n🚀 Starting client...")
-            print("-" * 60)
-
-            # Run the client
-            success = run_multiprocess_client(server_port=args.port, args=args)
-
-            return 0 if success else 1
+            print(f"❌ Unsupported scaffold: {args.scaffold}")
+            print(f"   Supported: {', '.join(CUSTOM_AGENT_CONFIGS.keys())}")
+            return 1
         
     except KeyboardInterrupt:
         print("\n\n🛑 Shutdown requested by user")

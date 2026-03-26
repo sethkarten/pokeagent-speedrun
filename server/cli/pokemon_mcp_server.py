@@ -8,12 +8,19 @@ logic lives here — this module is purely a transport adapter between the
 MCP protocol (used by Claude Code / Codex CLI / Gemini CLI) and the game server's
 REST API.
 
-Available tools (13 total):
-  Game:        get_game_state, press_buttons, navigate_to
-  Knowledge:   add_knowledge, search_knowledge, get_knowledge_summary
-  Wiki:        lookup_pokemon_info, list_wiki_sources, get_walkthrough
-  Objectives:  complete_direct_objective, create_direct_objectives, get_progress_summary
-  Reflection:  reflect
+TOOL RESTRICTION: For CLI agent experiments, only core game interaction tools
+are exposed. CLI agents may implement their own abstractions for reflection,
+memory, and planning systems. The objective system is not exposed as CLI agent
+executions use milestones (not exposed to the agent) for progress 
+tracking in .pokeagent_cache/{run_id}/cumulative_metrics.json. 
+
+NOTE ON CONTAINERIZATION: It is  crucial that the game server in app.py is not 
+exposed to CLI agents as that may enable inappropriate direct modification 
+of the game state (i.e. manually loading of save states) or access to 
+unwarranted context.
+
+Available tools (3 total):
+  Game: get_game_state, press_buttons, navigate_to
 """
 
 import logging
@@ -38,7 +45,12 @@ logger = logging.getLogger(__name__)
 # Server configuration
 SERVER_URL = os.environ.get("POKEMON_SERVER_URL", "http://localhost:8000")
 
-mcp = FastMCP(name="pokemon-emerald")
+# MCP server port and host (for SSE transport -- note, the mcp-config may need to know we are using SSE transport)
+# Port/host are set at FastMCP init time, not at run() time
+_MCP_PORT = int(os.environ.get("MCP_PORT", "8002"))
+_MCP_HOST = os.environ.get("MCP_HOST", "0.0.0.0")  # Bind to all interfaces for Docker access
+
+mcp = FastMCP(name="pokemon-emerald", host=_MCP_HOST, port=_MCP_PORT)
 
 _TIMEOUT_SHORT = 10   # seconds — lightweight reads
 _TIMEOUT_MEDIUM = 30  # seconds — actions/pathfinding
@@ -177,81 +189,23 @@ def navigate_to(
 
 
 # ---------------------------------------------------------------------------
-# Knowledge tools
+# Removed tools for CLI agent experiments:
+# - Memory tools (add_memory, search_memory, get_memory_summary)
+#   CLI agents may implement their own internal memory systems
+# - Wiki tools (lookup_pokemon_info, list_wiki_sources, get_walkthrough)
+#   CLI agents may access web information through their native capabilities
+# - Objective tools (complete_direct_objective, create_direct_objectives, get_progress_summary)
+#   CLI agents may use their own abstractions for creating and tracking the
+#   completion of objectives. Milestones are used for progress internal metric tracking 
+#   in .pokeagent_cache/{run_id}/cumulative_metrics.json.
+# - Reflection tools (reflect)
+#   CLI agents may implement their own abstractions for reflection.
+#
+# These tools remain accessible to VLM agents via mappings in 
+# MCPToolAdapter to direct endpoints in app.py 
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
-def add_knowledge(
-    category: str, title: str, content: str, location: str = "", coordinates: str = "", importance: int = 3
-) -> dict:
-    """
-    Store important information in your persistent knowledge base.
-    Use this to remember locations, NPCs, items, strategies, or any other useful information you discover.
-
-    Args:
-        category: Category of knowledge (location, npc, item, pokemon, strategy, custom)
-        title: Brief title for this knowledge
-        content: Detailed description or notes
-        location: Map name where this applies (optional)
-        coordinates: Coordinates like 'X:10,Y:20' (optional)
-        importance: Importance level 1-5 (5 = critical, 3 = normal, 1 = minor)
-
-    Returns:
-        Dictionary with success status and entry ID
-    """
-    return _post("/mcp/add_knowledge", {
-        "category": category,
-        "title": title,
-        "content": content,
-        "location": location,
-        "coordinates": coordinates,
-        "importance": importance,
-    })
-
-
-@mcp.tool()
-def search_knowledge(category: str = "all", query: str = "", location: str = "", min_importance: int = 1) -> dict:
-    """
-    Search your knowledge base for stored information.
-    Use this to recall what you've learned about locations, NPCs, items, or strategies.
-
-    Args:
-        category: Category to search (location, npc, item, pokemon, strategy, custom, all)
-        query: Text to search for in titles and content (optional)
-        location: Filter by map name (optional)
-        min_importance: Minimum importance level (1-5, default 1)
-
-    Returns:
-        Dictionary with success status, count, and search results
-    """
-    return _post("/mcp/search_knowledge", {
-        "category": category,
-        "query": query,
-        "location": location,
-        "min_importance": min_importance,
-    })
-
-
-@mcp.tool()
-def get_knowledge_summary(min_importance: int = 3) -> dict:
-    """
-    Get a summary of the most important things you've learned.
-    Shows your top discoveries and notes.
-
-    Args:
-        min_importance: Minimum importance level to include (1-5, default 3)
-
-    Returns:
-        Dictionary with success status and formatted summary
-    """
-    return _post("/mcp/get_knowledge_summary", {"min_importance": min_importance})
-
-
-# ---------------------------------------------------------------------------
-# Wiki / walkthrough tools
-# ---------------------------------------------------------------------------
-
-@mcp.tool()
+# @mcp.tool()
 def lookup_pokemon_info(topic: str, source: str = "bulbapedia") -> dict:
     """
     Look up information about Pokemon Emerald from trusted wiki sources.
@@ -272,7 +226,7 @@ def lookup_pokemon_info(topic: str, source: str = "bulbapedia") -> dict:
     return _post("/mcp/lookup_pokemon_info", {"topic": topic, "source": source}, timeout=_TIMEOUT_MEDIUM)
 
 
-@mcp.tool()
+# @mcp.tool()
 def list_wiki_sources() -> dict:
     """
     List available Pokemon wiki sources and what they're good for.
@@ -284,7 +238,7 @@ def list_wiki_sources() -> dict:
     return _post("/mcp/list_wiki_sources", timeout=_TIMEOUT_SHORT)
 
 
-@mcp.tool()
+# @mcp.tool()
 def get_walkthrough(part: int) -> dict:
     """
     Get the official Bulbapedia walkthrough for Pokemon Emerald.
@@ -328,7 +282,7 @@ def get_walkthrough(part: int) -> dict:
 # Objective / progress tools
 # ---------------------------------------------------------------------------
 
-@mcp.tool()
+# @mcp.tool()
 def complete_direct_objective(
     objective_id: str,
     completion_notes: str = "",
@@ -354,7 +308,7 @@ def complete_direct_objective(
     return _post("/mcp/complete_direct_objective", body)
 
 
-@mcp.tool()
+# @mcp.tool()
 def create_direct_objectives(
     objectives: List[Dict[str, Any]],
     reasoning: str = "",
@@ -387,23 +341,23 @@ def create_direct_objectives(
     return _post("/mcp/create_direct_objectives", body)
 
 
-@mcp.tool()
+# @mcp.tool()
 def get_progress_summary() -> dict:
     """
-    Get comprehensive progress summary including milestones, completed objectives, and knowledge.
+    Get comprehensive progress summary including milestones, completed objectives, and memory.
     Use this to review your overall progress and plan next steps.
 
     Returns:
         Dictionary with success status and progress data including:
         - Milestones completed
         - Direct objectives status
-        - Knowledge base summary
+        - Memory summary
         - Current location and coordinates
     """
     return _post("/mcp/get_progress_summary", timeout=_TIMEOUT_SHORT)
 
 
-@mcp.tool()
+# @mcp.tool()
 def reflect(situation: str = "Agent requested reflection") -> dict:
     """
     Return context data for self-reflection on current progress.
@@ -427,15 +381,50 @@ def reflect(situation: str = "Agent requested reflection") -> dict:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def _run_combined_transport() -> None:
+    """Run both SSE and Streamable HTTP for containerized CLI agents.
+    Claude/Gemini use SSE (/sse); Codex uses Streamable HTTP (/mcp)."""
+    import anyio
+    import uvicorn
+    from starlette.applications import Starlette
+
+    streamable_app = mcp.streamable_http_app()
+    sse_app = mcp.sse_app()
+    combined = Starlette(
+        debug=mcp.settings.debug,
+        routes=list(sse_app.routes) + list(streamable_app.routes),
+        lifespan=streamable_app.router.lifespan_context,
+    )
+    config = uvicorn.Config(
+        combined,
+        host=_MCP_HOST,
+        port=_MCP_PORT,
+        log_level=mcp.settings.log_level.lower(),
+    )
+    anyio.run(lambda: uvicorn.Server(config).serve())
+
+
 if __name__ == "__main__":
     logger.info("Pokemon MCP Server starting (thin proxy mode)...")
     logger.info(f"Proxying to game server at: {SERVER_URL}")
     logger.info("Server name: pokemon-emerald")
-    logger.info("Available tools (13):")
-    logger.info("  Game:       get_game_state, press_buttons, navigate_to")
-    logger.info("  Knowledge:  add_knowledge, search_knowledge, get_knowledge_summary")
-    logger.info("  Wiki:       lookup_pokemon_info, list_wiki_sources, get_walkthrough")
-    logger.info("  Objectives: complete_direct_objective, create_direct_objectives, get_progress_summary")
-    logger.info("  Reflection: reflect")
+    logger.info("Available tools (3 total, CLI agent minimal set):")
+    logger.info("  Game: get_game_state, press_buttons, navigate_to")
+    logger.info("")
+    logger.info("Note: Memory, Wiki, Objectives, and Reflection tools removed for CLI experiments.")
+    logger.info("      CLI agents implement their own internal memory and planning systems.")
 
-    mcp.run(transport="stdio")
+    # Check for transport mode (used when running in containerized environment)
+    transport_mode = os.environ.get("MCP_TRANSPORT", "stdio").lower()
+    
+    if transport_mode in ("sse", "streamable-http"):
+        # Combined transport: SSE + Streamable HTTP for all CLI agents
+        # Claude/Gemini use /sse; Codex uses /mcp
+        logger.info(f"🌐 Starting SSE + Streamable HTTP transport on {_MCP_HOST}:{_MCP_PORT}")
+        logger.info(f"   Claude/Gemini: http://<host>:{_MCP_PORT}/sse")
+        logger.info(f"   Codex: http://<host>:{_MCP_PORT}/mcp")
+        _run_combined_transport()
+    else:
+        # Stdio mode (default): for local subprocess spawning
+        logger.info("📡 Starting stdio transport (local subprocess mode)")
+        mcp.run(transport="stdio")

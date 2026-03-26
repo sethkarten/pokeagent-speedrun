@@ -644,7 +644,7 @@
         
 
 
-    </style>
+</style>
 </head>
 <body>
     <div class="header">
@@ -652,9 +652,9 @@
         <div class="header-title">PROTOCOL_EMERALD // AGENT = PLAYER</div>
         <div style="flex: 1;"></div>
         <div id="metrics-display" style="color: #33ff33; margin-right: 20px; font-size: 14px;">
-            <!-- <span id="cost-metric">Cost: $0.00</span> |
+            <span id="cost-metric">Cost: $0.00</span> |
             <span id="tokens-metric">0 tokens</span> |
-            <span id="actions-metric">Actions: 0</span> |  -->
+            <span id="actions-metric">Actions: 0</span> |
             <span id="time-metric">Time: 00:00:00</span>
         </div>
         <div style="width: 10px; height: 10px; background-color: #33ff33; border-radius: 50%; box-shadow: 0 0 10px #33ff33;"></div>
@@ -820,13 +820,12 @@
                 if (response.ok) {
                     const metrics = await response.json();
 
-                    // Cost, tokens, and actions hidden for now
-                    // const cost = metrics.total_cost || 0;
-                    // document.getElementById('cost-metric').textContent = `Cost: $${cost.toFixed(4)}`;
-                    // const tokens = metrics.total_tokens || 0;
-                    // document.getElementById('tokens-metric').textContent = `${tokens.toLocaleString()} tokens`;
-                    // const actions = metrics.total_actions || 0;
-                    // document.getElementById('actions-metric').textContent = `Actions: ${actions.toLocaleString()}`;
+                    const cost = metrics.total_cost || 0;
+                    document.getElementById('cost-metric').textContent = `Cost: $${cost.toFixed(4)}`;
+                    const tokens = metrics.total_tokens || 0;
+                    document.getElementById('tokens-metric').textContent = `${tokens.toLocaleString()} tokens`;
+                    const actions = metrics.total_actions || 0;
+                    document.getElementById('actions-metric').textContent = `Actions: ${actions.toLocaleString()}`;
 
                     // Initialize time tracking on first load
                     if (!sessionStartTime) {
@@ -1021,9 +1020,10 @@
                     // Format all LLM interactions in condensed format: "Step X: <msg>"
                     let html = '';
                     data.recent_interactions.forEach((interaction, index) => {
-                        // Calculate step number based on current step and interaction index
                         const baseStep = data.current_step || 0;
-                        const stepNumber = baseStep;
+                        const stepNumber = (interaction.agent_step != null && interaction.agent_step !== '')
+                            ? interaction.agent_step
+                            : baseStep;
                         
                         // Trim whitespace from the response
                         const trimmedResponse = interaction.response.trim();
