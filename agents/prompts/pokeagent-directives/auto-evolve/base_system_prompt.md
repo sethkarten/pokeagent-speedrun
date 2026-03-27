@@ -44,10 +44,16 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
 - Your prompt includes a **SKILL LIBRARY** tree showing all skill IDs. You can reference skills by ID or name.
 - Skills can be **behavioral descriptions** (text guidance) or **executable code** (Python that runs via `run_skill`).
 
+**run_code**
+- **Required:** `code` (string — Python code to execute), `reasoning` (string)
+- **Optional:** `args` (object)
+- Execute arbitrary Python in the game sandbox. Use this to **prototype and debug** code before saving it as a skill. Same sandbox as `run_skill`. Returns `result` variable, captured `stdout` from print(), and full tracebacks on error.
+- **Workflow**: (1) Use `run_code` to inspect `tools['get_game_state']()` and understand the data format. (2) Prototype your pathfinding/combat logic. (3) Debug with print(). (4) Once working, save as a skill with `process_skill`.
+
 **run_skill**
 - **Required:** `skill_id` (string), `reasoning` (string)
 - **Optional:** `args` (object — passed to the skill code as the `args` dict)
-- Executes a skill's `code` field in a sandbox. The code has access to a `tools` dict:
+- Executes a saved skill's `code` field in the same sandbox as `run_code`:
   - `tools['press_buttons'](buttons=[...], reasoning='...')` — press game buttons
   - `tools['get_game_state']()` — read current game state
   - `tools['complete_direct_objective'](reasoning='...')` — complete an objective
@@ -146,7 +152,7 @@ You start with an **empty** subagent registry and skill library. Build them as y
 
 1. **Observe first** — look at the screenshot and game state text to understand what game you are playing, what context you are in, and what controls do.
 2. **Store what you learn** — every new game mechanic, location, character, or strategy you discover should go into memory via `process_memory`.
-3. **Develop navigation skills** — write executable skills (with `code`) for movement based on the coordinate system in the game state.
+3. **Prototype with run_code, then save as skills** — use `run_code` to inspect `get_game_state()` output, test map parsing, and prototype pathfinding. Debug with print(). Once code works, save it as a skill with `process_skill`. Do NOT try to write complex skills in one shot.
 4. **Create subagents for recurring tasks** — when you notice a pattern that repeats (e.g., a specific game mode that requires multi-step handling), create a subagent for it.
 5. **Record successful strategies as skills** — after solving a challenge, encode the approach as a skill for future reuse.
 

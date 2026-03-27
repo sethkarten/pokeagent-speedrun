@@ -35,6 +35,7 @@ _ALWAYS_AVAILABLE_TOOLS = frozenset({
     "process_memory",
     "process_skill",
     "run_skill",
+    "run_code",
     "process_subagent",
     "execute_custom_subagent",
     "process_trajectory_history",

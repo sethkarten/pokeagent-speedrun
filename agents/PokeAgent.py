@@ -484,6 +484,29 @@ class PokeAgent:
                 }
             },
             {
+                "name": "run_code",
+                "description": "Execute arbitrary Python code in the game sandbox. Use this to prototype, debug, and test code BEFORE saving it as a skill. The code has access to the same `tools` dict as run_skill (press_buttons, get_game_state, etc.) plus `args`. Set `result` to return data. Use this to: inspect get_game_state() output, test map parsing, prototype pathfinding, debug skill code. Stdout from print() is captured.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "code": {
+                            "type_": "STRING",
+                            "description": "Python code to execute. Has access to: tools['press_buttons'](), tools['get_game_state'](), args, random, collections, heapq, numpy/np, json, re, math. Set 'result' variable to return data."
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "What you are testing or prototyping"
+                        },
+                        "args": {
+                            "type_": "OBJECT",
+                            "description": "Optional arguments passed as the `args` dict",
+                            "properties": {}
+                        }
+                    },
+                    "required": ["code", "reasoning"]
+                }
+            },
+            {
                 "name": "process_subagent",
                 "description": "Manage the subagent registry. The SUBAGENT REGISTRY section in your prompt shows all subagent IDs. Use 'read' to get full config, 'add' to create, 'update' to modify, 'delete' to remove (built-ins cannot be deleted).",
                 "parameters": {
@@ -650,9 +673,11 @@ class PokeAgent:
             spec = get_local_subagent_spec(function_name)
             return getattr(self, spec.handler_method)(arguments)
 
-        # run_skill: execute skill code locally with tool access
+        # run_skill / run_code: execute code locally with tool access
         if function_name == "run_skill":
             return self._execute_run_skill(arguments)
+        if function_name == "run_code":
+            return self._execute_run_code(arguments)
 
         # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -757,6 +782,92 @@ class PokeAgent:
         except Exception as e:
             logger.error(f"Skill {skill_id} execution FAILED: {e}", exc_info=True)
             return json.dumps({"success": False, "skill_id": skill_id, "error": str(e)})
+
+    def _execute_run_code(self, arguments: dict) -> str:
+        """Execute arbitrary Python code in the game sandbox for prototyping/debugging."""
+        code = arguments.get("code", "")
+        reasoning = arguments.get("reasoning", "")
+        code_args = arguments.get("args", {})
+
+        if not code or not code.strip():
+            return json.dumps({"success": False, "error": "No code provided"})
+
+        logger.info(f"Running code snippet ({len(code)} chars): {reasoning}")
+
+        # Reuse the same sandbox builder as run_skill
+        def _tool_caller(tool_name):
+            def call(**kwargs):
+                result = self.mcp_adapter.call_tool(tool_name, kwargs)
+                if tool_name == "press_buttons":
+                    self._wait_for_actions_complete()
+                return result
+            return call
+
+        sandbox_tools = {}
+        for tool_name in ("press_buttons", "get_game_state", "complete_direct_objective",
+                          "process_memory", "get_progress_summary"):
+            sandbox_tools[tool_name] = _tool_caller(tool_name)
+
+        import random, collections, math, json as _json_mod, re as _re_mod, heapq, itertools, functools
+        import numpy as np
+        import io as _io_mod
+        import sys as _sys_mod
+
+        # Capture print output
+        captured_output = _io_mod.StringIO()
+
+        sandbox_globals = {
+            "__builtins__": {
+                "range": range, "len": len, "int": int, "float": float,
+                "str": str, "list": list, "dict": dict, "tuple": tuple,
+                "set": set, "frozenset": frozenset,
+                "bool": bool, "print": lambda *a, **kw: print(*a, file=captured_output, **kw),
+                "abs": abs, "min": min,
+                "max": max, "sum": sum, "enumerate": enumerate, "zip": zip,
+                "sorted": sorted, "reversed": reversed, "isinstance": isinstance,
+                "map": map, "filter": filter, "any": any, "all": all,
+                "True": True, "False": False, "None": None,
+            },
+            "random": random,
+            "collections": collections,
+            "math": math,
+            "json": _json_mod,
+            "re": _re_mod,
+            "heapq": heapq,
+            "itertools": itertools,
+            "functools": functools,
+            "np": np,
+            "numpy": np,
+            "tools": sandbox_tools,
+            "args": code_args or {},
+        }
+
+        try:
+            exec(code, sandbox_globals)  # noqa: S102
+            result = sandbox_globals.get("result", None)
+            stdout = captured_output.getvalue()
+            response = {"success": True}
+            if result is not None:
+                response["result"] = result
+            if stdout:
+                response["stdout"] = stdout[:5000]
+            if not result and not stdout:
+                response["note"] = "Code ran successfully but set no 'result' variable and printed nothing."
+            logger.info(f"  run_code completed: result={json.dumps(result, default=str)[:200] if result else 'None'}, stdout={len(stdout)} chars")
+            return json.dumps(response, default=str)
+        except Exception as e:
+            stdout = captured_output.getvalue()
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(f"run_code FAILED: {e}")
+            response = {
+                "success": False,
+                "error": str(e),
+                "traceback": tb[-1000:],
+            }
+            if stdout:
+                response["stdout"] = stdout[:2000]
+            return json.dumps(response, default=str)
 
     # Built-in tool-set keys are pinned in the LRU cache (never evicted).
     _BUILTIN_VLM_KEYS: set = set()
