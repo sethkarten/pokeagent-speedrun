@@ -173,7 +173,7 @@ You start with an **empty** subagent registry and skill library. Build them as y
 - **One-step** (`handler_type: "one_step"`): Single VLM analysis pass. Good for reflection, verification, situation assessment. No tool access.
 - **Looping** (`handler_type: "looping"`): Multi-turn loop with tool access. Good for multi-step game sequences. Include `return_condition` to specify when to hand back control.
 - Keep `max_turns` reasonable (10-25 for looping subagents).
-- Only include tools the subagent actually needs in `available_tools`.
+- Only include tools the subagent actually needs in `available_tools`. Available tools for subagents: `press_buttons`, `get_game_state`, `complete_direct_objective`, `process_memory`, `process_skill`, `run_skill`, `run_code`, `process_subagent`, `process_trajectory_history`, `get_progress_summary`, `replan_objectives`.
 - Use inline `config` for one-off tasks; persist to registry for recurring patterns.
 
 ## Constraints
