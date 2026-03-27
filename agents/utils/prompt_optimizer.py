@@ -35,7 +35,7 @@ class PromptOptimizer:
         self.system_prompt_content = None
         if system_prompt_file.exists():
             with open(system_prompt_file, 'r') as f:
-                self.system_prompt_content = f.read()
+                self.system_prompt_content = render_prompt(f.read())
             logger.info(f"📋 Loaded system prompt for optimizer: {system_prompt_path} ({len(self.system_prompt_content)} chars)")
         else:
             logger.warning(f"System prompt not found at {system_prompt_path}, optimizer will not know available tools")

@@ -29,7 +29,7 @@ You are playing **{game_name}** on a Game Boy Color emulator. You receive screen
 **process_memory**
 - **Required:** `action` (`read` | `add` | `update` | `delete`), `entries` (array of objects), `reasoning` (string)
 - For `read`: `[{id}]` — returns full entry content (up to 3 per call)
-- For `add`: `[{id?, path, title, content, importance}]` — path is hierarchical e.g. `"locations/town_name"`. You can specify a custom `id` (e.g. `"route_101_layout"`) or omit it for auto-generated IDs.
+- For `add`: `[{id?, path, title, content, importance}]` — path is hierarchical e.g. `"locations/town_name"`. You can specify a custom `id` (e.g. `"route_1_layout"`) or omit it for auto-generated IDs.
 - For `update`: `[{id, title?, content?, path?, importance?}]`
 - For `delete`: `[{id}]`
 - Your prompt includes a **LONG-TERM MEMORY OVERVIEW** tree showing all entry IDs. You can reference entries by ID or by title.
@@ -58,15 +58,18 @@ You are playing **{game_name}** on a Game Boy Color emulator. You receive screen
 **`get_game_state()` return format** (key fields for skill code):
 ```
 state['player_position'] = {'x': int, 'y': int}
-state['location'] = 'ROUTE 101'
+state['location'] = 'PALLET TOWN'
 state['state_text'] = '...'  (full formatted text including ASCII map, party, warps, NPCs)
 state['raw_state']['player']['position'] = {'x': int, 'y': int}
 ```
 
-The `state_text` contains an **ASCII map** every step with the legend:
-- `P` = Player, `.` = walkable, `#` = blocked, `~` = tall grass
-- `D` = Door, `S` = Stairs/Warp, `I` = item, `X` = out of bounds
-- Map dimensions and warp destinations are also included
+The `state_text` contains a **full ASCII map** of the current location every step (not a viewport — the entire map). The legend:
+- `I` = Player, `.` = walkable, `#` = wall, `~` = grass, `W` = water, `D` = door
+- `t` = cuttable tree (HM01 Cut), `G` = Card Key gate, `!` = sign, `?` = hidden item
+- `O` = Poké Ball, `N` = NPC, `↓`/`←`/`→` = jump ledge, `C` = counter, `*` = spinner stop
+- `B` = bookshelf, `U` = trash, `^` = display/blueprint, `P` = computer, `=` = bench, `T` = TV/machine
+- Map dimensions, `warp_events` (with destination map + coords), `bg_events`, and `objects` (with sprite names + positions) are included as JSON after the map
+- A **MOVEMENT PREVIEW** section shows what tile is in each cardinal direction and whether it is WALKABLE or BLOCKED
 
 Skill code can parse `state_text` to read the ASCII map for pathfinding, or use `player_position` for simple coordinate-based movement.
 
@@ -107,7 +110,7 @@ for _ in range(max_moves):
 result = {'arrived': (px == target_x and py == target_y), 'moves': moves_made, 'final_pos': (px, py)}
 ```
 
-**Advanced: You can parse the ASCII map from `state_text` for obstacle-aware pathfinding.** The map grid lines start after "ASCII Map:" in `state_text`. Each character is a tile at that (x, y) coordinate. Use `#` to detect blocked tiles and route around them.
+**Advanced: You can parse the ASCII map from `state_text` for obstacle-aware pathfinding.** The map grid lines start after "ASCII Map:" in `state_text`. This is the **full map** — row index = y, column index = x. Use `#` and other blocked symbols to detect obstacles and route around them. The JSON section below the map gives you warp coordinates and NPC positions for planning.
 
 ### Subagent Registry
 

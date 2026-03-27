@@ -758,6 +758,82 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
 
     return context_parts
 
+def _format_red_map_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]], map_info: dict):
+    """Format Red's native map data for the agent (equivalent to _format_porymap_info for Emerald).
+
+    Returns same shape as _format_porymap_info: either (context_parts, map_data) tuple or plain list.
+    """
+    context_parts = []
+
+    if not location_name or location_name in ('TITLE_SEQUENCE', 'Unknown'):
+        return context_parts
+
+    whole_map = map_info.get('red_whole_map')
+    if not whole_map or not whole_map.get('grid'):
+        return context_parts
+
+    grid = whole_map['grid']
+    dims = whole_map.get('dimensions', {})
+    w, h = dims.get('width', 0), dims.get('height', 0)
+
+    context_parts.append("\n=== MAP (FULL) ===")
+    context_parts.append(f"Location: {location_name}")
+    context_parts.append(f"Dimensions: {w}x{h}")
+
+    # Build ASCII map string: Poké Balls as 'O', other NPCs as 'N', player as 'I' (wins ties)
+    objects = whole_map.get('objects', [])
+    # Map (y, x) → display symbol; Poké Balls get 'O', everything else gets 'N'
+    obj_symbol: dict = {}
+    for obj in objects:
+        ny, nx = obj.get('y'), obj.get('x')
+        if ny is None or nx is None:
+            continue
+        is_pokeball = "POKE_BALL" in obj.get('sprite_name', '').upper()
+        obj_symbol[(int(ny), int(nx))] = 'O' if is_pokeball else 'N'
+
+    ascii_lines = []
+    for y, row in enumerate(grid):
+        line = list(row)
+        # Overlay objects first (Poké Balls as 'O', NPCs as 'N')
+        for (oy, ox), sym in obj_symbol.items():
+            if oy == y and 0 <= ox < len(line):
+                line[ox] = sym
+        # Player always on top
+        if player_coords and y == player_coords[1]:
+            px = player_coords[0]
+            if 0 <= px < len(line):
+                line[px] = 'I'
+        ascii_lines.append(''.join(line))
+    ascii_map = '\n'.join(ascii_lines)
+
+    context_parts.append("\nASCII Map:")
+    context_parts.append(ascii_map)
+    context_parts.append("(Legend: I=Player .=walkable #=wall t=cuttable tree (use HM01 Cut) ~=grass W=water D=door G=Card Key gate (blocked, walk into and press A) !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC *=spinner stop)")
+
+    # Compact JSON summary (warp_events, bg_events, objects)
+    compact_json = {
+        "name": location_name,
+        "dimensions": dims,
+        "warp_events": whole_map.get('warp_events', []),
+        "bg_events":   whole_map.get('bg_events', []),
+        "objects":     whole_map.get('objects', []),
+    }
+    context_parts.append("\nMap Data (JSON):")
+    context_parts.append(json.dumps(compact_json, indent=2))
+
+    # Return same tuple shape as _format_porymap_info
+    # map_data['warps'] is populated from warp_events for pathfinder compat
+    map_data = {
+        'grid':       grid,
+        'raw_tiles':  whole_map.get('raw_tiles'),
+        'dimensions': dims,
+        'objects':    whole_map.get('objects', []),
+        'warps':      whole_map.get('warp_events', []),
+    }
+
+    logger.info(f"Red map: formatted '{location_name}' ({w}x{h}) with {len(whole_map.get('warp_events', []))} warps, {len(whole_map.get('objects', []))} objects")
+    return context_parts, map_data
+
 def _add_local_map_fallback(context_parts, map_info, include_npcs, location_name=None):
     """Helper function to add local map display as fallback"""
     if 'tiles' in map_info and map_info['tiles']:
