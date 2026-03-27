@@ -808,9 +808,10 @@ class PokeAgent:
                 return result
             return call
 
+        # run_code is for debugging/prototyping ONLY - no game actions allowed
+        # The agent must save code as a skill and use run_skill to execute actions
         sandbox_tools = {}
-        for tool_name in ("press_buttons", "get_game_state", "get_map_data", "complete_direct_objective",
-                          "process_memory", "get_progress_summary"):
+        for tool_name in ("get_game_state", "get_map_data", "get_progress_summary"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
         import random, collections, math, json as _json_mod, re as _re_mod, heapq, itertools, functools

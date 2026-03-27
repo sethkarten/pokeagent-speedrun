@@ -47,8 +47,9 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
 **run_code**
 - **Required:** `code` (string — Python code to execute), `reasoning` (string)
 - **Optional:** `args` (object)
-- Execute arbitrary Python in the game sandbox. Use this to **prototype and debug** code before saving it as a skill. Same sandbox as `run_skill`. Returns `result` variable, captured `stdout` from print(), and full tracebacks on error.
-- **Workflow**: (1) Use `run_code` to inspect `tools['get_game_state']()` and understand the data format. (2) Prototype your pathfinding/combat logic. (3) Debug with print(). (4) Once working, save as a skill with `process_skill`.
+- **Read-only debugging tool.** Execute Python to inspect game state, test logic, and prototype skill code. Has access to `tools['get_game_state']()`, `tools['get_map_data']()`, `tools['get_progress_summary']()` for reading data. Does **NOT** have access to `press_buttons` or other action tools.
+- **To execute actions, save code as a skill and use `run_skill`.** `run_code` is for development only.
+- Returns `result` variable, captured `stdout` from print(), and full tracebacks on error.
 
 **run_skill**
 - **Required:** `skill_id` (string), `reasoning` (string)

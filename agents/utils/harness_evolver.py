@@ -326,6 +326,24 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
         )
         tool_failures = self._extract_tool_failures(trajectories)
 
+        # Detect antipattern: using run_code repeatedly instead of saving as skills
+        run_code_count = sum(
+            1 for t in trajectories
+            for tc in (t.get("action", {}).get("tool_calls", []) if isinstance(t.get("action", {}), dict) else [])
+            if tc.get("name") == "run_code"
+        )
+        run_skill_count = sum(
+            1 for t in trajectories
+            for tc in (t.get("action", {}).get("tool_calls", []) if isinstance(t.get("action", {}), dict) else [])
+            if tc.get("name") == "run_skill"
+        )
+        antipattern_warning = ""
+        if run_code_count >= 3 and run_skill_count == 0:
+            antipattern_warning = f"""
+## CRITICAL ANTIPATTERN DETECTED
+The agent called run_code {run_code_count} times but run_skill 0 times in the last {len(trajectories)} steps. This means the agent is writing disposable scripts instead of saving reusable skills. You MUST create executable skills from the patterns in these run_code calls. Extract the common code, save it as a skill with process_skill, so the agent can call run_skill instead.
+"""
+
         prompt = f"""You are a harness evolution system analyzing an AI agent's recent gameplay in Pokemon Emerald.
 
 Your job: identify reusable behavioral patterns (skills) from successful actions and evaluate existing skills.
@@ -337,6 +355,7 @@ Your job: identify reusable behavioral patterns (skills) from successful actions
 {trajectory_summary}
 
 {tool_failures}
+{antipattern_warning}
 
 ## Analysis Tasks
 
