@@ -32,6 +32,7 @@ _ALWAYS_AVAILABLE_TOOLS = frozenset({
     "press_buttons",
     "complete_direct_objective",
     "get_game_state",
+    "get_map_data",
     "process_memory",
     "process_skill",
     "run_skill",

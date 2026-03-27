@@ -102,6 +102,7 @@ class MCPToolAdapter:
             endpoint_map = {
                 # Pokemon MCP tools
                 "get_game_state": "/mcp/get_game_state",
+                "get_map_data": "/mcp/get_map_data",
                 "press_buttons": "/mcp/press_buttons",
                 "navigate_to": "/mcp/navigate_to",
                 "add_memory": "/mcp/add_memory",
@@ -743,7 +744,7 @@ class PokeAgent:
             return call
 
         sandbox_tools = {}
-        for tool_name in ("press_buttons", "get_game_state", "complete_direct_objective",
+        for tool_name in ("press_buttons", "get_game_state", "get_map_data", "complete_direct_objective",
                           "process_memory", "get_progress_summary"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
@@ -808,7 +809,7 @@ class PokeAgent:
             return call
 
         sandbox_tools = {}
-        for tool_name in ("press_buttons", "get_game_state", "complete_direct_objective",
+        for tool_name in ("press_buttons", "get_game_state", "get_map_data", "complete_direct_objective",
                           "process_memory", "get_progress_summary"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 

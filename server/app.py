@@ -2811,6 +2811,98 @@ async def mcp_get_game_state():
         return {"success": False, "error": str(e)}
 
 
+@app.post("/mcp/get_map_data")
+async def mcp_get_map_data():
+    """MCP Tool: Get structured map data for skill code (pathfinding, navigation).
+
+    Returns a clean dict with: grid (2D array of tile chars), player position,
+    dimensions, warps, NPCs/objects, connections, location name, game context.
+    No nulls, no raw_state, no screenshots.
+    """
+    if env is None:
+        return {"success": False, "error": "Emulator not initialized"}
+
+    try:
+        state = env.get_comprehensive_state()
+        player = state.get("player", {})
+        position = player.get("position", {})
+        px, py = position.get("x", 0), position.get("y", 0)
+        location = player.get("location", "Unknown")
+        game_state = state.get("game", {}).get("game_state", "unknown")
+
+        result = {
+            "success": True,
+            "location": location,
+            "player": {"x": px, "y": py},
+            "game_context": game_state,
+            "is_in_battle": state.get("game", {}).get("is_in_battle", False),
+        }
+
+        # Party info
+        party = player.get("party") or state.get("game", {}).get("party") or []
+        if party:
+            result["party"] = [
+                {
+                    "species": p.get("species_name", "?"),
+                    "level": p.get("level", 0),
+                    "hp": p.get("current_hp", 0),
+                    "max_hp": p.get("max_hp", 0),
+                    "moves": p.get("moves", []),
+                }
+                for p in party
+            ]
+
+        # Map data from porymap
+        if game_state != "battle":
+            try:
+                from utils.mapping.porymap_json_builder import build_json_map_for_llm
+                from pokemon_env.porymap_paths import get_pokeemerald_root
+
+                pokeemerald_root = get_pokeemerald_root()
+                badges = state.get("game", {}).get("progress_context", {}).get("badges_obtained", 0)
+                json_map = build_json_map_for_llm(location, pokeemerald_root, badge_count=badges)
+
+                if json_map:
+                    grid = json_map.get("grid", [])
+                    # Mark player position on grid
+                    if grid and 0 <= py < len(grid) and 0 <= px < len(grid[0] if grid else []):
+                        grid = [list(row) for row in grid]
+                        grid[py][px] = "P"
+                        grid = ["".join(row) for row in grid]
+
+                    result["map"] = {
+                        "name": json_map.get("name", location),
+                        "dimensions": json_map.get("dimensions", {}),
+                        "grid": grid,
+                        "warps": [
+                            {"x": w["x"], "y": w["y"], "dest_map": w.get("dest_map", "?")}
+                            for w in json_map.get("warps", [])
+                        ],
+                        "objects": [
+                            {
+                                "x": o["x"],
+                                "y": o["y"],
+                                "type": o.get("graphics_id", ""),
+                                "trainer": o.get("trainer_type", "") != "TRAINER_TYPE_NONE",
+                            }
+                            for o in json_map.get("objects", [])
+                        ],
+                        "connections": [
+                            {"direction": c.get("direction", "?"), "map": c.get("map", "?")}
+                            for c in json_map.get("connections", [])
+                        ],
+                    }
+                    result["grid_legend"] = "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item"
+            except Exception as e:
+                logger.warning(f"Could not load map data: {e}")
+
+        return result
+
+    except Exception as e:
+        logger.error(f"get_map_data error: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/mcp/press_buttons")
 async def mcp_press_buttons(request: dict):
     """MCP Tool: Press GBA buttons"""
