@@ -139,6 +139,11 @@ result = {'arrived': (px == target_x and py == target_y), 'moves': moves_made, '
 - Subagent signals completion via `return_to_orchestrator: true` in a tool-call argument.
 - Custom subagents **cannot** call `execute_custom_subagent` (no nesting).
 
+**evolve_harness**
+- **Required:** `reasoning` (string — what needs improvement and why)
+- **Optional:** `num_steps` (integer — how many recent steps to analyze, default 50)
+- Trigger an evolution pass NOW to improve skills, subagents, memory, and prompt based on recent performance. Use this when you notice a skill or subagent is underperforming, rather than waiting for the automatic cycle.
+
 **process_trajectory_history**
 - **Required:** `window_range` (array of 2 integers `[start, end]`), `directive` (string — analysis question)
 - One-step VLM pass over the specified trajectory window. Max 100 steps.

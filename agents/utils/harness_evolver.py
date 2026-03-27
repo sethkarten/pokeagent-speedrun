@@ -356,9 +356,9 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
                         f"\n### UNDERPERFORMING: [{sid}] {getattr(entry, 'name', sid)}\n"
                         f"Stats: {stats['calls']} calls, {stats['stuck']} stuck ({100*stats['stuck']//stats['calls']}% failure)\n"
                         f"Current code:\n```python\n{entry.code}\n```\n"
-                        f"This skill needs to be rewritten to use `tools['get_map_data']()` for obstacle-aware pathfinding.\n"
-                        f"The grid from get_map_data has: `.`=walkable, `#`=blocked, `~`=grass(walkable), "
-                        f"`D`=door, `S`=stairs. Use BFS with `collections.deque` on grid[y][x].\n"
+                        f"Rewrite this skill with a better algorithm. The code has access to "
+                        f"`tools['get_map_data']()` which returns structured grid/position/warp data, "
+                        f"and all standard libraries (collections, heapq, numpy, etc).\n"
                     )
 
         # Detect antipattern: using run_code repeatedly instead of saving as skills
@@ -395,11 +395,16 @@ Your job: identify reusable behavioral patterns (skills) from successful actions
 
 ## Analysis Tasks
 
-1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code. Use `tools['get_map_data']()` which returns `data['map']['grid']` (list of strings where `grid[y][x]` is the tile char). Use BFS with `collections.deque` to find a path avoiding `#` tiles. Include the FULL replacement `code` in your update.
+1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code with a better algorithm. Include the FULL replacement `code` in your update. Common game programming patterns that help:
+   - **Pathfinding**: BFS (collections.deque), A* (heapq), Dijkstra for grid navigation around obstacles
+   - **State machines**: Track game mode transitions (overworld/battle/menu/dialogue) and act accordingly
+   - **Decision logic**: Evaluate options (damage calculation, type effectiveness, resource management)
+   - **Parsing**: Extract structured info from game state text (regex, string splitting)
+   The skill sandbox has: collections, heapq, numpy, json, re, math, and game tools (get_map_data, get_game_state, press_buttons).
 
 2. **Fix broken skills**: If skills error or use wrong API fields, fix the code.
 
-3. **Record new skills**: Look for successful action sequences. Include `code` for skills that automate multi-step actions.
+3. **Record new skills**: Look for successful action sequences. Include `code` for skills that automate multi-step actions. Make skills game-specific and useful.
 
 4. **Update effectiveness ratings** based on trajectory outcomes.
 
