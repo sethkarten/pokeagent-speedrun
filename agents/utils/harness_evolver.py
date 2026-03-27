@@ -339,13 +339,13 @@ Your job: identify reusable behavioral patterns (skills) from successful actions
 
 ## Analysis Tasks
 
-1. **Fix broken skills**: If any skills with `code` are being called incorrectly (wrong args, repeated failures), update the skill's code to be more robust or update its description to document required args clearly.
+1. **Improve underperforming executable skills**: If a skill with `code` frequently gets stuck (hits stuck detection, doesn't arrive at target), rewrite its code to be smarter. For navigation skills: parse the ASCII map from `state['state_text']` to detect blocked tiles (`#`) and route around obstacles using BFS with `collections.deque` or A* with `heapq`. The map grid starts after "ASCII Map:" in state_text. Include the FULL improved `code` in your update.
 
-2. **Record new skills**: Look for successful action sequences that solved a problem effectively. Encode these as reusable behavioral descriptions or executable code.
+2. **Fix broken skills**: If skills error or use wrong API fields, fix the code.
 
-3. **Update effectiveness**: If existing skills were applied (referenced in reasoning) and worked/failed, update their effectiveness rating.
+3. **Record new skills**: Look for successful action sequences. Include `code` for skills that automate multi-step actions.
 
-3. **Identify stale skills**: Skills never referenced in the trajectory window may need lower importance.
+4. **Update effectiveness ratings** based on trajectory outcomes.
 
 ## Output Format
 
@@ -356,7 +356,8 @@ Respond with ONLY a JSON object (no markdown fences):
     {{
       "name": "string",
       "path": "category/subcategory",
-      "description": "Detailed behavioral description of the skill — when to use it, what to do",
+      "description": "What the skill does",
+      "code": "optional Python code for executable skills",
       "effectiveness": "low|medium|high",
       "importance": 3
     }}
@@ -365,7 +366,8 @@ Respond with ONLY a JSON object (no markdown fences):
     {{
       "id": "skill_XXXX",
       "effectiveness": "low|medium|high",
-      "description": "optional updated description"
+      "description": "optional updated description",
+      "code": "optional: FULL replacement Python code if improving an executable skill"
     }}
   ]
 }}
