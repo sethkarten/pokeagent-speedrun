@@ -665,6 +665,26 @@ class PokeAgent:
         if self.scaffold in _NO_BUILTINS_SCAFFOLDS:
             tools.append(REPLAN_OBJECTIVES_TOOL_DECLARATION)
 
+        if self.scaffold == "autoevolve":
+            tools.append({
+                "name": "evolve_harness",
+                "description": "Trigger an evolution pass NOW to improve skills, subagents, and memory based on recent performance. Use this when you notice a skill or subagent is underperforming and needs improvement, rather than waiting for the automatic evolution cycle.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "What needs improvement and why (e.g., 'navigate_to skill gets stuck 80% of the time, needs obstacle avoidance')"
+                        },
+                        "num_steps": {
+                            "type_": "INTEGER",
+                            "description": "Number of recent trajectory steps to analyze (default 50)"
+                        }
+                    },
+                    "required": ["reasoning"]
+                }
+            })
+
         logger.info(f"✅ Created {len(tools)} tool declarations (scaffold={self.scaffold})")
         return tools
 
@@ -682,6 +702,10 @@ class PokeAgent:
         if function_name == "run_code":
             result_json = self._execute_run_code(arguments)
             self._store_function_result_for_context("run_code", result_json)
+            return result_json
+        if function_name == "evolve_harness":
+            result_json = self._execute_evolve_harness(arguments)
+            self._store_function_result_for_context("evolve_harness", result_json)
             return result_json
 
         # REGULAR MCP TOOL CALL VIA MCP ADAPTER
@@ -788,6 +812,27 @@ class PokeAgent:
         except Exception as e:
             logger.error(f"Skill {skill_id} execution FAILED: {e}", exc_info=True)
             return json.dumps({"success": False, "skill_id": skill_id, "error": str(e)})
+
+    def _execute_evolve_harness(self, arguments: dict) -> str:
+        """Trigger an on-demand evolution pass."""
+        reasoning = arguments.get("reasoning", "")
+        num_steps = int(arguments.get("num_steps", 50))
+
+        if not self.harness_evolver:
+            return json.dumps({"success": False, "error": "HarnessEvolver not available (not in autoevolve scaffold or optimization not enabled)"})
+
+        logger.info(f"Orchestrator requested evolution: {reasoning}")
+        try:
+            results = self.harness_evolver.evolve(
+                current_step=self.step_count,
+                num_trajectory_steps=num_steps,
+            )
+            logger.info(f"On-demand evolution completed: {results}")
+            self._inject_evolution_summary(results)
+            return json.dumps({"success": True, "results": results}, default=str)
+        except Exception as e:
+            logger.error(f"On-demand evolution failed: {e}", exc_info=True)
+            return json.dumps({"success": False, "error": str(e)})
 
     def _execute_run_code(self, arguments: dict) -> str:
         """Execute arbitrary Python code in the game sandbox for prototyping/debugging."""
@@ -1671,6 +1716,10 @@ class PokeAgent:
         if function_name == "run_code":
             result_json = self._execute_run_code(arguments)
             self._store_function_result_for_context("run_code", result_json)
+            return result_json
+        if function_name == "evolve_harness":
+            result_json = self._execute_evolve_harness(arguments)
+            self._store_function_result_for_context("evolve_harness", result_json)
             return result_json
 
         # Call the tool via MCP adapter
