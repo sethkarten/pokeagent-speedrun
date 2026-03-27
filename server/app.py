@@ -2836,6 +2836,8 @@ async def mcp_get_map_data():
             "player": {"x": px, "y": py},
             "game_context": game_state,
             "is_in_battle": state.get("game", {}).get("is_in_battle", False),
+            "map": None,  # Populated below if map data available
+            "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item",
         }
 
         # Party info
@@ -2892,7 +2894,6 @@ async def mcp_get_map_data():
                             for c in json_map.get("connections", [])
                         ],
                     }
-                    result["grid_legend"] = "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item"
             except Exception as e:
                 logger.warning(f"Could not load map data: {e}")
 
