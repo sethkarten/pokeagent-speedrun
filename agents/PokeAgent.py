@@ -675,9 +675,13 @@ class PokeAgent:
 
         # run_skill / run_code: execute code locally with tool access
         if function_name == "run_skill":
-            return self._execute_run_skill(arguments)
+            result_json = self._execute_run_skill(arguments)
+            self._store_function_result_for_context("run_skill", result_json)
+            return result_json
         if function_name == "run_code":
-            return self._execute_run_code(arguments)
+            result_json = self._execute_run_code(arguments)
+            self._store_function_result_for_context("run_code", result_json)
+            return result_json
 
         # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
