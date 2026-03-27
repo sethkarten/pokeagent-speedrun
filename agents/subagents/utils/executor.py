@@ -282,6 +282,19 @@ class SubagentExecutor:
                          "Custom subagents cannot spawn other subagents.",
             }, indent=2)
 
+        # Warn if looping subagent has no tools (common mistake)
+        handler_type = config.get("handler_type", "looping")
+        if handler_type == "looping" and not config.get("available_tools"):
+            return json.dumps({
+                "success": False,
+                "error": (
+                    f"Looping subagent '{config.get('name', '?')}' has no tools in available_tools. "
+                    "It needs at least ['press_buttons', 'get_game_state'] to interact with the game. "
+                    "Update the subagent with process_subagent(action='update', entries=[{id: '...', "
+                    "available_tools: ['press_buttons', 'get_game_state']}])."
+                ),
+            }, indent=2)
+
         # Per-call max_steps override takes priority over registry config
         max_steps_override = arguments.get("max_steps")
         max_turns = int(max_steps_override or config.get("max_turns", 25))
