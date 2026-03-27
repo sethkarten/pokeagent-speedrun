@@ -3,6 +3,7 @@
 *.js
 *.log
 *.gba
+*.gbc
 *.pem
 *.gba
 llm_log_*
