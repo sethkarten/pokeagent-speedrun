@@ -63,18 +63,27 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
 
 **`get_game_state()` return format** (key fields for skill code):
 ```
-state['player_position'] = {'x': int, 'y': int}
-state['location'] = 'ROUTE 101'
-state['state_text'] = '...'  (full formatted text including ASCII map, party, warps, NPCs)
-state['raw_state']['player']['position'] = {'x': int, 'y': int}
+state['player_position'] = {'x': int, 'y': int}   # Always use this for position
+state['location'] = 'ROUTE 101'                    # Current map name
+state['state_text'] = '...'                        # Pre-formatted text with ASCII map, party, warps, NPCs
 ```
 
-The `state_text` contains an **ASCII map** every step with the legend:
+**IMPORTANT**: Use `state_text` for map data, NOT `raw_state`. The `state_text` is preprocessed and always available. The `raw_state` has many null fields and is not reliable for skill code.
+
+The `state_text` contains an **ASCII map** (when in overworld) with the legend:
 - `P` = Player, `.` = walkable, `#` = blocked, `~` = tall grass
 - `D` = Door, `S` = Stairs/Warp, `I` = item, `X` = out of bounds
-- Map dimensions and warp destinations are also included
+- Map dimensions, warp destinations, and NPC positions are included
 
-Skill code can parse `state_text` to read the ASCII map for pathfinding, or use `player_position` for simple coordinate-based movement.
+To extract the ASCII map grid in code:
+```python
+state = tools['get_game_state']()
+text = state['state_text']
+if 'ASCII Map:' in text:
+    map_section = text.split('ASCII Map:')[1].split('(Legend:')[0]
+    grid = [line for line in map_section.strip().split('\n') if line.strip()]
+    # grid[y][x] gives the tile character at (x, y)
+```
 
 **Example executable skill (coordinate-based pathfinding with loop):**
 ```python
