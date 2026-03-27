@@ -1898,6 +1898,8 @@ class PokeAgent:
             start_time = time.time()
             vlm_call_start = time.time()
             claimed_step = None
+            scaffold_label = "auto-evolve" if self.scaffold == "autoevolve" else self.scaffold
+            orchestrator_interaction_name = f"{scaffold_label}_orchestrator"
             try:
 
                 if screenshot_b64:
@@ -1927,11 +1929,11 @@ class PokeAgent:
 
                     claimed_step = self.runtime.claim_step(
                         owner="orchestrator",
-                        interaction_name="Autonomous_CLI_Agent",
+                        interaction_name=orchestrator_interaction_name,
                     )
 
                     def call_vlm_with_image():
-                        return self.vlm.get_query(image, prompt, "Autonomous_CLI_Agent")
+                        return self.vlm.get_query(image, prompt, orchestrator_interaction_name)
 
                     logger.info(f"📡 Calling VLM API with image (prompt: {len(prompt)} chars, image: {len(screenshot_b64)} bytes)")
                     logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 45s...")
@@ -1962,11 +1964,11 @@ class PokeAgent:
                 else:
                     claimed_step = self.runtime.claim_step(
                         owner="orchestrator",
-                        interaction_name="Autonomous_CLI_Agent",
+                        interaction_name=orchestrator_interaction_name,
                     )
 
                     def call_vlm_with_text():
-                        return self.vlm.get_text_query(prompt, "Autonomous_CLI_Agent")
+                        return self.vlm.get_text_query(prompt, orchestrator_interaction_name)
 
                     logger.info(f"📡 Calling VLM API with text only (prompt: {len(prompt)} chars)")
                     logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 45s...")

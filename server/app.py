@@ -106,6 +106,26 @@ def _build_story_planning_objective():
         priority=1,
     )
 
+
+def _format_interaction_type_for_ui(interaction_type: str) -> str:
+    """Normalize orchestrator labels for UI readability.
+
+    Backends log interaction_type as `<backend>_<module_name>`. For orchestrator
+    entries we prefer `<scaffold>_<backend>_orchestrator` in the UI.
+    """
+    if not interaction_type:
+        return "unknown"
+
+    backend_prefixes = ("gemini_", "openai_", "openrouter_", "anthropic_", "vertex_")
+    for prefix in backend_prefixes:
+        if interaction_type.startswith(prefix) and interaction_type.endswith("_orchestrator"):
+            backend = prefix[:-1]
+            module_name = interaction_type[len(prefix):]
+            if module_name:
+                base = module_name[:-13]  # len("_orchestrator") == 13
+                return f"{base}_{backend}_orchestrator"
+    return interaction_type
+
 # Performance monitoring
 last_fps_log = time.time()
 frame_count_since_log = 0
@@ -1923,9 +1943,15 @@ async def stream_agent_thinking():
                                             timestamp = entry.get("timestamp", "")
                                             # Only add if we haven't sent this timestamp before
                                             if timestamp and timestamp not in sent_timestamps:
+                                                model_name = (
+                                                    entry.get("model_info", {}) or {}
+                                                ).get("model", "")
                                                 new_interactions.append(
                                                     {
-                                                        "type": entry.get("interaction_type", "unknown"),
+                                                        "type": _format_interaction_type_for_ui(
+                                                            entry.get("interaction_type", "unknown")
+                                                        ),
+                                                        "model": model_name,
                                                         "response": entry.get("response", ""),
                                                         "duration": entry.get("duration", 0),
                                                         "timestamp": timestamp,
@@ -1952,6 +1978,7 @@ async def stream_agent_thinking():
                             event_data = {
                                 "step": line_step,
                                 "type": interaction.get("type", "unknown"),
+                                "model": interaction.get("model", ""),
                                 "response": interaction.get("response", ""),
                                 "duration": interaction.get("duration", 0),
                                 "timestamp": interaction.get("timestamp", ""),
@@ -2007,9 +2034,15 @@ async def get_agent_thinking():
                         try:
                             entry = json.loads(line.strip())
                             if entry.get("type") == "interaction":
+                                model_name = (
+                                    entry.get("model_info", {}) or {}
+                                ).get("model", "")
                                 recent_interactions.append(
                                     {
-                                        "type": entry.get("interaction_type", "unknown"),
+                                        "type": _format_interaction_type_for_ui(
+                                            entry.get("interaction_type", "unknown")
+                                        ),
+                                        "model": model_name,
                                         "prompt": entry.get("prompt", ""),
                                         "response": entry.get("response", ""),
                                         "duration": entry.get("duration", 0),

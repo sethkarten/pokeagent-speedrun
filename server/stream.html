@@ -918,12 +918,13 @@
                     console.log('New agent message received:', data.step);
                     
                     // Create new message element
+                    const modelLabel = data.model ? ` [${data.model}]` : '';
                     const messageDiv = document.createElement('div');
                     messageDiv.className = 'llm-entry streaming';
                     messageDiv.innerHTML = `
                         <div class="llm-step">Step ${data.step}:</div>
                         <div class="llm-message" id="streaming-message-${data.step}-${Date.now()}"></div>
-                        <div class="llm-meta">${data.type} (${data.duration?.toFixed(2)}s)</div>
+                        <div class="llm-meta">${data.type}${modelLabel} (${data.duration?.toFixed(2)}s)</div>
                     `;
                     
                     // Add to container
@@ -1014,10 +1015,12 @@
                         
                         // Trim whitespace from the response
                         const trimmedResponse = interaction.response.trim();
+                        const modelLabel = interaction.model ? ` [${interaction.model}]` : '';
                         
                         html += `<div class="llm-entry complete">
                             <div class="llm-step">Step ${stepNumber}:</div>
                             <div class="llm-message">${trimmedResponse}</div>
+                            <div class="llm-meta">${interaction.type || 'unknown'}${modelLabel}</div>
                         </div>`;
                     });
                     agentThinkingDiv.innerHTML = html;
