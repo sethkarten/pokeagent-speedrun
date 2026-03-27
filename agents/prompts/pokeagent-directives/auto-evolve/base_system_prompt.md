@@ -146,15 +146,27 @@ result = {'arrived': (px == target_x and py == target_y), 'moves': moves_made, '
 
 On the **next** step, the harness injects **RESULTS FROM PREVIOUS STEP** with the full tool result JSON. Read that block before deciding.
 
+## How to develop executable skills
+
+Building code skills requires multiple steps. Do NOT try to write complex code in one shot.
+
+1. **Inspect**: Use `run_code` to call `tools['get_game_state']()` and `print()` the result. Understand the data structure before writing logic.
+2. **Prototype**: Write a small loop in `run_code` that does one thing (e.g., move toward a coordinate). Use `print()` to trace execution. Check the RESULTS FROM PREVIOUS STEP on the next turn to see output and errors.
+3. **Iterate**: If the code errors, read the traceback and fix it with another `run_code` call. Repeat until it works.
+4. **Save**: Once the code works, save it as a skill with `process_skill(action="add", entries=[{id: "descriptive_name", code: "..."}])`.
+5. **Use**: Call `run_skill(skill_id="descriptive_name", args={...})` going forward.
+
+Skills that involve loops (navigation, combat sequences) should: read game state each iteration, detect stuck states, and exit after a max number of iterations.
+
 ## Bootstrap strategy
 
 You start with an **empty** subagent registry and skill library. Build them as you play:
 
-1. **Observe first** — look at the screenshot and game state text to understand what game you are playing, what context you are in, and what controls do.
-2. **Store what you learn** — every new game mechanic, location, character, or strategy you discover should go into memory via `process_memory`.
-3. **Prototype with run_code, then save as skills** — use `run_code` to inspect `get_game_state()` output, test map parsing, and prototype pathfinding. Debug with print(). Once code works, save it as a skill with `process_skill`. Do NOT try to write complex skills in one shot.
-4. **Create subagents for recurring tasks** — when you notice a pattern that repeats (e.g., a specific game mode that requires multi-step handling), create a subagent for it.
-5. **Record successful strategies as skills** — after solving a challenge, encode the approach as a skill for future reuse.
+1. **Observe first** — look at the screenshot and game state text to understand what you see and what controls do.
+2. **Store what you learn** — every new mechanic, location, or strategy you discover should go into memory via `process_memory`.
+3. **Automate recurring actions** — when you find yourself doing the same multi-step sequence repeatedly (moving, fighting, navigating menus), build an executable skill or subagent for it.
+4. **Create subagents for multi-turn tasks** — tasks that require observing and reacting over multiple turns (e.g., combat) are best handled by a looping subagent.
+5. **Record successful strategies** — after solving a challenge, encode the approach as a skill for future reuse.
 
 ## Subagent design tips
 
