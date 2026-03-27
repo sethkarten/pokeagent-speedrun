@@ -326,6 +326,41 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
         )
         tool_failures = self._extract_tool_failures(trajectories)
 
+        # Analyze run_skill performance to find underperforming skills
+        skill_stats: Dict[str, Dict[str, int]] = {}
+        for traj in trajectories:
+            action = traj.get("action", {})
+            if not isinstance(action, dict):
+                continue
+            for tc in action.get("tool_calls", []):
+                if tc.get("name") != "run_skill":
+                    continue
+                sid = tc.get("args", {}).get("skill_id", "")
+                if not sid:
+                    continue
+                if sid not in skill_stats:
+                    skill_stats[sid] = {"calls": 0, "stuck": 0}
+                skill_stats[sid]["calls"] += 1
+                # Check if position changed (stuck detection)
+                pre = traj.get("pre_state", {}).get("player_coords")
+                post = traj.get("post_state", {}).get("player_coords", pre)
+                if pre == post:
+                    skill_stats[sid]["stuck"] += 1
+
+        underperforming_skills = ""
+        for sid, stats in skill_stats.items():
+            if stats["calls"] >= 3 and stats["stuck"] / stats["calls"] >= 0.5:
+                entry = store.get(sid)
+                if entry and getattr(entry, "code", ""):
+                    underperforming_skills += (
+                        f"\n### UNDERPERFORMING: [{sid}] {getattr(entry, 'name', sid)}\n"
+                        f"Stats: {stats['calls']} calls, {stats['stuck']} stuck ({100*stats['stuck']//stats['calls']}% failure)\n"
+                        f"Current code:\n```python\n{entry.code}\n```\n"
+                        f"This skill needs to be rewritten to use `tools['get_map_data']()` for obstacle-aware pathfinding.\n"
+                        f"The grid from get_map_data has: `.`=walkable, `#`=blocked, `~`=grass(walkable), "
+                        f"`D`=door, `S`=stairs. Use BFS with `collections.deque` on grid[y][x].\n"
+                    )
+
         # Detect antipattern: using run_code repeatedly instead of saving as skills
         run_code_count = sum(
             1 for t in trajectories
@@ -356,10 +391,11 @@ Your job: identify reusable behavioral patterns (skills) from successful actions
 
 {tool_failures}
 {antipattern_warning}
+{underperforming_skills}
 
 ## Analysis Tasks
 
-1. **Improve underperforming executable skills**: If a skill with `code` frequently gets stuck (hits stuck detection, doesn't arrive at target), rewrite its code to be smarter. For navigation skills: parse the ASCII map from `state['state_text']` to detect blocked tiles (`#`) and route around obstacles using BFS with `collections.deque` or A* with `heapq`. The map grid starts after "ASCII Map:" in state_text. Include the FULL improved `code` in your update.
+1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code. Use `tools['get_map_data']()` which returns `data['map']['grid']` (list of strings where `grid[y][x]` is the tile char). Use BFS with `collections.deque` to find a path avoiding `#` tiles. Include the FULL replacement `code` in your update.
 
 2. **Fix broken skills**: If skills error or use wrong API fields, fix the code.
 
