@@ -2,7 +2,7 @@
 # Test commands for the three scaffolds
 
 # AutoEvolve scaffold (H_auto: empty registry + harness evolution)
-uv run python run.py --backend gemini --model-name gemini-2.5-pro-preview-05-06 \
+uv run python run.py --backend gemini --model-name gemini-3.1-pro-preview \
   --backup-state Emerald-GBAdvance/auto-evolve_init.zip \
   --port 8778 --agent-auto --scaffold autoevolve \
   --enable-prompt-optimization --optimization-frequency 50 \
