@@ -320,7 +320,7 @@ Edit the prompts in those files and restart the agent. Use `--debug-state` for d
 ## Advanced Configuration
 
 - **Environment**: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`; optional `PYTHONPATH` for development.
-- **Persistence**: Checkpoints and run data are under `.pokeagent_cache/{run_id}/` and `run_data/{run_id}/`. Backups of `.pokeagent_cache/{run_id}/` are created on objective or major milestone completion. See [utils/README.md](utils/README.md) for layout.
+- **Persistence**: Checkpoints and run data are under `.pokeagent_cache/{run_id}/` and `run_data/{run_id}/`. Backups of `.pokeagent_cache/{run_id}/` are created on objective or milestone completion; milestone ordering comes from the canonical `MILESTONE_PHASES`/`ORDERED_PROGRESS_MILESTONES` in `pokemon_env/emulator.py`. See [utils/README.md](utils/README.md) for layout.
 - **Metrics**: `cumulative_metrics.json` (in cache) and LLM logs; see [utils/README.md](utils/README.md).
 
 ## Troubleshooting
