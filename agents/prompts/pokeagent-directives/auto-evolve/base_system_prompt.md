@@ -57,30 +57,29 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
 - Executes a saved skill's `code` field in the same sandbox as `run_code`:
   - `tools['press_buttons'](buttons=[...], reasoning='...')` — press game buttons
   - `tools['get_game_state']()` — read current game state (text-heavy)
-  - `tools['get_map_data']()` — structured map data for pathfinding (grid, warps, NPCs, dimensions)
+  - `tools['get_map_data']()` — ASCII grid + warps + objects for pathfinding (same map you see each step)
   - `tools['complete_direct_objective'](reasoning='...')` — complete an objective
   - `tools['process_memory'](action='...', entries=[...], reasoning='...')` — memory CRUD
   - `tools['get_progress_summary']()` — get progress info
 - Set a `result` variable in the code to return data to yourself.
 
-**`get_map_data()`** (for skill code: structured map, no nulls, no parsing needed):
+**`get_map_data()`** (for skill code: same ASCII map you see each step, extracted as structured data):
 ```python
 data = tools['get_map_data']()
 data['player']       # {'x': int, 'y': int}
 data['location']     # 'ROUTE 101'
-data['game_context'] # 'overworld' | 'battle' | ...
-data['map']['grid']  # list of strings, e.g. ['##.P.##', '##...##'] - grid[y][x]
-data['map']['dimensions']  # {'width': int, 'height': int}
-data['map']['warps']       # [{'x': 6, 'y': 13, 'dest_map': 'MAP_ROUTE_101'}, ...]
-data['map']['objects']     # [{'x': 5, 'y': 2, 'type': 'OBJ_EVENT_GFX_...', 'trainer': bool}, ...]
-data['map']['connections'] # [{'direction': 'north', 'map': 'MAP_OLDALE_TOWN'}, ...]
+data['grid']         # list of strings, e.g. ['##.P.##', '##...##'] - grid[y][x]
+data['dimensions']   # {'width': int, 'height': int}
+data['warps']        # [{'x': 6, 'y': 13, 'dest_map': 'MAP_ROUTE_101'}, ...]
+data['objects']      # [{'x': 5, 'y': 2, ...}, ...]
+data['connections']  # [{'direction': 'north', 'map': 'MAP_OLDALE_TOWN'}, ...]
 data['party']        # [{'species': 'Mudkip', 'level': 5, 'hp': 20, 'max_hp': 20, 'moves': [...]}, ...]
 data['grid_legend']  # 'P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item'
 ```
 
-Use `get_map_data()` in skill code for pathfinding. The grid is ready to use: `grid[y][x]` gives the tile character. `'.'`, `'~'`, `'D'`, `'S'`, `'P'` are walkable. `'#'` is blocked. No string parsing required.
+The grid is the same ASCII map from your game state text with `P` at the player position. `grid[y][x]` gives the tile. Walkable: `.`, `~`, `D`, `S`, `P`. Blocked: `#`.
 
-**`get_game_state()`** returns `player_position`, `location`, and `state_text` (full formatted text). Use `get_map_data()` instead when you need structured map data in code.
+**`get_game_state()`** returns `player_position`, `location`, and `state_text` (full formatted text). Use `get_map_data()` when you need the grid for pathfinding in skill code.
 
 **Example executable skill (coordinate-based pathfinding with loop):**
 ```python
