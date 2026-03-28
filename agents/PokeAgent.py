@@ -711,7 +711,7 @@ class PokeAgent:
         # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, default=str)
 
     def _execute_run_skill(self, arguments: dict) -> str:
         """Execute a skill's code in a sandbox with access to game tools."""
@@ -2591,12 +2591,19 @@ class PokeAgent:
         
         # Parse game state to extract relevant information
         try:
-            game_state_data = json_module.loads(game_state_result)
+            if isinstance(game_state_result, dict):
+                game_state_data = game_state_result
+            else:
+                game_state_data = json_module.loads(game_state_result)
         except:
             game_state_data = {}
-        
-        # Extract key information from game state
+
+        # Extract ONLY the formatted state text (not screenshot or raw_state)
         state_text = game_state_data.get("state_text", "")
+        if not state_text and isinstance(game_state_result, str) and len(game_state_result) > 50000:
+            # Fallback failed and game_state_result is huge — don't embed it
+            logger.warning("state_text extraction failed, game_state_result is %d chars — using empty", len(game_state_result))
+            state_text = "Game state unavailable this step."
 
         # Detect if in title sequence
         is_title_sequence = self._is_title_sequence(game_state_data)
