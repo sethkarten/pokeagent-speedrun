@@ -583,7 +583,12 @@ class PokeAgent:
             #         "required": ["objectives", "reasoning"]
             #     }
             # },
-            {
+        ]
+
+        # get_progress_summary: H_expert only. autoevolve/simple agents already get
+        # objectives, memory, and skill overviews in their prompt each step.
+        if self.scaffold not in _NO_BUILTINS_SCAFFOLDS:
+            tools.append({
                 "name": "get_progress_summary",
                 "description": (
                     "Get progress: milestones, current location/coords, direct-objective status, completed objectives "
@@ -594,8 +599,7 @@ class PokeAgent:
                     "properties": {},
                     "required": []
                 }
-            },
-        ]
+            })
 
         # H_expert-only tools: pathfinding, walkthrough, wiki lookup
         # H_min/H_auto agents must navigate with press_buttons and learn through gameplay
@@ -711,7 +715,7 @@ class PokeAgent:
         # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, default=str)
 
     def _execute_run_skill(self, arguments: dict) -> str:
         """Execute a skill's code in a sandbox with access to game tools."""
@@ -769,7 +773,7 @@ class PokeAgent:
 
         sandbox_tools = {}
         for tool_name in ("press_buttons", "get_game_state", "get_map_data", "complete_direct_objective",
-                          "process_memory", "get_progress_summary"):
+                          "process_memory"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
         import random, collections, math, json as _json_mod, re as _re_mod, heapq, itertools, functools
@@ -857,7 +861,7 @@ class PokeAgent:
         # run_code is for debugging/prototyping ONLY - no game actions allowed
         # The agent must save code as a skill and use run_skill to execute actions
         sandbox_tools = {}
-        for tool_name in ("get_game_state", "get_map_data", "get_progress_summary"):
+        for tool_name in ("get_game_state", "get_map_data"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
         import random, collections, math, json as _json_mod, re as _re_mod, heapq, itertools, functools
@@ -1707,6 +1711,10 @@ class PokeAgent:
         if is_local_subagent_tool(function_name):
             spec = get_local_subagent_spec(function_name)
             return getattr(self, spec.handler_method)(arguments)
+
+        # return_to_orchestrator: no-op used by subagents to signal completion
+        if function_name == "return_to_orchestrator":
+            return json.dumps({"success": True, "message": "Returning control to orchestrator"})
 
         # run_skill / run_code: execute code locally with tool access
         if function_name == "run_skill":
@@ -2589,12 +2597,19 @@ class PokeAgent:
         
         # Parse game state to extract relevant information
         try:
-            game_state_data = json_module.loads(game_state_result)
+            if isinstance(game_state_result, dict):
+                game_state_data = game_state_result
+            else:
+                game_state_data = json_module.loads(game_state_result)
         except:
             game_state_data = {}
-        
-        # Extract key information from game state
+
+        # Extract ONLY the formatted state text (not screenshot or raw_state)
         state_text = game_state_data.get("state_text", "")
+        if not state_text and isinstance(game_state_result, str) and len(game_state_result) > 50000:
+            # Fallback failed and game_state_result is huge — don't embed it
+            logger.warning("state_text extraction failed, game_state_result is %d chars — using empty", len(game_state_result))
+            state_text = "Game state unavailable this step."
 
         # Detect if in title sequence
         is_title_sequence = self._is_title_sequence(game_state_data)

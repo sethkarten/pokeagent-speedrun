@@ -22,9 +22,14 @@ from agents.utils.prompt_optimizer import PromptOptimizer
 
 logger = logging.getLogger(__name__)
 
-# Minimum steps before the first evolution fires.  The agent needs enough
-# trajectory data for the meta-optimizer to produce meaningful improvements.
-MIN_WARMUP_STEPS = 50
+# Minimum steps before the first evolution fires.
+MIN_WARMUP_STEPS = 25
+
+# Evolution frequency adapts: frequent early (every 25 steps for first 200),
+# then backs off (every 100 steps) once the harness stabilizes.
+EARLY_PHASE_CUTOFF = 200
+EARLY_FREQUENCY = 25
+STABLE_FREQUENCY = 100
 
 # Tools that exist for every scaffold (used to validate subagent tool lists)
 # Tools available in the autoevolve scaffold (no navigate_to, no walkthrough, no wiki)
@@ -40,7 +45,6 @@ _ALWAYS_AVAILABLE_TOOLS = frozenset({
     "process_subagent",
     "execute_custom_subagent",
     "process_trajectory_history",
-    "get_progress_summary",
     "replan_objectives",
 })
 
@@ -65,6 +69,9 @@ class HarnessEvolver:
 
         self.generation = 0
         self.evolution_log: List[Dict[str, Any]] = []
+        # Track previous evolution results for before/after comparison
+        self._prev_skill_stats: Dict[str, Dict[str, int]] = {}
+        self._prev_changes_summary: str = ""
 
         logger.info("HarnessEvolver initialized (warmup=%d steps)", MIN_WARMUP_STEPS)
 
@@ -89,16 +96,107 @@ class HarnessEvolver:
     # ------------------------------------------------------------------
 
     def should_evolve(self, current_step: int, frequency: int) -> bool:
-        """Return True if evolution should fire at this step."""
-        return (
-            current_step >= MIN_WARMUP_STEPS
-            and current_step > 0
-            and current_step % frequency == 0
-        )
+        """Return True if evolution should fire at this step.
+
+        Uses adaptive frequency: evolve more often early (every 25 steps
+        for the first 200 steps) to bootstrap the harness quickly, then
+        back off to every 100 steps once capabilities stabilize.
+        The caller's ``frequency`` arg is ignored in favor of the adaptive schedule.
+        """
+        if current_step < MIN_WARMUP_STEPS or current_step <= 0:
+            return False
+        effective_freq = EARLY_FREQUENCY if current_step <= EARLY_PHASE_CUTOFF else STABLE_FREQUENCY
+        return current_step % effective_freq == 0
 
     def get_current_prompt(self) -> str:
         """Delegate to the inner PromptOptimizer."""
         return self.prompt_optimizer.get_current_prompt()
+
+    def _compute_skill_stats(self, trajectories: List[Dict[str, Any]]) -> Dict[str, Dict[str, int]]:
+        """Compute per-skill call/stuck stats from trajectories."""
+        stats: Dict[str, Dict[str, int]] = {}
+        for traj in trajectories:
+            action = traj.get("action", {})
+            if not isinstance(action, dict):
+                continue
+            for tc in action.get("tool_calls", []):
+                if tc.get("name") != "run_skill":
+                    continue
+                sid = tc.get("args", {}).get("skill_id", "")
+                if not sid:
+                    continue
+                if sid not in stats:
+                    stats[sid] = {"calls": 0, "stuck": 0}
+                stats[sid]["calls"] += 1
+                pre = traj.get("pre_state", {}).get("player_coords")
+                post = traj.get("post_state", {}).get("player_coords", pre)
+                if pre == post:
+                    stats[sid]["stuck"] += 1
+        return stats
+
+    def _auto_revert_degraded_skills(self, current_stats: Dict[str, Dict[str, int]]) -> List[str]:
+        """Auto-revert skills that got worse after the last evolution.
+
+        Uses mutation_history to restore the previous code version.
+        Returns list of reverted skill IDs.
+        """
+        if not self._prev_skill_stats:
+            return []
+
+        reverted = []
+        store = self._get_skill_store()
+
+        for sid, cur in current_stats.items():
+            prev = self._prev_skill_stats.get(sid)
+            if not prev or prev["calls"] < 3:
+                continue
+            if cur["calls"] < 3:
+                continue
+
+            prev_stuck_pct = 100 * prev["stuck"] // prev["calls"]
+            cur_stuck_pct = 100 * cur["stuck"] // cur["calls"]
+
+            if cur_stuck_pct - prev_stuck_pct > 15:
+                # Skill got significantly worse — try to revert code
+                entry = store.get(sid)
+                if not entry or not getattr(entry, "mutation_history", []):
+                    continue
+
+                # Find the last mutation that changed 'code'
+                for mut in reversed(entry.mutation_history):
+                    old_code = mut.get("fields", {}).get("code", {}).get("old")
+                    if old_code is not None:
+                        logger.info(
+                            "Auto-reverting skill %s: stuck %d%% -> %d%%, restoring previous code (%d chars)",
+                            sid, prev_stuck_pct, cur_stuck_pct, len(old_code),
+                        )
+                        store.update(sid, code=old_code, effectiveness="medium")
+                        reverted.append(sid)
+                        break
+
+        return reverted
+
+    def _build_changes_feedback(self, current_stats: Dict[str, Dict[str, int]]) -> str:
+        """Compare current skill performance to previous evolution's stats."""
+        if not self._prev_skill_stats:
+            return ""
+        lines = ["## Impact of Previous Evolution Changes"]
+        for sid, cur in current_stats.items():
+            prev = self._prev_skill_stats.get(sid)
+            if not prev or prev["calls"] == 0:
+                continue
+            prev_stuck_pct = 100 * prev["stuck"] // prev["calls"]
+            cur_stuck_pct = 100 * cur["stuck"] // cur["calls"] if cur["calls"] > 0 else 0
+            delta = cur_stuck_pct - prev_stuck_pct
+            if delta > 10:
+                lines.append(f"- **{sid} GOT WORSE**: stuck rate {prev_stuck_pct}% -> {cur_stuck_pct}% (+{delta}pp). Code was auto-reverted to previous version.")
+            elif delta < -10:
+                lines.append(f"- **{sid} IMPROVED**: stuck rate {prev_stuck_pct}% -> {cur_stuck_pct}% ({delta}pp). Keep this approach.")
+            else:
+                lines.append(f"- {sid}: stuck rate {prev_stuck_pct}% -> {cur_stuck_pct}% (no significant change)")
+        if self._prev_changes_summary:
+            lines.append(f"\nPrevious changes were: {self._prev_changes_summary}")
+        return "\n".join(lines) if len(lines) > 1 else ""
 
     def evolve(self, current_step: int, num_trajectory_steps: int = 50) -> Dict[str, Any]:
         """Run all evolution passes and return a summary.
@@ -116,7 +214,15 @@ class HarnessEvolver:
             logger.warning("No trajectories — skipping evolution")
             return {"skipped": True, "reason": "no_trajectories"}
 
+        # Compute current skill stats for before/after comparison
+        current_stats = self._compute_skill_stats(trajectories)
+
+        # Auto-revert skills that got worse after the last evolution
+        reverted = self._auto_revert_degraded_skills(current_stats)
+
         results: Dict[str, Any] = {}
+        if reverted:
+            results["reverted_skills"] = reverted
 
         # Each pass is wrapped independently so failures don't block others
         for name, fn in [
@@ -130,6 +236,17 @@ class HarnessEvolver:
             except Exception as e:
                 logger.error("Evolution pass '%s' failed: %s", name, e, exc_info=True)
                 results[name] = {"error": str(e)}
+
+        # Save stats for next evolution's before/after comparison
+        self._prev_skill_stats = current_stats
+        changes = []
+        for pass_name in ["subagents", "skills", "memory"]:
+            data = results.get(pass_name, {})
+            if isinstance(data, dict):
+                for k in ["created", "updated", "retired"]:
+                    if data.get(k):
+                        changes.append(f"{pass_name}_{k}={data[k]}")
+        self._prev_changes_summary = ", ".join(changes) if changes else "prompt only"
 
         self.generation += 1
         self._save_evolution_log(current_step, results)
@@ -379,9 +496,13 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
 The agent called run_code {run_code_count} times but run_skill 0 times in the last {len(trajectories)} steps. This means the agent is writing disposable scripts instead of saving reusable skills. You MUST create executable skills from the patterns in these run_code calls. Extract the common code, save it as a skill with process_skill, so the agent can call run_skill instead.
 """
 
+        changes_feedback = self._build_changes_feedback(skill_stats)
+
         prompt = f"""You are a harness evolution system analyzing an AI agent's recent gameplay in Pokemon Emerald.
 
 Your job: identify reusable behavioral patterns (skills) from successful actions and evaluate existing skills.
+
+{changes_feedback}
 
 ## Current Skill Library
 {skill_overview}
@@ -393,14 +514,26 @@ Your job: identify reusable behavioral patterns (skills) from successful actions
 {antipattern_warning}
 {underperforming_skills}
 
+## Skill Code API (MUST follow this exactly)
+
+Skill code runs as inline Python (NOT a function definition). It has access to:
+- `tools['press_buttons'](buttons=['UP'], reasoning='...')` — press buttons (waits for emulator)
+- `tools['get_game_state']()` — returns dict with `player_position`, `location`, `state_text`
+- `tools['get_map_data']()` — returns dict with `grid` (list of strings), `player`, `dimensions`, `warps`, `objects`
+- `args` — dict of arguments passed by the caller (e.g. `args['x']`, `args['y']`)
+- `result` — set this variable to return data
+- Libraries: `collections`, `heapq`, `numpy`/`np`, `json`, `re`, `math`, `random`
+
+CRITICAL: Use `tools['function_name'](...)` syntax. Do NOT call bare `get_game_state()` or `press_buttons()`.
+Do NOT write `def skill_name():` — write inline code that reads `args` and sets `result`.
+
 ## Analysis Tasks
 
-1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code with a better algorithm. Include the FULL replacement `code` in your update. Common game programming patterns that help:
-   - **Pathfinding**: BFS (collections.deque), A* (heapq), Dijkstra for grid navigation around obstacles
-   - **State machines**: Track game mode transitions (overworld/battle/menu/dialogue) and act accordingly
-   - **Decision logic**: Evaluate options (damage calculation, type effectiveness, resource management)
-   - **Parsing**: Extract structured info from game state text (regex, string splitting)
-   The skill sandbox has: collections, heapq, numpy, json, re, math, and game tools (get_map_data, get_game_state, press_buttons).
+1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code. Include the FULL replacement `code` in your update. Common patterns:
+   - **Pathfinding**: BFS (collections.deque), A* (heapq) on `tools['get_map_data']()['grid']`
+   - **State machines**: Track game mode transitions and act accordingly
+   - **Decision logic**: Evaluate options (damage, resources)
+   - **Parsing**: Extract info from game state text (regex, string splitting)
 
 2. **Fix broken skills**: If skills error or use wrong API fields, fix the code.
 
