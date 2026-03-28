@@ -135,6 +135,48 @@ class HarnessEvolver:
                     stats[sid]["stuck"] += 1
         return stats
 
+    def _auto_revert_degraded_skills(self, current_stats: Dict[str, Dict[str, int]]) -> List[str]:
+        """Auto-revert skills that got worse after the last evolution.
+
+        Uses mutation_history to restore the previous code version.
+        Returns list of reverted skill IDs.
+        """
+        if not self._prev_skill_stats:
+            return []
+
+        reverted = []
+        store = self._get_skill_store()
+
+        for sid, cur in current_stats.items():
+            prev = self._prev_skill_stats.get(sid)
+            if not prev or prev["calls"] < 3:
+                continue
+            if cur["calls"] < 3:
+                continue
+
+            prev_stuck_pct = 100 * prev["stuck"] // prev["calls"]
+            cur_stuck_pct = 100 * cur["stuck"] // cur["calls"]
+
+            if cur_stuck_pct - prev_stuck_pct > 15:
+                # Skill got significantly worse — try to revert code
+                entry = store.get(sid)
+                if not entry or not getattr(entry, "mutation_history", []):
+                    continue
+
+                # Find the last mutation that changed 'code'
+                for mut in reversed(entry.mutation_history):
+                    old_code = mut.get("fields", {}).get("code", {}).get("old")
+                    if old_code is not None:
+                        logger.info(
+                            "Auto-reverting skill %s: stuck %d%% -> %d%%, restoring previous code (%d chars)",
+                            sid, prev_stuck_pct, cur_stuck_pct, len(old_code),
+                        )
+                        store.update(sid, code=old_code, effectiveness="medium")
+                        reverted.append(sid)
+                        break
+
+        return reverted
+
     def _build_changes_feedback(self, current_stats: Dict[str, Dict[str, int]]) -> str:
         """Compare current skill performance to previous evolution's stats."""
         if not self._prev_skill_stats:
@@ -148,7 +190,7 @@ class HarnessEvolver:
             cur_stuck_pct = 100 * cur["stuck"] // cur["calls"] if cur["calls"] > 0 else 0
             delta = cur_stuck_pct - prev_stuck_pct
             if delta > 10:
-                lines.append(f"- **{sid} GOT WORSE**: stuck rate {prev_stuck_pct}% -> {cur_stuck_pct}% (+{delta}pp). REVERT or fix the last code change.")
+                lines.append(f"- **{sid} GOT WORSE**: stuck rate {prev_stuck_pct}% -> {cur_stuck_pct}% (+{delta}pp). Code was auto-reverted to previous version.")
             elif delta < -10:
                 lines.append(f"- **{sid} IMPROVED**: stuck rate {prev_stuck_pct}% -> {cur_stuck_pct}% ({delta}pp). Keep this approach.")
             else:
@@ -176,7 +218,12 @@ class HarnessEvolver:
         # Compute current skill stats for before/after comparison
         current_stats = self._compute_skill_stats(trajectories)
 
+        # Auto-revert skills that got worse after the last evolution
+        reverted = self._auto_revert_degraded_skills(current_stats)
+
         results: Dict[str, Any] = {}
+        if reverted:
+            results["reverted_skills"] = reverted
 
         # Each pass is wrapped independently so failures don't block others
         for name, fn in [
