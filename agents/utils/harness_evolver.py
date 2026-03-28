@@ -393,14 +393,26 @@ Your job: identify reusable behavioral patterns (skills) from successful actions
 {antipattern_warning}
 {underperforming_skills}
 
+## Skill Code API (MUST follow this exactly)
+
+Skill code runs as inline Python (NOT a function definition). It has access to:
+- `tools['press_buttons'](buttons=['UP'], reasoning='...')` — press buttons (waits for emulator)
+- `tools['get_game_state']()` — returns dict with `player_position`, `location`, `state_text`
+- `tools['get_map_data']()` — returns dict with `grid` (list of strings), `player`, `dimensions`, `warps`, `objects`
+- `args` — dict of arguments passed by the caller (e.g. `args['x']`, `args['y']`)
+- `result` — set this variable to return data
+- Libraries: `collections`, `heapq`, `numpy`/`np`, `json`, `re`, `math`, `random`
+
+CRITICAL: Use `tools['function_name'](...)` syntax. Do NOT call bare `get_game_state()` or `press_buttons()`.
+Do NOT write `def skill_name():` — write inline code that reads `args` and sets `result`.
+
 ## Analysis Tasks
 
-1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code with a better algorithm. Include the FULL replacement `code` in your update. Common game programming patterns that help:
-   - **Pathfinding**: BFS (collections.deque), A* (heapq), Dijkstra for grid navigation around obstacles
-   - **State machines**: Track game mode transitions (overworld/battle/menu/dialogue) and act accordingly
-   - **Decision logic**: Evaluate options (damage calculation, type effectiveness, resource management)
-   - **Parsing**: Extract structured info from game state text (regex, string splitting)
-   The skill sandbox has: collections, heapq, numpy, json, re, math, and game tools (get_map_data, get_game_state, press_buttons).
+1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code. Include the FULL replacement `code` in your update. Common patterns:
+   - **Pathfinding**: BFS (collections.deque), A* (heapq) on `tools['get_map_data']()['grid']`
+   - **State machines**: Track game mode transitions and act accordingly
+   - **Decision logic**: Evaluate options (damage, resources)
+   - **Parsing**: Extract info from game state text (regex, string splitting)
 
 2. **Fix broken skills**: If skills error or use wrong API fields, fix the code.
 
