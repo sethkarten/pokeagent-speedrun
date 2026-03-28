@@ -2849,29 +2849,38 @@ async def mcp_get_map_data():
             "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)",
         }
 
-        # Extract the ASCII grid from state_text (already has P marker)
-        if "ASCII Map:" in state_text:
+        # Get the FULL map grid (not windowed) from the porymap data in raw_state
+        # The state_text ASCII map may be cropped, but raw_state has the complete grid
+        raw_state = state_result.get("raw_state", {})
+        porymap_grid = raw_state.get("map", {}).get("porymap", {}).get("grid")
+        grid = None
+
+        if porymap_grid:
+            # Use full porymap grid and add player marker
+            grid = [list(row) for row in porymap_grid]
+            px, py = pos.get("x", 0), pos.get("y", 0)
+            if 0 <= py < len(grid) and 0 <= px < len(grid[0]):
+                grid[py][px] = "P"
+
+            # Mark live NPC positions as 'N' (blocked for pathfinding)
+            obj_events = raw_state.get("map", {}).get("object_events", [])
+            for obj in obj_events:
+                ox = obj.get("current_x", -1)
+                oy = obj.get("current_y", -1)
+                if (ox, oy) != (px, py) and 0 <= oy < len(grid) and 0 <= ox < len(grid[0]):
+                    if grid[oy][ox] not in ('#', 'P'):
+                        grid[oy][ox] = 'N'
+
+            grid = ["".join(row) for row in grid]
+        elif "ASCII Map:" in state_text:
+            # Fallback: extract from state_text if porymap grid unavailable
             map_section = state_text.split("ASCII Map:")[1]
             legend_idx = map_section.find("(Legend:")
             if legend_idx > 0:
                 map_section = map_section[:legend_idx]
             grid = [line for line in map_section.strip().split("\n") if line.strip()]
 
-            # Mark live NPC positions on grid as 'N' (blocked for pathfinding)
-            # Uses object_events from raw state which has current positions
-            raw_state = state_result.get("raw_state", {})
-            obj_events = raw_state.get("map", {}).get("object_events", [])
-            px, py = pos.get("x", 0), pos.get("y", 0)
-            if grid and obj_events:
-                grid = [list(row) for row in grid]
-                for obj in obj_events:
-                    ox = obj.get("current_x", -1)
-                    oy = obj.get("current_y", -1)
-                    if (ox, oy) != (px, py) and 0 <= oy < len(grid) and 0 <= ox < len(grid[0]):
-                        if grid[oy][ox] not in ('#', 'P'):
-                            grid[oy][ox] = 'N'
-                grid = ["".join(row) for row in grid]
-
+        if grid:
             result["grid"] = grid
             result["dimensions"] = {"width": len(grid[0]) if grid else 0, "height": len(grid)}
 
