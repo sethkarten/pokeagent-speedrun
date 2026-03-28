@@ -45,7 +45,6 @@ _ALWAYS_AVAILABLE_TOOLS = frozenset({
     "process_subagent",
     "execute_custom_subagent",
     "process_trajectory_history",
-    "get_progress_summary",
     "replan_objectives",
 })
 

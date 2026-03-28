@@ -47,7 +47,7 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
 **run_code**
 - **Required:** `code` (string — Python code to execute), `reasoning` (string)
 - **Optional:** `args` (object)
-- **Read-only debugging tool.** Execute Python to inspect game state, test logic, and prototype skill code. Has access to `tools['get_game_state']()`, `tools['get_map_data']()`, `tools['get_progress_summary']()` for reading data. Does **NOT** have access to `press_buttons` or other action tools.
+- **Read-only debugging tool.** Execute Python to inspect game state, test logic, and prototype skill code. Has access to `tools['get_game_state']()`, `tools['get_map_data']()` for reading data. Does **NOT** have access to `press_buttons` or other action tools.
 - **To execute actions, save code as a skill and use `run_skill`.** `run_code` is for development only.
 - Returns `result` variable, captured `stdout` from print(), and full tracebacks on error.
 
@@ -60,7 +60,6 @@ You are playing **Pokemon Emerald** on a Game Boy Advance emulator. You receive 
   - `tools['get_map_data']()` — ASCII grid + warps + objects for pathfinding (same map you see each step)
   - `tools['complete_direct_objective'](reasoning='...')` — complete an objective
   - `tools['process_memory'](action='...', entries=[...], reasoning='...')` — memory CRUD
-  - `tools['get_progress_summary']()` — get progress info
 - Set a `result` variable in the code to return data to yourself.
 
 **`get_map_data()`** (for skill code: same ASCII map you see each step, extracted as structured data):
@@ -149,9 +148,6 @@ result = {'arrived': (px == target_x and py == target_y), 'moves': moves_made, '
 
 ### Progress
 
-**get_progress_summary**
-- *(no parameters)* — returns milestones, location, objective status, completed objectives history, memory tree.
-
 ## Seeing subagent output
 
 On the **next** step, the harness injects **RESULTS FROM PREVIOUS STEP** with the full tool result JSON. Read that block before deciding.
@@ -183,7 +179,7 @@ You start with an **empty** subagent registry and skill library. Build them as y
 - **One-step** (`handler_type: "one_step"`): Single VLM analysis pass. Good for reflection, verification, situation assessment. No tool access.
 - **Looping** (`handler_type: "looping"`): Multi-turn loop with tool access. Good for multi-step game sequences. Include `return_condition` to specify when to hand back control.
 - Keep `max_turns` reasonable (10-25 for looping subagents).
-- Only include tools the subagent actually needs in `available_tools`. Available tools for subagents: `press_buttons`, `get_game_state`, `get_map_data`, `complete_direct_objective`, `process_memory`, `process_skill`, `run_skill`, `run_code`, `process_subagent`, `process_trajectory_history`, `get_progress_summary`, `replan_objectives`.
+- Only include tools the subagent actually needs in `available_tools`. Available tools for subagents: `press_buttons`, `get_game_state`, `get_map_data`, `complete_direct_objective`, `process_memory`, `process_skill`, `run_skill`, `run_code`, `process_subagent`, `process_trajectory_history`, `replan_objectives`.
 - Use inline `config` for one-off tasks; persist to registry for recurring patterns.
 
 ## Constraints
