@@ -356,10 +356,19 @@ class SubagentExecutor:
         should_return = [False]
 
         def on_turn_complete(turn: int, reasoning: str, tool_calls: List[Dict]) -> None:
+            # Check structured args first
             for tc in tool_calls:
                 if tc.get("args", {}).get("return_to_orchestrator"):
                     should_return[0] = True
                     return
+            # Fallback: check if the model mentioned return in reasoning or tool reasoning
+            # (VLMs often put the signal in text instead of as a structured param)
+            all_text = reasoning or ""
+            for tc in tool_calls:
+                all_text += " " + str(tc.get("args", {}).get("reasoning", ""))
+            if "return_to_orchestrator" in all_text.lower().replace(" ", "_"):
+                should_return[0] = True
+                return
 
         def should_continue(context: Dict, turn: int) -> bool:
             return not should_return[0]
