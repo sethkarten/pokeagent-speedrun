@@ -2846,7 +2846,7 @@ async def mcp_get_map_data():
             "success": True,
             "location": location,
             "player": {"x": pos.get("x", 0), "y": pos.get("y", 0)},
-            "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item",
+            "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)",
         }
 
         # Extract the ASCII grid from state_text (already has P marker)
@@ -2856,6 +2856,22 @@ async def mcp_get_map_data():
             if legend_idx > 0:
                 map_section = map_section[:legend_idx]
             grid = [line for line in map_section.strip().split("\n") if line.strip()]
+
+            # Mark live NPC positions on grid as 'N' (blocked for pathfinding)
+            # Uses object_events from raw state which has current positions
+            raw_state = state_result.get("raw_state", {})
+            obj_events = raw_state.get("map", {}).get("object_events", [])
+            px, py = pos.get("x", 0), pos.get("y", 0)
+            if grid and obj_events:
+                grid = [list(row) for row in grid]
+                for obj in obj_events:
+                    ox = obj.get("current_x", -1)
+                    oy = obj.get("current_y", -1)
+                    if (ox, oy) != (px, py) and 0 <= oy < len(grid) and 0 <= ox < len(grid[0]):
+                        if grid[oy][ox] not in ('#', 'P'):
+                            grid[oy][ox] = 'N'
+                grid = ["".join(row) for row in grid]
+
             result["grid"] = grid
             result["dimensions"] = {"width": len(grid[0]) if grid else 0, "height": len(grid)}
 
