@@ -729,10 +729,14 @@ def process_subagent_direct(action: str, entries: list, reasoning: object) -> di
                 max_turns = int(entry_data.get("max_turns", 25))
                 available_tools = entry_data.get("available_tools", [])
                 # Auto-fill default tools for looping subagents if the model omits them
-                # (Gemini consistently fails to serialize available_tools in nested args)
                 if handler_type == "looping" and not available_tools:
                     available_tools = ["press_buttons", "get_game_state"]
                     logger.info(f"Auto-filled available_tools for looping subagent '{name}': {available_tools}")
+                # Ensure looping subagents always have access to run_skill and run_code
+                if handler_type == "looping":
+                    for essential in ["run_skill", "run_code", "get_map_data"]:
+                        if essential not in available_tools:
+                            available_tools.append(essential)
                 system_instructions = entry_data.get("system_instructions", "")
                 directive = entry_data.get("directive", "")
                 return_condition = entry_data.get("return_condition", "")
