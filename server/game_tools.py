@@ -728,6 +728,15 @@ def process_subagent_direct(action: str, entries: list, reasoning: object) -> di
                 handler_type = entry_data.get("handler_type", "looping")
                 max_turns = int(entry_data.get("max_turns", 25))
                 available_tools = entry_data.get("available_tools", [])
+                if handler_type == "looping" and not available_tools:
+                    results.append({
+                        "success": False,
+                        "error": (
+                            "Looping subagents MUST have available_tools. At minimum: "
+                            "['press_buttons', 'get_game_state']. Add them and try again."
+                        ),
+                    })
+                    continue
                 system_instructions = entry_data.get("system_instructions", "")
                 directive = entry_data.get("directive", "")
                 return_condition = entry_data.get("return_condition", "")
