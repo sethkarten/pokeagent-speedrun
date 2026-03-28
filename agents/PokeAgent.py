@@ -1708,6 +1708,10 @@ class PokeAgent:
             spec = get_local_subagent_spec(function_name)
             return getattr(self, spec.handler_method)(arguments)
 
+        # return_to_orchestrator: no-op used by subagents to signal completion
+        if function_name == "return_to_orchestrator":
+            return json.dumps({"success": True, "message": "Returning control to orchestrator"})
+
         # run_skill / run_code: execute code locally with tool access
         if function_name == "run_skill":
             result_json = self._execute_run_skill(arguments)
