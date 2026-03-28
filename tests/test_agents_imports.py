@@ -18,3 +18,21 @@ def test_agents_package_imports():
     assert DirectObjectiveManager is not None
     assert hasattr(agents, "PokeAgent")
     assert hasattr(agents, "VisionOnlyAgent")
+
+
+def test_pokeagent_adapter_no_create_direct_objectives_mapping():
+    from agents.PokeAgent import MCPToolAdapter
+
+    adapter = MCPToolAdapter(server_url="http://localhost:8000")
+    result = adapter.call_tool("create_direct_objectives", {"objectives": []})
+    assert result["success"] is False
+    assert "Unknown tool" in result["error"]
+
+
+def test_vision_only_adapter_no_create_direct_objectives_mapping():
+    from agents.vision_only_agent import MCPToolAdapter
+
+    adapter = MCPToolAdapter(server_url="http://localhost:8000")
+    result = adapter.call_tool("create_direct_objectives", {"objectives": []})
+    assert result["success"] is False
+    assert "Unknown tool" in result["error"]

@@ -119,7 +119,6 @@ class MCPToolAdapter:
                 "get_walkthrough": "/mcp/get_walkthrough",
                 
                 "complete_direct_objective": "/mcp/complete_direct_objective",
-                "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
                 # Planner subagent (categorized mode) — must match server/app.py routes
                 "get_full_objective_sequence": "/mcp/get_full_objective_sequence",
@@ -543,46 +542,6 @@ class PokeAgent:
                     "required": ["action", "entries", "reasoning"]
                 }
             },
-            # COMMENTED OUT FOR NOW AS OBJECTIVE CREATION IS HANDLED BY THE PLANNER SUBAGENT
-            #  {
-            #     "name": "create_direct_objectives",
-            #     "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' for training prep, and 'dynamics' for short-term navigation/cleanup. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "objectives": {
-            #                 "type_": "ARRAY",
-            #                 "items": {
-            #                     "type_": "OBJECT",
-            #                     "properties": {
-            #                         "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
-            #                         "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
-            #                         "action_type": {
-            #                             "type_": "STRING",
-            #                             "enum": ["navigate", "interact", "battle", "wait"],
-            #                             "description": "Type of action"
-            #                         },
-            #                         "target_location": {"type_": "STRING", "description": "Target location/map name"},
-            #                         "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
-            #                         "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
-            #                     },
-            #                     "required": ["id", "description", "action_type"]
-            #                 },
-            #                 "description": "Array of exactly 3 objectives to create next"
-            #             },
-            #             "category": {
-            #                 "type_": "STRING",
-            #                 "enum": ["dynamics", "story", "battling"],
-            #                 "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal."
-            #             },
-            #             "reasoning": {
-            #                 "type_": "STRING",
-            #                 "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
-            #             }
-            #         },
-            #         "required": ["objectives", "reasoning"]
-            #     }
-            # },
         ]
 
         # get_progress_summary: H_expert only. autoevolve/simple agents already get
@@ -1661,41 +1620,7 @@ class PokeAgent:
             arguments = self._convert_protobuf_args(function_call.args)
             logger.info(f"   ✅ Successfully parsed arguments: {list(arguments.keys())}")
             
-            # Special validation for create_direct_objectives
-            if function_name == "create_direct_objectives":
-                logger.info(f"   🎯 Validating create_direct_objectives arguments...")
-                if "objectives" not in arguments:
-                    logger.error(f"   ❌ Missing 'objectives' key in arguments!")
-                    logger.error(f"   Available keys: {list(arguments.keys())}")
-                    return json.dumps({"success": False, "error": "Missing 'objectives' parameter"})
-                
-                obj_list = arguments["objectives"]
-                if not isinstance(obj_list, list):
-                    logger.error(f"   ❌ 'objectives' is not a list! Type: {type(obj_list)}")
-                    logger.error(f"   Value: {str(obj_list)[:500]}")
-                    return json.dumps({"success": False, "error": f"'objectives' must be a list, got {type(obj_list)}"})
-                
-                if len(obj_list) != 3:
-                    logger.warning(f"   ⚠️ Expected 3 objectives, got {len(obj_list)}")
-                
-                for i, obj in enumerate(obj_list):
-                    if not isinstance(obj, dict):
-                        logger.error(f"   ❌ Objective {i} is not a dict! Type: {type(obj)}")
-                        logger.error(f"   Value: {str(obj)[:200]}")
-                        return json.dumps({"success": False, "error": f"Objective {i} must be a dict, got {type(obj)}"})
-                    
-                    required_fields = ["id", "description", "action_type"]
-                    missing = [f for f in required_fields if f not in obj]
-                    if missing:
-                        logger.error(f"   ❌ Objective {i} missing required fields: {missing}")
-                        logger.error(f"   Available fields: {list(obj.keys())}")
-                        return json.dumps({"success": False, "error": f"Objective {i} missing required fields: {missing}"})
-                    
-                    logger.info(f"   ✅ Objective {i} valid: id={obj.get('id')}, action_type={obj.get('action_type')}")
-                
-                logger.info(f"   ✅ All objectives validated successfully")
-
-            elif function_name == "replan_objectives":
+            if function_name == "replan_objectives":
                 # Gemini often returns nested args as protobuf MapComposite / RepeatedComposite.
                 # After _convert_protobuf_args, edits may still not be a plain list (e.g. tuple,
                 # or dict with "0","1",… keys). DirectObjectiveManager requires list[dict].
@@ -2091,12 +2016,6 @@ class PokeAgent:
                                         if hasattr(fc, 'args'):
                                             args_dict = dict(fc.args) if hasattr(fc.args, '__iter__') else {}
                                             logger.info(f"      Function call args keys: {list(args_dict.keys())}")
-                                            # For create_direct_objectives, log objectives structure
-                                            if fc.name == "create_direct_objectives" and "objectives" in args_dict:
-                                                obj_list = args_dict.get("objectives", [])
-                                                logger.info(f"      Objectives array length: {len(obj_list) if isinstance(obj_list, list) else 'NOT A LIST'}")
-                                                if isinstance(obj_list, list) and len(obj_list) > 0:
-                                                    logger.info(f"      First objective keys: {list(obj_list[0].keys()) if isinstance(obj_list[0], dict) else type(obj_list[0])}")
                                     except Exception as e:
                                         logger.error(f"      ⚠️ Could not parse function call args: {e}")
                                         logger.error(f"      Args type: {type(fc.args) if hasattr(fc, 'args') else 'NO ARGS ATTR'}")
@@ -3378,26 +3297,6 @@ Step {step_count}"""
                             logger.info(f"      ✅ Successfully converted args to dict")
                             logger.info(f"      Args keys: {list(args_dict.keys())}")
                             
-                            # Special logging for create_direct_objectives
-                            if function_call.name == "create_direct_objectives":
-                                logger.info(f"      🎯 create_direct_objectives args analysis:")
-                                if "objectives" in args_dict:
-                                    obj_list = args_dict["objectives"]
-                                    logger.info(f"         objectives type: {type(obj_list)}")
-                                    logger.info(f"         objectives is list: {isinstance(obj_list, list)}")
-                                    if isinstance(obj_list, list):
-                                        logger.info(f"         objectives length: {len(obj_list)}")
-                                        for j, obj in enumerate(obj_list[:3]):  # Log first 3
-                                            logger.info(f"         Objective {j}: type={type(obj)}, keys={list(obj.keys()) if isinstance(obj, dict) else 'NOT DICT'}")
-                                    else:
-                                        logger.error(f"         ⚠️ objectives is NOT a list! Type: {type(obj_list)}")
-                                        logger.error(f"         Value: {str(obj_list)[:500]}")
-                                else:
-                                    logger.error(f"         ⚠️ 'objectives' key not found in args!")
-                                    logger.error(f"         Available keys: {list(args_dict.keys())}")
-                                if "reasoning" in args_dict:
-                                    reasoning = args_dict["reasoning"]
-                                    logger.info(f"         reasoning length: {len(str(reasoning))} chars")
                         except Exception as e:
                             logger.error(f"      ❌ Failed to convert args: {e}")
                             logger.error(f"      Args raw value: {str(function_call.args)[:500]}")

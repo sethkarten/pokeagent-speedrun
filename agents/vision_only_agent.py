@@ -78,7 +78,6 @@ class MCPToolAdapter:
                 "list_wiki_sources": "/mcp/list_wiki_sources",
                 "get_walkthrough": "/mcp/get_walkthrough",
                 "complete_direct_objective": "/mcp/complete_direct_objective",
-                "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_full_objective_sequence": "/mcp/get_full_objective_sequence",
                 "replan_objectives": "/mcp/replan_objectives",
                 # "get_progress_summary": "/mcp/get_progress_summary",
@@ -260,37 +259,57 @@ class VisionOnlyAgent:
                 }
             },
             {
-                "name": "create_direct_objectives",
-                "description": "Create the next 3 direct objectives when a sequence completes. Use this after consulting get_walkthrough() or wiki sources to plan your next steps.",
+                "name": "replan_objectives",
+                "description": "Modify objectives for one category using index-based edits. Use this to create, update, or delete objectives.",
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
-                        "objectives": {
+                        "category": {
+                            "type_": "STRING",
+                            "enum": ["story", "battling", "dynamics"],
+                            "description": "Which category to replan."
+                        },
+                        "edits": {
                             "type_": "ARRAY",
                             "items": {
                                 "type_": "OBJECT",
                                 "properties": {
-                                    "id": {"type_": "STRING", "description": "Unique identifier"},
-                                    "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
-                                    "action_type": {
-                                        "type_": "STRING",
-                                        "enum": ["navigate", "interact", "battle", "wait"],
-                                        "description": "Type of action"
+                                    "index": {
+                                        "type_": "INTEGER",
+                                        "description": "Zero-based objective index to edit"
                                     },
-                                    "target_location": {"type_": "STRING", "description": "Target location/map name"},
-                                    "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
-                                    "completion_condition": {"type_": "STRING", "description": "How to verify completion"}
+                                    "objective": {
+                                        "type_": "OBJECT",
+                                        "description": "Objective data. Omit or set null to delete at index.",
+                                        "properties": {
+                                            "id": {"type_": "STRING"},
+                                            "description": {"type_": "STRING"},
+                                            "action_type": {
+                                                "type_": "STRING",
+                                                "enum": ["navigate", "interact", "battle", "wait", "create_new_objectives"]
+                                            },
+                                            "target_location": {"type_": "STRING"},
+                                            "navigation_hint": {"type_": "STRING"},
+                                            "completion_condition": {"type_": "STRING"},
+                                            "optional": {"type_": "BOOLEAN"}
+                                        },
+                                        "required": ["id", "description", "action_type"]
+                                    }
                                 },
-                                "required": ["id", "description", "action_type"]
+                                "required": ["index"]
                             },
-                            "description": "Array of exactly 3 objectives to create next"
+                            "description": "List of index-based edits to apply."
                         },
-                        "reasoning": {
+                        "return_to_orchestrator": {
+                            "type_": "BOOLEAN",
+                            "description": "Set true when planning is complete."
+                        },
+                        "rationale": {
                             "type_": "STRING",
-                            "description": "Explanation of why these objectives were chosen"
+                            "description": "Brief explanation of the changes."
                         }
                     },
-                    "required": ["objectives", "reasoning"]
+                    "required": ["category", "edits", "return_to_orchestrator", "rationale"]
                 }
             },
             # {
@@ -1239,7 +1258,7 @@ AVAILABLE TOOLS:
   * Each button in the sequence will be sent as a separate action to the game
 
 🎯 **OBJECTIVE MANAGEMENT**:
-- create_direct_objectives(objectives, reasoning) - Create next 3 objectives when sequences complete
+- replan_objectives(category, edits, return_to_orchestrator, rationale) - Create/update/delete objectives via index-based edits
 - reflect(situation) - Use when stuck or uncertain or when repeating yourself. Analyzes recent actions and provides strategic guidance
 
 ** MOVEMENT **:
