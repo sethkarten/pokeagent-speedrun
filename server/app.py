@@ -2813,35 +2813,80 @@ async def mcp_get_game_state():
 
 @app.post("/mcp/get_map_data")
 async def mcp_get_map_data():
-    """MCP Tool: Get structured map data for skill code (pathfinding, navigation).
+    """MCP Tool: Get structured map data for skill code.
 
-    Returns a clean dict with: grid (2D array of tile chars), player position,
-    dimensions, warps, NPCs/objects, connections, location name, game context.
-    No nulls, no raw_state, no screenshots.
+    Uses the same preprocessing as get_game_state (state_text with ASCII map)
+    but extracts and returns the grid, warps, objects, etc. as structured data.
     """
     if env is None:
         return {"success": False, "error": "Emulator not initialized"}
 
     try:
-        state = env.get_comprehensive_state()
-        player = state.get("player", {})
-        position = player.get("position", {})
-        px, py = position.get("x", 0), position.get("y", 0)
-        location = player.get("location", "Unknown")
-        game_state = state.get("game", {}).get("game_state", "unknown")
+        from utils.state_formatter import format_state_for_llm
+        from server import game_tools
+
+        global recent_button_presses, current_obs
+        with obs_lock:
+            obs_copy = current_obs.copy() if current_obs is not None else None
+
+        state_result = game_tools.get_game_state_direct(
+            env, format_state_for_llm,
+            action_history=recent_button_presses,
+            current_obs=obs_copy,
+        )
+
+        if not state_result.get("success"):
+            return {"success": False, "error": "Could not get game state"}
+
+        state_text = state_result.get("state_text", "")
+        pos = state_result.get("player_position", {})
+        location = state_result.get("location", "Unknown")
 
         result = {
             "success": True,
             "location": location,
-            "player": {"x": px, "y": py},
-            "game_context": game_state,
-            "is_in_battle": state.get("game", {}).get("is_in_battle", False),
-            "map": None,  # Populated below if map data available
+            "player": {"x": pos.get("x", 0), "y": pos.get("y", 0)},
             "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item",
         }
 
+        # Extract the ASCII grid from state_text (already has P marker)
+        if "ASCII Map:" in state_text:
+            map_section = state_text.split("ASCII Map:")[1]
+            legend_idx = map_section.find("(Legend:")
+            if legend_idx > 0:
+                map_section = map_section[:legend_idx]
+            grid = [line for line in map_section.strip().split("\n") if line.strip()]
+            result["grid"] = grid
+            result["dimensions"] = {"width": len(grid[0]) if grid else 0, "height": len(grid)}
+
+        # Extract the JSON map data block if present
+        if "Map Data (JSON):" in state_text:
+            try:
+                import json as _json
+                json_section = state_text.split("Map Data (JSON):")[1]
+                # Find the JSON object
+                start = json_section.find("{")
+                if start >= 0:
+                    depth = 0
+                    end = start
+                    for i, c in enumerate(json_section[start:], start):
+                        if c == "{": depth += 1
+                        elif c == "}": depth -= 1
+                        if depth == 0:
+                            end = i + 1
+                            break
+                    map_json = _json.loads(json_section[start:end])
+                    result["warps"] = map_json.get("warps", [])
+                    result["objects"] = map_json.get("objects", [])
+                    result["connections"] = map_json.get("connections", [])
+                    if not result.get("dimensions"):
+                        result["dimensions"] = map_json.get("dimensions", {})
+            except Exception:
+                pass  # JSON parsing failed, grid is still available
+
         # Party info
-        party = player.get("party") or state.get("game", {}).get("party") or []
+        raw_state = state_result.get("raw_state", {})
+        party = raw_state.get("player", {}).get("party") or raw_state.get("game", {}).get("party") or []
         if party:
             result["party"] = [
                 {
@@ -2853,63 +2898,6 @@ async def mcp_get_map_data():
                 }
                 for p in party
             ]
-
-        # Map data: prefer already-loaded porymap from state, fall back to re-loading
-        if game_state != "battle":
-            try:
-                # First try the porymap data already loaded by the state formatter
-                porymap_data = state.get("map", {}).get("porymap", {})
-                json_map = None
-                if porymap_data and porymap_data.get("grid"):
-                    # Build json_map from the already-loaded porymap data
-                    json_map = {
-                        "name": porymap_data.get("name") or location,
-                        "dimensions": porymap_data.get("dimensions", {}),
-                        "grid": porymap_data.get("grid", []),
-                        "warps": porymap_data.get("warps", []),
-                        "objects": porymap_data.get("objects", []),
-                        "connections": porymap_data.get("connections", []),
-                    }
-                else:
-                    # Fall back to re-loading from porymap files
-                    from utils.mapping.porymap_json_builder import build_json_map_for_llm
-                    from pokemon_env.porymap_paths import get_pokeemerald_root
-                    pokeemerald_root = get_pokeemerald_root()
-                    badges = state.get("game", {}).get("progress_context", {}).get("badges_obtained", 0)
-                    json_map = build_json_map_for_llm(location, pokeemerald_root, badge_count=badges)
-
-                if json_map:
-                    grid = json_map.get("grid", [])
-                    # Mark player position on grid
-                    if grid and 0 <= py < len(grid) and 0 <= px < len(grid[0] if grid else []):
-                        grid = [list(row) for row in grid]
-                        grid[py][px] = "P"
-                        grid = ["".join(row) for row in grid]
-
-                    result["map"] = {
-                        "name": json_map.get("name", location),
-                        "dimensions": json_map.get("dimensions", {}),
-                        "grid": grid,
-                        "warps": [
-                            {"x": w["x"], "y": w["y"], "dest_map": w.get("dest_map", "?")}
-                            for w in json_map.get("warps", [])
-                        ],
-                        "objects": [
-                            {
-                                "x": o["x"],
-                                "y": o["y"],
-                                "type": o.get("graphics_id", ""),
-                                "trainer": o.get("trainer_type", "") != "TRAINER_TYPE_NONE",
-                            }
-                            for o in json_map.get("objects", [])
-                        ],
-                        "connections": [
-                            {"direction": c.get("direction", "?"), "map": c.get("map", "?")}
-                            for c in json_map.get("connections", [])
-                        ],
-                    }
-            except Exception as e:
-                logger.warning(f"Could not load map data: {e}")
 
         return result
 
