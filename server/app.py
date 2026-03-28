@@ -2854,15 +2854,29 @@ async def mcp_get_map_data():
                 for p in party
             ]
 
-        # Map data from porymap
+        # Map data: prefer already-loaded porymap from state, fall back to re-loading
         if game_state != "battle":
             try:
-                from utils.mapping.porymap_json_builder import build_json_map_for_llm
-                from pokemon_env.porymap_paths import get_pokeemerald_root
-
-                pokeemerald_root = get_pokeemerald_root()
-                badges = state.get("game", {}).get("progress_context", {}).get("badges_obtained", 0)
-                json_map = build_json_map_for_llm(location, pokeemerald_root, badge_count=badges)
+                # First try the porymap data already loaded by the state formatter
+                porymap_data = state.get("map", {}).get("porymap", {})
+                json_map = None
+                if porymap_data and porymap_data.get("grid"):
+                    # Build json_map from the already-loaded porymap data
+                    json_map = {
+                        "name": porymap_data.get("name") or location,
+                        "dimensions": porymap_data.get("dimensions", {}),
+                        "grid": porymap_data.get("grid", []),
+                        "warps": porymap_data.get("warps", []),
+                        "objects": porymap_data.get("objects", []),
+                        "connections": porymap_data.get("connections", []),
+                    }
+                else:
+                    # Fall back to re-loading from porymap files
+                    from utils.mapping.porymap_json_builder import build_json_map_for_llm
+                    from pokemon_env.porymap_paths import get_pokeemerald_root
+                    pokeemerald_root = get_pokeemerald_root()
+                    badges = state.get("game", {}).get("progress_context", {}).get("badges_obtained", 0)
+                    json_map = build_json_map_for_llm(location, pokeemerald_root, badge_count=badges)
 
                 if json_map:
                     grid = json_map.get("grid", [])
