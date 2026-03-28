@@ -782,7 +782,7 @@ class PokeAgent:
             "__builtins__": {
                 "range": range, "len": len, "int": int, "float": float,
                 "str": str, "list": list, "dict": dict, "tuple": tuple,
-                "set": set, "frozenset": frozenset,
+                "set": set, "frozenset": frozenset, "type": type,
                 "bool": bool, "print": print, "abs": abs, "min": min,
                 "max": max, "sum": sum, "enumerate": enumerate, "zip": zip,
                 "sorted": sorted, "reversed": reversed, "isinstance": isinstance,
@@ -876,7 +876,7 @@ class PokeAgent:
             "__builtins__": {
                 "range": range, "len": len, "int": int, "float": float,
                 "str": str, "list": list, "dict": dict, "tuple": tuple,
-                "set": set, "frozenset": frozenset,
+                "set": set, "frozenset": frozenset, "type": type,
                 "bool": bool, "print": lambda *a, **kw: print(*a, file=captured_output, **kw),
                 "abs": abs, "min": min,
                 "max": max, "sum": sum, "enumerate": enumerate, "zip": zip,
