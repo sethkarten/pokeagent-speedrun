@@ -41,6 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pokemon_env.emulator import EmeraldEmulator
 from utils.anticheat import AntiCheatTracker
 from utils.json_utils import normalize_replan_edits
+from utils.llm_provider_ui import infer_llm_provider_family
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
@@ -125,6 +126,17 @@ def _format_interaction_type_for_ui(interaction_type: str) -> str:
                 base = module_name[:-13]  # len("_orchestrator") == 13
                 return f"{base}_{backend}_orchestrator"
     return interaction_type
+
+
+def _provider_family_for_llm_log_entry(entry: dict) -> str:
+    """UI color bucket from raw log line (handles OpenRouter via model slug)."""
+    raw_type = entry.get("interaction_type") or ""
+    mi = entry.get("model_info") or {}
+    model_name = mi.get("model") or ""
+    meta = entry.get("metadata") or {}
+    backend = meta.get("backend") or mi.get("backend")
+    return infer_llm_provider_family(raw_type, model_name, backend)
+
 
 # Performance monitoring
 last_fps_log = time.time()
@@ -1952,6 +1964,9 @@ async def stream_agent_thinking():
                                                             entry.get("interaction_type", "unknown")
                                                         ),
                                                         "model": model_name,
+                                                        "provider_family": _provider_family_for_llm_log_entry(
+                                                            entry
+                                                        ),
                                                         "response": entry.get("response", ""),
                                                         "duration": entry.get("duration", 0),
                                                         "timestamp": timestamp,
@@ -1979,6 +1994,9 @@ async def stream_agent_thinking():
                                 "step": line_step,
                                 "type": interaction.get("type", "unknown"),
                                 "model": interaction.get("model", ""),
+                                "provider_family": interaction.get(
+                                    "provider_family", "other"
+                                ),
                                 "response": interaction.get("response", ""),
                                 "duration": interaction.get("duration", 0),
                                 "timestamp": interaction.get("timestamp", ""),
@@ -2043,6 +2061,9 @@ async def get_agent_thinking():
                                             entry.get("interaction_type", "unknown")
                                         ),
                                         "model": model_name,
+                                        "provider_family": _provider_family_for_llm_log_entry(
+                                            entry
+                                        ),
                                         "prompt": entry.get("prompt", ""),
                                         "response": entry.get("response", ""),
                                         "duration": entry.get("duration", 0),

@@ -481,19 +481,57 @@
             float: none;
         }
 
-        /* Streaming-specific styles */
-        .llm-entry.streaming {
-            border-left: 3px solid #ffa500;
-            background-color: rgba(255, 165, 0, 0.1);
+        /* Streaming / complete cards: outline color follows model family */
+        .llm-entry.streaming,
+        .llm-entry.complete {
+            border: 1px solid #33ff33;
             padding: 8px;
             margin-bottom: 8px;
+            box-sizing: border-box;
         }
 
-        .llm-entry.complete {
-            border-left: 3px solid #00ff00;
-            background-color: rgba(0, 255, 0, 0.05);
-            padding: 8px;
-            margin-bottom: 8px;
+        .llm-entry.provider-gemini {
+            border-color: #2ecbff;
+            box-shadow: 0 0 14px rgba(46, 203, 255, 0.28);
+        }
+        .llm-entry.streaming.provider-gemini {
+            background-color: rgba(46, 203, 255, 0.12);
+        }
+        .llm-entry.complete.provider-gemini {
+            background-color: rgba(46, 203, 255, 0.06);
+        }
+
+        .llm-entry.provider-openai {
+            border-color: #f0f4f8;
+            box-shadow: 0 0 14px rgba(240, 244, 248, 0.22);
+        }
+        .llm-entry.streaming.provider-openai {
+            background-color: rgba(240, 244, 248, 0.1);
+        }
+        .llm-entry.complete.provider-openai {
+            background-color: rgba(240, 244, 248, 0.05);
+        }
+
+        .llm-entry.provider-anthropic {
+            border-color: #ff9f40;
+            box-shadow: 0 0 14px rgba(255, 159, 64, 0.3);
+        }
+        .llm-entry.streaming.provider-anthropic {
+            background-color: rgba(255, 159, 64, 0.12);
+        }
+        .llm-entry.complete.provider-anthropic {
+            background-color: rgba(255, 159, 64, 0.06);
+        }
+
+        .llm-entry.provider-other {
+            border-color: #d333ff;
+            box-shadow: 0 0 12px rgba(136, 51, 255, 0.22);
+        }
+        .llm-entry.streaming.provider-other {
+            background-color: rgba(51, 255, 51, 0.08);
+        }
+        .llm-entry.complete.provider-other {
+            background-color: rgba(51, 255, 51, 0.04);
         }
 
         .llm-message {
@@ -879,6 +917,46 @@
         let streamingSource = null;
         let currentMessage = null;
         let isMessageComplete = true;
+
+        function inferProviderFamily(interactionType, model, providerFamily) {
+            const explicit = String(providerFamily || '').toLowerCase().trim();
+            if (['gemini', 'openai', 'anthropic', 'other'].includes(explicit)) {
+                return explicit;
+            }
+
+            const typePrefix = String(interactionType || '').toLowerCase().split('_', 1)[0];
+            const modelLower = String(model || '').toLowerCase().trim();
+
+            if (typePrefix === 'gemini' || typePrefix === 'vertex') return 'gemini';
+            if (typePrefix === 'openai') return 'openai';
+            if (typePrefix === 'anthropic') return 'anthropic';
+
+            if (typePrefix === 'openrouter' && modelLower.includes('/')) {
+                const org = modelLower.split('/', 1)[0];
+                if (org === 'google' || org === 'google-ai-platform' || org === 'gemini') return 'gemini';
+                if (org === 'openai') return 'openai';
+                if (org === 'anthropic') return 'anthropic';
+            }
+
+            if (modelLower.includes('gemini') || modelLower.includes('palm')) return 'gemini';
+            if (modelLower.includes('claude')) return 'anthropic';
+            if (
+                modelLower.includes('gpt') ||
+                modelLower.includes('o3') ||
+                modelLower.includes('o4') ||
+                modelLower.includes('o5') ||
+                modelLower.includes('codex')
+            ) {
+                return 'openai';
+            }
+
+            return 'other';
+        }
+
+        function sanitizeProviderFamily(interactionType, model, providerFamily) {
+            return inferProviderFamily(interactionType, model, providerFamily)
+                .replace(/[^a-z]/g, '') || 'other';
+        }
         
         function initializeAgentStreaming() {
             const agentThinkingDiv = document.getElementById('agent-thinking');
@@ -919,8 +997,9 @@
                     
                     // Create new message element
                     const modelLabel = data.model ? ` [${data.model}]` : '';
+                    const pf = sanitizeProviderFamily(data.type, data.model, data.provider_family);
                     const messageDiv = document.createElement('div');
-                    messageDiv.className = 'llm-entry streaming';
+                    messageDiv.className = `llm-entry streaming provider-${pf}`;
                     messageDiv.innerHTML = `
                         <div class="llm-step">Step ${data.step}:</div>
                         <div class="llm-message" id="streaming-message-${data.step}-${Date.now()}"></div>
@@ -1016,8 +1095,13 @@
                         // Trim whitespace from the response
                         const trimmedResponse = interaction.response.trim();
                         const modelLabel = interaction.model ? ` [${interaction.model}]` : '';
+                        const pf = sanitizeProviderFamily(
+                            interaction.type,
+                            interaction.model,
+                            interaction.provider_family
+                        );
                         
-                        html += `<div class="llm-entry complete">
+                        html += `<div class="llm-entry complete provider-${pf}">
                             <div class="llm-step">Step ${stepNumber}:</div>
                             <div class="llm-message">${trimmedResponse}</div>
                             <div class="llm-meta">${interaction.type || 'unknown'}${modelLabel}</div>
