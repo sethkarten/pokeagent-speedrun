@@ -1545,7 +1545,8 @@ async def get_comprehensive_state():
             try:
                 from utils.state_formatter import _format_porymap_info
 
-                porymap_result = _format_porymap_info(current_location, player_coords)
+                _mr = getattr(env, "memory_reader", None) if env else None
+                porymap_result = _format_porymap_info(current_location, player_coords, memory_reader=_mr)
                 if isinstance(porymap_result, tuple):
                     _, porymap_data = porymap_result
                     if porymap_data and porymap_data.get("grid"):

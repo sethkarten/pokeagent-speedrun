@@ -511,7 +511,7 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         # an overworld-style state where map traversal context is actually useful.
         game_state_name = game_data.get('game_state')
         if game_state_name in {'overworld', 'dialog'}:
-            map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
+            map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data, memory_reader=state_data.get('_memory_reader'))
             context_parts.extend(map_context)
         elif game_state_name:
             context_parts.append("\n=== LOCATION & MAP INFO ===")
@@ -636,7 +636,7 @@ def _format_party_info(player_data, game_data):
     
     return context_parts
 
-def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None):
+def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None, memory_reader=None):
     """Format map and traversability information using MapStitcher."""
     context_parts = []
     
@@ -713,7 +713,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
     
     # Add porymap ground truth data (JSON and ASCII map)
-    porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count)
+    porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count, memory_reader=memory_reader)
     if isinstance(porymap_result, tuple):
         porymap_info, porymap_data = porymap_result
         if porymap_info:

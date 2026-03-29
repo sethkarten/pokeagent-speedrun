@@ -3,7 +3,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -430,7 +430,7 @@ def _get_porymap_map_name(location_name: Optional[str]) -> Optional[str]:
     return ROM_TO_PORYMAP_MAP.get(location_name)
 
 
-def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None, badge_count: int = 0) -> List[str]:
+def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None, badge_count: int = 0, memory_reader: Any = None) -> List[str]:
     """
     Format porymap ground truth data (JSON and ASCII map) for the agent.
     
@@ -438,6 +438,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         location_name: Current location name from ROM
         player_coords: Player's (x, y) coordinates
         badge_count: Number of badges player has (for game-state-aware map selection)
+        memory_reader: Optional PokemonEmeraldReader for live metatile reads on dynamic maps
     
     Returns list of formatted strings to add to context.
     """
@@ -544,6 +545,12 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         if not json_map:
             logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
             return context_parts
+
+        # For dynamic maps (e.g. Mauville Gym), replace static grid with live
+        # emulator metatiles so barrier changes are reflected in the agent's map.
+        if memory_reader is not None:
+            from utils.mapping.dynamic_map_overlay import apply_live_overlay_to_json_map
+            apply_live_overlay_to_json_map(json_map, memory_reader, location_name)
 
         # Filter grid based on player elevation to handle multi-level maps
         # For caves/dungeons with multiple connected levels, be more permissive
