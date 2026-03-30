@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 import struct
 from typing import Optional, Dict, Any, List, Tuple
 import logging
@@ -274,7 +275,7 @@ class PokemonEmeraldReader:
         
         # Track A button presses to prevent dialogue cache repopulation
         self._a_button_pressed_time = 0.0
-        
+
     def _invalidate_mem_cache(self):
         self._mem_cache = {}
     
@@ -1152,17 +1153,15 @@ class PokemonEmeraldReader:
             return "Unknown"
 
     def read_badges(self) -> List[str]:
-        """Read obtained badges"""
+        """Read obtained badges from system save flags (badge_01..badge_08)."""
         try:
-            badge_byte = self._read_u8(self.addresses.PLAYER_BADGES)
             badge_names = ["Stone", "Knuckle", "Dynamo", "Heat", "Balance", "Feather", "Mind", "Rain"]
-            
-            obtained_badges = []
-            for i, badge_name in enumerate(badge_names):
-                if badge_byte & (1 << i):
-                    obtained_badges.append(badge_name)
-            
-            return obtained_badges
+            flags = self.read_flags()
+            return [
+                badge_name
+                for i, badge_name in enumerate(badge_names, start=1)
+                if flags.get(f"badge_{i:02d}", False)
+            ]
         except Exception as e:
             logger.warning(f"Failed to read badges: {e}")
             return []

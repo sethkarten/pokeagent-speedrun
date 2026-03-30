@@ -4299,7 +4299,15 @@ async def sync_llm_metrics(request: Request):
             # Update cumulative metrics (but preserve server-managed metrics like start_time and total_actions)
             server_start_time = llm_logger.cumulative_metrics.get("start_time")
             server_total_actions = llm_logger.cumulative_metrics.get("total_actions")
+            server_total_tokens = llm_logger.cumulative_metrics.get("total_tokens", 0)
+            server_prompt_tokens = llm_logger.cumulative_metrics.get("prompt_tokens", 0)
+            server_completion_tokens = llm_logger.cumulative_metrics.get("completion_tokens", 0)
+            server_cached_tokens = llm_logger.cumulative_metrics.get("cached_tokens", 0)
+            server_cache_write_tokens = llm_logger.cumulative_metrics.get("cache_write_tokens", 0)
+            server_total_cost = llm_logger.cumulative_metrics.get("total_cost", 0.0)
+            server_total_llm_calls = llm_logger.cumulative_metrics.get("total_llm_calls", 0)
             server_milestones = llm_logger.cumulative_metrics.get("milestones")
+            server_steps = llm_logger.cumulative_metrics.get("steps") or []
             server_last_milestone_step = llm_logger.cumulative_metrics.get("_last_milestone_step")
             server_last_milestone_tokens = llm_logger.cumulative_metrics.get("_last_milestone_tokens")
             server_last_milestone_time = llm_logger.cumulative_metrics.get("_last_milestone_time")
@@ -4322,6 +4330,70 @@ async def sync_llm_metrics(request: Request):
             # Preserve milestone tracking from server (authoritative source)
             if server_milestones is not None:
                 llm_logger.cumulative_metrics["milestones"] = server_milestones
+            # Preserve/merge historical step rows so resumed runs continue on top of prior backups.
+            client_steps = cumulative_metrics.get("steps") or []
+            if server_steps:
+                server_max_step = 0
+                for s in server_steps:
+                    try:
+                        server_max_step = max(server_max_step, int(s.get("step") or 0))
+                    except (TypeError, ValueError):
+                        continue
+
+                client_min_step = None
+                client_max_step = 0
+                for s in client_steps:
+                    try:
+                        v = int(s.get("step") or 0)
+                        client_max_step = max(client_max_step, v)
+                        client_min_step = v if client_min_step is None else min(client_min_step, v)
+                    except (TypeError, ValueError):
+                        continue
+
+                # If client restarts from step 1 while server already has historical steps,
+                # offset incoming client steps so continuity is preserved.
+                step_offset = server_max_step if (client_steps and (client_min_step or 0) <= 1 and client_max_step <= server_max_step) else 0
+                rebased_client_steps = []
+                for s in client_steps:
+                    e = dict(s)
+                    try:
+                        e["step"] = int(e.get("step") or 0) + step_offset
+                    except (TypeError, ValueError):
+                        pass
+                    rebased_client_steps.append(e)
+
+                merged_steps = []
+                by_step = {}
+                for s in server_steps:
+                    try:
+                        sid = int(s.get("step") or 0)
+                    except (TypeError, ValueError):
+                        sid = None
+                    if sid is None:
+                        merged_steps.append(s)
+                    else:
+                        by_step[sid] = s
+
+                for s in rebased_client_steps:
+                    try:
+                        sid = int(s.get("step") or 0)
+                    except (TypeError, ValueError):
+                        sid = None
+                    if sid is None:
+                        merged_steps.append(s)
+                    else:
+                        prev = by_step.get(sid)
+                        if prev is None:
+                            by_step[sid] = s
+                        else:
+                            prev_ts = prev.get("timestamp") or 0
+                            cur_ts = s.get("timestamp") or 0
+                            by_step[sid] = s if cur_ts >= prev_ts else prev
+
+                merged_steps.extend([by_step[k] for k in sorted(by_step.keys())])
+                llm_logger.cumulative_metrics["steps"] = merged_steps
+            else:
+                llm_logger.cumulative_metrics["steps"] = client_steps
             if server_last_milestone_step is not None:
                 llm_logger.cumulative_metrics["_last_milestone_step"] = server_last_milestone_step
             if server_last_milestone_tokens is not None:
@@ -4343,12 +4415,55 @@ async def sync_llm_metrics(request: Request):
             if server_last_update_time is not None:
                 llm_logger.cumulative_metrics["last_update_time"] = server_last_update_time
 
+            # Keep cumulative totals monotonic so restored totals are never downgraded by stale client payloads.
+            llm_logger.cumulative_metrics["total_tokens"] = max(
+                server_total_tokens, llm_logger.cumulative_metrics.get("total_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["prompt_tokens"] = max(
+                server_prompt_tokens, llm_logger.cumulative_metrics.get("prompt_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["completion_tokens"] = max(
+                server_completion_tokens, llm_logger.cumulative_metrics.get("completion_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["cached_tokens"] = max(
+                server_cached_tokens, llm_logger.cumulative_metrics.get("cached_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["cache_write_tokens"] = max(
+                server_cache_write_tokens, llm_logger.cumulative_metrics.get("cache_write_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["total_cost"] = max(
+                server_total_cost, llm_logger.cumulative_metrics.get("total_cost", 0.0)
+            )
+            llm_logger.cumulative_metrics["total_llm_calls"] = max(
+                server_total_llm_calls, llm_logger.cumulative_metrics.get("total_llm_calls", 0)
+            )
+
             # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
             global latest_metrics
             with step_lock:
                 for key, value in cumulative_metrics.items():
-                    if key in latest_metrics and key not in ["total_actions", "start_time", "total_run_time"]:
+                    if key in latest_metrics and key not in [
+                        "total_actions",
+                        "start_time",
+                        "total_run_time",
+                        "total_tokens",
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "cached_tokens",
+                        "cache_write_tokens",
+                        "total_cost",
+                        "total_llm_calls",
+                    ]:
                         latest_metrics[key] = value
+
+            with step_lock:
+                latest_metrics["total_tokens"] = llm_logger.cumulative_metrics.get("total_tokens", 0)
+                latest_metrics["prompt_tokens"] = llm_logger.cumulative_metrics.get("prompt_tokens", 0)
+                latest_metrics["completion_tokens"] = llm_logger.cumulative_metrics.get("completion_tokens", 0)
+                latest_metrics["cached_tokens"] = llm_logger.cumulative_metrics.get("cached_tokens", 0)
+                latest_metrics["cache_write_tokens"] = llm_logger.cumulative_metrics.get("cache_write_tokens", 0)
+                latest_metrics["total_cost"] = llm_logger.cumulative_metrics.get("total_cost", 0.0)
+                latest_metrics["total_llm_calls"] = llm_logger.cumulative_metrics.get("total_llm_calls", 0)
 
             # Persist to cache so steps/milestones are saved promptly
             llm_logger.save_cumulative_metrics()

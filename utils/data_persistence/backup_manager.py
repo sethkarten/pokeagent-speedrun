@@ -8,11 +8,28 @@ import os
 import shutil
 import logging
 import zipfile
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _load_metrics_summary(path: Path) -> Optional[dict]:
+    try:
+        if not path.exists():
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return {
+            "last_update_time": d.get("last_update_time", 0),
+            "total_actions": d.get("total_actions", 0),
+            "total_tokens": d.get("total_tokens", 0),
+            "run_id": d.get("metadata", {}).get("run_id"),
+        }
+    except Exception:
+        return None
 
 
 def create_cache_backup(
@@ -230,6 +247,27 @@ def restore_cache_from_backup(
                 elif item.is_dir():
                     shutil.copytree(item, dest, dirs_exist_ok=True)
                     logger.debug(f"Copied directory: {item.name}")
+
+            # Prefer the latest source-run cumulative metrics when available.
+            # Backups are objective-time snapshots, but resumed runs should continue from
+            # the source run's latest aggregate totals.
+            restored_metrics = cache_path / "cumulative_metrics.json"
+            source_run_cache = cache_path.parent / extracted_run_dir.name
+            source_latest_metrics = source_run_cache / "cumulative_metrics.json"
+
+            restored_summary = _load_metrics_summary(restored_metrics)
+            source_summary = _load_metrics_summary(source_latest_metrics)
+
+            if (
+                restored_summary
+                and source_summary
+                and source_summary.get("last_update_time", 0) > restored_summary.get("last_update_time", 0)
+            ):
+                shutil.copy2(source_latest_metrics, restored_metrics)
+                logger.info(
+                    "Promoted latest cumulative_metrics.json from source run cache: %s",
+                    source_latest_metrics,
+                )
 
         logger.info(f"✅ Successfully restored cache to {cache_dir}")
         return True

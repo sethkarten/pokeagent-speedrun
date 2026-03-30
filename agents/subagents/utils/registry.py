@@ -55,6 +55,7 @@ BUILTIN_SUBAGENT_TOOL_NAMES: FrozenSet[str] = frozenset({
     "subagent_summarize",
     "subagent_battler",
     "subagent_plan_objectives",
+    "subagent_cleanup_run_artifacts",
 })
 
 
@@ -346,6 +347,71 @@ LOCAL_SUBAGENT_SPECS = (
                 },
             },
             "required": ["window_range", "directive"],
+        },
+    ),
+    LocalSubagentSpec(
+        tool_name="subagent_cleanup_run_artifacts",
+        handler_type="one_step",
+        interaction_name="Subagent_Cleanup_Run_Artifacts",
+        handler_method="_execute_subagent_cleanup_run_artifacts",
+        description=(
+            "Delete local run/cache artifacts under the repo: optional file mtime "
+            "cutoff and/or top-level directory names embedding YYYYMMDD (or "
+            "run_YYYYMMDD_). Targets default roots .pokeagent_cache, backups, and "
+            "run_data. No LLM — deterministic filesystem cleanup. Defaults to "
+            "dry_run true; set dry_run false to actually delete. Requires at least "
+            "one of file_mtime_on_or_after or directory_embedded_date_on_or_after."
+        ),
+        parameters={
+            "type_": "OBJECT",
+            "properties": {
+                "reasoning": {
+                    "type_": "STRING",
+                    "description": (
+                        "Why this cleanup is appropriate (audit trail). "
+                        "Example: 'Free disk after experiment batch; matches Mar 27+ policy.'"
+                    ),
+                },
+                "dry_run": {
+                    "type_": "BOOLEAN",
+                    "description": (
+                        "If true (default), only report counts and sample paths without "
+                        "deleting. Set false to perform deletion."
+                    ),
+                },
+                "file_mtime_on_or_after": {
+                    "type_": "STRING",
+                    "description": (
+                        "Optional. Delete files under the chosen roots whose modification "
+                        "time is >= this instant (local time). Formats: YYYY-MM-DD or "
+                        "YYYY-MM-DD HH:MM:SS."
+                    ),
+                },
+                "directory_embedded_date_on_or_after": {
+                    "type_": "STRING",
+                    "description": (
+                        "Optional. Remove top-level subdirectories of each root whose "
+                        "name starts with YYYYMMDD_ or run_YYYYMMDD_ and the date is "
+                        ">= this calendar day. Use YYYYMMDD or YYYY-MM-DD."
+                    ),
+                },
+                "roots": {
+                    "type_": "ARRAY",
+                    "items": {"type_": "STRING"},
+                    "description": (
+                        "Optional relative path names under the repo root. "
+                        "Default: [\".pokeagent_cache\", \"backups\", \"run_data\"]."
+                    ),
+                },
+                "max_path_samples": {
+                    "type_": "INTEGER",
+                    "description": (
+                        "Optional. Max sample paths per category in the JSON result "
+                        "(default 80)."
+                    ),
+                },
+            },
+            "required": ["reasoning"],
         },
     ),
 )

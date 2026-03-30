@@ -1242,6 +1242,51 @@ class PokeAgent:
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
+    def _execute_subagent_cleanup_run_artifacts(self, arguments: dict) -> str:
+        """Remove cache/run files and/or dated top-level dirs (deterministic; optional dry_run)."""
+        try:
+            from utils.run_artifact_cleanup import run_run_artifact_cleanup
+
+            dry = arguments.get("dry_run", True)
+            if isinstance(dry, str):
+                dry = dry.strip().lower() in ("1", "true", "yes", "on")
+            max_samples = arguments.get("max_path_samples", 80)
+            try:
+                max_samples = int(max_samples)
+            except (TypeError, ValueError):
+                max_samples = 80
+            max_samples = max(1, min(max_samples, 500))
+
+            roots = arguments.get("roots")
+            if roots is not None and not isinstance(roots, list):
+                roots = None
+
+            result = run_run_artifact_cleanup(
+                reasoning=str(arguments.get("reasoning", "")),
+                dry_run=bool(dry),
+                file_mtime_on_or_after=arguments.get("file_mtime_on_or_after"),
+                directory_embedded_date_on_or_after=arguments.get(
+                    "directory_embedded_date_on_or_after"
+                ),
+                roots=roots,
+                max_path_samples=max_samples,
+            )
+            logger.info(
+                "subagent_cleanup_run_artifacts dry_run=%s success=%s dirs=%s/%s files=%s/%s warnings=%s",
+                result.dry_run,
+                result.success,
+                result.dirs_removed,
+                result.dirs_would_remove,
+                result.files_deleted,
+                result.files_would_delete,
+                len(result.warnings),
+            )
+            return json.dumps(result.as_dict(), indent=2, default=str)
+        except Exception as e:
+            logger.error(f"Error in cleanup_run_artifacts: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
     def _execute_subagent_battler(self, arguments: dict) -> str:
         """Delegate the active battle to a local looping battler."""
         try:
