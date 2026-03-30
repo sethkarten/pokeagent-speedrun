@@ -823,6 +823,7 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
             map_info['porymap']['grid'] = porymap_data.get('grid')
             map_info['porymap']['objects'] = porymap_data.get('objects', [])
             map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
+            map_info['porymap']['ascii'] = porymap_data.get('ascii')
             map_info['porymap']['raw_tiles'] = porymap_data.get('raw_tiles')  # Include raw tiles with elevation
 
             # Debug: Verify the grid was stored
@@ -1359,6 +1360,8 @@ def get_movement_preview(state_data):
     # Try to use porymap grid first (elevation-filtered and more accurate)
     porymap = map_info.get('porymap', {})
     porymap_grid = porymap.get('grid')
+    porymap_ascii = porymap.get('ascii')
+    porymap_ascii_lines = porymap_ascii.split('\n') if isinstance(porymap_ascii, str) and porymap_ascii else []
     raw_tiles_for_elevation = porymap.get('raw_tiles') if porymap else None
 
     # Fallback to memory-read tiles if porymap not available
@@ -1368,8 +1371,13 @@ def get_movement_preview(state_data):
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
-    # Get NPCs from map info
-    npcs = map_info.get('object_events', [])
+    # Prefer reconciled/flag-filtered porymap objects so movement preview
+    # matches the final rendered porymap ASCII map.
+    porymap_objects = porymap.get('objects') if isinstance(porymap, dict) else None
+    if isinstance(porymap_objects, list) and porymap_objects:
+        npcs = porymap_objects
+    else:
+        npcs = map_info.get('object_events', [])
     
     directions = {
         'UP': (0, -1),
@@ -1425,6 +1433,12 @@ def get_movement_preview(state_data):
             # Use porymap grid (already filtered by elevation)
             try:
                 tile_symbol = porymap_grid[new_world_y][new_world_x]
+                # If available, use the final rendered ASCII symbol (includes N/I/O markers)
+                # so movement preview reflects exactly what the agent sees.
+                if 0 <= new_world_y < len(porymap_ascii_lines):
+                    ascii_row = porymap_ascii_lines[new_world_y]
+                    if 0 <= new_world_x < len(ascii_row):
+                        tile_symbol = ascii_row[new_world_x]
                 target_tile = None  # Don't have the raw tile data when using porymap grid
 
                 # Determine if movement is blocked by terrain (using porymap symbols)

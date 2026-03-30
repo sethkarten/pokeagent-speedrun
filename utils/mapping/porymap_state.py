@@ -1052,6 +1052,8 @@ def _format_porymap_info(
                             line[px] = 'P'
                             ascii_lines[py] = ''.join(line)
             ascii_map = '\n'.join(ascii_lines)
+            # Keep json_map ASCII aligned with the final rendered map shown to the LLM/UI.
+            json_map["ascii"] = ascii_map
             
             context_parts.append("\nASCII Map:")
             context_parts.append(ascii_map)

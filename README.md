@@ -45,8 +45,6 @@ For module-level detail, see the README in each area:
 - **[pokemon_env/README.md](pokemon_env/README.md)** — Emulator, memory reader, Porymap map data.
 - **[utils/README.md](utils/README.md)** — Mapping, persistence, VLM backends, metrics.
 
-Optional maintainer notes: **`System-Design/README.md`** (folder is often gitignored; create locally if missing).
-
 ## Features
 
 - **Multiple VLM backends**: OpenAI, OpenRouter, Google Gemini, Anthropic, (via `utils/vlm_backends.py`)
