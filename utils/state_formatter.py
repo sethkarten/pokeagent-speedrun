@@ -1450,7 +1450,7 @@ def get_movement_preview(state_data):
                 elif tile_symbol == '#':
                     tile_description = 'Wall'
                 elif tile_symbol == '^':
-                    tile_description = 'Walkable (different elevation, use ramp/stairs)'
+                    tile_description = 'Walkable (different elevation)'
                 elif tile_symbol == 'W':
                     tile_description = 'Water'
                 else:

@@ -482,6 +482,59 @@ def _graphics_ids_compatible(static_gid: Any, runtime_gid: Any) -> bool:
     return True
 
 
+NON_NPC_GRAPHICS_KEYWORDS = {
+    "TRUCK",
+}
+
+
+def _is_item_object_event(obj: Dict[str, Any]) -> bool:
+    """Best-effort item object detection."""
+    graphics_id = str(obj.get("graphics_id", "")).upper()
+    if "ITEM_BALL" in graphics_id or "ITEMBALL" in graphics_id:
+        return True
+
+    script_name = str(obj.get("script", "")).upper()
+    if "ITEMBALL" in script_name or "ITEM_BALL" in script_name:
+        return True
+    return False
+
+
+def _is_npc_object_event(obj: Dict[str, Any]) -> bool:
+    """Best-effort NPC detection without assuming unknowns are items."""
+    if _is_item_object_event(obj):
+        return False
+
+    graphics_id = str(obj.get("graphics_id", "")).upper()
+    if any(keyword in graphics_id for keyword in NON_NPC_GRAPHICS_KEYWORDS):
+        return False
+
+    trainer_type = str(obj.get("trainer_type", "")).upper()
+    if trainer_type and trainer_type != "TRAINER_TYPE_NONE":
+        return True
+
+    movement_type = str(obj.get("movement_type", "")).upper()
+    if movement_type and movement_type != "MOVEMENT_TYPE_NONE":
+        return True
+
+    local_id = str(obj.get("local_id", "")).strip()
+    if local_id:
+        return True
+
+    # Most character object events use OBJ_EVENT_GFX_*.
+    if graphics_id.startswith("OBJ_EVENT_GFX_"):
+        return True
+    return False
+
+
+def _object_ascii_marker(obj: Dict[str, Any]) -> str:
+    """Choose ASCII marker for reconciled object events."""
+    if _is_item_object_event(obj):
+        return "I"
+    if _is_npc_object_event(obj):
+        return "N"
+    return "O"
+
+
 def _format_porymap_info(
     location_name: Optional[str],
     player_coords: Optional[Tuple[int, int]] = None,
@@ -964,9 +1017,25 @@ def _format_porymap_info(
         context_parts.append(f"Location: {json_map.get('name', porymap_map_name)}")
         context_parts.append(f"Dimensions: {json_map['dimensions']['width']}x{json_map['dimensions']['height']}")
         
-        # Add ASCII map with player position marked
+        # Add ASCII map with reconciled NPCs ('N') and player ('P') marked.
         if json_map.get('ascii'):
             ascii_map = json_map['ascii']
+            ascii_lines = ascii_map.split('\n')
+
+            # Stamp visible objects as markers for the LLM-facing map.
+            # Uses reconciled/flag-filtered objects, so hidden/static-only
+            # objects are not rendered. Item balls are shown as 'I';
+            # character/object events are shown as 'N'.
+            for obj in json_map.get("objects", []):
+                ox = obj.get("x")
+                oy = obj.get("y")
+                if not isinstance(ox, int) or not isinstance(oy, int):
+                    continue
+                if 0 <= oy < len(ascii_lines):
+                    line = list(ascii_lines[oy])
+                    if 0 <= ox < len(line):
+                        line[ox] = _object_ascii_marker(obj)
+                        ascii_lines[oy] = ''.join(line)
 
             # Insert player position 'P' if provided
             if player_coords and json_map.get('grid'):
@@ -975,22 +1044,18 @@ def _format_porymap_info(
 
                 # Check if player position is within map bounds
                 if 0 <= py < len(grid) and 0 <= px < len(grid[0]) if grid else False:
-                    # Split ASCII map into lines
-                    ascii_lines = ascii_map.split('\n')
-
                     # Find the line corresponding to player's Y coordinate
                     if py < len(ascii_lines):
                         line = list(ascii_lines[py])
                         # Replace character at player's X position with 'P'
                         if px < len(line):
-                            original_char = line[px]
                             line[px] = 'P'
                             ascii_lines[py] = ''.join(line)
-                            ascii_map = '\n'.join(ascii_lines)
+            ascii_map = '\n'.join(ascii_lines)
             
             context_parts.append("\nASCII Map:")
             context_parts.append(ascii_map)
-            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, '^' = walkable (different elevation, use ramp/stairs), 'I' = item, '~' = tall grass, 'W' = water, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
+            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, '^' = walkable (different elevation), 'N' = NPC, 'I' = item, 'O' = other object, '~' = tall grass, 'W' = water, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
         
         # NOTE: Warps, Objects/NPCs, and Connections lists are DEPRECATED
         # This data is already included in the Map Data (JSON) section below.
