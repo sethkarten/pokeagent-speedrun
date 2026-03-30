@@ -469,6 +469,15 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.append("\n=== PARTY STATUS ===")
         party_context = _format_party_info(player_data, game_data)
         context_parts.extend(party_context)
+
+        # Inventory information (battle-relevant subset)
+        inventory_context = _format_inventory_info(
+            player_data,
+            game_data,
+            include_only_pockets={"poke_balls"},
+            header="\n=== BAG STATUS ===",
+        )
+        context_parts.extend(inventory_context)
         
         # Trainer info if available
         if 'name' in player_data and player_data['name']:
@@ -505,6 +514,10 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         # Pokemon Party (check both player and game sections)
         party_context = _format_party_info(player_data, game_data)
         context_parts.extend(party_context)
+
+        # Inventory
+        inventory_context = _format_inventory_info(player_data, game_data, header="\nBag Inventory:")
+        context_parts.extend(inventory_context)
 
         # Menu-like UI screens (e.g. naming/gender selection) can have incomplete map data.
         # Preserve the screenshot-driven state but skip heavy map formatting unless we're in
@@ -634,6 +647,48 @@ def _format_party_info(player_data, game_data):
     else:
         context_parts.append("No Pokemon in party")
     
+    return context_parts
+
+
+def _format_inventory_info(player_data, game_data, include_only_pockets=None, header=None):
+    """Format bag inventory information from structured player/game state."""
+    context_parts = []
+    inventory = player_data.get('inventory') or game_data.get('inventory')
+    if not isinstance(inventory, dict):
+        return context_parts
+
+    pocket_labels = {
+        "items": "Items",
+        "key_items": "Key Items",
+        "poke_balls": "Poke Balls",
+        "tms_hms": "TMs/HMs",
+        "berries": "Berries",
+    }
+    if include_only_pockets is not None:
+        selected_pockets = [k for k in pocket_labels if k in include_only_pockets]
+    else:
+        selected_pockets = list(pocket_labels.keys())
+
+    non_empty_pockets = [k for k in selected_pockets if inventory.get(k)]
+    if not non_empty_pockets:
+        return context_parts
+
+    if header:
+        context_parts.append(header)
+
+    max_items_per_pocket = 20
+    for pocket_key in non_empty_pockets:
+        items = inventory.get(pocket_key) or []
+        label = pocket_labels[pocket_key]
+        context_parts.append(f"  {label}:")
+        for entry in items[:max_items_per_pocket]:
+            item_name = entry.get("name", f"Item_{entry.get('item_id', '?')}")
+            quantity = entry.get("quantity", "?")
+            context_parts.append(f"    - {item_name} x{quantity}")
+        remaining = len(items) - max_items_per_pocket
+        if remaining > 0:
+            context_parts.append(f"    - ... and {remaining} more")
+
     return context_parts
 
 def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None, memory_reader=None):

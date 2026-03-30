@@ -6,7 +6,20 @@ import time
 
 from mgba._pylib import ffi, lib
 
-from pokemon_env.emerald_utils import ADDRESSES, Pokemon_format, parse_pokemon, EmeraldCharmap
+from pokemon_env.emerald_utils import (
+    ADDRESSES,
+    BAG_BERRIES_COUNT,
+    BAG_ITEMS_COUNT,
+    BAG_KEYITEMS_COUNT,
+    BAG_POKEBALLS_COUNT,
+    BAG_TMHM_COUNT,
+    EmeraldCharmap,
+    ItemSlot_format,
+    Pokemon_format,
+    SAVE_BLOCK_1_OFFSETS,
+    _item_id_to_name,
+    parse_pokemon,
+)
 from .enums import MetatileBehavior, StatusCondition, Tileset, PokemonType, PokemonSpecies, Move, Badge, MapLocation
 from .types import PokemonData
 from utils.ocr_dialogue import create_ocr_detector
@@ -1181,19 +1194,77 @@ class PokemonEmeraldReader:
             
             item_count = self._read_u16(count_addr)
             items = []
+            quantity_key = self._get_security_key() & 0xFFFF
             
             for i in range(min(item_count, 30)):
                 item_id = self._read_u16(items_addr + i * 4)
-                quantity = self._read_u16(items_addr + i * 4 + 2)
+                quantity = self._read_u16(items_addr + i * 4 + 2) ^ quantity_key
                 
-                if item_id > 0:
-                    item_name = f"Item_{item_id:03d}"
+                if item_id > 0 and quantity > 0:
+                    item_name = _item_id_to_name(item_id)
                     items.append((item_name, quantity))
             
             return items
         except Exception as e:
             logger.warning(f"Failed to read items: {e}")
             return []
+
+    def _decrypt_bag_quantity(self, encrypted_quantity: int) -> int:
+        """Bag quantities are XOR-encrypted with the low 16 bits of the save encryption key."""
+        return encrypted_quantity ^ (self._get_security_key() & 0xFFFF)
+
+    def _empty_inventory_template(self) -> Dict[str, List[Dict[str, Any]]]:
+        return {
+            "items": [],
+            "key_items": [],
+            "poke_balls": [],
+            "tms_hms": [],
+            "berries": [],
+        }
+
+    def read_full_inventory(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Read all bag pockets from SaveBlock1 and return structured inventory."""
+        inventory = self._empty_inventory_template()
+        try:
+            save_block1_ptr = self._read_u32(ADDRESSES["gSaveBlock1Ptr"])
+            if save_block1_ptr == 0:
+                return inventory
+
+            slot_size = struct.calcsize(ItemSlot_format)
+            pocket_specs = {
+                "items": ("bagPocket_Items", BAG_ITEMS_COUNT),
+                "key_items": ("bagPocket_KeyItems", BAG_KEYITEMS_COUNT),
+                "poke_balls": ("bagPocket_PokeBalls", BAG_POKEBALLS_COUNT),
+                "tms_hms": ("bagPocket_TMHM", BAG_TMHM_COUNT),
+                "berries": ("bagPocket_Berries", BAG_BERRIES_COUNT),
+            }
+
+            for inventory_key, (field_name, max_slots) in pocket_specs.items():
+                field_offset = SAVE_BLOCK_1_OFFSETS.get(field_name)
+                if field_offset is None:
+                    continue
+
+                pocket_addr = save_block1_ptr + field_offset
+                pocket_items: List[Dict[str, Any]] = []
+                for slot_idx in range(max_slots):
+                    slot_addr = pocket_addr + slot_idx * slot_size
+                    item_id = self._read_u16(slot_addr)
+                    quantity = self._decrypt_bag_quantity(self._read_u16(slot_addr + 2))
+                    if item_id <= 0 or quantity <= 0:
+                        continue
+
+                    pocket_items.append(
+                        {
+                            "item_id": item_id,
+                            "name": _item_id_to_name(item_id),
+                            "quantity": quantity,
+                        }
+                    )
+
+                inventory[inventory_key] = pocket_items
+        except Exception as e:
+            logger.warning(f"Failed to read full inventory: {e}")
+        return inventory
 
     def read_item_count(self) -> int:
         """Read number of items in bag"""
@@ -2435,7 +2506,7 @@ class PokemonEmeraldReader:
         logger.info("Starting comprehensive state reading")
         state = {
             "visual": {"screenshot": None, "resolution": [240, 160]},
-            "player": {"position": None, "location": None, "name": None},
+            "player": {"position": None, "location": None, "name": None, "inventory": None},
             "game": {
                 "money": None, "party": None, "game_state": None, "is_in_battle": None,
                 "time": None, "badges": None, "items": None, "item_count": None,
@@ -2566,6 +2637,11 @@ class PokemonEmeraldReader:
                 logger.info(f"Final state party: {state['player']['party']}")
             else:
                 self._rate_limited_warning("No Pokemon found in party", "party_empty")
+
+            # Bag inventory (all pockets)
+            inventory = self.read_full_inventory()
+            if any(inventory.values()):
+                state["player"]["inventory"] = inventory
         
                 
         except Exception as e:
