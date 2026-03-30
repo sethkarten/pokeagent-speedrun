@@ -442,14 +442,14 @@ class Pathfinder:
                 for x, cell in enumerate(row):
                     # In porymap ASCII:
                     # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), 'D' (doors), '←↓↑→' (ledges - directionally walkable)
-                    # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf)
+                    # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf), '^' (different elevation)
                     # Special: '&' (cycling road) - block if at different elevation
                     # CRITICAL: 'D' (door) and 'S' (stairs) tiles are ALWAYS walkable
 
                     pos = (x, y)
 
-                    # Always block walls and out of bounds
-                    if cell in ["#", "X"]:
+                    # Always block walls, out of bounds, and different-elevation tiles
+                    if cell in ["#", "X", "^"]:
                         # CRITICAL: Never block the starting position - player is there so it must be walkable
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
@@ -563,8 +563,8 @@ class Pathfinder:
                 for x, cell in enumerate(row):
                     pos = (x, y)
 
-                    # Always block walls and out of bounds
-                    if cell in ["#", "X"]:
+                    # Always block walls, out of bounds, and different-elevation tiles
+                    if cell in ["#", "X", "^"]:
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
@@ -715,7 +715,7 @@ class Pathfinder:
         """
         if isinstance(tile, str):
             # String representation - check for wall symbols
-            return tile in ["#", "X", "█", "▓"]
+            return tile in ["#", "X", "^", "█", "▓"]
 
         # Use shared walkability function (inverted)
         from utils.mapping.map_formatter import is_tile_walkable
@@ -818,30 +818,19 @@ class Pathfinder:
         dy = to_pos[1] - from_pos[1]  # positive = moving south, negative = moving north
 
         # ========================================================================
-        # CRITICAL: Trust the filtered grid from state_formatter
+        # Elevation Checking Logic
         # ========================================================================
-        # If both tiles are marked as walkable in the grid, trust the grid filtering
-        # which already handled elevation connectivity. This allows pathfinding through
-        # ladders and slopes that connect different elevations.
+        # Always check elevation via raw_tiles. The grid filter marks unreachable
+        # tiles as '#', but adjacent reachable tiles at different elevations still
+        # need per-edge validation (e.g. E3 next to E0 ramp).
         # ========================================================================
         walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&"]
         both_walkable = from_symbol in walkable_symbols and dest_symbol in walkable_symbols
 
-        # Skip elevation blocking if both tiles are walkable - trust the filtered grid
-        if both_walkable:
-            # Still need to handle ledge directionality and cycling road patterns below
-            # but skip the elevation difference blocking
-            pass
+        # Check elevation differences and only allow transitions through valid
+        # connectors (E0 tiles, stairs, doors, ladders, ledges).
         # ========================================================================
-        # Elevation Checking Logic (Re-enabled 2025-12-15 for bridges)
-        # ========================================================================
-        # Check for SIGNIFICANT elevation differences (>= 3) to handle bridges and
-        # elevated platforms. Small differences (0-2) are cosmetic and allowed.
-        #
-        # This prevents pathfinding through bridges (e.g., Cycling Road on Route 110
-        # at elevation 3) while the player is on the ground underneath (elevation 0).
-        # ========================================================================
-        elif "raw_tiles" in map_data:
+        if "raw_tiles" in map_data:
             raw_tiles = map_data["raw_tiles"]
             try:
                 # Get elevation from raw tiles
