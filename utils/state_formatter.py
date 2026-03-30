@@ -18,6 +18,7 @@ from typing import Optional, List, Tuple
 from pokemon_env.enums import MetatileBehavior
 from utils import state_formatter as sf
 from utils.mapping.porymap_state import (
+    PorymapResult,
     ROM_TO_PORYMAP_MAP,
     _format_porymap_info,
     _get_pokeemerald_root,
@@ -768,11 +769,54 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
     
     # Add porymap ground truth data (JSON and ASCII map)
-    porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count, memory_reader=memory_reader)
-    if isinstance(porymap_result, tuple):
-        porymap_info, porymap_data = porymap_result
-        if porymap_info:
-            context_parts.extend(porymap_info)
+    # region agent log
+    try:
+        import time
+        runtime_events = map_info.get("object_events", [])
+        with open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-b11f04.log", "a", encoding="utf-8") as f:
+            f.write(
+                json.dumps(
+                    {
+                        "sessionId": "b11f04",
+                        "runId": "run1",
+                        "hypothesisId": "H5",
+                        "location": "state_formatter.py:_format_map_info:before_porymap_call",
+                        "message": "Passing runtime object_events into porymap formatter",
+                        "data": {
+                            "location_name": location_name,
+                            "runtime_count": len(runtime_events),
+                            "runtime_sample": [
+                                {
+                                    "local_id": obj.get("local_id"),
+                                    "graphics_id": obj.get("graphics_id"),
+                                    "x": obj.get("current_x", obj.get("x")),
+                                    "y": obj.get("current_y", obj.get("y")),
+                                    "source": obj.get("source"),
+                                }
+                                for obj in runtime_events[:8]
+                            ],
+                        },
+                        "timestamp": int(time.time() * 1000),
+                    },
+                    ensure_ascii=True,
+                )
+                + "\n"
+            )
+    except Exception:
+        pass
+    # endregion
+    porymap_result = _format_porymap_info(
+        location_name,
+        player_coords,
+        badge_count=badge_count,
+        memory_reader=memory_reader,
+        runtime_object_events=map_info.get("object_events", []),
+    )
+    if isinstance(porymap_result, PorymapResult):
+        if porymap_result.context_parts:
+            context_parts.extend(porymap_result.context_parts)
+        if porymap_result.json_map:
+            porymap_data = porymap_result.json_map
             # Store porymap data in map_info for pathfinding (don't add to context text)
             if 'porymap' not in map_info:
                 map_info['porymap'] = {}
@@ -785,8 +829,6 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
             stored_grid = map_info['porymap'].get('grid')
             if stored_grid:
                 logger.debug(f"Stored elevation-filtered porymap grid: {len(stored_grid)}x{len(stored_grid[0]) if stored_grid else 0}")
-    elif porymap_result:
-        context_parts.extend(porymap_result)
     
     return context_parts
 
@@ -1420,11 +1462,10 @@ def get_movement_preview(state_data):
                 preview_info['tile_description'] = tile_description
                 preview_info['npc_at_position'] = npc_at_position is not None
                 if npc_at_position:
-                    preview_info['npc_info'] = {
-                        'graphics_id': npc_at_position.get('graphics_id', 'Unknown'),
-                        'x': npc_at_position.get('x', 0),
-                        'y': npc_at_position.get('y', 0)
-                    }
+                    npc_gfx = npc_at_position.get('graphics_id', 'Unknown')
+                    npc_display_x = npc_at_position.get('current_x', npc_at_position.get('x', '?'))
+                    npc_display_y = npc_at_position.get('current_y', npc_at_position.get('y', '?'))
+                    preview_info['npc_info'] = f"NPC (gfx={npc_gfx}) at ({npc_display_x},{npc_display_y})"
 
             except (IndexError, TypeError):
                 tile_symbol = '#'

@@ -332,6 +332,7 @@ class Pathfinder:
                     "type": "porymap",
                     "grid": porymap["grid"],  # ASCII grid: [['.', '#', ...], ...]
                     "objects": porymap.get("objects", []),
+                    "runtime_objects": map_data.get("object_events", []),
                     "width": porymap.get("dimensions", {}).get("width", 0),
                     "height": porymap.get("dimensions", {}).get("height", 0),
                     "warps": porymap.get("warps", []),  # Include warps for pathfinding
@@ -668,32 +669,44 @@ class Pathfinder:
                                 else:
                                     blocked.add(pos)
 
-        # Add NPC/object positions as blocked (from porymap objects)
-        # Only add NPCs if consider_npcs is True
-        if consider_npcs and "objects" in map_data:
-            objects = map_data["objects"]
-            for obj in objects:
-                obj_x = obj.get("x", 0)
-                obj_y = obj.get("y", 0)
-                # Block objects that are stationary or have limited movement
-                # Block: NONE, FACE_*, WANDER_AROUND (they occupy their position)
-                # Allow: WALK_*, RUN_*, JUMP_* (they actively move around)
-                movement_type = obj.get("movement_type", "")
-                movement_type_upper = movement_type.upper()
-
-                if (
-                    "NONE" in movement_type_upper
-                    or "STATIC" in movement_type_upper
-                    or "FACE_" in movement_type_upper  # FACE_DOWN, FACE_UP, etc.
-                    or "WANDER" in movement_type_upper  # WANDER_AROUND
-                    or "LOOK" in movement_type_upper  # LOOK_AROUND, LOOK_AROUND_EX
-                    or "BERRY" in movement_type_upper  # BERRY_TREE_GROWTH
-                    or not movement_type
-                ):
+        # Add NPC/object positions as blocked.
+        # Prefer runtime object_events (live positions); fall back to static porymap objects.
+        if consider_npcs:
+            runtime_objects = map_data.get("runtime_objects") or []
+            if runtime_objects:
+                for obj in runtime_objects:
+                    obj_x = obj.get("current_x", obj.get("x", 0))
+                    obj_y = obj.get("current_y", obj.get("y", 0))
+                    if obj_x is None or obj_y is None:
+                        continue
                     obj_pos = (obj_x, obj_y)
                     if goal_pos and obj_pos == goal_pos:
                         continue
                     blocked.add(obj_pos)
+            elif "objects" in map_data:
+                objects = map_data["objects"]
+                for obj in objects:
+                    obj_x = obj.get("x", 0)
+                    obj_y = obj.get("y", 0)
+                    # Block objects that are stationary or have limited movement
+                    # Block: NONE, FACE_*, WANDER_AROUND (they occupy their position)
+                    # Allow: WALK_*, RUN_*, JUMP_* (they actively move around)
+                    movement_type = obj.get("movement_type", "")
+                    movement_type_upper = movement_type.upper()
+
+                    if (
+                        "NONE" in movement_type_upper
+                        or "STATIC" in movement_type_upper
+                        or "FACE_" in movement_type_upper  # FACE_DOWN, FACE_UP, etc.
+                        or "WANDER" in movement_type_upper  # WANDER_AROUND
+                        or "LOOK" in movement_type_upper  # LOOK_AROUND, LOOK_AROUND_EX
+                        or "BERRY" in movement_type_upper  # BERRY_TREE_GROWTH
+                        or not movement_type
+                    ):
+                        obj_pos = (obj_x, obj_y)
+                        if goal_pos and obj_pos == goal_pos:
+                            continue
+                        blocked.add(obj_pos)
 
         # Add out-of-bounds positions
         for x in range(-1, width + 1):

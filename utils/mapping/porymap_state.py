@@ -2,10 +2,39 @@
 
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from utils.mapping.flag_hide_constants import FLAG_HIDE_IDS
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PorymapResult:
+    context_parts: List[str]
+    json_map: Optional[Dict[str, Any]] = None
+
+
+def _agent_debug_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any], run_id: str = "run1") -> None:
+    # region agent log
+    try:
+        import time
+        payload = {
+            "sessionId": "b11f04",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-b11f04.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+    # endregion
 
 def _get_pokeemerald_root() -> Optional[Path]:
     """Get the pokeemerald root directory path. Delegates to centralized resolver."""
@@ -430,7 +459,36 @@ def _get_porymap_map_name(location_name: Optional[str]) -> Optional[str]:
     return ROM_TO_PORYMAP_MAP.get(location_name)
 
 
-def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None, badge_count: int = 0, memory_reader: Any = None) -> List[str]:
+def _normalize_local_id(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().upper()
+
+
+def _get_runtime_xy(runtime_obj: Dict[str, Any]) -> Tuple[Optional[int], Optional[int]]:
+    x = runtime_obj.get("current_x", runtime_obj.get("x"))
+    y = runtime_obj.get("current_y", runtime_obj.get("y"))
+    return x, y
+
+
+def _graphics_ids_compatible(static_gid: Any, runtime_gid: Any) -> bool:
+    """Return True when graphics IDs are comparable and match, or unknown."""
+    if static_gid is None or runtime_gid is None:
+        return True
+    if isinstance(static_gid, str) and isinstance(runtime_gid, str):
+        return static_gid == runtime_gid
+    # Runtime IDs are often numeric while porymap IDs are symbolic strings.
+    # Treat cross-type as unknown instead of rejecting a potential match.
+    return True
+
+
+def _format_porymap_info(
+    location_name: Optional[str],
+    player_coords: Optional[Tuple[int, int]] = None,
+    badge_count: int = 0,
+    memory_reader: Any = None,
+    runtime_object_events: Optional[List[Dict[str, Any]]] = None,
+) -> PorymapResult:
     """
     Format porymap ground truth data (JSON and ASCII map) for the agent.
     
@@ -440,12 +498,12 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         badge_count: Number of badges player has (for game-state-aware map selection)
         memory_reader: Optional PokemonEmeraldReader for live metatile reads on dynamic maps
     
-    Returns list of formatted strings to add to context.
+    Returns a PorymapResult containing formatted strings and optional raw map data.
     """
     context_parts = []
     
     if not location_name or location_name == 'TITLE_SEQUENCE' or location_name == 'Unknown':
-        return context_parts
+        return PorymapResult(context_parts=context_parts)
     
     try:
         # Import here to avoid circular dependencies and allow graceful failure
@@ -456,7 +514,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         pokeemerald_root = _get_pokeemerald_root()
         if not pokeemerald_root:
             logger.warning(f"Porymap: Could not find pokeemerald root for location '{location_name}'")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
         
         # Convert ROM location name to porymap map name using mapping
         porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
@@ -517,7 +575,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         
         if not porymap_map_name:
             logger.warning(f"Porymap: Could not map ROM location '{location_name}' to porymap map name")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
         
         logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}', badges: {badge_count})")
         
@@ -529,7 +587,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             logger.error(f"Porymap: Failed to build map for '{porymap_map_name}' due to corrupted tileset data: {e}")
             logger.error("This likely indicates missing or corrupted tileset files in pokemon_env/porymap.")
             logger.error("Pathfinding will not be available for this location.")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
         
         # Ensure grid is built (even if we don't include it in the text output)
         if not json_map.get('grid'):
@@ -544,7 +602,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
 
         if not json_map:
             logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
 
         # For dynamic maps (e.g. Mauville Gym), replace static grid with live
         # emulator metatiles so barrier changes are reflected in the agent's map.
@@ -729,9 +787,180 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                         logger.info(f"Elevation filtering (flood-fill): player at ({px}, {py}) elevation {player_elevation} - map has elevations {sorted(elevations_in_map)} - reachable tiles: {len(reachable)} - blocked {newly_blocked} additional tiles")
             except Exception as e:
                 logger.warning(f"Failed to filter map by elevation: {e}")
+
+        # Reconcile static porymap objects against runtime object events.
+        npc_source = "static_reference"
+        static_objects = json_map.get("objects", [])
+        # region agent log
+        _agent_debug_log(
+            "H3",
+            "porymap_state.py:_format_porymap_info:pre_reconcile",
+            "Pre-reconciliation object snapshot",
+            {
+                "location_name": location_name,
+                "porymap_map_name": porymap_map_name,
+                "static_count": len(static_objects),
+                "runtime_count": len(runtime_object_events or []),
+                "static_local_ids": [obj.get("local_id") for obj in static_objects[:10]],
+                "runtime_local_ids": [obj.get("local_id") for obj in (runtime_object_events or [])[:10]],
+                "runtime_coords": [
+                    {
+                        "local_id": obj.get("local_id"),
+                        "x": obj.get("current_x", obj.get("x")),
+                        "y": obj.get("current_y", obj.get("y")),
+                        "graphics_id": obj.get("graphics_id"),
+                    }
+                    for obj in (runtime_object_events or [])[:10]
+                ],
+            },
+        )
+        # endregion
+        if runtime_object_events:
+            reconciled_objects: List[Dict[str, Any]] = []
+            runtime_with_coords: List[Dict[str, Any]] = []
+            match_debug: List[Dict[str, Any]] = []
+
+            for runtime_obj in runtime_object_events:
+                rx, ry = _get_runtime_xy(runtime_obj)
+                if isinstance(rx, int) and isinstance(ry, int):
+                    runtime_with_coords.append(runtime_obj)
+
+            had_runtime_coords = len(runtime_with_coords) > 0
+
+            for static_obj in static_objects:
+                static_local_id = _normalize_local_id(static_obj.get("local_id"))
+                static_x = static_obj.get("x")
+                static_y = static_obj.get("y")
+                static_gid = static_obj.get("graphics_id")
+
+                matched = False
+                matched_reason = ""
+                matched_runtime: Optional[Dict[str, Any]] = None
+
+                matched_idx = -1
+
+                # Primary: local_id matching when both sides provide one.
+                if static_local_id:
+                    for idx, runtime_obj in enumerate(runtime_with_coords):
+                        runtime_local_id = _normalize_local_id(runtime_obj.get("local_id"))
+                        if runtime_local_id and runtime_local_id == static_local_id:
+                            matched = True
+                            matched_reason = "local_id"
+                            matched_runtime = runtime_obj
+                            matched_idx = idx
+                            break
+
+                # Fallback: coordinate proximity + compatible graphics.
+                if not matched and isinstance(static_x, int) and isinstance(static_y, int):
+                    for idx, runtime_obj in enumerate(runtime_with_coords):
+                        rx, ry = _get_runtime_xy(runtime_obj)
+                        if not isinstance(rx, int) or not isinstance(ry, int):
+                            continue
+                        if abs(rx - static_x) + abs(ry - static_y) > 2:
+                            continue
+                        if not _graphics_ids_compatible(static_gid, runtime_obj.get("graphics_id")):
+                            continue
+                        matched = True
+                        matched_reason = "coord_plus_graphics"
+                        matched_runtime = runtime_obj
+                        matched_idx = idx
+                        break
+
+                if matched and matched_idx >= 0:
+                    runtime_with_coords.pop(matched_idx)
+
+                if len(match_debug) < 12:
+                    rx, ry = _get_runtime_xy(matched_runtime) if matched_runtime else (None, None)
+                    match_debug.append(
+                        {
+                            "static_local_id": static_obj.get("local_id"),
+                            "static_flag": static_obj.get("flag"),
+                            "static_x": static_x,
+                            "static_y": static_y,
+                            "static_graphics_id": static_gid,
+                            "matched": matched,
+                            "matched_reason": matched_reason,
+                            "runtime_source": (matched_runtime or {}).get("source"),
+                            "runtime_local_id": (matched_runtime or {}).get("local_id"),
+                            "runtime_graphics_id": (matched_runtime or {}).get("graphics_id"),
+                            "runtime_x": rx,
+                            "runtime_y": ry,
+                        }
+                    )
+
+                if matched:
+                    reconciled_objects.append(static_obj)
+
+            # Only switch to runtime-verified mode when we had runtime coords to compare.
+            if had_runtime_coords:
+                json_map["objects"] = reconciled_objects
+                npc_source = "runtime_verified"
+        # region agent log
+        _agent_debug_log(
+            "H4",
+            "porymap_state.py:_format_porymap_info:post_reconcile",
+            "Post-reconciliation object snapshot",
+            {
+                "location_name": location_name,
+                "npc_source": npc_source,
+                "final_count": len(json_map.get("objects", [])),
+                "final_local_ids": [obj.get("local_id") for obj in json_map.get("objects", [])[:10]],
+                "birch_present": any(obj.get("local_id") == "LOCALID_BIRCHS_LAB_BIRCH" for obj in json_map.get("objects", [])),
+            },
+        )
+        # endregion
+        # region agent log
+        _agent_debug_log(
+            "H10",
+            "porymap_state.py:_format_porymap_info:match_debug",
+            "Per-object reconciliation decision trace",
+            {
+                "location_name": location_name,
+                "match_debug": match_debug if "match_debug" in locals() else [],
+            },
+        )
+        # endregion
+
+        pre_flag_count = len(json_map.get("objects", []))
+        if memory_reader is not None and json_map.get("objects"):
+            filtered_by_flag: List[Dict[str, Any]] = []
+            flag_filter_debug: List[Dict[str, Any]] = []
+            for obj in json_map["objects"]:
+                flag_name = obj.get("flag", "0")
+                if flag_name and flag_name != "0":
+                    flag_id = FLAG_HIDE_IDS.get(flag_name)
+                    if flag_id is not None:
+                        try:
+                            is_set = memory_reader._is_event_flag_set(flag_id)
+                        except Exception:
+                            is_set = False
+                        if len(flag_filter_debug) < 12:
+                            flag_filter_debug.append({"flag_name": flag_name, "flag_id": flag_id, "is_set": is_set, "local_id": obj.get("local_id", ""), "graphics_id": obj.get("graphics_id", "")})
+                        if is_set:
+                            continue
+                    else:
+                        if len(flag_filter_debug) < 12:
+                            flag_filter_debug.append({"flag_name": flag_name, "flag_id": None, "is_set": None, "local_id": obj.get("local_id", ""), "graphics_id": obj.get("graphics_id", ""), "note": "unknown_flag"})
+                filtered_by_flag.append(obj)
+            json_map["objects"] = filtered_by_flag
+            npc_source = npc_source + "+flag_filtered" if npc_source != "static_reference" else "flag_filtered"
+            # region agent log
+            _agent_debug_log(
+                "H12",
+                "porymap_state.py:_format_porymap_info:flag_filter",
+                "Flag-based object filtering",
+                {
+                    "location_name": location_name,
+                    "pre_flag_count": pre_flag_count,
+                    "post_flag_count": len(filtered_by_flag),
+                    "removed_count": pre_flag_count - len(filtered_by_flag),
+                    "flag_filter_debug": flag_filter_debug,
+                },
+            )
+            # endregion
         
         # Format for LLM
-        context_parts.append("\n=== PORYMAP GROUND TRUTH MAP ===")
+        context_parts.append("\n=== PORYMAP MAP LAYOUT ===")
         context_parts.append(f"Location: {json_map.get('name', porymap_map_name)}")
         context_parts.append(f"Dimensions: {json_map['dimensions']['width']}x{json_map['dimensions']['height']}")
         
@@ -800,6 +1029,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         compact_json_map = {
             "name": json_map.get('name'),
             "id": json_map.get('id'),
+            "npc_source": npc_source,
             "dimensions": json_map.get('dimensions'),
             "warps": simplified_warps,
             "objects": objects_for_json,
@@ -812,7 +1042,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         
         # Store porymap data in context_parts for later extraction (hidden from LLM but accessible for pathfinding)
         # We'll store it as a special marker that can be extracted from state
-        return context_parts, json_map  # Return both formatted text and raw data
+        return PorymapResult(context_parts=context_parts, json_map=json_map)
         
     except ImportError as e:
         # Log import errors as warnings
@@ -822,5 +1052,5 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         logger.warning(f"Error adding porymap info for location '{location_name}': {e}", exc_info=True)
     
     # Return formatted text only if json_map not available
-    return context_parts
+    return PorymapResult(context_parts=context_parts)
 

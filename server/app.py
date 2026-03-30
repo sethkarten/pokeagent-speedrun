@@ -1602,17 +1602,21 @@ async def get_comprehensive_state():
                 from utils.state_formatter import _format_porymap_info
 
                 _mr = getattr(env, "memory_reader", None) if env else None
-                porymap_result = _format_porymap_info(current_location, player_coords, memory_reader=_mr)
-                if isinstance(porymap_result, tuple):
-                    _, porymap_data = porymap_result
-                    if porymap_data and porymap_data.get("grid"):
-                        if "porymap" not in state["map"]:
-                            state["map"]["porymap"] = {}
-                        state["map"]["porymap"]["grid"] = porymap_data.get("grid")
-                        state["map"]["porymap"]["objects"] = porymap_data.get("objects", [])
-                        state["map"]["porymap"]["dimensions"] = porymap_data.get("dimensions", {})
-                        state["map"]["porymap"]["warps"] = porymap_data.get("warps", [])
-                        logger.debug(f"Added elevation-filtered porymap data to /state for {current_location}")
+                porymap_result = _format_porymap_info(
+                    current_location,
+                    player_coords,
+                    memory_reader=_mr,
+                    runtime_object_events=state.get("map", {}).get("object_events", []),
+                )
+                porymap_data = getattr(porymap_result, "json_map", None)
+                if porymap_data and porymap_data.get("grid"):
+                    if "porymap" not in state["map"]:
+                        state["map"]["porymap"] = {}
+                    state["map"]["porymap"]["grid"] = porymap_data.get("grid")
+                    state["map"]["porymap"]["objects"] = porymap_data.get("objects", [])
+                    state["map"]["porymap"]["dimensions"] = porymap_data.get("dimensions", {})
+                    state["map"]["porymap"]["warps"] = porymap_data.get("warps", [])
+                    logger.debug(f"Added elevation-filtered porymap data to /state for {current_location}")
             except Exception as e:
                 logger.warning(f"Failed to add porymap data to /state: {e}")
 
