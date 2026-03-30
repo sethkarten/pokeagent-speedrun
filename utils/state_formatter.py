@@ -1331,7 +1331,7 @@ def get_movement_preview(state_data):
                 target_tile = None  # Don't have the raw tile data when using porymap grid
 
                 # Determine if movement is blocked by terrain (using porymap symbols)
-                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'X', '^']  # Walls, water, out of bounds, different elevation
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'X']  # Walls, water, out of bounds
 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
@@ -1353,7 +1353,7 @@ def get_movement_preview(state_data):
                 elif tile_symbol == '#':
                     tile_description = 'Wall'
                 elif tile_symbol == '^':
-                    tile_description = 'Different elevation'
+                    tile_description = 'Walkable (different elevation, use ramp/stairs)'
                 elif tile_symbol == 'W':
                     tile_description = 'Water'
                 else:

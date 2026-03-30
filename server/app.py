@@ -1283,6 +1283,63 @@ async def get_queue_status():
     }
 
 
+def _build_porymap_visual_map_15x15(state: Dict[str, Any], player_coords: Tuple[int, int]) -> bool:
+    """Set ``state['map']['visual_map']`` from elevation-filtered ``porymap.grid`` (15x15 around player).
+
+    Uses whatever grid is already in ``state`` (refreshed while idle, or from /state cache). Safe when
+    the action queue is non-empty: recenters the window on *current* player coordinates without
+    re-running ``_format_porymap_info``.
+
+    Returns True if ``visual_map`` was written.
+    """
+    map_section = state.get("map") or {}
+    porymap_grid = (map_section.get("porymap") or {}).get("grid")
+    if not porymap_grid or not player_coords:
+        return False
+
+    px, py = int(player_coords[0]), int(player_coords[1])
+    window_size = 15
+    half_window = window_size // 2
+    height = len(porymap_grid)
+
+    def _slice_row(row: Any, sx: int, ex: int) -> List[str]:
+        if isinstance(row, str):
+            return list(row[sx:ex])
+        return [str(c) for c in row[sx:ex]]
+
+    start_y = max(0, py - half_window)
+    end_y = min(height, py + half_window + 1)
+    start_x = max(0, px - half_window)
+
+    visual_grid: List[List[str]] = []
+    for y in range(start_y, end_y):
+        if y < height:
+            row = porymap_grid[y]
+            end_x = min(len(row), px + half_window + 1)
+            window_row = _slice_row(row, start_x, end_x)
+            while len(window_row) < window_size:
+                window_row.append("#")
+            visual_grid.append(window_row[:window_size])
+        else:
+            visual_grid.append(["#"] * window_size)
+
+    while len(visual_grid) < window_size:
+        visual_grid.append(["#"] * window_size)
+
+    player_y_in_window = py - start_y
+    player_x_in_window = px - start_x
+    if 0 <= player_y_in_window < len(visual_grid) and 0 <= player_x_in_window < len(
+        visual_grid[player_y_in_window]
+    ):
+        visual_grid[player_y_in_window][player_x_in_window] = "P"
+
+    if "map" not in state:
+        state["map"] = {}
+    state["map"]["visual_map"] = "\n".join(" ".join(r) for r in visual_grid)
+    state["map"]["map_source"] = "porymap_with_player_15x15"
+    return True
+
+
 @app.get("/state")
 async def get_comprehensive_state():
     """Get comprehensive game state including visual and memory data"""
@@ -1533,9 +1590,8 @@ async def get_comprehensive_state():
             # Remove the PIL image object to avoid serialization issues
             del state["visual"]["screenshot"]
 
-        # Add porymap ground truth data with elevation filtering for frontend display
-        # Skip during queued actions to avoid FPS slowdown
-        current_queue_length = len(action_queue)  # Check queue before expensive porymap operations
+        # Expensive: refresh full elevation-filtered porymap grid only when idle (FPS)
+        current_queue_length = len(action_queue)
         if (
             current_location
             and current_location != "Unknown"
@@ -1557,61 +1613,12 @@ async def get_comprehensive_state():
                         state["map"]["porymap"]["dimensions"] = porymap_data.get("dimensions", {})
                         state["map"]["porymap"]["warps"] = porymap_data.get("warps", [])
                         logger.debug(f"Added elevation-filtered porymap data to /state for {current_location}")
-
-                        # Generate visual_map from porymap grid with player position marker
-                        # Extract 15x15 window around player for stream.html display
-                        porymap_grid = porymap_data.get("grid")
-                        if porymap_grid and player_coords:
-                            px, py = player_coords[0], player_coords[1]
-
-                            # Extract 15x15 window centered on player
-                            window_size = 15
-                            half_window = window_size // 2
-
-                            # Calculate window bounds
-                            start_y = max(0, py - half_window)
-                            end_y = min(len(porymap_grid), py + half_window + 1)
-                            start_x = max(0, px - half_window)
-
-                            # Extract window
-                            visual_grid = []
-                            for y in range(start_y, end_y):
-                                if y < len(porymap_grid):
-                                    row = porymap_grid[y]
-                                    end_x = min(len(row), px + half_window + 1)
-                                    window_row = row[start_x:end_x]
-
-                                    # Pad row if needed to maintain 15 width
-                                    while len(window_row) < window_size:
-                                        window_row.append("#")
-
-                                    visual_grid.append(window_row[:])
-                                else:
-                                    # Pad with blocked tiles if beyond map bounds
-                                    visual_grid.append(["#"] * window_size)
-
-                            # Pad height if needed to maintain 15x15
-                            while len(visual_grid) < window_size:
-                                visual_grid.append(["#"] * window_size)
-
-                            # Add player marker at center of window
-                            player_y_in_window = py - start_y
-                            player_x_in_window = px - start_x
-                            if 0 <= player_y_in_window < len(visual_grid) and 0 <= player_x_in_window < len(
-                                visual_grid[player_y_in_window]
-                            ):
-                                visual_grid[player_y_in_window][player_x_in_window] = "P"
-
-                            # Convert grid to visual_map string format
-                            visual_map_lines = []
-                            for row in visual_grid:
-                                visual_map_lines.append(" ".join(row))
-
-                            state["map"]["visual_map"] = "\n".join(visual_map_lines)
-                            state["map"]["map_source"] = "porymap_with_player_15x15"
-                            logger.debug(f"Generated 15x15 visual_map from porymap with player at ({px}, {py})")
             except Exception as e:
                 logger.warning(f"Failed to add porymap data to /state: {e}")
+
+        # Cheap: 15x15 stream UI from cached or freshly refreshed grid (also while actions are queued)
+        if current_location and current_location not in ("Unknown", "TITLE_SEQUENCE") and player_coords:
+            _build_porymap_visual_map_15x15(state, player_coords)
 
         with step_lock:
             current_step = step_count

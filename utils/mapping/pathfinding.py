@@ -441,15 +441,15 @@ class Pathfinder:
             if isinstance(row, list):
                 for x, cell in enumerate(row):
                     # In porymap ASCII:
-                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), 'D' (doors), '←↓↑→' (ledges - directionally walkable)
-                    # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf), '^' (different elevation)
+                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), 'D' (doors), '←↓↑→' (ledges), '^' (different elevation)
+                    # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf)
                     # Special: '&' (cycling road) - block if at different elevation
                     # CRITICAL: 'D' (door) and 'S' (stairs) tiles are ALWAYS walkable
 
                     pos = (x, y)
 
-                    # Always block walls, out of bounds, and different-elevation tiles
-                    if cell in ["#", "X", "^"]:
+                    # Always block walls and out of bounds
+                    if cell in ["#", "X"]:
                         # CRITICAL: Never block the starting position - player is there so it must be walkable
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
@@ -563,8 +563,8 @@ class Pathfinder:
                 for x, cell in enumerate(row):
                     pos = (x, y)
 
-                    # Always block walls, out of bounds, and different-elevation tiles
-                    if cell in ["#", "X", "^"]:
+                    # Always block walls and out of bounds
+                    if cell in ["#", "X"]:
                         if start_pos and pos == start_pos:
                             logger.debug(f"Excluding start position {start_pos} from blocked set (player is there)")
                             continue
@@ -715,7 +715,7 @@ class Pathfinder:
         """
         if isinstance(tile, str):
             # String representation - check for wall symbols
-            return tile in ["#", "X", "^", "█", "▓"]
+            return tile in ["#", "X", "█", "▓"]
 
         # Use shared walkability function (inverted)
         from utils.mapping.map_formatter import is_tile_walkable
@@ -824,7 +824,7 @@ class Pathfinder:
         # tiles as '#', but adjacent reachable tiles at different elevations still
         # need per-edge validation (e.g. E3 next to E0 ramp).
         # ========================================================================
-        walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&"]
+        walkable_symbols = [".", "~", "^", "S", "D", "←", "→", "↑", "↓", "&"]
         both_walkable = from_symbol in walkable_symbols and dest_symbol in walkable_symbols
 
         # Check elevation differences and only allow transitions through valid

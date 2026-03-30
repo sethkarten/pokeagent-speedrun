@@ -673,8 +673,9 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                                             extra.add((ax, ay))
                         reachable |= extra
 
-                        # Build filtered grid: unreachable walkable tiles become '^'
-                        # (distinct from '#' walls so the agent knows they exist at another elevation)
+                        # Build filtered grid: walkable tiles at a different elevation become '^'
+                        # '^' is functionally equivalent to '.' but visually signals
+                        # "this ground is at another elevation — use a ramp/connector"
                         filtered_grid = []
                         for y in range(height):
                             filtered_row = []
@@ -696,15 +697,19 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                                             filtered_row.append('&')
                                     else:
                                         filtered_row.append(original_char)
+                                elif original_char in ['.', '~']:
+                                    # Walkable ground at a different elevation
+                                    filtered_row.append('^')
                                 elif original_char == 'W':
+                                    # Unreachable water stays '#' (need Surf, not elevation)
                                     player_char = grid[py][px] if 0 <= py < height and 0 <= px < width else '.'
                                     if player_char == 'W':
                                         filtered_row.append('W')
                                     else:
-                                        filtered_row.append('^')
+                                        filtered_row.append('#')
                                 else:
-                                    # Walkable tile at a different elevation — show as '^'
-                                    filtered_row.append('^')
+                                    # Anything else unreachable becomes '#'
+                                    filtered_row.append('#')
                             filtered_grid.append(filtered_row)
 
                         # Update the grid and ASCII map
@@ -756,7 +761,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             
             context_parts.append("\nASCII Map:")
             context_parts.append(ascii_map)
-            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, '^' = different elevation (blocked), 'I' = item, '~' = tall grass, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
+            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, '^' = walkable (different elevation, use ramp/stairs), 'I' = item, '~' = tall grass, 'W' = water, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
         
         # NOTE: Warps, Objects/NPCs, and Connections lists are DEPRECATED
         # This data is already included in the Map Data (JSON) section below.
