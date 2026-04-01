@@ -282,8 +282,6 @@ class SubagentExecutor:
                          "Custom subagents cannot spawn other subagents.",
             }, indent=2)
 
-<<<<<<< HEAD
-=======
         # Warn if looping subagent has no tools (common mistake)
         handler_type = config.get("handler_type", "looping")
         if handler_type == "looping" and not config.get("available_tools"):
@@ -297,7 +295,6 @@ class SubagentExecutor:
                 ),
             }, indent=2)
 
->>>>>>> tu8435/tersoo-dev-2
         # Per-call max_steps override takes priority over registry config
         max_steps_override = arguments.get("max_steps")
         max_turns = int(max_steps_override or config.get("max_turns", 25))
@@ -307,9 +304,6 @@ class SubagentExecutor:
         name = config.get("name", "Custom_Subagent")
         interaction_name = f"Custom_{name.replace(' ', '_')}"
 
-<<<<<<< HEAD
-        vlm = self._get_subagent_vlm(requested_tools or None)
-=======
         # Add return_to_orchestrator as an explicit tool so the model can call it
         # Add return_to_orchestrator as an explicit callable tool
         return_tool_decl = {
@@ -332,7 +326,6 @@ class SubagentExecutor:
             requested_tools or None,
             supplemental_tools=[return_tool_decl],
         )
->>>>>>> tu8435/tersoo-dev-2
 
         def prompt_builder(
             context: Dict[str, Any],
@@ -376,13 +369,8 @@ class SubagentExecutor:
                 f"You are an autonomous subagent with up to {max_turns} actions. "
                 f"Each action you take gives you fresh game state and a screenshot. "
                 f"Call tools to accomplish your directive. "
-<<<<<<< HEAD
-                f"When your task is complete, include return_to_orchestrator: true "
-                f"in your final tool call args to hand control back to the orchestrator."
-=======
                 f"When your task is complete, call the `return_to_orchestrator` tool "
                 f"to hand control back. You MUST call this tool when done."
->>>>>>> tu8435/tersoo-dev-2
             )
             return "\n\n".join(parts)
 
@@ -390,11 +378,6 @@ class SubagentExecutor:
 
         def on_turn_complete(turn: int, reasoning: str, tool_calls: List[Dict]) -> None:
             for tc in tool_calls:
-<<<<<<< HEAD
-                if tc.get("args", {}).get("return_to_orchestrator"):
-                    should_return[0] = True
-                    return
-=======
                 # Explicit tool call to return_to_orchestrator
                 if tc.get("name") == "return_to_orchestrator":
                     should_return[0] = True
@@ -410,7 +393,6 @@ class SubagentExecutor:
             if "return_to_orchestrator" in all_text.lower().replace(" ", "_"):
                 should_return[0] = True
                 return
->>>>>>> tu8435/tersoo-dev-2
 
         def should_continue(context: Dict, turn: int) -> bool:
             return not should_return[0]

@@ -27,10 +27,7 @@ def _extract_current_state(game_state_result: Dict[str, Any]) -> Dict[str, Any]:
         "location": raw_state.get("player", {}).get("location", "Unknown"),
         "coordinates": {"x": player_position.get("x"), "y": player_position.get("y")},
         "state_text": game_state_result.get("state_text", ""),
-<<<<<<< HEAD
-=======
         "inventory": raw_state.get("player", {}).get("inventory", {}),
->>>>>>> tu8435/tersoo-dev-2
     }
 
 

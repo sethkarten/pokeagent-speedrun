@@ -48,11 +48,6 @@ POKEAGENT_PROMPT_PATH = _default_system_prompts[game_type]
 POKEAGENT_SYSTEM_PROMPT_PATH = _optimization_enabled_prompts[game_type]
 SIMPLE_PROMPT_PATH = _simple_prompts[game_type]
 
-_no_builtins_prompts = {
-    "red": f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT_NO_BUILTINS_RED.md",
-    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT_NO_BUILTINS.md",
-}
-POKEAGENT_NO_BUILTINS_PROMPT_PATH = _no_builtins_prompts[game_type]
 # ---------------------------------------------------------------------------
 # Templated files: single file with {game_name}, rendered at load time
 # ---------------------------------------------------------------------------
@@ -64,7 +59,7 @@ _autoevolve_base_orchestrator_policies = {
     "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/BASE_ORCHESTRATOR_POLICY.md",
 }
 _autoevolve_system_prompts = {
-    "red": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/SYSTEM_PROMPT.md",
+    "red": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/SYSTEM_PROMPT_RED.md",
     "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/SYSTEM_PROMPT.md",
 }
 AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH = _autoevolve_base_orchestrator_policies[game_type]

@@ -154,12 +154,12 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
                     whole_map = env.memory_reader.map_reader.get_whole_map_data()
                     if whole_map and whole_map.get("grid"):
                         state.setdefault("map", {})["red_whole_map"] = whole_map
-                    # add back porymap field for movement preview
-                    state["map"]["porymap"] = {
+                        # add back porymap field for movement preview
+                        state["map"]["porymap"] = {
                             "grid": whole_map["grid"],
                             "objects": whole_map.get("objects", []),
                             "dimensions": whole_map.get("dimensions", {}),
-                            "warps": whole_map.get("warps", []),
+                            "warps": whole_map.get("warp_events", []),
                             "raw_tiles": whole_map.get("raw_tiles"),
                         }
             except Exception as e:

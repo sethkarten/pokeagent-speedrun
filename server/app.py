@@ -48,7 +48,7 @@ logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Game type: "emerald" (GBA, default) or "red" (Game Boy)
-game_type = os.environ.get("GAME_TYPE", "emerald")
+game_type = os.environ.get("GAME_TYPE", "emerald").lower()
 
 # Global state
 env = None
@@ -1475,7 +1475,7 @@ async def get_comprehensive_state():
         # PRIORITY 1.5: Build final porymap map for UI parity with LLM map context.
         # This ensures the "Map & Actions" UI uses the same post-filtered map
         # (reconciliation + flag filtering + object markers) when available.
-        if current_location and current_location != "Unknown" and state.get("map", {}).get("map_source") != "agent_slam":
+        if game_type != "red" and current_location and current_location != "Unknown" and state.get("map", {}).get("map_source") != "agent_slam":
             try:
                 from utils.mapping.porymap_state import _format_porymap_info
 
@@ -1700,8 +1700,15 @@ async def get_comprehensive_state():
                 logger.warning(f"Failed to add porymap data to /state: {e}")
 
         # Cheap: 15x15 stream UI from cached or freshly refreshed grid (also while actions are queued)
-        if current_location and current_location not in ("Unknown", "TITLE_SEQUENCE") and player_coords:
+        if game_type != "red" and current_location and current_location not in ("Unknown", "TITLE_SEQUENCE") and player_coords:
             _build_porymap_visual_map_15x15(state, player_coords)
+        elif game_type == "red":
+            # stream UI map for Red has been built in red_map_reader.py
+            visual_map = env.memory_reader.map_reader.format_map_for_llm(radius=7)
+            state["map"]["visual_map"] = visual_map
+            state["map"]["map_source"] = "red_map_reader"
+            whole_map = env.memory_reader.map_reader.get_whole_map_data()
+            state["map"]["red_whole_map"] = whole_map
 
         with step_lock:
             current_step = step_count
@@ -3002,11 +3009,26 @@ async def mcp_get_map_data():
         pos = state_result.get("player_position", {})
         location = state_result.get("location", "Unknown")
 
+        # Game-specific player marker and legend
+        _gt = os.environ.get("GAME_TYPE", "emerald").lower()
+        if _gt == "red":
+            _player_marker = "I"
+            _grid_legend = (
+                "I=player .=walkable #=wall ~=grass W=water D=door "
+                "t=cuttable tree G=Card Key gate !=sign ?=hidden item "
+                "O=pokeball N=NPC(blocked) ↓/←/→=jump ledge "
+                "C=counter *=spinner stop B=bookshelf U=trash "
+                "^=display/blueprint P=computer ==bench T=TV/machine"
+            )
+        else:
+            _player_marker = "P"
+            _grid_legend = "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)"
+
         result = {
             "success": True,
             "location": location,
             "player": {"x": pos.get("x", 0), "y": pos.get("y", 0)},
-            "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)",
+            "grid_legend": _grid_legend,
         }
 
         # Get the FULL map grid (not windowed) from the porymap data in raw_state
@@ -3020,7 +3042,7 @@ async def mcp_get_map_data():
             grid = [list(row) for row in porymap_grid]
             px, py = pos.get("x", 0), pos.get("y", 0)
             if 0 <= py < len(grid) and 0 <= px < len(grid[0]):
-                grid[py][px] = "P"
+                grid[py][px] = _player_marker
 
             # Mark live NPC positions as 'N' (blocked for pathfinding)
             obj_events = raw_state.get("map", {}).get("object_events", [])
@@ -3028,7 +3050,7 @@ async def mcp_get_map_data():
                 ox = obj.get("current_x", -1)
                 oy = obj.get("current_y", -1)
                 if (ox, oy) != (px, py) and 0 <= oy < len(grid) and 0 <= ox < len(grid[0]):
-                    if grid[oy][ox] not in ('#', 'P'):
+                    if grid[oy][ox] not in ('#', _player_marker):
                         grid[oy][ox] = 'N'
 
             grid = ["".join(row) for row in grid]
