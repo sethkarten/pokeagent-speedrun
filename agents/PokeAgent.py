@@ -69,11 +69,10 @@ from agents.subagents.planner import (
     format_planner_history,
 )
 from agents.prompts.paths import (
-    AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
-    POKEAGENT_BASE_PROMPT_PATH,
-    POKEAGENT_NO_BUILTINS_PROMPT_PATH,
+    AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+    AUTOEVOLVE_SYSTEM_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
-    POKEAGENT_SYSTEM_PROMPT_PATH,
+    SIMPLE_PROMPT_PATH,
     resolve_repo_path,
 )
 
@@ -215,11 +214,9 @@ class PokeAgent:
         # Determine which system instructions file to use
         if system_instructions_file is None:
             if self.scaffold == "autoevolve":
-                system_instructions_file = AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH
-            elif self.optimization_enabled:
-                system_instructions_file = POKEAGENT_SYSTEM_PROMPT_PATH
+                system_instructions_file = AUTOEVOLVE_SYSTEM_PROMPT_PATH
             elif self.scaffold in _NO_BUILTINS_SCAFFOLDS:
-                system_instructions_file = POKEAGENT_NO_BUILTINS_PROMPT_PATH
+                system_instructions_file = SIMPLE_PROMPT_PATH
             else:
                 system_instructions_file = POKEAGENT_PROMPT_PATH
 
@@ -275,8 +272,8 @@ class PokeAgent:
                 self.harness_evolver = create_harness_evolver(
                     vlm=self.vlm,
                     run_data_manager=run_manager,
-                    base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
-                    system_prompt_path=AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+                    base_prompt_path=AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+                    system_prompt_path=AUTOEVOLVE_SYSTEM_PROMPT_PATH,
                 )
                 self.prompt_optimizer = self.harness_evolver.prompt_optimizer
                 logger.info(f"🧬 HarnessEvolver ENABLED (frequency: every {optimization_frequency} steps)")
@@ -284,7 +281,7 @@ class PokeAgent:
                 self.prompt_optimizer = create_prompt_optimizer(
                     vlm=self.vlm,
                     run_data_manager=run_manager,
-                    base_prompt_path=POKEAGENT_BASE_PROMPT_PATH,
+                    base_prompt_path=AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
                 )
                 logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
 
@@ -322,7 +319,7 @@ class PokeAgent:
                 logger.info(f"📋 No prompt_optimizer attribute found")
         
         # Otherwise load from canonical repo path (e.g. optimization off but code path hit)
-        filepath = resolve_repo_path(POKEAGENT_BASE_PROMPT_PATH)
+        filepath = resolve_repo_path(AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH)
         if not filepath.exists():
             logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
             return """# Strategic Guidance
@@ -3451,8 +3448,8 @@ def main():
         default=None,
         help=(
             "Repo-relative path to system instructions markdown. "
-            "Omit for automatic selection: POKEAGENT.md by default, or system_prompt.md when "
-            "--enable-prompt-optimization is set (fails at startup if run_data_manager is missing)."
+            "Omit for automatic scaffold selection: POKEAGENT.md (pokeagent), SIMPLE.md "
+            "(simple/simplest), or auto-evolve/SYSTEM_PROMPT.md (autoevolve)."
         ),
     )
     parser.add_argument(
