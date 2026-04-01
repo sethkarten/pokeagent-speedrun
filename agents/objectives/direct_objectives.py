@@ -3254,7 +3254,7 @@ class DirectObjectiveManager:
 
         self.battling_index = min(start_battling_index, len(self.battling_sequence))
 
-        # Dynamics starts empty (populated only by agent via create_direct_objectives)
+        # Dynamics starts empty and is filled later via replanning edits.
         self.dynamics_sequence = []
         self.dynamics_index = 0
 
@@ -3427,7 +3427,7 @@ class DirectObjectiveManager:
             logger.warning(f"add_objectives_to_category() called but mode is 'legacy'. Switching to categorized mode.")
             self.enable_categorized_mode()
 
-        # Validate category for dynamics - only allow via agent's create_direct_objectives
+        # Dynamics objectives are expected to come from planner-driven replanning.
         if category == "dynamics":
             logger.info(f"🎯 Adding {len(objectives_data)} DYNAMICS objectives (agent-created)")
 

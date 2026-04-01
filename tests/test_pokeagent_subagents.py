@@ -215,31 +215,26 @@ def _build_adapter(states=None):
 
 
 def _write_trajectory_window(run_manager: RunDataManager, steps: int = 4):
-    # Write to legacy path (for backward-compat tests)
-    legacy_file = run_manager.get_run_directory() / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
-    legacy_file.parent.mkdir(parents=True, exist_ok=True)
-
-    # Also write to the cache path that the updated reader checks first
+    # Write to the cache path used by trajectory readers
     base_dir = Path(run_manager.get_run_directory()).parent
     cache_file = base_dir / "trajectory_history.jsonl"
 
-    for trajectory_file in (legacy_file, cache_file):
-        with trajectory_file.open("w", encoding="utf-8") as handle:
-            for step in range(1, steps + 1):
-                handle.write(
-                    json.dumps(
-                        {
-                            "step": step,
-                            "reasoning": f"step {step} reasoning",
-                            "action": {"tool": "press_buttons", "buttons": ["A"]},
-                            "location": "Route 101",
-                            "player_coords": [4, 8],
-                            "objective_context": None,
-                            "outcome": {"success": True},
-                        }
-                    )
-                    + "\n"
+    with cache_file.open("w", encoding="utf-8") as handle:
+        for step in range(1, steps + 1):
+            handle.write(
+                json.dumps(
+                    {
+                        "step": step,
+                        "reasoning": f"step {step} reasoning",
+                        "action": {"tool": "press_buttons", "buttons": ["A"]},
+                        "location": "Route 101",
+                        "player_coords": [4, 8],
+                        "objective_context": None,
+                        "outcome": {"success": True},
+                    }
                 )
+                + "\n"
+            )
 
 
 def _make_agent(tmp_path, vlm_cls=RecordingVLM, adapter=None):

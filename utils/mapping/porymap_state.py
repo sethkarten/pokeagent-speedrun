@@ -2,10 +2,39 @@
 
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+from utils.mapping.flag_hide_constants import FLAG_HIDE_IDS
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PorymapResult:
+    context_parts: List[str]
+    json_map: Optional[Dict[str, Any]] = None
+
+
+def _agent_debug_log(hypothesis_id: str, location: str, message: str, data: Dict[str, Any], run_id: str = "run1") -> None:
+    # region agent log
+    try:
+        import time
+        payload = {
+            "sessionId": "b11f04",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-b11f04.log", "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+    # endregion
 
 def _get_pokeemerald_root() -> Optional[Path]:
     """Get the pokeemerald root directory path. Delegates to centralized resolver."""
@@ -430,7 +459,89 @@ def _get_porymap_map_name(location_name: Optional[str]) -> Optional[str]:
     return ROM_TO_PORYMAP_MAP.get(location_name)
 
 
-def _format_porymap_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]] = None, badge_count: int = 0) -> List[str]:
+def _normalize_local_id(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().upper()
+
+
+def _get_runtime_xy(runtime_obj: Dict[str, Any]) -> Tuple[Optional[int], Optional[int]]:
+    x = runtime_obj.get("current_x", runtime_obj.get("x"))
+    y = runtime_obj.get("current_y", runtime_obj.get("y"))
+    return x, y
+
+
+def _graphics_ids_compatible(static_gid: Any, runtime_gid: Any) -> bool:
+    """Return True when graphics IDs are comparable and match, or unknown."""
+    if static_gid is None or runtime_gid is None:
+        return True
+    if isinstance(static_gid, str) and isinstance(runtime_gid, str):
+        return static_gid == runtime_gid
+    # Runtime IDs are often numeric while porymap IDs are symbolic strings.
+    # Treat cross-type as unknown instead of rejecting a potential match.
+    return True
+
+
+NON_NPC_GRAPHICS_KEYWORDS = {
+    "TRUCK",
+}
+
+
+def _is_item_object_event(obj: Dict[str, Any]) -> bool:
+    """Best-effort item object detection."""
+    graphics_id = str(obj.get("graphics_id", "")).upper()
+    if "ITEM_BALL" in graphics_id or "ITEMBALL" in graphics_id:
+        return True
+
+    script_name = str(obj.get("script", "")).upper()
+    if "ITEMBALL" in script_name or "ITEM_BALL" in script_name:
+        return True
+    return False
+
+
+def _is_npc_object_event(obj: Dict[str, Any]) -> bool:
+    """Best-effort NPC detection without assuming unknowns are items."""
+    if _is_item_object_event(obj):
+        return False
+
+    graphics_id = str(obj.get("graphics_id", "")).upper()
+    if any(keyword in graphics_id for keyword in NON_NPC_GRAPHICS_KEYWORDS):
+        return False
+
+    trainer_type = str(obj.get("trainer_type", "")).upper()
+    if trainer_type and trainer_type != "TRAINER_TYPE_NONE":
+        return True
+
+    movement_type = str(obj.get("movement_type", "")).upper()
+    if movement_type and movement_type != "MOVEMENT_TYPE_NONE":
+        return True
+
+    local_id = str(obj.get("local_id", "")).strip()
+    if local_id:
+        return True
+
+    # Most character object events use OBJ_EVENT_GFX_*.
+    if graphics_id.startswith("OBJ_EVENT_GFX_"):
+        return True
+    return False
+
+
+def _object_ascii_marker(obj: Dict[str, Any]) -> str:
+    """Choose ASCII marker for reconciled object events."""
+    if _is_item_object_event(obj):
+        return "I"
+    if _is_npc_object_event(obj):
+        return "N"
+    return "O"
+
+
+def _format_porymap_info(
+    location_name: Optional[str],
+    player_coords: Optional[Tuple[int, int]] = None,
+    badge_count: int = 0,
+    memory_reader: Any = None,
+    runtime_object_events: Optional[List[Dict[str, Any]]] = None,
+) -> PorymapResult:
     """
     Format porymap ground truth data (JSON and ASCII map) for the agent.
     
@@ -438,13 +549,14 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         location_name: Current location name from ROM
         player_coords: Player's (x, y) coordinates
         badge_count: Number of badges player has (for game-state-aware map selection)
+        memory_reader: Optional PokemonEmeraldReader for live metatile reads on dynamic maps
     
-    Returns list of formatted strings to add to context.
+    Returns a PorymapResult containing formatted strings and optional raw map data.
     """
     context_parts = []
     
     if not location_name or location_name == 'TITLE_SEQUENCE' or location_name == 'Unknown':
-        return context_parts
+        return PorymapResult(context_parts=context_parts)
     
     try:
         # Import here to avoid circular dependencies and allow graceful failure
@@ -455,7 +567,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         pokeemerald_root = _get_pokeemerald_root()
         if not pokeemerald_root:
             logger.warning(f"Porymap: Could not find pokeemerald root for location '{location_name}'")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
         
         # Convert ROM location name to porymap map name using mapping
         porymap_map_name = ROM_TO_PORYMAP_MAP.get(location_name)
@@ -516,7 +628,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         
         if not porymap_map_name:
             logger.warning(f"Porymap: Could not map ROM location '{location_name}' to porymap map name")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
         
         logger.info(f"Porymap: Building map for '{porymap_map_name}' (ROM location: '{location_name}', badges: {badge_count})")
         
@@ -528,7 +640,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
             logger.error(f"Porymap: Failed to build map for '{porymap_map_name}' due to corrupted tileset data: {e}")
             logger.error("This likely indicates missing or corrupted tileset files in pokemon_env/porymap.")
             logger.error("Pathfinding will not be available for this location.")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
         
         # Ensure grid is built (even if we don't include it in the text output)
         if not json_map.get('grid'):
@@ -543,7 +655,13 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
 
         if not json_map:
             logger.warning(f"Porymap: Failed to build JSON map for '{porymap_map_name}'")
-            return context_parts
+            return PorymapResult(context_parts=context_parts)
+
+        # For dynamic maps (e.g. Mauville Gym), replace static grid with live
+        # emulator metatiles so barrier changes are reflected in the agent's map.
+        if memory_reader is not None:
+            from utils.mapping.dynamic_map_overlay import apply_live_overlay_to_json_map
+            apply_live_overlay_to_json_map(json_map, memory_reader, location_name)
 
         # Filter grid based on player elevation to handle multi-level maps
         # For caves/dungeons with multiple connected levels, be more permissive
@@ -567,185 +685,142 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                                 if len(tile) >= 4:
                                     elevations_in_map.add(tile[3])
 
-                        # NO tolerance - only allow exact elevation matches
-                        # Elevation changes ONLY through stairs/doors/ledges (handled separately)
-                        elevation_tolerance = 0  # Must be exact same elevation
-
-                        # First pass: Find all stair and warp positions (S, D, arrow tiles, and ladders)
                         grid = json_map['grid']
-                        warp_positions = set()
-                        arrow_positions = set()  # Non-warp stairs (directional arrows - ledges)
-                        ladder_positions = set()  # Ladder tiles that connect elevations
-                        for y in range(len(grid)):
-                            for x in range(len(grid[y])):
-                                if grid[y][x] in ['S', 'D']:  # Stairs and Doors are both warps
-                                    warp_positions.add((x, y))
-                                elif grid[y][x] in ['←', '→', '↑', '↓']:  # Arrow tiles (ledges)
-                                    arrow_positions.add((x, y))
-                                elif grid[y][x] == '&':  # Ladder/bridge tiles
-                                    ladder_positions.add((x, y))
+                        height = len(grid)
+                        width = len(grid[0]) if height > 0 else 0
 
-                        # Combine all types of elevation connectors
-                        # Ladders (&) connect different elevations vertically
-                        all_stair_positions = warp_positions | arrow_positions | ladder_positions
+                        # Flood-fill from player position to find all reachable tiles.
+                        # Only crosses elevation boundaries through valid connectors:
+                        #   - E0 tiles (invisible stairs/ramps in Pokemon)
+                        #   - S/D tiles (stairs/doors/warps)
+                        #   - Ledge arrows (one-way, but reachable side is still visible)
+                        #   - & tiles (ladders/bridges)
+                        #   - Tiles with LADDER/STAIRS/WARP behavior
+                        from collections import deque
 
-                        # Build elevation connectivity graph from ladders AND adjacent walkable tiles
-                        # Ladders (&) connect elevations, but also regular tiles at adjacent different elevations (slopes)
-                        connected_elevations = set([player_elevation])  # Start with player's elevation
+                        def _get_elev(tx, ty):
+                            if 0 <= ty < len(raw_tiles) and 0 <= tx < len(raw_tiles[ty]):
+                                t = raw_tiles[ty][tx]
+                                return t[3] if len(t) >= 4 else None
+                            return None
 
-                        # Iteratively find all connected elevations (BFS)
-                        prev_size = 0
-                        max_iterations = 10  # Prevent infinite loops
-                        iteration = 0
-                        while len(connected_elevations) != prev_size and iteration < max_iterations:
-                            prev_size = len(connected_elevations)
-                            iteration += 1
+                        def _is_connector(cx, cy):
+                            """Check if a tile is an elevation connector (E0, stair, door, ladder)."""
+                            ch = grid[cy][cx] if 0 <= cy < height and 0 <= cx < width else '#'
+                            if ch in ['S', 'D', '&']:
+                                return True
+                            e = _get_elev(cx, cy)
+                            if e == 0:
+                                return True
+                            if 0 <= cy < len(raw_tiles) and 0 <= cx < len(raw_tiles[cy]):
+                                t = raw_tiles[cy][cx]
+                                if len(t) >= 2:
+                                    try:
+                                        from pokemon_env.enums import MetatileBehavior
+                                        bname = MetatileBehavior(t[1]).name if isinstance(t[1], int) else ""
+                                    except (ValueError, KeyError):
+                                        bname = ""
+                                    if any(kw in bname for kw in ("LADDER", "STAIRS", "WARP", "DOOR")):
+                                        return True
+                            return False
 
-                            # Detect direct walkable connections (slopes between elevations)
-                            # Check for adjacent walkable tiles at different elevations
-                            for y in range(len(grid)):
-                                for x in range(len(grid[y])):
-                                    if y < len(raw_tiles) and x < len(raw_tiles[y]):
-                                        tile = raw_tiles[y][x]
-                                        if len(tile) >= 4 and grid[y][x] in ['.', '~']:
-                                            tile_elev = tile[3]
-                                            if tile_elev in connected_elevations:
-                                                # Check adjacent tiles in all 4 directions
-                                                for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
-                                                    nx, ny = x + dx, y + dy
-                                                    if 0 <= ny < len(raw_tiles) and 0 <= nx < len(raw_tiles[ny]):
-                                                        neighbor_tile = raw_tiles[ny][nx]
-                                                        if len(neighbor_tile) >= 4:
-                                                            neighbor_elev = neighbor_tile[3]
-                                                            if ny < len(grid) and nx < len(grid[ny]):
-                                                                neighbor_char = grid[ny][nx]
-                                                                # If adjacent tile is walkable and at different elevation, connect them
-                                                                if neighbor_char in ['.', '~', 'S', 'D'] and neighbor_elev != tile_elev:
-                                                                    connected_elevations.add(neighbor_elev)
+                        walkable_chars = {'.', '~', 'S', 'D', '&', 'W', '←', '→', '↑', '↓'}
+                        reachable = set()
+                        queue = deque()
+                        queue.append((px, py))
+                        reachable.add((px, py))
 
-                            # Also check ladder tiles for connections
-                            for lx, ly in ladder_positions:
-                                if ly < len(raw_tiles) and lx < len(raw_tiles[ly]):
-                                    ladder_tile = raw_tiles[ly][lx]
-                                    if len(ladder_tile) >= 4:
-                                        ladder_elev = ladder_tile[3]
-                                        if ladder_elev in connected_elevations:
-                                            # Check tiles in all 4 directions (ladders can connect up/down/left/right)
-                                            for dx, dy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
-                                                nx, ny = lx + dx, ly + dy
-                                                if 0 <= ny < len(raw_tiles) and 0 <= nx < len(raw_tiles[ny]):
-                                                    neighbor_tile = raw_tiles[ny][nx]
-                                                    if len(neighbor_tile) >= 4:
-                                                        neighbor_elev = neighbor_tile[3]
-                                                        # Add elevation from walkable tiles OR other ladders
-                                                        if ny < len(grid) and nx < len(grid[ny]):
-                                                            neighbor_char = grid[ny][nx]
-                                                            if neighbor_char in ['.', '~', 'S', 'D', '&']:
-                                                                connected_elevations.add(neighbor_elev)
+                        while queue:
+                            cx, cy = queue.popleft()
+                            c_elev = _get_elev(cx, cy)
+                            c_char = grid[cy][cx] if 0 <= cy < height and 0 <= cx < width else '#'
 
-                        # Filter the grid based on elevation
+                            for ddx, ddy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                                nx, ny = cx + ddx, cy + ddy
+                                if (nx, ny) in reachable:
+                                    continue
+                                if not (0 <= ny < height and 0 <= nx < width):
+                                    continue
+
+                                n_char = grid[ny][nx]
+                                if n_char not in walkable_chars:
+                                    continue
+
+                                n_elev = _get_elev(nx, ny)
+                                if n_elev is None or c_elev is None:
+                                    reachable.add((nx, ny))
+                                    queue.append((nx, ny))
+                                    continue
+
+                                if n_elev == c_elev:
+                                    reachable.add((nx, ny))
+                                    queue.append((nx, ny))
+                                    continue
+
+                                # Elevation differs — only allow through connectors
+                                if _is_connector(cx, cy) or _is_connector(nx, ny):
+                                    reachable.add((nx, ny))
+                                    queue.append((nx, ny))
+                                    continue
+
+                                # Ledge tiles allow one-way elevation change *onto* the ledge
+                                if n_char in ['←', '→', '↑', '↓']:
+                                    reachable.add((nx, ny))
+                                    queue.append((nx, ny))
+                                    continue
+
+                                # Not a valid transition — skip
+
+                        # Also mark tiles adjacent to reachable warps/doors as reachable
+                        # so the pathfinder can step onto the landing tile after a warp
+                        extra = set()
+                        for rx, ry in reachable:
+                            if grid[ry][rx] in ['S', 'D']:
+                                for ddx, ddy in [(0, -1), (0, 1), (-1, 0), (1, 0)]:
+                                    ax, ay = rx + ddx, ry + ddy
+                                    if (ax, ay) not in reachable and 0 <= ay < height and 0 <= ax < width:
+                                        ac = grid[ay][ax]
+                                        if ac in walkable_chars:
+                                            extra.add((ax, ay))
+                        reachable |= extra
+
+                        # Build filtered grid: walkable tiles at a different elevation become '^'
+                        # '^' is functionally equivalent to '.' but visually signals
+                        # "this ground is at another elevation — use a ramp/connector"
                         filtered_grid = []
-
-                        for y in range(len(grid)):
+                        for y in range(height):
                             filtered_row = []
-                            for x in range(len(grid[y])):
+                            for x in range(width):
                                 original_char = grid[y][x]
 
-                                # Always preserve special markers (warps, doors, NPCs, items, PC, TV/notebook)
-                                if original_char in ['D', 'S', 'T', 'K', 'N', 'I', 'P', 'V', '←', '→', '↑', '↓']:
+                                # Always preserve special markers regardless of reachability
+                                if original_char in ['D', 'S', 'T', 'K', 'N', 'I', 'P', 'V']:
                                     filtered_row.append(original_char)
-                                elif y < len(raw_tiles) and x < len(raw_tiles[y]):
-                                    tile = raw_tiles[y][x]
-                                    if len(tile) >= 4:
-                                        tile_elevation = tile[3]
-                                        elevation_diff = abs(tile_elevation - player_elevation)
-
-                                        # Check if tile is adjacent to stairs (immediate neighbors only)
-                                        # This includes both warps (S/D) and arrow tiles (←/→/↑/↓)
-                                        is_adjacent_to_stairs = False
-                                        for stair_x, stair_y in all_stair_positions:
-                                            if abs(x - stair_x) + abs(y - stair_y) == 1:
-                                                is_adjacent_to_stairs = True
-                                                break
-
-                                        # Adjacent to stairs: keep WALKABLE tiles accessible regardless of elevation
-                                        # But still block walls/cliffs!
-                                        if is_adjacent_to_stairs and original_char in ['.', '~', '←', '→', '↑', '↓']:
-                                            filtered_row.append(original_char)  # Walkable tiles near stairs stay walkable
-                                        # Handle bridge tiles (&) based on whether there's a path underneath
-                                        elif original_char == '&':
-                                            # Check if bridge has adjacent walkable tiles (. & & & . pattern)
-                                            # This indicates a ground path underneath the bridge
-                                            # Need to search through consecutive & tiles to find ground at both ends
-                                            has_ground_path = False
-                                            if 0 <= y < len(grid):
-                                                # Search left through consecutive bridge tiles to find ground
-                                                left_walkable = False
-                                                search_x = x - 1
-                                                while search_x >= 0 and search_x < len(grid[y]):
-                                                    search_char = grid[y][search_x]
-                                                    if search_char == '&':
-                                                        # Continue searching left through bridge
-                                                        search_x -= 1
-                                                    elif search_char in ['.', '~']:
-                                                        # Found walkable ground - check elevation
-                                                        if search_x < len(raw_tiles[y]):
-                                                            search_tile = raw_tiles[y][search_x]
-                                                            if len(search_tile) >= 4:
-                                                                search_elev = search_tile[3]
-                                                                if abs(search_elev - player_elevation) <= elevation_tolerance:
-                                                                    left_walkable = True
-                                                        break
-                                                    else:
-                                                        # Hit a non-ground, non-bridge tile
-                                                        break
-
-                                                # Search right through consecutive bridge tiles to find ground
-                                                right_walkable = False
-                                                search_x = x + 1
-                                                while search_x < len(grid[y]):
-                                                    search_char = grid[y][search_x]
-                                                    if search_char == '&':
-                                                        # Continue searching right through bridge
-                                                        search_x += 1
-                                                    elif search_char in ['.', '~']:
-                                                        # Found walkable ground - check elevation
-                                                        if search_x < len(raw_tiles[y]):
-                                                            search_tile = raw_tiles[y][search_x]
-                                                            if len(search_tile) >= 4:
-                                                                search_elev = search_tile[3]
-                                                                if abs(search_elev - player_elevation) <= elevation_tolerance:
-                                                                    right_walkable = True
-                                                        break
-                                                    else:
-                                                        # Hit a non-ground, non-bridge tile
-                                                        break
-
-                                                # Ground path exists if BOTH left and right ends are walkable at player elevation
-                                                has_ground_path = left_walkable and right_walkable
-
-                                            # If there's a ground path underneath, show as walkable
-                                            if has_ground_path and tile_elevation > player_elevation:
-                                                filtered_row.append('.')  # Can walk under bridge
-                                            else:
-                                                filtered_row.append('&')  # Keep bridge visible for pathfinding
-                                        # Block tiles beyond elevation tolerance
-                                        elif elevation_diff > elevation_tolerance:
-                                            # Check if tile's elevation is connected via ladders
-                                            if tile_elevation in connected_elevations:
-                                                filtered_row.append(original_char)  # Allow tiles at connected elevations
-                                            # Special case: If player is in water, allow ground/grass tiles to show
-                                            # (player can surf to shore, but shore players can't access water - handled by pathfinding)
-                                            elif 0 <= py < len(grid) and 0 <= px < len(grid[py]) and grid[py][px] == 'W' and original_char in ['.', '~']:
-                                                filtered_row.append(original_char)  # Allow ground tiles from water
-                                            else:
-                                                filtered_row.append('#')  # Block tiles at very different elevations
+                                elif original_char == '#':
+                                    filtered_row.append('#')
+                                elif (x, y) in reachable:
+                                    # Handle bridge tiles: if player is under a bridge, show as walkable ground
+                                    if original_char == '&':
+                                        tile_elev = _get_elev(x, y)
+                                        if tile_elev is not None and tile_elev > player_elevation:
+                                            filtered_row.append('.')
                                         else:
-                                            filtered_row.append(original_char)  # Keep original tile
+                                            filtered_row.append('&')
                                     else:
                                         filtered_row.append(original_char)
+                                elif original_char in ['.', '~']:
+                                    # Walkable ground at a different elevation
+                                    filtered_row.append('^')
+                                elif original_char == 'W':
+                                    # Unreachable water stays '#' (need Surf, not elevation)
+                                    player_char = grid[py][px] if 0 <= py < height and 0 <= px < width else '.'
+                                    if player_char == 'W':
+                                        filtered_row.append('W')
+                                    else:
+                                        filtered_row.append('#')
                                 else:
-                                    filtered_row.append(original_char)
+                                    # Anything else unreachable becomes '#'
+                                    filtered_row.append('#')
                             filtered_grid.append(filtered_row)
 
                         # Update the grid and ASCII map
@@ -762,18 +837,205 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
                         original_blocked_count = sum(1 for row in grid for cell in row if cell == '#')
                         newly_blocked = blocked_count - original_blocked_count
 
-                        logger.info(f"Elevation filtering: player at ({px}, {py}) elevation {player_elevation} - map has elevations {sorted(elevations_in_map)} - tolerance: {elevation_tolerance} - blocked {newly_blocked} additional tiles")
+                        logger.info(f"Elevation filtering (flood-fill): player at ({px}, {py}) elevation {player_elevation} - map has elevations {sorted(elevations_in_map)} - reachable tiles: {len(reachable)} - blocked {newly_blocked} additional tiles")
             except Exception as e:
                 logger.warning(f"Failed to filter map by elevation: {e}")
+
+        # Reconcile static porymap objects against runtime object events.
+        npc_source = "static_reference"
+        static_objects = json_map.get("objects", [])
+        # region agent log
+        _agent_debug_log(
+            "H3",
+            "porymap_state.py:_format_porymap_info:pre_reconcile",
+            "Pre-reconciliation object snapshot",
+            {
+                "location_name": location_name,
+                "porymap_map_name": porymap_map_name,
+                "static_count": len(static_objects),
+                "runtime_count": len(runtime_object_events or []),
+                "static_local_ids": [obj.get("local_id") for obj in static_objects[:10]],
+                "runtime_local_ids": [obj.get("local_id") for obj in (runtime_object_events or [])[:10]],
+                "runtime_coords": [
+                    {
+                        "local_id": obj.get("local_id"),
+                        "x": obj.get("current_x", obj.get("x")),
+                        "y": obj.get("current_y", obj.get("y")),
+                        "graphics_id": obj.get("graphics_id"),
+                    }
+                    for obj in (runtime_object_events or [])[:10]
+                ],
+            },
+        )
+        # endregion
+        if runtime_object_events:
+            reconciled_objects: List[Dict[str, Any]] = []
+            runtime_with_coords: List[Dict[str, Any]] = []
+            match_debug: List[Dict[str, Any]] = []
+
+            for runtime_obj in runtime_object_events:
+                rx, ry = _get_runtime_xy(runtime_obj)
+                if isinstance(rx, int) and isinstance(ry, int):
+                    runtime_with_coords.append(runtime_obj)
+
+            had_runtime_coords = len(runtime_with_coords) > 0
+
+            for static_obj in static_objects:
+                static_local_id = _normalize_local_id(static_obj.get("local_id"))
+                static_x = static_obj.get("x")
+                static_y = static_obj.get("y")
+                static_gid = static_obj.get("graphics_id")
+
+                matched = False
+                matched_reason = ""
+                matched_runtime: Optional[Dict[str, Any]] = None
+
+                matched_idx = -1
+
+                # Primary: local_id matching when both sides provide one.
+                if static_local_id:
+                    for idx, runtime_obj in enumerate(runtime_with_coords):
+                        runtime_local_id = _normalize_local_id(runtime_obj.get("local_id"))
+                        if runtime_local_id and runtime_local_id == static_local_id:
+                            matched = True
+                            matched_reason = "local_id"
+                            matched_runtime = runtime_obj
+                            matched_idx = idx
+                            break
+
+                # Fallback: coordinate proximity + compatible graphics.
+                if not matched and isinstance(static_x, int) and isinstance(static_y, int):
+                    for idx, runtime_obj in enumerate(runtime_with_coords):
+                        rx, ry = _get_runtime_xy(runtime_obj)
+                        if not isinstance(rx, int) or not isinstance(ry, int):
+                            continue
+                        if abs(rx - static_x) + abs(ry - static_y) > 2:
+                            continue
+                        if not _graphics_ids_compatible(static_gid, runtime_obj.get("graphics_id")):
+                            continue
+                        matched = True
+                        matched_reason = "coord_plus_graphics"
+                        matched_runtime = runtime_obj
+                        matched_idx = idx
+                        break
+
+                if matched and matched_idx >= 0:
+                    runtime_with_coords.pop(matched_idx)
+
+                if len(match_debug) < 12:
+                    rx, ry = _get_runtime_xy(matched_runtime) if matched_runtime else (None, None)
+                    match_debug.append(
+                        {
+                            "static_local_id": static_obj.get("local_id"),
+                            "static_flag": static_obj.get("flag"),
+                            "static_x": static_x,
+                            "static_y": static_y,
+                            "static_graphics_id": static_gid,
+                            "matched": matched,
+                            "matched_reason": matched_reason,
+                            "runtime_source": (matched_runtime or {}).get("source"),
+                            "runtime_local_id": (matched_runtime or {}).get("local_id"),
+                            "runtime_graphics_id": (matched_runtime or {}).get("graphics_id"),
+                            "runtime_x": rx,
+                            "runtime_y": ry,
+                        }
+                    )
+
+                if matched:
+                    reconciled_objects.append(static_obj)
+
+            # Only switch to runtime-verified mode when we had runtime coords to compare.
+            if had_runtime_coords:
+                json_map["objects"] = reconciled_objects
+                npc_source = "runtime_verified"
+        # region agent log
+        _agent_debug_log(
+            "H4",
+            "porymap_state.py:_format_porymap_info:post_reconcile",
+            "Post-reconciliation object snapshot",
+            {
+                "location_name": location_name,
+                "npc_source": npc_source,
+                "final_count": len(json_map.get("objects", [])),
+                "final_local_ids": [obj.get("local_id") for obj in json_map.get("objects", [])[:10]],
+                "birch_present": any(obj.get("local_id") == "LOCALID_BIRCHS_LAB_BIRCH" for obj in json_map.get("objects", [])),
+            },
+        )
+        # endregion
+        # region agent log
+        _agent_debug_log(
+            "H10",
+            "porymap_state.py:_format_porymap_info:match_debug",
+            "Per-object reconciliation decision trace",
+            {
+                "location_name": location_name,
+                "match_debug": match_debug if "match_debug" in locals() else [],
+            },
+        )
+        # endregion
+
+        pre_flag_count = len(json_map.get("objects", []))
+        if memory_reader is not None and json_map.get("objects"):
+            filtered_by_flag: List[Dict[str, Any]] = []
+            flag_filter_debug: List[Dict[str, Any]] = []
+            for obj in json_map["objects"]:
+                flag_name = obj.get("flag", "0")
+                if flag_name and flag_name != "0":
+                    flag_id = FLAG_HIDE_IDS.get(flag_name)
+                    if flag_id is not None:
+                        try:
+                            is_set = memory_reader._is_event_flag_set(flag_id)
+                        except Exception:
+                            is_set = False
+                        if len(flag_filter_debug) < 12:
+                            flag_filter_debug.append({"flag_name": flag_name, "flag_id": flag_id, "is_set": is_set, "local_id": obj.get("local_id", ""), "graphics_id": obj.get("graphics_id", "")})
+                        if is_set:
+                            continue
+                    else:
+                        if len(flag_filter_debug) < 12:
+                            flag_filter_debug.append({"flag_name": flag_name, "flag_id": None, "is_set": None, "local_id": obj.get("local_id", ""), "graphics_id": obj.get("graphics_id", ""), "note": "unknown_flag"})
+                filtered_by_flag.append(obj)
+            json_map["objects"] = filtered_by_flag
+            npc_source = npc_source + "+flag_filtered" if npc_source != "static_reference" else "flag_filtered"
+            # region agent log
+            _agent_debug_log(
+                "H12",
+                "porymap_state.py:_format_porymap_info:flag_filter",
+                "Flag-based object filtering",
+                {
+                    "location_name": location_name,
+                    "pre_flag_count": pre_flag_count,
+                    "post_flag_count": len(filtered_by_flag),
+                    "removed_count": pre_flag_count - len(filtered_by_flag),
+                    "flag_filter_debug": flag_filter_debug,
+                },
+            )
+            # endregion
         
         # Format for LLM
-        context_parts.append("\n=== PORYMAP GROUND TRUTH MAP ===")
+        context_parts.append("\n=== PORYMAP MAP LAYOUT ===")
         context_parts.append(f"Location: {json_map.get('name', porymap_map_name)}")
         context_parts.append(f"Dimensions: {json_map['dimensions']['width']}x{json_map['dimensions']['height']}")
         
-        # Add ASCII map with player position marked
+        # Add ASCII map with reconciled NPCs ('N') and player ('P') marked.
         if json_map.get('ascii'):
             ascii_map = json_map['ascii']
+            ascii_lines = ascii_map.split('\n')
+
+            # Stamp visible objects as markers for the LLM-facing map.
+            # Uses reconciled/flag-filtered objects, so hidden/static-only
+            # objects are not rendered. Item balls are shown as 'I';
+            # character/object events are shown as 'N'.
+            for obj in json_map.get("objects", []):
+                ox = obj.get("x")
+                oy = obj.get("y")
+                if not isinstance(ox, int) or not isinstance(oy, int):
+                    continue
+                if 0 <= oy < len(ascii_lines):
+                    line = list(ascii_lines[oy])
+                    if 0 <= ox < len(line):
+                        line[ox] = _object_ascii_marker(obj)
+                        ascii_lines[oy] = ''.join(line)
 
             # Insert player position 'P' if provided
             if player_coords and json_map.get('grid'):
@@ -782,22 +1044,20 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
 
                 # Check if player position is within map bounds
                 if 0 <= py < len(grid) and 0 <= px < len(grid[0]) if grid else False:
-                    # Split ASCII map into lines
-                    ascii_lines = ascii_map.split('\n')
-
                     # Find the line corresponding to player's Y coordinate
                     if py < len(ascii_lines):
                         line = list(ascii_lines[py])
                         # Replace character at player's X position with 'P'
                         if px < len(line):
-                            original_char = line[px]
                             line[px] = 'P'
                             ascii_lines[py] = ''.join(line)
-                            ascii_map = '\n'.join(ascii_lines)
+            ascii_map = '\n'.join(ascii_lines)
+            # Keep json_map ASCII aligned with the final rendered map shown to the LLM/UI.
+            json_map["ascii"] = ascii_map
             
             context_parts.append("\nASCII Map:")
             context_parts.append(ascii_map)
-            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, 'I' = item, '~' = tall grass, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
+            context_parts.append("(Legend: 'P' = Player, '.' = walkable, '#' = blocked, '^' = walkable (different elevation), 'N' = NPC, 'I' = item, 'O' = other object, '~' = tall grass, 'W' = water, 'X' = out of bounds, 'T' = TV, 'K' = Clock, 'S' = Stairs/Warp, 'D' = Door)")
         
         # NOTE: Warps, Objects/NPCs, and Connections lists are DEPRECATED
         # This data is already included in the Map Data (JSON) section below.
@@ -836,6 +1096,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         compact_json_map = {
             "name": json_map.get('name'),
             "id": json_map.get('id'),
+            "npc_source": npc_source,
             "dimensions": json_map.get('dimensions'),
             "warps": simplified_warps,
             "objects": objects_for_json,
@@ -848,7 +1109,7 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         
         # Store porymap data in context_parts for later extraction (hidden from LLM but accessible for pathfinding)
         # We'll store it as a special marker that can be extracted from state
-        return context_parts, json_map  # Return both formatted text and raw data
+        return PorymapResult(context_parts=context_parts, json_map=json_map)
         
     except ImportError as e:
         # Log import errors as warnings
@@ -858,5 +1119,5 @@ def _format_porymap_info(location_name: Optional[str], player_coords: Optional[T
         logger.warning(f"Error adding porymap info for location '{location_name}': {e}", exc_info=True)
     
     # Return formatted text only if json_map not available
-    return context_parts
+    return PorymapResult(context_parts=context_parts)
 

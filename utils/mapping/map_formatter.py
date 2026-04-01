@@ -86,8 +86,12 @@ def is_tile_walkable(tile) -> bool:
                 behavior_enum = _get_behavior_enum()(behavior_int)
                 behavior_name = behavior_enum.name
         except (ValueError, TypeError, AttributeError):
-            behavior_name = "UNKNOWN"
-
+            # MetatileBehavior might be fallback that doesn't accept args
+            if hasattr(MetatileBehavior, 'NORMAL'):
+                behavior_name = "UNKNOWN"
+            else:
+                behavior_name = "UNKNOWN"
+    
     # Special case for Brendan's House - stairs and doors are reversed
     # NON_ANIMATED_DOOR (96) appears at top and should be stairs (walkable)
     # SOUTH_ARROW_WARP (101) appears at bottom and should be door (walkable)

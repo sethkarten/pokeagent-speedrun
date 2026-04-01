@@ -204,6 +204,23 @@ class RunDataManager:
         New schema (v2): ``post_state`` is no longer written. Location and
         player_coords are promoted from pre_state to top-level fields.
         ``objective_context`` captures the active objective IDs.
+
+        Trajectory JSONL schema (current):
+            Required:
+                - step
+                - timestamp
+                - reasoning
+                - action
+                - pre_state
+                - outcome
+                - location
+                - player_coords
+            Optional:
+                - objective_context
+                - llm_prompt
+                - llm_trace_ref
+            Legacy compatibility:
+                - post_state may exist in older runs
         """
         trajectory_entry: Dict[str, Any] = {
             "step": step,

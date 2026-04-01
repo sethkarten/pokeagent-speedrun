@@ -12,8 +12,13 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from agents.prompts.paths import GAME_NAME, POKEAGENT_BASE_PROMPT_PATH, POKEAGENT_SYSTEM_PROMPT_PATH, render_prompt, resolve_repo_path
+from agents.subagents.utils.trajectory_window import (
+    read_last_jsonl_lines,
+    resolve_trajectory_path,
+)
 
 logger = logging.getLogger(__name__)
+MIN_PROMPT_OPTIMIZATION_WARMUP_STEPS = 50
 
 
 class PromptOptimizer:
@@ -91,9 +96,18 @@ class PromptOptimizer:
             optimization_frequency: How often to run optimization
         
         Returns:
-            True if optimization should run
+            True if optimization should run.
+
+        Warmup note:
+            Prompt optimization now uses the same warmup floor as harness
+            evolution (50 steps) so standalone prompt optimization and
+            harness-driven optimization follow consistent cadence semantics.
         """
-        return current_step > 0 and current_step % optimization_frequency == 0
+        return (
+            current_step >= MIN_PROMPT_OPTIMIZATION_WARMUP_STEPS
+            and current_step > 0
+            and current_step % optimization_frequency == 0
+        )
     
     def get_recent_trajectories(self, num_steps: int = 10) -> List[Dict[str, Any]]:
         """
@@ -105,25 +119,18 @@ class PromptOptimizer:
         Returns:
             List of trajectory dictionaries
         """
-        from utils.data_persistence.run_data_manager import get_cache_path
-        trajectory_file = get_cache_path("trajectory_history.jsonl")
-
-        # Fallback to legacy path for older runs
-        if not trajectory_file.exists():
-            trajectory_file = self.run_manager.run_dir / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
-
-        if not trajectory_file.exists():
+        trajectory_file = resolve_trajectory_path(self.run_manager)
+        if not trajectory_file or not trajectory_file.exists():
             logger.warning("No trajectory file found")
             return []
-        
+
         trajectories = []
-        with open(trajectory_file, 'r') as f:
-            for line in f:
-                if line.strip():
-                    trajectories.append(json.loads(line))
-        
-        # Return last N trajectories
-        return trajectories[-num_steps:] if len(trajectories) >= num_steps else trajectories
+        for line in read_last_jsonl_lines(trajectory_file, num_steps):
+            try:
+                trajectories.append(json.loads(line))
+            except json.JSONDecodeError:
+                logger.warning("Skipping malformed trajectory line from %s", trajectory_file)
+        return trajectories
     
     def optimize_prompt(self, current_step: int, num_trajectory_steps: int = 10) -> str:
         """

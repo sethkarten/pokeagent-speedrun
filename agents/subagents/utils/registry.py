@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 import os
+=======
+>>>>>>> tu8435/tersoo-dev-2
 from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, Optional, Sequence
 
@@ -18,6 +21,7 @@ class LocalSubagentSpec:
     allowed_tool_names: Sequence[str] = ()
 
 
+<<<<<<< HEAD
 def _is_red() -> bool:
     return os.environ.get("GAME_TYPE", "emerald").lower() == "red"
 
@@ -26,6 +30,8 @@ def _puzzle_tool_name() -> str:
     return "red_puzzle_agent" if _is_red() else "subagent_gym_puzzle"
 
 
+=======
+>>>>>>> tu8435/tersoo-dev-2
 BATTLE_ALLOWED_TOOL_NAMES = (
     "press_buttons",
     "process_memory",
@@ -49,7 +55,11 @@ PLANNER_ALLOWED_TOOL_NAMES = (
     "subagent_summarize",
     "subagent_verify",
     "subagent_reflect",
+<<<<<<< HEAD
     _puzzle_tool_name(),
+=======
+    "subagent_gym_puzzle",
+>>>>>>> tu8435/tersoo-dev-2
     "replan_objectives",
 )
 
@@ -60,6 +70,7 @@ SUBAGENT_FORBIDDEN_TOOLS: FrozenSet[str] = frozenset({"execute_custom_subagent"}
 BUILTIN_SUBAGENT_TOOL_NAMES: FrozenSet[str] = frozenset({
     "subagent_reflect",
     "subagent_verify",
+<<<<<<< HEAD
     _puzzle_tool_name(),
     "subagent_summarize",
     "subagent_battler",
@@ -118,6 +129,16 @@ _RED_PUZZLE_SPEC = LocalSubagentSpec(
     },
 )
 
+=======
+    "subagent_gym_puzzle",
+    "subagent_summarize",
+    "subagent_battler",
+    "subagent_plan_objectives",
+    "subagent_cleanup_run_artifacts",
+})
+
+
+>>>>>>> tu8435/tersoo-dev-2
 LOCAL_SUBAGENT_SPECS = (
     LocalSubagentSpec(
         tool_name="subagent_reflect",
@@ -193,7 +214,34 @@ LOCAL_SUBAGENT_SPECS = (
             "required": ["reasoning"],
         },
     ),
+<<<<<<< HEAD
     _RED_PUZZLE_SPEC if _is_red() else _EMERALD_PUZZLE_SPEC,
+=======
+    LocalSubagentSpec(
+        tool_name="subagent_gym_puzzle",
+        handler_type="one_step",
+        interaction_name="Gym_Puzzle_Analysis",
+        handler_method="_execute_subagent_gym_puzzle",
+        description=(
+            "Get expert guidance on solving gym puzzles. Use this when you're "
+            "in a gym and need help understanding the puzzle mechanics or "
+            "finding the solution."
+        ),
+        parameters={
+            "type_": "OBJECT",
+            "properties": {
+                "gym_name": {
+                    "type_": "STRING",
+                    "description": (
+                        "Gym / map identifier from the current game state, e.g. "
+                        "'LAVARIDGE_TOWN_GYM_1F' or 'MOSSDEEP_CITY_GYM'."
+                    ),
+                }
+            },
+            "required": [],
+        },
+    ),
+>>>>>>> tu8435/tersoo-dev-2
     LocalSubagentSpec(
         tool_name="subagent_summarize",
         handler_type="one_step",
@@ -385,6 +433,74 @@ LOCAL_SUBAGENT_SPECS = (
             "required": ["window_range", "directive"],
         },
     ),
+<<<<<<< HEAD
+=======
+    LocalSubagentSpec(
+        tool_name="subagent_cleanup_run_artifacts",
+        handler_type="one_step",
+        interaction_name="Subagent_Cleanup_Run_Artifacts",
+        handler_method="_execute_subagent_cleanup_run_artifacts",
+        description=(
+            "Delete local run/cache artifacts under the repo: optional file mtime "
+            "cutoff and/or top-level directory names embedding YYYYMMDD (or "
+            "run_YYYYMMDD_). Targets default roots .pokeagent_cache, backups, and "
+            "run_data. No LLM — deterministic filesystem cleanup. Defaults to "
+            "dry_run true; set dry_run false to actually delete. Requires at least "
+            "one of file_mtime_on_or_after or directory_embedded_date_on_or_after."
+        ),
+        parameters={
+            "type_": "OBJECT",
+            "properties": {
+                "reasoning": {
+                    "type_": "STRING",
+                    "description": (
+                        "Why this cleanup is appropriate (audit trail). "
+                        "Example: 'Free disk after experiment batch; matches Mar 27+ policy.'"
+                    ),
+                },
+                "dry_run": {
+                    "type_": "BOOLEAN",
+                    "description": (
+                        "If true (default), only report counts and sample paths without "
+                        "deleting. Set false to perform deletion."
+                    ),
+                },
+                "file_mtime_on_or_after": {
+                    "type_": "STRING",
+                    "description": (
+                        "Optional. Delete files under the chosen roots whose modification "
+                        "time is >= this instant (local time). Formats: YYYY-MM-DD or "
+                        "YYYY-MM-DD HH:MM:SS."
+                    ),
+                },
+                "directory_embedded_date_on_or_after": {
+                    "type_": "STRING",
+                    "description": (
+                        "Optional. Remove top-level subdirectories of each root whose "
+                        "name starts with YYYYMMDD_ or run_YYYYMMDD_ and the date is "
+                        ">= this calendar day. Use YYYYMMDD or YYYY-MM-DD."
+                    ),
+                },
+                "roots": {
+                    "type_": "ARRAY",
+                    "items": {"type_": "STRING"},
+                    "description": (
+                        "Optional relative path names under the repo root. "
+                        "Default: [\".pokeagent_cache\", \"backups\", \"run_data\"]."
+                    ),
+                },
+                "max_path_samples": {
+                    "type_": "INTEGER",
+                    "description": (
+                        "Optional. Max sample paths per category in the JSON result "
+                        "(default 80)."
+                    ),
+                },
+            },
+            "required": ["reasoning"],
+        },
+    ),
+>>>>>>> tu8435/tersoo-dev-2
 )
 
 

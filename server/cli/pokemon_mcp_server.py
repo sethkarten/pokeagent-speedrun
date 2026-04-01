@@ -194,7 +194,7 @@ def navigate_to(
 #   CLI agents may implement their own internal memory systems
 # - Wiki tools (lookup_pokemon_info, list_wiki_sources, get_walkthrough)
 #   CLI agents may access web information through their native capabilities
-# - Objective tools (complete_direct_objective, create_direct_objectives, get_progress_summary)
+# - Objective tools (complete_direct_objective, replan_objectives, get_progress_summary)
 #   CLI agents may use their own abstractions for creating and tracking the
 #   completion of objectives. Milestones are used for progress internal metric tracking 
 #   in .pokeagent_cache/{run_id}/cumulative_metrics.json.
@@ -306,39 +306,6 @@ def complete_direct_objective(
     if category:
         body["category"] = category
     return _post("/mcp/complete_direct_objective", body)
-
-
-# @mcp.tool()
-def create_direct_objectives(
-    objectives: List[Dict[str, Any]],
-    reasoning: str = "",
-    category: str = "",
-) -> dict:
-    """
-    Create the next 3 direct objectives dynamically.
-    Use this after completing all objectives in a sequence to plan your next steps.
-
-    Args:
-        objectives: List of exactly 3 objective dicts, each with:
-            - id (str): Unique objective identifier
-            - description (str): What needs to be done
-            - action_type (str): Type of action (navigate, interact, battle, create_new_objectives)
-            - target_location (str, optional): Where this takes place
-            - navigation_hint (str, optional): How to get there
-            - completion_condition (str, optional): How to know it's done
-            - priority (int, optional): Priority level
-        reasoning: Why these objectives were chosen
-        category: Category for categorized mode (story, battling, dynamics)
-
-    Returns:
-        Dictionary with success status and next objective guidance
-    """
-    body: Dict[str, Any] = {"objectives": objectives}
-    if reasoning:
-        body["reasoning"] = reasoning
-    if category:
-        body["category"] = category
-    return _post("/mcp/create_direct_objectives", body)
 
 
 # @mcp.tool()

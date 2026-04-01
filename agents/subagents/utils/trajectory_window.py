@@ -1,4 +1,9 @@
+<<<<<<< HEAD
 """Trajectory-window helpers for local subagents."""
+=======
+"""Trajectory-window helpers for subagents. The subagent/optimization system
+is deeply tied to the global trajectory history stored in trajectory_history.jsonl"""
+>>>>>>> tu8435/tersoo-dev-2
 
 from __future__ import annotations
 
@@ -25,8 +30,13 @@ def clamp_trajectory_window(last_n_steps: Optional[int]) -> int:
     return max(1, min(requested, MAX_TRAJECTORY_WINDOW))
 
 
+<<<<<<< HEAD
 def _trajectory_file_for_run(run_data_manager: Any = None) -> Optional[Path]:
     """Resolve trajectory_history.jsonl, preferring the cache location."""
+=======
+def resolve_trajectory_path(run_data_manager: Any = None) -> Optional[Path]:
+    """Resolve trajectory_history.jsonl using cache/run_data precedence."""
+>>>>>>> tu8435/tersoo-dev-2
     try:
         from utils.data_persistence.run_data_manager import get_cache_path
         cache_file = get_cache_path("trajectory_history.jsonl")
@@ -35,7 +45,11 @@ def _trajectory_file_for_run(run_data_manager: Any = None) -> Optional[Path]:
     except Exception:
         pass
 
+<<<<<<< HEAD
     # Fallback to legacy run_data path for older runs
+=======
+    # Fallback to synced run_data copy when cache is unavailable.
+>>>>>>> tu8435/tersoo-dev-2
     if run_data_manager is not None:
         run_dir = None
         if hasattr(run_data_manager, "get_run_directory"):
@@ -43,14 +57,29 @@ def _trajectory_file_for_run(run_data_manager: Any = None) -> Optional[Path]:
         elif hasattr(run_data_manager, "run_dir"):
             run_dir = run_data_manager.run_dir
         if run_dir:
+<<<<<<< HEAD
             legacy = Path(run_dir) / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
             if legacy.exists():
                 return legacy
+=======
+            synced = Path(run_dir) / "trajectory_history.jsonl"
+            if synced.exists():
+                return synced
+>>>>>>> tu8435/tersoo-dev-2
 
     return None
 
 
+<<<<<<< HEAD
 def _read_last_jsonl_lines(path: Path, max_lines: int) -> List[str]:
+=======
+def _trajectory_file_for_run(run_data_manager: Any = None) -> Optional[Path]:
+    """Backward-compatible alias for legacy callsites/tests."""
+    return resolve_trajectory_path(run_data_manager)
+
+
+def read_last_jsonl_lines(path: Path, max_lines: int) -> List[str]:
+>>>>>>> tu8435/tersoo-dev-2
     """Read the last non-empty lines from a JSONL file without scanning it twice."""
     if max_lines <= 0 or not path.exists():
         return []
@@ -96,15 +125,31 @@ def _read_last_jsonl_lines(path: Path, max_lines: int) -> List[str]:
     return lines
 
 
+<<<<<<< HEAD
 def load_recent_trajectories(run_data_manager: Any, last_n_steps: Optional[int] = None) -> List[Dict[str, Any]]:
     """Load the most recent trajectory entries, preserving chronological order."""
     window_size = clamp_trajectory_window(last_n_steps)
     trajectory_file = _trajectory_file_for_run(run_data_manager)
+=======
+def _read_last_jsonl_lines(path: Path, max_lines: int) -> List[str]:
+    """Backward-compatible alias for older callsites/tests."""
+    return read_last_jsonl_lines(path, max_lines)
+
+
+def load_recent_trajectories(run_data_manager: Any, last_n_steps: Optional[int] = None) -> List[Dict[str, Any]]:
+    """Load the most recent trajectory entries, preserving chronological order."""
+    window_size = clamp_trajectory_window(last_n_steps)
+    trajectory_file = resolve_trajectory_path(run_data_manager)
+>>>>>>> tu8435/tersoo-dev-2
     if not trajectory_file or not trajectory_file.exists():
         return []
 
     trajectories: List[Dict[str, Any]] = []
+<<<<<<< HEAD
     for line in _read_last_jsonl_lines(trajectory_file, window_size):
+=======
+    for line in read_last_jsonl_lines(trajectory_file, window_size):
+>>>>>>> tu8435/tersoo-dev-2
         try:
             trajectories.append(json.loads(line))
         except json.JSONDecodeError:
@@ -122,12 +167,23 @@ def load_trajectory_range(
 
     Returns ``(entries, actual_min_step, actual_max_step)`` where the
     actual values reflect the available data (the range is clipped).
+<<<<<<< HEAD
     """
     trajectory_file = _trajectory_file_for_run(run_data_manager)
     if not trajectory_file or not trajectory_file.exists():
         return [], 0, 0
 
     all_lines = _read_last_jsonl_lines(trajectory_file, MAX_TRAJECTORY_WINDOW * 10)
+=======
+    Implementation note: this reads only a bounded tail window
+    (MAX_TRAJECTORY_WINDOW * 10 lines), not the full trajectory file.
+    """
+    trajectory_file = resolve_trajectory_path(run_data_manager)
+    if not trajectory_file or not trajectory_file.exists():
+        return [], 0, 0
+
+    all_lines = read_last_jsonl_lines(trajectory_file, MAX_TRAJECTORY_WINDOW * 10)
+>>>>>>> tu8435/tersoo-dev-2
 
     entries: List[Dict[str, Any]] = []
     min_step = float("inf")
@@ -151,6 +207,15 @@ def load_trajectory_range(
 
     actual_min = int(min_step) if min_step != float("inf") else 0
     actual_max = int(max_step) if max_step != float("-inf") else 0
+<<<<<<< HEAD
+=======
+    if actual_min and actual_min > start:
+        logger.warning(
+            "Trajectory range clipped to available tail window: requested_start=%d actual_min=%d",
+            start,
+            actual_min,
+        )
+>>>>>>> tu8435/tersoo-dev-2
     return entries, actual_min, actual_max
 
 

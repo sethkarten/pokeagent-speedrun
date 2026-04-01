@@ -106,6 +106,7 @@ class MCPToolAdapter:
             endpoint_map = {
                 # Pokemon MCP tools
                 "get_game_state": "/mcp/get_game_state",
+                "get_map_data": "/mcp/get_map_data",
                 "press_buttons": "/mcp/press_buttons",
                 "navigate_to": "/mcp/navigate_to",
                 "add_memory": "/mcp/add_memory",
@@ -122,7 +123,6 @@ class MCPToolAdapter:
                 "get_walkthrough": "/mcp/get_walkthrough",
                 
                 "complete_direct_objective": "/mcp/complete_direct_objective",
-                "create_direct_objectives": "/mcp/create_direct_objectives",
                 "get_progress_summary": "/mcp/get_progress_summary",
                 # Planner subagent (categorized mode) — must match server/app.py routes
                 "get_full_objective_sequence": "/mcp/get_full_objective_sequence",
@@ -491,6 +491,29 @@ class PokeAgent:
                 }
             },
             {
+                "name": "run_code",
+                "description": "Execute arbitrary Python code in the game sandbox. Use this to prototype, debug, and test code BEFORE saving it as a skill. The code has access to the same `tools` dict as run_skill (press_buttons, get_game_state, etc.) plus `args`. Set `result` to return data. Use this to: inspect get_game_state() output, test map parsing, prototype pathfinding, debug skill code. Stdout from print() is captured.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "code": {
+                            "type_": "STRING",
+                            "description": "Python code to execute. Has access to: tools['press_buttons'](), tools['get_game_state'](), args, random, collections, heapq, numpy/np, json, re, math. Set 'result' variable to return data."
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "What you are testing or prototyping"
+                        },
+                        "args": {
+                            "type_": "OBJECT",
+                            "description": "Optional arguments passed as the `args` dict",
+                            "properties": {}
+                        }
+                    },
+                    "required": ["code", "reasoning"]
+                }
+            },
+            {
                 "name": "process_subagent",
                 "description": "Manage the subagent registry. The SUBAGENT REGISTRY section in your prompt shows all subagent IDs. Use 'read' to get full config, 'add' to create, 'update' to modify, 'delete' to remove (built-ins cannot be deleted).",
                 "parameters": {
@@ -526,47 +549,12 @@ class PokeAgent:
                     "required": ["action", "entries", "reasoning"]
                 }
             },
-            # COMMENTED OUT FOR NOW AS OBJECTIVE CREATION IS HANDLED BY THE PLANNER SUBAGENT
-            #  {
-            #     "name": "create_direct_objectives",
-            #     "description": "Create the next 3 direct objectives when you need new goals. In LEGACY mode, creates general objectives. In CATEGORIZED mode, you MUST choose a category (story, battling, or dynamics). Use 'story' for walkthrough progression, 'battling' for training prep, and 'dynamics' for short-term navigation/cleanup. Provide exactly 3 objectives with id, description, action_type, target_location, navigation_hint, and completion_condition.",
-            #     "parameters": {
-            #         "type_": "OBJECT",
-            #         "properties": {
-            #             "objectives": {
-            #                 "type_": "ARRAY",
-            #                 "items": {
-            #                     "type_": "OBJECT",
-            #                     "properties": {
-            #                         "id": {"type_": "STRING", "description": "Unique identifier (e.g., 'dynamic_01_navigate_route')"},
-            #                         "description": {"type_": "STRING", "description": "Clear description of what to accomplish"},
-            #                         "action_type": {
-            #                             "type_": "STRING",
-            #                             "enum": ["navigate", "interact", "battle", "wait"],
-            #                             "description": "Type of action"
-            #                         },
-            #                         "target_location": {"type_": "STRING", "description": "Target location/map name"},
-            #                         "navigation_hint": {"type_": "STRING", "description": "Specific guidance on how to accomplish this"},
-            #                         "completion_condition": {"type_": "STRING", "description": "How to verify completion (e.g., 'location_contains_route_102')"}
-            #                     },
-            #                     "required": ["id", "description", "action_type"]
-            #                 },
-            #                 "description": "Array of exactly 3 objectives to create next"
-            #             },
-            #             "category": {
-            #                 "type_": "STRING",
-            #                 "enum": ["dynamics", "story", "battling"],
-            #                 "description": "Category for objectives: 'story' (walkthrough progression), 'battling' (training/prep), or 'dynamics' (short-term navigation/cleanup). Choose the category that matches the goal."
-            #             },
-            #             "reasoning": {
-            #                 "type_": "STRING",
-            #                 "description": "Explanation of why these objectives were chosen (referencing walkthrough/wiki sources)"
-            #             }
-            #         },
-            #         "required": ["objectives", "reasoning"]
-            #     }
-            # },
-            {
+        ]
+
+        # get_progress_summary: H_expert only. autoevolve/simple agents already get
+        # objectives, memory, and skill overviews in their prompt each step.
+        if self.scaffold not in _NO_BUILTINS_SCAFFOLDS:
+            tools.append({
                 "name": "get_progress_summary",
                 "description": (
                     "Get progress: milestones, current location/coords, direct-objective status, completed objectives "
@@ -577,8 +565,7 @@ class PokeAgent:
                     "properties": {},
                     "required": []
                 }
-            },
-        ]
+            })
 
         # H_expert-only tools: pathfinding, walkthrough, wiki lookup
         # H_min/H_auto agents must navigate with press_buttons and learn through gameplay
@@ -648,6 +635,26 @@ class PokeAgent:
         if self.scaffold in _NO_BUILTINS_SCAFFOLDS:
             tools.append(REPLAN_OBJECTIVES_TOOL_DECLARATION)
 
+        if self.scaffold == "autoevolve":
+            tools.append({
+                "name": "evolve_harness",
+                "description": "Trigger an evolution pass NOW to improve skills, subagents, and memory based on recent performance. Use this when you notice a skill or subagent is underperforming and needs improvement, rather than waiting for the automatic evolution cycle.",
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "What needs improvement and why (e.g., 'navigate_to skill gets stuck 80% of the time, needs obstacle avoidance')"
+                        },
+                        "num_steps": {
+                            "type_": "INTEGER",
+                            "description": "Number of recent trajectory steps to analyze (default 50)"
+                        }
+                    },
+                    "required": ["reasoning"]
+                }
+            })
+
         logger.info(f"✅ Created {len(tools)} tool declarations (scaffold={self.scaffold})")
         return tools
 
@@ -657,14 +664,24 @@ class PokeAgent:
             spec = get_local_subagent_spec(function_name)
             return getattr(self, spec.handler_method)(arguments)
 
-        # run_skill: execute skill code locally with tool access
+        # run_skill / run_code: execute code locally with tool access
         if function_name == "run_skill":
-            return self._execute_run_skill(arguments)
+            result_json = self._execute_run_skill(arguments)
+            self._store_function_result_for_context("run_skill", result_json)
+            return result_json
+        if function_name == "run_code":
+            result_json = self._execute_run_code(arguments)
+            self._store_function_result_for_context("run_code", result_json)
+            return result_json
+        if function_name == "evolve_harness":
+            result_json = self._execute_evolve_harness(arguments)
+            self._store_function_result_for_context("evolve_harness", result_json)
+            return result_json
 
         # REGULAR MCP TOOL CALL VIA MCP ADAPTER
         result = self.mcp_adapter.call_tool(function_name, arguments)
         # Return as JSON string
-        return json.dumps(result, indent=2)
+        return json.dumps(result, indent=2, default=str)
 
     def _execute_run_skill(self, arguments: dict) -> str:
         """Execute a skill's code in a sandbox with access to game tools."""
@@ -721,35 +738,159 @@ class PokeAgent:
             return call
 
         sandbox_tools = {}
-        for tool_name in ("press_buttons", "get_game_state", "complete_direct_objective",
-                          "process_memory", "get_progress_summary"):
+        for tool_name in ("press_buttons", "get_game_state", "get_map_data", "complete_direct_objective",
+                          "process_memory"):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
-        import random as _random_mod
+        import random, collections, math, json as _json_mod, re as _re_mod, heapq, itertools, functools
+        import numpy as np
         sandbox_globals = {
             "__builtins__": {
                 "range": range, "len": len, "int": int, "float": float,
                 "str": str, "list": list, "dict": dict, "tuple": tuple,
+                "set": set, "frozenset": frozenset, "type": type,
                 "bool": bool, "print": print, "abs": abs, "min": min,
                 "max": max, "sum": sum, "enumerate": enumerate, "zip": zip,
                 "sorted": sorted, "reversed": reversed, "isinstance": isinstance,
+                "map": map, "filter": filter, "any": any, "all": all,
+                "__import__": __import__,
                 "True": True, "False": False, "None": None,
             },
-            "random": _random_mod,
+            "random": random,
+            "collections": collections,
+            "math": math,
+            "json": _json_mod,
+            "re": _re_mod,
+            "heapq": heapq,
+            "itertools": itertools,
+            "functools": functools,
+            "np": np,
+            "numpy": np,
             "tools": sandbox_tools,
             "args": skill_args or {},
         }
 
         logger.info(f"Running skill {skill_id} ({entry.name}): {reasoning}")
+        logger.info(f"  Skill code length: {len(code)} chars, args: {skill_args}")
 
         try:
             exec(code, sandbox_globals)  # noqa: S102
             # Check if the code defined a result
             result = sandbox_globals.get("result", "Skill executed successfully")
+            logger.info(f"  Skill {skill_id} completed: {json.dumps(result, default=str)[:200]}")
             return json.dumps({"success": True, "skill_id": skill_id, "result": result})
         except Exception as e:
-            logger.error(f"Skill {skill_id} execution failed: {e}", exc_info=True)
+            logger.error(f"Skill {skill_id} execution FAILED: {e}", exc_info=True)
             return json.dumps({"success": False, "skill_id": skill_id, "error": str(e)})
+
+    def _execute_evolve_harness(self, arguments: dict) -> str:
+        """Trigger an on-demand evolution pass."""
+        reasoning = arguments.get("reasoning", "")
+        num_steps = int(arguments.get("num_steps", 50))
+
+        if not self.harness_evolver:
+            return json.dumps({"success": False, "error": "HarnessEvolver not available (not in autoevolve scaffold or optimization not enabled)"})
+
+        logger.info(f"Orchestrator requested evolution: {reasoning}")
+        try:
+            results = self.harness_evolver.evolve(
+                current_step=self.step_count,
+                num_trajectory_steps=num_steps,
+            )
+            logger.info(f"On-demand evolution completed: {results}")
+            self._inject_evolution_summary(results)
+            return json.dumps({"success": True, "results": results}, default=str)
+        except Exception as e:
+            logger.error(f"On-demand evolution failed: {e}", exc_info=True)
+            return json.dumps({"success": False, "error": str(e)})
+
+    def _execute_run_code(self, arguments: dict) -> str:
+        """Execute arbitrary Python code in the game sandbox for prototyping/debugging."""
+        code = arguments.get("code", "")
+        reasoning = arguments.get("reasoning", "")
+        code_args = arguments.get("args", {})
+
+        if not code or not code.strip():
+            return json.dumps({"success": False, "error": "No code provided"})
+
+        logger.info(f"Running code snippet ({len(code)} chars): {reasoning}")
+
+        # Reuse the same sandbox builder as run_skill
+        def _tool_caller(tool_name):
+            def call(**kwargs):
+                result = self.mcp_adapter.call_tool(tool_name, kwargs)
+                if tool_name == "press_buttons":
+                    self._wait_for_actions_complete()
+                return result
+            return call
+
+        # run_code is for debugging/prototyping ONLY - no game actions allowed
+        # The agent must save code as a skill and use run_skill to execute actions
+        sandbox_tools = {}
+        for tool_name in ("get_game_state", "get_map_data"):
+            sandbox_tools[tool_name] = _tool_caller(tool_name)
+
+        import random, collections, math, json as _json_mod, re as _re_mod, heapq, itertools, functools
+        import numpy as np
+        import io as _io_mod
+        import sys as _sys_mod
+
+        # Capture print output
+        captured_output = _io_mod.StringIO()
+
+        sandbox_globals = {
+            "__builtins__": {
+                "range": range, "len": len, "int": int, "float": float,
+                "str": str, "list": list, "dict": dict, "tuple": tuple,
+                "set": set, "frozenset": frozenset, "type": type,
+                "bool": bool, "print": lambda *a, **kw: print(*a, file=captured_output, **kw),
+                "abs": abs, "min": min,
+                "max": max, "sum": sum, "enumerate": enumerate, "zip": zip,
+                "sorted": sorted, "reversed": reversed, "isinstance": isinstance,
+                "map": map, "filter": filter, "any": any, "all": all,
+                "__import__": __import__,
+                "True": True, "False": False, "None": None,
+            },
+            "random": random,
+            "collections": collections,
+            "math": math,
+            "json": _json_mod,
+            "re": _re_mod,
+            "heapq": heapq,
+            "itertools": itertools,
+            "functools": functools,
+            "np": np,
+            "numpy": np,
+            "tools": sandbox_tools,
+            "args": code_args or {},
+        }
+
+        try:
+            exec(code, sandbox_globals)  # noqa: S102
+            result = sandbox_globals.get("result", None)
+            stdout = captured_output.getvalue()
+            response = {"success": True}
+            if result is not None:
+                response["result"] = result
+            if stdout:
+                response["stdout"] = stdout[:5000]
+            if not result and not stdout:
+                response["note"] = "Code ran successfully but set no 'result' variable and printed nothing."
+            logger.info(f"  run_code completed: result={json.dumps(result, default=str)[:200] if result else 'None'}, stdout={len(stdout)} chars")
+            return json.dumps(response, default=str)
+        except Exception as e:
+            stdout = captured_output.getvalue()
+            import traceback
+            tb = traceback.format_exc()
+            logger.error(f"run_code FAILED: {e}")
+            response = {
+                "success": False,
+                "error": str(e),
+                "traceback": tb[-1000:],
+            }
+            if stdout:
+                response["stdout"] = stdout[:2000]
+            return json.dumps(response, default=str)
 
     # Built-in tool-set keys are pinned in the LRU cache (never evicted).
     _BUILTIN_VLM_KEYS: set = set()
@@ -1155,6 +1296,51 @@ class PokeAgent:
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
+    def _execute_subagent_cleanup_run_artifacts(self, arguments: dict) -> str:
+        """Remove cache/run files and/or dated top-level dirs (deterministic; optional dry_run)."""
+        try:
+            from utils.run_artifact_cleanup import run_run_artifact_cleanup
+
+            dry = arguments.get("dry_run", True)
+            if isinstance(dry, str):
+                dry = dry.strip().lower() in ("1", "true", "yes", "on")
+            max_samples = arguments.get("max_path_samples", 80)
+            try:
+                max_samples = int(max_samples)
+            except (TypeError, ValueError):
+                max_samples = 80
+            max_samples = max(1, min(max_samples, 500))
+
+            roots = arguments.get("roots")
+            if roots is not None and not isinstance(roots, list):
+                roots = None
+
+            result = run_run_artifact_cleanup(
+                reasoning=str(arguments.get("reasoning", "")),
+                dry_run=bool(dry),
+                file_mtime_on_or_after=arguments.get("file_mtime_on_or_after"),
+                directory_embedded_date_on_or_after=arguments.get(
+                    "directory_embedded_date_on_or_after"
+                ),
+                roots=roots,
+                max_path_samples=max_samples,
+            )
+            logger.info(
+                "subagent_cleanup_run_artifacts dry_run=%s success=%s dirs=%s/%s files=%s/%s warnings=%s",
+                result.dry_run,
+                result.success,
+                result.dirs_removed,
+                result.dirs_would_remove,
+                result.files_deleted,
+                result.files_would_delete,
+                len(result.warnings),
+            )
+            return json.dumps(result.as_dict(), indent=2, default=str)
+        except Exception as e:
+            logger.error(f"Error in cleanup_run_artifacts: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
     def _execute_subagent_battler(self, arguments: dict) -> str:
         """Delegate the active battle to a local looping battler."""
         try:
@@ -1533,41 +1719,7 @@ class PokeAgent:
             arguments = self._convert_protobuf_args(function_call.args)
             logger.info(f"   ✅ Successfully parsed arguments: {list(arguments.keys())}")
             
-            # Special validation for create_direct_objectives
-            if function_name == "create_direct_objectives":
-                logger.info(f"   🎯 Validating create_direct_objectives arguments...")
-                if "objectives" not in arguments:
-                    logger.error(f"   ❌ Missing 'objectives' key in arguments!")
-                    logger.error(f"   Available keys: {list(arguments.keys())}")
-                    return json.dumps({"success": False, "error": "Missing 'objectives' parameter"})
-                
-                obj_list = arguments["objectives"]
-                if not isinstance(obj_list, list):
-                    logger.error(f"   ❌ 'objectives' is not a list! Type: {type(obj_list)}")
-                    logger.error(f"   Value: {str(obj_list)[:500]}")
-                    return json.dumps({"success": False, "error": f"'objectives' must be a list, got {type(obj_list)}"})
-                
-                if len(obj_list) != 3:
-                    logger.warning(f"   ⚠️ Expected 3 objectives, got {len(obj_list)}")
-                
-                for i, obj in enumerate(obj_list):
-                    if not isinstance(obj, dict):
-                        logger.error(f"   ❌ Objective {i} is not a dict! Type: {type(obj)}")
-                        logger.error(f"   Value: {str(obj)[:200]}")
-                        return json.dumps({"success": False, "error": f"Objective {i} must be a dict, got {type(obj)}"})
-                    
-                    required_fields = ["id", "description", "action_type"]
-                    missing = [f for f in required_fields if f not in obj]
-                    if missing:
-                        logger.error(f"   ❌ Objective {i} missing required fields: {missing}")
-                        logger.error(f"   Available fields: {list(obj.keys())}")
-                        return json.dumps({"success": False, "error": f"Objective {i} missing required fields: {missing}"})
-                    
-                    logger.info(f"   ✅ Objective {i} valid: id={obj.get('id')}, action_type={obj.get('action_type')}")
-                
-                logger.info(f"   ✅ All objectives validated successfully")
-
-            elif function_name == "replan_objectives":
+            if function_name == "replan_objectives":
                 # Gemini often returns nested args as protobuf MapComposite / RepeatedComposite.
                 # After _convert_protobuf_args, edits may still not be a plain list (e.g. tuple,
                 # or dict with "0","1",… keys). DirectObjectiveManager requires list[dict].
@@ -1583,6 +1735,24 @@ class PokeAgent:
         if is_local_subagent_tool(function_name):
             spec = get_local_subagent_spec(function_name)
             return getattr(self, spec.handler_method)(arguments)
+
+        # return_to_orchestrator: no-op used by subagents to signal completion
+        if function_name == "return_to_orchestrator":
+            return json.dumps({"success": True, "message": "Returning control to orchestrator"})
+
+        # run_skill / run_code: execute code locally with tool access
+        if function_name == "run_skill":
+            result_json = self._execute_run_skill(arguments)
+            self._store_function_result_for_context("run_skill", result_json)
+            return result_json
+        if function_name == "run_code":
+            result_json = self._execute_run_code(arguments)
+            self._store_function_result_for_context("run_code", result_json)
+            return result_json
+        if function_name == "evolve_harness":
+            result_json = self._execute_evolve_harness(arguments)
+            self._store_function_result_for_context("evolve_harness", result_json)
+            return result_json
 
         # Call the tool via MCP adapter
         result = self.mcp_adapter.call_tool(function_name, arguments)
@@ -1809,6 +1979,8 @@ class PokeAgent:
             start_time = time.time()
             vlm_call_start = time.time()
             claimed_step = None
+            scaffold_label = "auto-evolve" if self.scaffold == "autoevolve" else self.scaffold
+            orchestrator_interaction_name = f"{scaffold_label}_orchestrator"
             try:
 
                 if screenshot_b64:
@@ -1838,11 +2010,11 @@ class PokeAgent:
 
                     claimed_step = self.runtime.claim_step(
                         owner="orchestrator",
-                        interaction_name="Autonomous_CLI_Agent",
+                        interaction_name=orchestrator_interaction_name,
                     )
 
                     def call_vlm_with_image():
-                        return self.vlm.get_query(image, prompt, "Autonomous_CLI_Agent")
+                        return self.vlm.get_query(image, prompt, orchestrator_interaction_name)
 
                     logger.info(f"📡 Calling VLM API with image (prompt: {len(prompt)} chars, image: {len(screenshot_b64)} bytes)")
                     logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 45s...")
@@ -1873,11 +2045,11 @@ class PokeAgent:
                 else:
                     claimed_step = self.runtime.claim_step(
                         owner="orchestrator",
-                        interaction_name="Autonomous_CLI_Agent",
+                        interaction_name=orchestrator_interaction_name,
                     )
 
                     def call_vlm_with_text():
-                        return self.vlm.get_text_query(prompt, "Autonomous_CLI_Agent")
+                        return self.vlm.get_text_query(prompt, orchestrator_interaction_name)
 
                     logger.info(f"📡 Calling VLM API with text only (prompt: {len(prompt)} chars)")
                     logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 45s...")
@@ -1943,12 +2115,6 @@ class PokeAgent:
                                         if hasattr(fc, 'args'):
                                             args_dict = dict(fc.args) if hasattr(fc.args, '__iter__') else {}
                                             logger.info(f"      Function call args keys: {list(args_dict.keys())}")
-                                            # For create_direct_objectives, log objectives structure
-                                            if fc.name == "create_direct_objectives" and "objectives" in args_dict:
-                                                obj_list = args_dict.get("objectives", [])
-                                                logger.info(f"      Objectives array length: {len(obj_list) if isinstance(obj_list, list) else 'NOT A LIST'}")
-                                                if isinstance(obj_list, list) and len(obj_list) > 0:
-                                                    logger.info(f"      First objective keys: {list(obj_list[0].keys()) if isinstance(obj_list[0], dict) else type(obj_list[0])}")
                                     except Exception as e:
                                         logger.error(f"      ⚠️ Could not parse function call args: {e}")
                                         logger.error(f"      Args type: {type(fc.args) if hasattr(fc, 'args') else 'NO ARGS ATTR'}")
@@ -2139,6 +2305,7 @@ class PokeAgent:
                                     num_trajectory_steps=self.optimization_frequency,
                                 )
                                 logger.info(f"✅ Harness evolved at step {active_step}: {results}")
+                                self._inject_evolution_summary(results)
                             except Exception as e:
                                 logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
                     elif self.prompt_optimizer:
@@ -2199,6 +2366,7 @@ class PokeAgent:
                                     num_trajectory_steps=self.optimization_frequency,
                                 )
                                 logger.info(f"✅ Harness evolved at step {active_step}: {results}")
+                                self._inject_evolution_summary(results)
                             except Exception as e:
                                 logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
                     elif self.prompt_optimizer:
@@ -2312,6 +2480,35 @@ class PokeAgent:
             logger.debug("✅ Logged to LLM logger")
         except Exception as e:
             logger.debug(f"Could not log to LLM logger: {e}")
+
+    def _inject_evolution_summary(self, results: dict):
+        """Inject a human-readable evolution summary so the orchestrator sees what changed."""
+        lines = ["🧬 HARNESS EVOLUTION completed. Changes to your toolkit:"]
+        for pass_name, label in [("subagents", "Subagents"), ("skills", "Skills"), ("memory", "Memory")]:
+            data = results.get(pass_name, {})
+            if isinstance(data, dict) and data.get("error"):
+                continue
+            created = data.get("created", [])
+            updated = data.get("updated", [])
+            retired = data.get("retired", [])
+            analysis = data.get("analysis", "")
+            if created or updated or retired or analysis:
+                parts = []
+                if created:
+                    parts.append(f"new: {created}")
+                if updated:
+                    parts.append(f"updated: {updated}")
+                if retired:
+                    parts.append(f"retired: {retired}")
+                lines.append(f"  {label}: {', '.join(parts)}")
+                if analysis:
+                    lines.append(f"    Reason: {analysis[:200]}")
+        prompt_data = results.get("prompt", {})
+        if isinstance(prompt_data, dict) and prompt_data.get("rewritten"):
+            lines.append("  Strategic prompt: rewritten based on trajectory analysis")
+        if len(lines) > 1:
+            lines.append("Review the updated SKILL LIBRARY, SUBAGENT REGISTRY, and MEMORY OVERVIEW below.")
+            self._store_function_result_for_context("harness_evolution", "\n".join(lines))
 
     def _store_function_result_for_context(self, function_name: str, result_json: str):
         """Store function result to include in next step's context."""
@@ -2431,12 +2628,19 @@ class PokeAgent:
         
         # Parse game state to extract relevant information
         try:
-            game_state_data = json_module.loads(game_state_result)
+            if isinstance(game_state_result, dict):
+                game_state_data = game_state_result
+            else:
+                game_state_data = json_module.loads(game_state_result)
         except:
             game_state_data = {}
-        
-        # Extract key information from game state
+
+        # Extract ONLY the formatted state text (not screenshot or raw_state)
         state_text = game_state_data.get("state_text", "")
+        if not state_text and isinstance(game_state_result, str) and len(game_state_result) > 50000:
+            # Fallback failed and game_state_result is huge — don't embed it
+            logger.warning("state_text extraction failed, game_state_result is %d chars — using empty", len(game_state_result))
+            state_text = "Game state unavailable this step."
 
         # Detect if in title sequence
         is_title_sequence = self._is_title_sequence(game_state_data)
@@ -2598,22 +2802,6 @@ class PokeAgent:
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
 
-        # Generate completion detection hint based on current story objective type
-        completion_hint = ""
-        # In categorized mode, story_obj is a dict; in legacy mode, use direct_objective dict
-        _obj_for_hint = story_obj if objectives_mode == "categorized" and story_obj else None
-        if _obj_for_hint is None and objectives_mode != "categorized":
-            # Legacy: direct_objective may have been a dict before formatting
-            _obj_for_hint = game_state_data.get("direct_objective") if isinstance(game_state_data.get("direct_objective"), dict) else None
-        if _obj_for_hint and isinstance(_obj_for_hint, dict):
-            _action_type = _obj_for_hint.get("action_type", "")
-            if _action_type == "battle":
-                completion_hint = "\n💡 This is a BATTLE objective. After winning the battle, press A/B through ALL dialogue to receive any rewards. Then immediately call add_knowledge() for items/rewards received and complete_direct_objective()."
-            elif _action_type == "navigate":
-                completion_hint = "\n💡 This is a NAVIGATION objective. Check your current location — if you've reached the target, call complete_direct_objective()."
-            elif _action_type == "interact":
-                completion_hint = "\n💡 This is an INTERACTION objective. After the dialogue/interaction ends and you return to normal gameplay, call complete_direct_objective()."
-
         # Build complete prompt by combining base prompt with context
         prompt = f"""# Current Step: {step_count}
 
@@ -2633,7 +2821,7 @@ class PokeAgent:
 {direct_objective_status}
 
 ⚠️ **CRITICAL**: When you complete the objective, IMMEDIATELY call:
-   complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>"){completion_hint}
+   complete_direct_objective(category="<story/battling/dynamics>", reasoning="<explain why it's complete>")
 
 ### CURRENT GAME STATE:
 {state_text}
@@ -3222,26 +3410,6 @@ Step {step_count}"""
                             logger.info(f"      ✅ Successfully converted args to dict")
                             logger.info(f"      Args keys: {list(args_dict.keys())}")
                             
-                            # Special logging for create_direct_objectives
-                            if function_call.name == "create_direct_objectives":
-                                logger.info(f"      🎯 create_direct_objectives args analysis:")
-                                if "objectives" in args_dict:
-                                    obj_list = args_dict["objectives"]
-                                    logger.info(f"         objectives type: {type(obj_list)}")
-                                    logger.info(f"         objectives is list: {isinstance(obj_list, list)}")
-                                    if isinstance(obj_list, list):
-                                        logger.info(f"         objectives length: {len(obj_list)}")
-                                        for j, obj in enumerate(obj_list[:3]):  # Log first 3
-                                            logger.info(f"         Objective {j}: type={type(obj)}, keys={list(obj.keys()) if isinstance(obj, dict) else 'NOT DICT'}")
-                                    else:
-                                        logger.error(f"         ⚠️ objectives is NOT a list! Type: {type(obj_list)}")
-                                        logger.error(f"         Value: {str(obj_list)[:500]}")
-                                else:
-                                    logger.error(f"         ⚠️ 'objectives' key not found in args!")
-                                    logger.error(f"         Available keys: {list(args_dict.keys())}")
-                                if "reasoning" in args_dict:
-                                    reasoning = args_dict["reasoning"]
-                                    logger.info(f"         reasoning length: {len(str(reasoning))} chars")
                         except Exception as e:
                             logger.error(f"      ❌ Failed to convert args: {e}")
                             logger.error(f"      Args raw value: {str(function_call.args)[:500]}")

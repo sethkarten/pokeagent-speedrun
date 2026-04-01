@@ -358,6 +358,7 @@ class Pathfinder:
                     "type": "porymap",
                     "grid": porymap["grid"],  # ASCII grid: [['.', '#', ...], ...]
                     "objects": porymap.get("objects", []),
+                    "runtime_objects": map_data.get("object_events", []),
                     "width": porymap.get("dimensions", {}).get("width", 0),
                     "height": porymap.get("dimensions", {}).get("height", 0),
                     "warps": porymap.get("warps", []),  # Include warps for pathfinding
@@ -471,7 +472,7 @@ class Pathfinder:
             if isinstance(row, list):
                 for x, cell in enumerate(row):
                     # In porymap ASCII:
-                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), 'D' (doors), '←↓↑→' (ledges - directionally walkable)
+                    # Walkable: '.' (normal), '~' (grass), 'S' (stairs/warps), 'D' (doors), '←↓↑→' (ledges), '^' (different elevation)
                     # Blocked: '#' (walls), 'X' (out of bounds), 'W' (water - requires Surf)
                     # Special: '&' (cycling road) - block if at different elevation
                     # CRITICAL: 'D' (door) and 'S' (stairs) tiles are ALWAYS walkable
@@ -698,34 +699,44 @@ class Pathfinder:
                                 else:
                                     blocked.add(pos)
 
-        # Add NPC/object positions as blocked (from porymap objects)
-        # Only add NPCs if consider_npcs is True
-        if consider_npcs and "objects" in map_data:
-            objects = map_data["objects"]
-            for obj in objects:
-                obj_x = obj.get("x", 0)
-                obj_y = obj.get("y", 0)
-                # Block objects that are stationary or have limited movement
-                # Block: NONE, FACE_*, WANDER_AROUND (they occupy their position)
-                # Allow: WALK_*, RUN_*, JUMP_* (they actively move around)
-                movement_type = obj.get("movement_type", "")
-                movement_type_upper = movement_type.upper()
-
-                if (
-                    "NONE" in movement_type_upper
-                    or "STATIC" in movement_type_upper
-                    or "FACE_" in movement_type_upper  # FACE_DOWN, FACE_UP, etc.
-                    or "WANDER" in movement_type_upper  # WANDER_AROUND
-                    or "LOOK" in movement_type_upper  # LOOK_AROUND, LOOK_AROUND_EX
-                    or "BERRY" in movement_type_upper  # BERRY_TREE_GROWTH
-                    or "STAY" in movement_type_upper  # pokemon red npc movement
-                    or "WALK" in movement_type_upper  # pokemon red walking npc (position corrected from RAM)
-                    or not movement_type
-                ):
+        # Add NPC/object positions as blocked.
+        # Prefer runtime object_events (live positions); fall back to static porymap objects.
+        if consider_npcs:
+            runtime_objects = map_data.get("runtime_objects") or []
+            if runtime_objects:
+                for obj in runtime_objects:
+                    obj_x = obj.get("current_x", obj.get("x", 0))
+                    obj_y = obj.get("current_y", obj.get("y", 0))
+                    if obj_x is None or obj_y is None:
+                        continue
                     obj_pos = (obj_x, obj_y)
                     if goal_pos and obj_pos == goal_pos:
                         continue
                     blocked.add(obj_pos)
+            elif "objects" in map_data:
+                objects = map_data["objects"]
+                for obj in objects:
+                    obj_x = obj.get("x", 0)
+                    obj_y = obj.get("y", 0)
+                    # Block objects that are stationary or have limited movement
+                    # Block: NONE, FACE_*, WANDER_AROUND (they occupy their position)
+                    # Allow: WALK_*, RUN_*, JUMP_* (they actively move around)
+                    movement_type = obj.get("movement_type", "")
+                    movement_type_upper = movement_type.upper()
+
+                    if (
+                        "NONE" in movement_type_upper
+                        or "STATIC" in movement_type_upper
+                        or "FACE_" in movement_type_upper  # FACE_DOWN, FACE_UP, etc.
+                        or "WANDER" in movement_type_upper  # WANDER_AROUND
+                        or "LOOK" in movement_type_upper  # LOOK_AROUND, LOOK_AROUND_EX
+                        or "BERRY" in movement_type_upper  # BERRY_TREE_GROWTH
+                        or not movement_type
+                    ):
+                        obj_pos = (obj_x, obj_y)
+                        if goal_pos and obj_pos == goal_pos:
+                            continue
+                        blocked.add(obj_pos)
 
         # Add out-of-bounds positions
         for x in range(-1, width + 1):
@@ -850,30 +861,21 @@ class Pathfinder:
         dy = to_pos[1] - from_pos[1]  # positive = moving south, negative = moving north
 
         # ========================================================================
-        # CRITICAL: Trust the filtered grid from state_formatter
+        # Elevation Checking Logic
         # ========================================================================
-        # If both tiles are marked as walkable in the grid, trust the grid filtering
-        # which already handled elevation connectivity. This allows pathfinding through
-        # ladders and slopes that connect different elevations.
+        # Always check elevation via raw_tiles. The grid filter marks unreachable
+        # tiles as '#', but adjacent reachable tiles at different elevations still
+        # need per-edge validation (e.g. E3 next to E0 ramp).
         # ========================================================================
-        walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&", "*"]
+        walkable_symbols = [".", "~", "S", "D", "←", "→", "↑", "↓", "&", "*"] \
+            if os.environ.get("GAME_TYPE", "emerald").upper() == "RED" \
+                else [".", "~", "^", "S", "D", "←", "→", "↑", "↓", "&"]
         both_walkable = from_symbol in walkable_symbols and dest_symbol in walkable_symbols
 
-        # Skip elevation blocking if both tiles are walkable - trust the filtered grid
-        if both_walkable:
-            # Still need to handle ledge directionality and cycling road patterns below
-            # but skip the elevation difference blocking
-            pass
+        # Check elevation differences and only allow transitions through valid
+        # connectors (E0 tiles, stairs, doors, ladders, ledges).
         # ========================================================================
-        # Elevation Checking Logic (Re-enabled 2025-12-15 for bridges)
-        # ========================================================================
-        # Check for SIGNIFICANT elevation differences (>= 3) to handle bridges and
-        # elevated platforms. Small differences (0-2) are cosmetic and allowed.
-        #
-        # This prevents pathfinding through bridges (e.g., Cycling Road on Route 110
-        # at elevation 3) while the player is on the ground underneath (elevation 0).
-        # ========================================================================
-        elif "raw_tiles" in map_data:
+        if "raw_tiles" in map_data:
             raw_tiles = map_data["raw_tiles"]
             try:
                 # Get elevation from raw tiles

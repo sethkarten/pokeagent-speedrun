@@ -74,7 +74,8 @@ Use the `speed` parameter in `press_buttons()`:
 - `replan_objectives(edits, category, reasoning)` — Modify the objective sequence. Primary planning tool.
 - `process_memory(action, entries, reasoning)` — Long-term memory CRUD. Store everything you learn about the game.
 - `process_skill(action, entries, reasoning)` — Skill library CRUD. Record strategies and tactics. Skills can include a `code` field with executable Python.
-- `run_skill(skill_id, reasoning, args?)` — Execute a skill's code with `tools` dict (press_buttons, get_game_state, etc.). Pass arguments via `args` object. Use descriptive IDs when creating skills.
+- `run_code(code, reasoning, args?)` — Execute arbitrary Python in the game sandbox. Use to prototype, debug, and inspect game state before saving as a skill.
+- `run_skill(skill_id, reasoning, args?)` — Execute a saved skill's code. Same sandbox as run_code. Pass arguments via `args` object.
 - `process_subagent(action, entries, reasoning)` — Subagent registry CRUD.
 - `execute_custom_subagent(subagent_id?, config?, reasoning)` — Run a subagent from registry or inline config.
 - `process_trajectory_history(window_range, directive)` — Analyze a range of past steps.
