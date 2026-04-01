@@ -14,6 +14,7 @@ agents.md
 .pokeagent_cache*
 .DS_Store
 node_modules/
+pokemon_red_env/test/output_game_state/*
 
 
 # Untracked internal docs/tools
