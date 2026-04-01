@@ -3045,7 +3045,7 @@ async def mcp_get_map_data():
                 grid[py][px] = _player_marker
 
             # Mark live NPC positions as 'N' (blocked for pathfinding)
-            obj_events = raw_state.get("map", {}).get("object_events", [])
+            obj_events = raw_state.get("map", {}).get("object_events", []) # object_events - from runtime memory; objects - from porymap data
             for obj in obj_events:
                 ox = obj.get("current_x", -1)
                 oy = obj.get("current_y", -1)
@@ -3083,7 +3083,7 @@ async def mcp_get_map_data():
                             end = i + 1
                             break
                     map_json = _json.loads(json_section[start:end])
-                    result["warps"] = map_json.get("warps", [])
+                    result["warps"] = map_json.get("warps") or map_json.get("warp_events", [])
                     result["objects"] = map_json.get("objects", [])
                     result["connections"] = map_json.get("connections", [])
                     if not result.get("dimensions"):

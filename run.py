@@ -334,6 +334,11 @@ def main():
                        help="Enable SLAM (map building) for vision_only agent")
     args = parser.parse_args()
 
+    # Set GAME_TYPE early — MUST happen before any import from the agents
+    # package because agents/__init__.py imports PokeAgent which imports
+    # agents.prompts.paths, and paths.py reads GAME_TYPE at module level.
+    os.environ["GAME_TYPE"] = args.game
+
     # Fix ROM default for Red (parser default is Emerald ROM)
     if args.rom == "Emerald-GBAdvance/rom.gba" and args.game == "red":
         args.rom = "PokemonRed-GBC/pokered.gbc"
