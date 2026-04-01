@@ -49,12 +49,14 @@ MILESTONE_PHASES: List[List[str]] = [
     # GYM #2 / #3
     # Phase 8: Post-Rustboro chain -> Dewford
     ["ROUTE_116", "RUSTURF_TUNNEL", "DEVON_CORP_3F_MR_STONE", "MR_BRINEYS_HOUSE", "DEWFORD_TOWN"],
-    # Phase 9: Dewford exploration (Steven and Brawly paths are non-linear)
-    ["ROUTE_106", "GRANITE_CAVE_STEVEN", "DEWFORD_GYM_ENTERED", "KNUCKLE_BADGE"],
+    # Phase 9a: Dewford Steven path (required to unlock Slateport branch)
+    ["ROUTE_106", "GRANITE_CAVE_STEVEN"],
     # Phase 10: Slateport -> Museum -> Route 110
     ["SLATEPORT_CITY", "OCEANIC_MUSEUM_AQUA", "ROUTE_110"],
     # Phase 11: Rival -> Mauville -> third gym
     ["RIVAL_BATTLE_ROUTE_110", "MAUVILLE_CITY", "MAUVILLE_GYM_ENTERED", "DYNAMO_BADGE"],
+    # Phase 9b (optional branch): Dewford gym progression can happen later.
+    ["DEWFORD_GYM_ENTERED", "KNUCKLE_BADGE"],
 ]
 
 ORDERED_PROGRESS_MILESTONES: List[str] = [mid for phase in MILESTONE_PHASES for mid in phase]
