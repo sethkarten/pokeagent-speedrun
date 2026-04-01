@@ -25,7 +25,6 @@ pokemon_red_env/test/output_game_state/*
 
 # Untracked internal docs/tools
 System-Design/
-scripts/
 
 # Runtime and outputs
 .pokeagent_cache/
@@ -149,7 +148,7 @@ System-Design/personal_notes/*
 test_outputs/*
 
 *.mp4
-*scripts/*
+# *scripts/*
 test_gemini.py
 out.txt
 out_2.txt
