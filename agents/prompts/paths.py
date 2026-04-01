@@ -39,10 +39,14 @@ _default_system_prompts = {
     "red": f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT_RED.md",
     "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT.md",
 }
+_simple_prompts = {
+    "red": f"{PROMPTS_ROOT}/pokeagent-directives/SIMPLE_RED.md",
+    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/SIMPLE.md",
+}
 
 POKEAGENT_PROMPT_PATH = _default_system_prompts[game_type]
 POKEAGENT_SYSTEM_PROMPT_PATH = _optimization_enabled_prompts[game_type]
-SLAM_INSTRUCTIONS_PATH = f"{PROMPTS_ROOT}/pokeagent-directives/SLAM_INSTRUCTIONS.md"
+SIMPLE_PROMPT_PATH = _simple_prompts[game_type]
 
 _no_builtins_prompts = {
     "red": f"{PROMPTS_ROOT}/pokeagent-directives/POKEAGENT_NO_BUILTINS_RED.md",
@@ -55,12 +59,16 @@ POKEAGENT_NO_BUILTINS_PROMPT_PATH = _no_builtins_prompts[game_type]
 CLI_AGENT_DIRECTIVE_PATH = f"{PROMPTS_ROOT}/cli-agent-directives/pokemon_directive.md"
 
 # AutoEvolve directory (renamed from prompt-optimization/)
-POKEAGENT_BASE_PROMPT_PATH = f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/orchestrator_policy.md"
-_autoevolve_base_system_prompts = {
-    "red": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/base_system_prompt_red.md",
-    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/base_system_prompt.md",
+_autoevolve_base_orchestrator_policies = {
+    "red": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/BASE_ORCHESTRATOR_POLICY.md",
+    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/BASE_ORCHESTRATOR_POLICY.md",
 }
-AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH = _autoevolve_base_system_prompts[game_type]
+_autoevolve_system_prompts = {
+    "red": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/SYSTEM_PROMPT.md",
+    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/SYSTEM_PROMPT.md",
+}
+AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH = _autoevolve_base_orchestrator_policies[game_type]
+AUTOEVOLVE_SYSTEM_PROMPT_PATH = _autoevolve_system_prompts[game_type]
 
 
 def resolve_repo_path(relative_path: str) -> Path:

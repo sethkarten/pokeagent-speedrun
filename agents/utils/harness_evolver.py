@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from agents.prompts.paths import (
-    AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+    AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
     GAME_NAME,
-    POKEAGENT_BASE_PROMPT_PATH,
+    AUTOEVOLVE_SYSTEM_PROMPT_PATH,
     resolve_repo_path,
 )
 from agents.utils.prompt_optimizer import PromptOptimizer
@@ -57,8 +57,8 @@ class HarnessEvolver:
         self,
         vlm,
         run_data_manager,
-        base_prompt_path: str = POKEAGENT_BASE_PROMPT_PATH,
-        system_prompt_path: str = AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+        base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+        system_prompt_path: str = AUTOEVOLVE_SYSTEM_PROMPT_PATH,
     ):
         # Compose the existing PromptOptimizer for prompt-level evolution
         self.prompt_optimizer = PromptOptimizer(
@@ -784,8 +784,8 @@ Respond with ONLY a JSON object (no markdown fences):
 def create_harness_evolver(
     vlm,
     run_data_manager,
-    base_prompt_path: str = POKEAGENT_BASE_PROMPT_PATH,
-    system_prompt_path: str = AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+    base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+    system_prompt_path: str = AUTOEVOLVE_SYSTEM_PROMPT_PATH,
 ) -> HarnessEvolver:
     """Factory function to create a HarnessEvolver instance."""
     return HarnessEvolver(vlm, run_data_manager, base_prompt_path, system_prompt_path)
