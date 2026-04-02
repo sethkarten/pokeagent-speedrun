@@ -1,0 +1,52 @@
+% ============================================================================
+% Chapter 5: AutoEvolve (Headers Only)
+% ============================================================================
+
+\newpage
+\section{AutoEvolve}\label{sec:autoevolve}
+
+\subsection{Beyond Pok\'{e}mon}\label{sec:beyond_pokemon}
+
+\textit{[To be written. Position AutoEvolve as a domain-agnostic evolutionary loop requiring modular agent framework, sandboxing, and a global session log; leverages LLM-as-a-judge in a reset-free manner. AutoEvolve is inherently domain agnostic.]}
+
+\subsection{Methodology}\label{sec:methodology}
+
+\subsubsection{Algorithm}\label{sec:algorithm}
+
+\textit{[To be written. Four-pass evolutionary optimization: system prompt, subagent registry, skill library, memory store. Scheduling (warmup steps, evolution frequency). Detailed pseudocode.]}
+
+\subsubsection{Experimental Design}\label{sec:experimental_design}
+
+\textit{[To be written. Three experimental settings, each with three trials:]}
+
+\begin{enumerate}
+    \item \textit{Three scaffold tiers: Baseline (simple) / Baseline + AutoEvolve / Fully Custom PokeAgent}
+    \begin{itemize}
+        \item \textit{Test Gemini 3.1-pro-preview}
+        \item \textit{Test Gemini 3-flash-preview}
+    \end{itemize}
+    \item \textit{Sophisticated Supervisor: powerful model for evolution, weaker model for orchestrator}
+    \item \textit{Bootstrapped Transfer Learning: equip weaker orchestrator with auto-evolved harness from stronger model + supervisor}
+\end{enumerate}
+
+\subsubsection{Metrics}\label{sec:autoevolve_metrics}
+
+\textit{[To be written. Standard speedrunning evaluation criteria; qualitative observations for each setting.]}
+
+\subsection{Results}\label{sec:results}
+
+\subsubsection{Three Settings}\label{sec:three_settings_results}
+
+\textit{[To be written. Speedrunning evaluation metrics and qualitative results for baseline / baseline+AutoEvolve / PokeAgent.]}
+
+\subsubsection{Sophisticated Supervisor}\label{sec:supervisor_results}
+
+\textit{[To be written. Speedrunning evaluation metrics and qualitative results for supervisor configuration.]}
+
+\subsubsection{Bootstrapped Transfer Learning}\label{sec:transfer_results}
+
+\textit{[To be written. Speedrunning evaluation metrics and qualitative results for transfer configuration.]}
+
+\subsection{Discussion}\label{sec:autoevolve_discussion}
+
+\textit{[To be written. How did AutoEvolve compare to simplest baseline and fully custom PokeAgent? Main failure/success cases. Implications for extending to other domains. Literature-supported analysis.]}
