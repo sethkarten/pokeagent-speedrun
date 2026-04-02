@@ -127,6 +127,88 @@ def _species_id_to_name(species_id: int) -> str:
     return ROM_SPECIES_ID_TO_NAME.get(species_id, f"Species_{species_id}")
 
 
+# ROM item_id -> human-readable item name (pokeemerald include/constants/items.h numbering).
+# Keep this lookup lightweight and deterministic for hot-path game state reads.
+ITEM_ID_TO_NAME = {
+    # Balls
+    1: "Master Ball", 2: "Ultra Ball", 3: "Great Ball", 4: "Poke Ball",
+    5: "Safari Ball", 6: "Net Ball", 7: "Dive Ball", 8: "Nest Ball",
+    9: "Repeat Ball", 10: "Timer Ball", 11: "Luxury Ball", 12: "Premier Ball",
+    # Medicine and utility
+    13: "Potion", 14: "Antidote", 15: "Burn Heal", 16: "Ice Heal",
+    17: "Awakening", 18: "Paralyze Heal", 19: "Full Restore", 20: "Max Potion",
+    21: "Hyper Potion", 22: "Super Potion", 23: "Full Heal", 24: "Revive",
+    25: "Max Revive", 26: "Fresh Water", 27: "Soda Pop", 28: "Lemonade",
+    29: "Moomoo Milk", 30: "Energy Powder", 31: "Energy Root", 32: "Heal Powder",
+    33: "Revival Herb", 34: "Ether", 35: "Max Ether", 36: "Elixir",
+    37: "Max Elixir", 38: "Lava Cookie", 39: "Blue Flute", 40: "Yellow Flute",
+    41: "Red Flute", 42: "Black Flute", 43: "White Flute", 44: "Berry Juice",
+    45: "Sacred Ash", 46: "Shoal Salt", 47: "Shoal Shell", 48: "Red Shard",
+    49: "Blue Shard", 50: "Yellow Shard", 51: "Green Shard",
+    63: "HP Up", 64: "Protein", 65: "Iron", 66: "Carbos",
+    67: "Calcium", 68: "Rare Candy", 69: "PP Up", 70: "Zinc",
+    71: "PP Max", 73: "Guard Spec.", 74: "Dire Hit", 75: "X Attack",
+    76: "X Defend", 77: "X Speed", 78: "X Accuracy", 79: "X Special",
+    80: "Poke Doll", 81: "Fluffy Tail", 83: "Super Repel", 84: "Max Repel",
+    85: "Escape Rope", 86: "Repel", 93: "Sun Stone", 94: "Moon Stone",
+    95: "Fire Stone", 96: "Thunder Stone", 97: "Water Stone", 98: "Leaf Stone",
+    103: "Tiny Mushroom", 104: "Big Mushroom", 106: "Pearl", 107: "Big Pearl",
+    108: "Stardust", 109: "Star Piece", 110: "Nugget", 111: "Heart Scale",
+    # Mail
+    121: "Orange Mail", 122: "Harbor Mail", 123: "Glitter Mail", 124: "Mech Mail",
+    125: "Wood Mail", 126: "Wave Mail", 127: "Bead Mail", 128: "Shadow Mail",
+    129: "Tropic Mail", 130: "Dream Mail", 131: "Fab Mail", 132: "Retro Mail",
+    # Berries
+    133: "Cheri Berry", 134: "Chesto Berry", 135: "Pecha Berry", 136: "Rawst Berry",
+    137: "Aspear Berry", 138: "Leppa Berry", 139: "Oran Berry", 140: "Persim Berry",
+    141: "Lum Berry", 142: "Sitrus Berry", 143: "Figy Berry", 144: "Wiki Berry",
+    145: "Mago Berry", 146: "Aguav Berry", 147: "Iapapa Berry", 148: "Razz Berry",
+    149: "Bluk Berry", 150: "Nanab Berry", 151: "Wepear Berry", 152: "Pinap Berry",
+    153: "Pomeg Berry", 154: "Kelpsy Berry", 155: "Qualot Berry", 156: "Hondew Berry",
+    157: "Grepa Berry", 158: "Tamato Berry", 159: "Cornn Berry", 160: "Magost Berry",
+    161: "Rabuta Berry", 162: "Nomel Berry", 163: "Spelon Berry", 164: "Pamtre Berry",
+    165: "Watmel Berry", 166: "Durin Berry", 167: "Belue Berry", 168: "Liechi Berry",
+    169: "Ganlon Berry", 170: "Salac Berry", 171: "Petaya Berry", 172: "Apicot Berry",
+    173: "Lansat Berry", 174: "Starf Berry", 175: "Enigma Berry",
+    # Held items
+    179: "Bright Powder", 180: "White Herb", 181: "Macho Brace", 182: "Exp. Share",
+    183: "Quick Claw", 184: "Soothe Bell", 185: "Mental Herb", 186: "Choice Band",
+    187: "King's Rock", 188: "SilverPowder", 189: "Amulet Coin", 190: "Cleanse Tag",
+    191: "Soul Dew", 192: "Deep Sea Tooth", 193: "Deep Sea Scale", 194: "Smoke Ball",
+    195: "Everstone", 196: "Focus Band", 197: "Lucky Egg", 198: "Scope Lens",
+    199: "Metal Coat", 200: "Leftovers", 201: "Dragon Scale", 202: "Light Ball",
+    203: "Soft Sand", 204: "Hard Stone", 205: "Miracle Seed", 206: "Black Glasses",
+    207: "Black Belt", 208: "Magnet", 209: "Mystic Water", 210: "Sharp Beak",
+    211: "Poison Barb", 212: "NeverMeltIce", 213: "Spell Tag", 214: "TwistedSpoon",
+    215: "Charcoal", 216: "Dragon Fang", 217: "Silk Scarf", 218: "Up-Grade",
+    219: "Shell Bell", 220: "Sea Incense", 221: "Lax Incense", 222: "Lucky Punch",
+    223: "Metal Powder", 224: "Thick Club", 225: "Stick",
+    # Contest scarves
+    254: "Red Scarf", 255: "Blue Scarf", 256: "Pink Scarf", 257: "Green Scarf",
+    258: "Yellow Scarf",
+    # Key items
+    259: "Mach Bike", 260: "Coin Case", 261: "Itemfinder", 262: "Old Rod",
+    263: "Good Rod", 264: "Super Rod", 265: "S.S. Ticket", 266: "Contest Pass",
+    268: "Wailmer Pail", 269: "Devon Goods", 270: "Soot Sack", 271: "Basement Key",
+    272: "Acro Bike", 273: "Pokeblock Case", 274: "Letter", 275: "Eon Ticket",
+    276: "Red Orb", 277: "Blue Orb", 278: "Scanner", 279: "Go-Goggles",
+    280: "Meteorite", 281: "Room 1 Key", 282: "Room 2 Key", 283: "Room 4 Key",
+    284: "Room 6 Key", 285: "Storage Key", 286: "Root Fossil", 287: "Claw Fossil",
+    288: "Devon Scope",
+    # Emerald exclusives
+    375: "Magma Emblem", 376: "Old Sea Map",
+}
+
+
+def _item_id_to_name(item_id: int) -> str:
+    """Derive item display name from ROM item_id (pokeemerald numbering)."""
+    if 289 <= item_id <= 338:
+        return f"TM{item_id - 288:02d}"
+    if 339 <= item_id <= 346:
+        return f"HM{item_id - 338:02d}"
+    return ITEM_ID_TO_NAME.get(item_id, f"Item_{item_id}")
+
+
 IN_BOX_COUNT = 30
 BOX_NAME_LENGTH = 8
 
@@ -428,6 +510,18 @@ SaveBlock1_spec = (
 )
 SaveBlock1 = namedtuple("SaveBlock1", [x[0] for x in SaveBlock1_spec])
 SaveBlock1_format = "".join([x[1] for x in SaveBlock1_spec])
+
+
+def _compute_save_block_1_offsets():
+    offsets = {}
+    offset = 0
+    for name, fmt in SaveBlock1_spec:
+        offsets[name] = offset
+        offset += struct.calcsize(fmt)
+    return offsets
+
+
+SAVE_BLOCK_1_OFFSETS = _compute_save_block_1_offsets()
 
 
 PokemonStorage_spec = (

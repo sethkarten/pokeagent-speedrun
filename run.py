@@ -130,6 +130,12 @@ def start_server(args, run_id=None):
         server_env["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
 
     # Pass through server-relevant arguments
+    if args.game:
+        server_cmd.extend(["--game", args.game])
+        server_env["GAME_TYPE"] = args.game
+        # Also set in current (client) process so agent scaffolds can detect game type
+        os.environ["GAME_TYPE"] = args.game
+
     if args.record:
         server_cmd.append("--record")
     
@@ -265,12 +271,14 @@ def start_custom_agent(agent_config, args):
 
 def main():
     """Main entry point for the Pokemon Agent"""
-    parser = argparse.ArgumentParser(description="Pokemon Emerald AI Agent")
+    parser = argparse.ArgumentParser(description="Pokemon AI Agent")
     
     # Core arguments
-    parser.add_argument("--rom", type=str, default="Emerald-GBAdvance/rom.gba", 
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
+                       help="Which game to run: 'red' (Pokemon Red, Game Boy) or 'emerald' (Pokemon Emerald, GBA)")
+    parser.add_argument("--rom", type=str, default="Emerald-GBAdvance/rom.gba",
                        help="Path to ROM file")
-    parser.add_argument("--port", type=int, default=8000, 
+    parser.add_argument("--port", type=int, default=8000,
                        help="Port for web interface")
     
     # State loading
@@ -325,10 +333,67 @@ def main():
     parser.add_argument("--allow-slam", action="store_true",
                        help="Enable SLAM (map building) for vision_only agent")
     args = parser.parse_args()
+
+    # Set GAME_TYPE early — MUST happen before any import from the agents
+    # package because agents/__init__.py imports PokeAgent which imports
+    # agents.prompts.paths, and paths.py reads GAME_TYPE at module level.
+    os.environ["GAME_TYPE"] = args.game
+
+    # Fix ROM default for Red (parser default is Emerald ROM)
+    if args.rom == "Emerald-GBAdvance/rom.gba" and args.game == "red":
+        args.rom = "PokemonRed-GBC/pokered.gbc"
+
+    print("=" * 60)
+    game_label = "Pokemon Red" if args.game == "red" else "Pokemon Emerald"
+    print(f"🎮 {game_label} AI Agent")
+    print("=" * 60)
     
-    print("=" * 60)
-    print("🎮 Pokemon Emerald AI Agent")
-    print("=" * 60)
+    # Get first objective info for consistent run naming
+    first_objective_id = None
+    first_objective_desc = None
+    if args.direct_objectives:
+        from agents.objectives import get_first_objective_info
+        first_objective_id, first_objective_desc = get_first_objective_info(
+            args.direct_objectives, 
+            args.direct_objectives_start
+        )
+        if first_objective_id:
+            print(f"🎯 First objective: {first_objective_id} - {first_objective_desc}")
+        else:
+            print(f"⚠️  Could not retrieve first objective from '{args.direct_objectives}' (index {args.direct_objectives_start})")
+            print(f"    Using timestamp-based run_id format instead")
+    
+    # Initialize run data manager for this run (client creates the run_id)
+    from utils.data_persistence.run_data_manager import initialize_run_data_manager
+    
+    run_manager = initialize_run_data_manager(
+        run_name=args.run_name,
+        first_objective_id=first_objective_id,
+        first_objective_desc=first_objective_desc
+    )
+    run_id = run_manager.run_id
+    print(f"📁 Run data directory: {run_manager.get_run_directory()}")
+    
+    # Generate LLM session_id for consistent logging across processes
+    from datetime import datetime
+    llm_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.environ["LLM_SESSION_ID"] = llm_session_id
+    print(f"📝 LLM session ID: {llm_session_id}")
+    
+    # Pass run_id to server via environment variable to avoid conflicts
+    os.environ["RUN_DATA_ID"] = run_id
+    if args.run_name:
+        os.environ["RUN_NAME"] = args.run_name
+    
+    # Save metadata with command line information
+    run_manager.save_metadata(
+        command_args=vars(args),
+        sys_argv=sys.argv,
+        additional_info={
+            "entry_point": "run.py",
+            "mode": "multiprocess_client"
+        }
+    )
     
     # Get first objective info for consistent run naming
     first_objective_id = None

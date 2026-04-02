@@ -14,6 +14,8 @@ from agents.subagents.utils.trajectory_window import (
     _trajectory_file_for_run,
     format_trajectory_window,
     load_recent_trajectories,
+    read_last_jsonl_lines,
+    resolve_trajectory_path,
 )
 
 
@@ -38,28 +40,6 @@ def _write_trajectories_cache(cache_dir: Path, count: int) -> Path:
                         "outcome": {"success": True},
                         "location": "Route 101",
                         "player_coords": [step, step],
-                    }
-                )
-                + "\n"
-            )
-    return trajectory_file
-
-
-def _write_trajectories_legacy(run_dir: Path, count: int) -> Path:
-    """Write trajectory entries to legacy prompt_evolution path."""
-    trajectory_file = run_dir / "prompt_evolution" / "trajectories" / "trajectories.jsonl"
-    trajectory_file.parent.mkdir(parents=True, exist_ok=True)
-    with trajectory_file.open("w", encoding="utf-8") as handle:
-        for step in range(1, count + 1):
-            handle.write(
-                json.dumps(
-                    {
-                        "step": step,
-                        "reasoning": f"reasoning-{step}",
-                        "action": {"tool": "press_buttons", "buttons": ["A"]},
-                        "pre_state": {"location": "Route 101", "player_coords": [step, step]},
-                        "post_state": {"location": "Route 101", "player_coords": [step + 1, step + 1]},
-                        "outcome": {"success": True},
                     }
                 )
                 + "\n"
@@ -93,16 +73,15 @@ def test_load_recent_trajectories_caps_window_at_max(tmp_path):
     assert loaded[-1]["step"] == n_entries
 
 
-# ---- Fallback to legacy path ----
-
-def test_trajectory_file_resolves_legacy_when_cache_missing(tmp_path):
+def test_trajectory_file_resolves_run_data_copy_when_cache_missing(tmp_path):
     run_dir = tmp_path / "run_data" / "test_run"
-    _write_trajectories_legacy(run_dir, 5)
+    synced = run_dir / "trajectory_history.jsonl"
+    synced.parent.mkdir(parents=True, exist_ok=True)
+    synced.write_text('{"step": 1}\n', encoding="utf-8")
 
     with mock.patch(_CACHE_MOCK_TARGET, side_effect=lambda rel: tmp_path / "nonexistent" / rel):
-        result = _trajectory_file_for_run(_RunManagerStub(run_dir))
-    assert result is not None
-    assert result.exists()
+        result = resolve_trajectory_path(_RunManagerStub(run_dir))
+    assert result == synced
 
 
 # ---- Missing file handling ----
@@ -194,3 +173,15 @@ def test_sync_trajectories_to_run_data(tmp_path):
     dest = run_dir / "trajectory_history.jsonl"
     assert dest.exists()
     assert dest.read_text(encoding="utf-8").strip() == '{"step":1}'
+
+
+def test_read_last_jsonl_lines_matches_full_scan_suffix(tmp_path):
+    trajectory_file = tmp_path / "trajectory_history.jsonl"
+    total = 250
+    with trajectory_file.open("w", encoding="utf-8") as handle:
+        for idx in range(total):
+            handle.write(f'{{"step": {idx + 1}}}\n')
+
+    expected = trajectory_file.read_text(encoding="utf-8").splitlines()[-37:]
+    actual = read_last_jsonl_lines(trajectory_file, 37)
+    assert actual == expected

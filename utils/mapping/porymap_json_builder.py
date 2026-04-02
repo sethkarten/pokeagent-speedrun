@@ -15,6 +15,8 @@ The JSON structure includes:
 
 import sys
 import json
+import copy
+from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
@@ -466,6 +468,7 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
         objects = []
         for obj in map_data.get("object_events", []):
             objects.append({
+                "local_id": obj.get("local_id", ""),
                 "x": obj.get("x", 0),
                 "y": obj.get("y", 0),
                 "elevation": obj.get("elevation", 0),
@@ -474,7 +477,8 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
                 "movement_range_x": obj.get("movement_range_x", 0),
                 "movement_range_y": obj.get("movement_range_y", 0),
                 "trainer_type": obj.get("trainer_type", "?"),
-                "trainer_sight_or_berry_tree_id": obj.get("trainer_sight_or_berry_tree_id", "?")
+                "trainer_sight_or_berry_tree_id": obj.get("trainer_sight_or_berry_tree_id", "?"),
+                "flag": obj.get("flag", "0"),
             })
     
     # Extract connections - use override if provided, else porymap data
@@ -539,6 +543,22 @@ def build_json_map(map_name: str, pokeemerald_root: Path,
     return json_map
 
 
+@lru_cache(maxsize=3)
+def _build_json_map_for_llm_cached(
+    map_name: str,
+    pokeemerald_root_str: str,
+    badge_count: int,
+) -> Optional[Dict[str, Any]]:
+    """Cache static porymap builds to avoid repeated filesystem parsing."""
+    return build_json_map(
+        map_name=map_name,
+        pokeemerald_root=Path(pokeemerald_root_str),
+        include_grid=True,
+        include_ascii=True,
+        badge_count=badge_count,
+    )
+
+
 def build_json_map_for_llm(map_name: str, pokeemerald_root: Path, badge_count: int = 0) -> Optional[Dict[str, Any]]:
     """
     Build a JSON map optimized for LLM consumption.
@@ -557,13 +577,15 @@ def build_json_map_for_llm(map_name: str, pokeemerald_root: Path, badge_count: i
     Returns:
         JSON-serializable dictionary optimized for LLM
     """
-    return build_json_map(
+    cached_map = _build_json_map_for_llm_cached(
         map_name=map_name,
-        pokeemerald_root=pokeemerald_root,
-        include_grid=True,
-        include_ascii=True,
-        badge_count=badge_count
+        pokeemerald_root_str=str(Path(pokeemerald_root).resolve()),
+        badge_count=badge_count,
     )
+    if cached_map is None:
+        return None
+    # Callers mutate map data (overlay/elevation filtering), so return a deep copy.
+    return copy.deepcopy(cached_map)
 
 
 def save_json_map(map_name: str, pokeemerald_root: Path, output_path: Path):

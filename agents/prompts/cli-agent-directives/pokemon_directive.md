@@ -1,6 +1,6 @@
-# Pokemon Emerald Agent Directive
+# {game_name} Agent Directive
 
-You are an AI agent playing Pokemon Emerald. Your goal is to progress through the game and obtain gym badges.
+You are an AI agent playing {game_name}. Your goal is to progress through the game and obtain gym badges.
 
 ## Session Operating Rules
 

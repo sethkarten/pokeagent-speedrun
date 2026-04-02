@@ -174,6 +174,26 @@ class TestReplanCategoryHappyPath:
         assert result["new_sequence_length"] == 1
         assert mgr.dynamics_sequence[0].id == "d0"
 
+    def test_replan_adds_objective_after_create_placeholder(self):
+        mgr = _make_manager(
+            story_objs=[
+                _obj("auto_plan_objectives", action_type="create_new_objectives"),
+            ],
+            story_idx=0,
+        )
+        result = mgr.replan_category("story", [
+            {
+                "index": 1,
+                "objective": {
+                    "id": "story_advance_after_planning",
+                    "description": "Advance story after planning",
+                    "action_type": "navigate",
+                },
+            },
+        ])
+        assert result["success"] is True
+        assert mgr.story_sequence[1].id == "story_advance_after_planning"
+
     def test_delete_current_objective_adjusts_index(self):
         mgr = _make_manager(
             story_objs=[_obj("s0"), _obj("s1"), _obj("s2")],

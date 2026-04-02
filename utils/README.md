@@ -8,7 +8,7 @@ Map and pathfinding: `ascii_map_loader`, `map_formatter`, `map_stitcher`, `map_s
 
 ## data_persistence/
 
-- **`backup_manager.py`** — Create and restore backups of `.pokeagent_cache/{run_id}/` (e.g. on objective completion).
+- **`backup_manager.py`** — Create and restore backups of `.pokeagent_cache/{run_id}/` (e.g. on objective completion). Restored zips copy **persistent** cache files (e.g. `checkpoint.state`, `objectives.json`, `memory.json`, `skills.json`, `subagents.json`, `trajectory_history.jsonl`, metrics, map stitcher data). They do **not** repopulate the orchestrator’s **short-term** in-process state: `PokeAgent` still starts with an empty rolling `conversation_history`; only **long-term** stores on disk carry over. Past steps remain in `trajectory_history.jsonl` when that file is included in the backup, and tools like `process_trajectory_history` can read them on demand.
 - **`run_data_manager.py`** — Run directory layout, cache paths, checkpoint/LLM paths; creates `run_data/{run_id}/` (prompt_evolution, end_state, agent_scratch_space, agent_logs (for cli agents)) and finalizes at shutdown.
 - **`llm_logger.py`** — Logs LLM interactions and maintains `cumulative_metrics.json` (tokens, cost, actions, steps, milestones). For CLI agents, metrics are synced via `POST /sync_llm_metrics`.
 

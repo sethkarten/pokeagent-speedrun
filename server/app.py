@@ -4,6 +4,7 @@ Fixed Pokemon Emerald server - headless FastAPI server
 """
 
 # Standard library imports
+import asyncio
 import base64
 import datetime
 import glob
@@ -37,14 +38,17 @@ import hashlib
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Local application imports
-from pokemon_env.emulator import EmeraldEmulator
+# Local application imports — emulator imported conditionally in setup_environment()
 from utils.anticheat import AntiCheatTracker
 from utils.json_utils import normalize_replan_edits
+from utils.llm_provider_ui import infer_llm_provider_family
 
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
+# Game type: "emerald" (GBA, default) or "red" (Game Boy)
+game_type = os.environ.get("GAME_TYPE", "emerald").lower()
 
 # Global state
 env = None
@@ -59,6 +63,9 @@ direct_objectives_battling_start_index = 0
 direct_objectives_manager = None
 current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
+debug_state_enabled = False  # Save game state JSON on each get_game_state call (--debug-state)
+_debug_state_counter = 0  # Step index for debug state entries
+_debug_state_log = []  # Accumulates all debug state snapshots (written to debug_states.json)
 current_obs = None
 fps = 80
 
@@ -106,6 +113,37 @@ def _build_story_planning_objective():
         priority=1,
     )
 
+
+def _format_interaction_type_for_ui(interaction_type: str) -> str:
+    """Normalize orchestrator labels for UI readability.
+
+    Backends log interaction_type as `<backend>_<module_name>`. For orchestrator
+    entries we prefer `<scaffold>_<backend>_orchestrator` in the UI.
+    """
+    if not interaction_type:
+        return "unknown"
+
+    backend_prefixes = ("gemini_", "openai_", "openrouter_", "anthropic_", "vertex_")
+    for prefix in backend_prefixes:
+        if interaction_type.startswith(prefix) and interaction_type.endswith("_orchestrator"):
+            backend = prefix[:-1]
+            module_name = interaction_type[len(prefix):]
+            if module_name:
+                base = module_name[:-13]  # len("_orchestrator") == 13
+                return f"{base}_{backend}_orchestrator"
+    return interaction_type
+
+
+def _provider_family_for_llm_log_entry(entry: dict) -> str:
+    """UI color bucket from raw log line (handles OpenRouter via model slug)."""
+    raw_type = entry.get("interaction_type") or ""
+    mi = entry.get("model_info") or {}
+    model_name = mi.get("model") or ""
+    meta = entry.get("metadata") or {}
+    backend = meta.get("backend") or mi.get("backend")
+    return infer_llm_provider_family(raw_type, model_name, backend)
+
+
 # Performance monitoring
 last_fps_log = time.time()
 frame_count_since_log = 0
@@ -134,6 +172,11 @@ video_recording = False
 video_filename = ""
 video_frame_counter = 0
 video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
+
+# Playwright WebUI recording state
+playwright_recording = False       # signal flag: set False to stop the recording thread
+playwright_thread = None           # background thread running the async recording loop
+playwright_video_path = None       # final .mp4 path set when recording finishes
 
 # Frame cache for separate frame server
 # Use cache directory instead of /tmp
@@ -414,6 +457,14 @@ def periodic_milestone_updater():
                 if env and env.memory_reader:
                     try:
                         # Use lightweight state for milestone updates only
+                        party = env.get_party_pokemon() or []
+                        location = env.get_location()
+                        badges = []
+                        if hasattr(env, 'memory_reader') and env.memory_reader and hasattr(env.memory_reader, 'read_badges'):
+                            try:
+                                badges = env.memory_reader.read_badges() or []
+                            except Exception:
+                                badges = []
                         basic_state = {
                             "player": {
                                 "money": env.get_money(),
@@ -529,11 +580,18 @@ def setup_environment(skip_initial_state=False):
     global env, current_obs, anticheat_tracker
 
     try:
-        rom_path = "Emerald-GBAdvance/rom.gba"
-        if not os.path.exists(rom_path):
-            raise RuntimeError(f"ROM not found at {rom_path}")
-
-        env = EmeraldEmulator(rom_path=rom_path)
+        if game_type == "red":
+            from pokemon_red_env.red_emulator import RedEmulator
+            rom_path = "PokemonRed-GBC/pokered.gbc"
+            if not os.path.exists(rom_path):
+                raise RuntimeError(f"ROM not found at {rom_path}")
+            env = RedEmulator(rom_path=rom_path)
+        else:
+            from pokemon_env.emulator import EmeraldEmulator
+            rom_path = "Emerald-GBAdvance/rom.gba"
+            if not os.path.exists(rom_path):
+                raise RuntimeError(f"ROM not found at {rom_path}")
+            env = EmeraldEmulator(rom_path=rom_path)
         env.initialize()
 
         # Initialize AntiCheat tracker for submission logging
@@ -604,7 +662,8 @@ def step_environment(actions_pressed):
     try:
         screenshot = env.get_screenshot()
         if screenshot:
-            record_frame(screenshot)
+            if not playwright_recording:
+                record_frame(screenshot)
             update_frame_cache(screenshot)  # Update frame cache for separate frame server
             with obs_lock:
                 current_obs = np.array(screenshot)
@@ -875,6 +934,16 @@ async def get_stream():
 
 
 # FastAPI endpoints
+@app.get("/config")
+async def get_config():
+    """Return server configuration (game type, resolution) for dynamic UI"""
+    return {
+        "game": game_type,
+        "width": env.width if env else 240,
+        "height": env.height if env else 160,
+    }
+
+
 @app.get("/health")
 async def get_health():
     """Health check endpoint for server monitoring"""
@@ -1251,6 +1320,63 @@ async def get_queue_status():
     }
 
 
+def _build_porymap_visual_map_15x15(state: Dict[str, Any], player_coords: Tuple[int, int]) -> bool:
+    """Set ``state['map']['visual_map']`` from elevation-filtered ``porymap.grid`` (15x15 around player).
+
+    Uses whatever grid is already in ``state`` (refreshed while idle, or from /state cache). Safe when
+    the action queue is non-empty: recenters the window on *current* player coordinates without
+    re-running ``_format_porymap_info``.
+
+    Returns True if ``visual_map`` was written.
+    """
+    map_section = state.get("map") or {}
+    porymap_grid = (map_section.get("porymap") or {}).get("grid")
+    if not porymap_grid or not player_coords:
+        return False
+
+    px, py = int(player_coords[0]), int(player_coords[1])
+    window_size = 15
+    half_window = window_size // 2
+    height = len(porymap_grid)
+
+    def _slice_row(row: Any, sx: int, ex: int) -> List[str]:
+        if isinstance(row, str):
+            return list(row[sx:ex])
+        return [str(c) for c in row[sx:ex]]
+
+    start_y = max(0, py - half_window)
+    end_y = min(height, py + half_window + 1)
+    start_x = max(0, px - half_window)
+
+    visual_grid: List[List[str]] = []
+    for y in range(start_y, end_y):
+        if y < height:
+            row = porymap_grid[y]
+            end_x = min(len(row), px + half_window + 1)
+            window_row = _slice_row(row, start_x, end_x)
+            while len(window_row) < window_size:
+                window_row.append("#")
+            visual_grid.append(window_row[:window_size])
+        else:
+            visual_grid.append(["#"] * window_size)
+
+    while len(visual_grid) < window_size:
+        visual_grid.append(["#"] * window_size)
+
+    player_y_in_window = py - start_y
+    player_x_in_window = px - start_x
+    if 0 <= player_y_in_window < len(visual_grid) and 0 <= player_x_in_window < len(
+        visual_grid[player_y_in_window]
+    ):
+        visual_grid[player_y_in_window][player_x_in_window] = "P"
+
+    if "map" not in state:
+        state["map"] = {}
+    state["map"]["visual_map"] = "\n".join(" ".join(r) for r in visual_grid)
+    state["map"]["map_source"] = "porymap_with_player_15x15"
+    return True
+
+
 @app.get("/state")
 async def get_comprehensive_state():
     """Get comprehensive game state including visual and memory data"""
@@ -1303,8 +1429,11 @@ async def get_comprehensive_state():
             _state_cache["location"] == current_location and current_time - _state_cache["timestamp"] < _state_cache_ttl
         )
 
-        # Initialize slam_map_loaded before the cache check
+        # Track map source states separately:
+        # - slam_map_loaded: a real SLAM map was loaded this request
+        # - used_cached_map: state.map came from cache and we should skip heavy generation
         slam_map_loaded = False
+        used_cached_map = False
 
         if cache_valid and _state_cache["map_data"]:
             # Use cached map data - skip expensive map generation!
@@ -1312,8 +1441,7 @@ async def get_comprehensive_state():
             if _state_cache["portal_data"]:
                 state.update(_state_cache["portal_data"])
             logger.debug(f"✅ Using cached map data for {current_location}")
-            # Skip map generation when using cache
-            slam_map_loaded = True  # Prevent re-generation below
+            used_cached_map = True
         else:
             # Generate fresh map data
             logger.debug(f"🔄 Generating fresh map data for {current_location}")
@@ -1344,13 +1472,51 @@ async def get_comprehensive_state():
                 except Exception as e:
                     logger.error(f"Error loading SLAM map: {e}")
 
+        # PRIORITY 1.5: Build final porymap map for UI parity with LLM map context.
+        # This ensures the "Map & Actions" UI uses the same post-filtered map
+        # (reconciliation + flag filtering + object markers) when available.
+        if game_type != "red" and current_location and current_location != "Unknown" and state.get("map", {}).get("map_source") != "agent_slam":
+            try:
+                from utils.mapping.porymap_state import _format_porymap_info
+
+                badges = state.get("game", {}).get("badges", [])
+                if isinstance(badges, list):
+                    badge_count = len(badges)
+                elif isinstance(badges, int):
+                    badge_count = badges
+                else:
+                    badge_count = 0
+
+                porymap_result = _format_porymap_info(
+                    location_name=current_location,
+                    player_coords=player_coords,
+                    badge_count=badge_count,
+                    memory_reader=env.memory_reader if env else None,
+                    runtime_object_events=state.get("map", {}).get("object_events", []),
+                )
+
+                porymap_json = porymap_result.json_map if porymap_result else None
+                porymap_ascii = porymap_json.get("ascii") if isinstance(porymap_json, dict) else None
+                if isinstance(porymap_ascii, str) and porymap_ascii:
+                    state["map"].setdefault("porymap", {})
+                    state["map"]["porymap"]["ascii"] = porymap_ascii
+                    state["map"]["porymap"]["grid"] = porymap_json.get("grid", [])
+                    state["map"]["porymap"]["objects"] = porymap_json.get("objects", [])
+                    state["map"]["porymap"]["raw_tiles"] = porymap_json.get("raw_tiles", [])
+                    state["map"]["porymap"]["dimensions"] = porymap_json.get("dimensions", {})
+                    state["map"]["visual_map"] = porymap_ascii
+                    state["map"]["map_source"] = "porymap_final"
+            except Exception as e:
+                logger.debug(f"Could not build final porymap visual map: {e}")
+
         # PRIORITY 2: Check if visual_map was already generated by memory_reader
         # If so, preserve it as it has the proper accumulated map data
-        if not slam_map_loaded:
+        if not slam_map_loaded and not used_cached_map:
             visual_map_from_memory_reader = state.get("map", {}).get("visual_map")
             if visual_map_from_memory_reader:
-                logger.debug("Using visual_map generated by memory_reader")
-                state["map"]["map_source"] = "memory_reader"
+                if state.get("map", {}).get("map_source") != "porymap_final":
+                    logger.debug("Using visual_map generated by memory_reader")
+                    state["map"]["map_source"] = "memory_reader"
                 # Keep the visual_map as-is
             elif not ENABLE_MAP_STITCHER and current_location and current_location != "Unknown":
                 # PRIORITY 3: Use porymap ground truth data when map stitcher is disabled
@@ -1502,10 +1668,11 @@ async def get_comprehensive_state():
             del state["visual"]["screenshot"]
 
         # Add porymap ground truth data with elevation filtering for frontend display
-        # Skip during queued actions to avoid FPS slowdown
+        # Skip during queued actions to avoid FPS slowdown (Emerald only — Red uses its own map reader)
         current_queue_length = len(action_queue)  # Check queue before expensive porymap operations
         if (
-            current_location
+            game_type != "red"
+            and current_location
             and current_location != "Unknown"
             and current_location != "TITLE_SEQUENCE"
             and current_queue_length == 0
@@ -1513,72 +1680,35 @@ async def get_comprehensive_state():
             try:
                 from utils.state_formatter import _format_porymap_info
 
-                porymap_result = _format_porymap_info(current_location, player_coords)
-                if isinstance(porymap_result, tuple):
-                    _, porymap_data = porymap_result
-                    if porymap_data and porymap_data.get("grid"):
-                        if "porymap" not in state["map"]:
-                            state["map"]["porymap"] = {}
-                        state["map"]["porymap"]["grid"] = porymap_data.get("grid")
-                        state["map"]["porymap"]["objects"] = porymap_data.get("objects", [])
-                        state["map"]["porymap"]["dimensions"] = porymap_data.get("dimensions", {})
-                        state["map"]["porymap"]["warps"] = porymap_data.get("warps", [])
-                        logger.debug(f"Added elevation-filtered porymap data to /state for {current_location}")
-
-                        # Generate visual_map from porymap grid with player position marker
-                        # Extract 15x15 window around player for stream.html display
-                        porymap_grid = porymap_data.get("grid")
-                        if porymap_grid and player_coords:
-                            px, py = player_coords[0], player_coords[1]
-
-                            # Extract 15x15 window centered on player
-                            window_size = 15
-                            half_window = window_size // 2
-
-                            # Calculate window bounds
-                            start_y = max(0, py - half_window)
-                            end_y = min(len(porymap_grid), py + half_window + 1)
-                            start_x = max(0, px - half_window)
-
-                            # Extract window
-                            visual_grid = []
-                            for y in range(start_y, end_y):
-                                if y < len(porymap_grid):
-                                    row = porymap_grid[y]
-                                    end_x = min(len(row), px + half_window + 1)
-                                    window_row = row[start_x:end_x]
-
-                                    # Pad row if needed to maintain 15 width
-                                    while len(window_row) < window_size:
-                                        window_row.append("#")
-
-                                    visual_grid.append(window_row[:])
-                                else:
-                                    # Pad with blocked tiles if beyond map bounds
-                                    visual_grid.append(["#"] * window_size)
-
-                            # Pad height if needed to maintain 15x15
-                            while len(visual_grid) < window_size:
-                                visual_grid.append(["#"] * window_size)
-
-                            # Add player marker at center of window
-                            player_y_in_window = py - start_y
-                            player_x_in_window = px - start_x
-                            if 0 <= player_y_in_window < len(visual_grid) and 0 <= player_x_in_window < len(
-                                visual_grid[player_y_in_window]
-                            ):
-                                visual_grid[player_y_in_window][player_x_in_window] = "P"
-
-                            # Convert grid to visual_map string format
-                            visual_map_lines = []
-                            for row in visual_grid:
-                                visual_map_lines.append(" ".join(row))
-
-                            state["map"]["visual_map"] = "\n".join(visual_map_lines)
-                            state["map"]["map_source"] = "porymap_with_player_15x15"
-                            logger.debug(f"Generated 15x15 visual_map from porymap with player at ({px}, {py})")
+                _mr = getattr(env, "memory_reader", None) if env else None
+                porymap_result = _format_porymap_info(
+                    current_location,
+                    player_coords,
+                    memory_reader=_mr,
+                    runtime_object_events=state.get("map", {}).get("object_events", []),
+                )
+                porymap_data = getattr(porymap_result, "json_map", None)
+                if porymap_data and porymap_data.get("grid"):
+                    if "porymap" not in state["map"]:
+                        state["map"]["porymap"] = {}
+                    state["map"]["porymap"]["grid"] = porymap_data.get("grid")
+                    state["map"]["porymap"]["objects"] = porymap_data.get("objects", [])
+                    state["map"]["porymap"]["dimensions"] = porymap_data.get("dimensions", {})
+                    state["map"]["porymap"]["warps"] = porymap_data.get("warps", [])
+                    logger.debug(f"Added elevation-filtered porymap data to /state for {current_location}")
             except Exception as e:
                 logger.warning(f"Failed to add porymap data to /state: {e}")
+
+        # Cheap: 15x15 stream UI from cached or freshly refreshed grid (also while actions are queued)
+        if game_type != "red" and current_location and current_location not in ("Unknown", "TITLE_SEQUENCE") and player_coords:
+            _build_porymap_visual_map_15x15(state, player_coords)
+        elif game_type == "red":
+            # stream UI map for Red has been built in red_map_reader.py
+            visual_map = env.memory_reader.map_reader.format_map_for_llm(radius=7)
+            state["map"]["visual_map"] = visual_map
+            state["map"]["map_source"] = "red_map_reader"
+            whole_map = env.memory_reader.map_reader.get_whole_map_data()
+            state["map"]["red_whole_map"] = whole_map
 
         with step_lock:
             current_step = step_count
@@ -1586,8 +1716,9 @@ async def get_comprehensive_state():
         # Include action queue info for multiprocess coordination
         queue_length = len(action_queue)  # Action queue access is atomic for len()
 
-        # Cache map data for this location (5 second TTL) - reduces load on subsequent requests
+        # Cache map data for this location+position - reduces load on rapid repeated requests
         _state_cache["location"] = current_location
+        _state_cache["player_coords"] = player_coords
         _state_cache["map_data"] = state.get("map", {}).copy()
         _state_cache["portal_data"] = {"location_connections": state.get("location_connections", {})}
         _state_cache["timestamp"] = time.time()
@@ -1615,6 +1746,20 @@ async def get_whole_map():
     if env is None:
         raise HTTPException(status_code=400, detail="Emulator not initialized")
 
+    # Red: use RedEmulator.get_whole_map() directly (returns compatible dict)
+    if game_type == "red":
+        try:
+            result = env.get_whole_map()
+            if not result or not result.get("grid"):
+                raise HTTPException(status_code=400, detail="No valid location loaded")
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting whole map (Red): {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # Emerald: use porymap ground truth
     try:
         # Get current location
         state = env.get_comprehensive_state()
@@ -1923,9 +2068,18 @@ async def stream_agent_thinking():
                                             timestamp = entry.get("timestamp", "")
                                             # Only add if we haven't sent this timestamp before
                                             if timestamp and timestamp not in sent_timestamps:
+                                                model_name = (
+                                                    entry.get("model_info", {}) or {}
+                                                ).get("model", "")
                                                 new_interactions.append(
                                                     {
-                                                        "type": entry.get("interaction_type", "unknown"),
+                                                        "type": _format_interaction_type_for_ui(
+                                                            entry.get("interaction_type", "unknown")
+                                                        ),
+                                                        "model": model_name,
+                                                        "provider_family": _provider_family_for_llm_log_entry(
+                                                            entry
+                                                        ),
                                                         "response": entry.get("response", ""),
                                                         "duration": entry.get("duration", 0),
                                                         "timestamp": timestamp,
@@ -1952,6 +2106,10 @@ async def stream_agent_thinking():
                             event_data = {
                                 "step": line_step,
                                 "type": interaction.get("type", "unknown"),
+                                "model": interaction.get("model", ""),
+                                "provider_family": interaction.get(
+                                    "provider_family", "other"
+                                ),
                                 "response": interaction.get("response", ""),
                                 "duration": interaction.get("duration", 0),
                                 "timestamp": interaction.get("timestamp", ""),
@@ -2007,9 +2165,18 @@ async def get_agent_thinking():
                         try:
                             entry = json.loads(line.strip())
                             if entry.get("type") == "interaction":
+                                model_name = (
+                                    entry.get("model_info", {}) or {}
+                                ).get("model", "")
                                 recent_interactions.append(
                                     {
-                                        "type": entry.get("interaction_type", "unknown"),
+                                        "type": _format_interaction_type_for_ui(
+                                            entry.get("interaction_type", "unknown")
+                                        ),
+                                        "model": model_name,
+                                        "provider_family": _provider_family_for_llm_log_entry(
+                                            entry
+                                        ),
                                         "prompt": entry.get("prompt", ""),
                                         "response": entry.get("response", ""),
                                         "duration": entry.get("duration", 0),
@@ -2842,11 +3009,26 @@ async def mcp_get_map_data():
         pos = state_result.get("player_position", {})
         location = state_result.get("location", "Unknown")
 
+        # Game-specific player marker and legend
+        _gt = os.environ.get("GAME_TYPE", "emerald").lower()
+        if _gt == "red":
+            _player_marker = "I"
+            _grid_legend = (
+                "I=player .=walkable #=wall ~=grass W=water D=door "
+                "t=cuttable tree G=Card Key gate !=sign ?=hidden item "
+                "O=pokeball N=NPC(blocked) ↓/←/→=jump ledge "
+                "C=counter *=spinner stop B=bookshelf U=trash "
+                "^=display/blueprint P=computer ==bench T=TV/machine"
+            )
+        else:
+            _player_marker = "P"
+            _grid_legend = "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)"
+
         result = {
             "success": True,
             "location": location,
             "player": {"x": pos.get("x", 0), "y": pos.get("y", 0)},
-            "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)",
+            "grid_legend": _grid_legend,
         }
 
         # Get the FULL map grid (not windowed) from the porymap data in raw_state
@@ -2860,15 +3042,15 @@ async def mcp_get_map_data():
             grid = [list(row) for row in porymap_grid]
             px, py = pos.get("x", 0), pos.get("y", 0)
             if 0 <= py < len(grid) and 0 <= px < len(grid[0]):
-                grid[py][px] = "P"
+                grid[py][px] = _player_marker
 
             # Mark live NPC positions as 'N' (blocked for pathfinding)
-            obj_events = raw_state.get("map", {}).get("object_events", [])
+            obj_events = raw_state.get("map", {}).get("object_events", []) # object_events - from runtime memory; objects - from porymap data
             for obj in obj_events:
                 ox = obj.get("current_x", -1)
                 oy = obj.get("current_y", -1)
                 if (ox, oy) != (px, py) and 0 <= oy < len(grid) and 0 <= ox < len(grid[0]):
-                    if grid[oy][ox] not in ('#', 'P'):
+                    if grid[oy][ox] not in ('#', _player_marker):
                         grid[oy][ox] = 'N'
 
             grid = ["".join(row) for row in grid]
@@ -2901,7 +3083,7 @@ async def mcp_get_map_data():
                             end = i + 1
                             break
                     map_json = _json.loads(json_section[start:end])
-                    result["warps"] = map_json.get("warps", [])
+                    result["warps"] = map_json.get("warps") or map_json.get("warp_events", [])
                     result["objects"] = map_json.get("objects", [])
                     result["connections"] = map_json.get("connections", [])
                     if not result.get("dimensions"):
@@ -2961,8 +3143,34 @@ async def mcp_press_buttons(request: dict):
         if not buttons:
             return {"success": False, "error": "No buttons specified"}
 
+        # GBC (Red) has no shoulder buttons — reject L/R
+        if game_type == "red":
+            invalid_shoulder = [b for b in buttons if str(b).upper().strip() in ("L", "R")]
+            if invalid_shoulder:
+                return {"success": False, "error": f"Game Boy has no shoulder buttons: {invalid_shoulder}"}
+
         # Valid buttons (including WAIT for no-op)
-        valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
+        if game_type == "red":
+            valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "WAIT"]
+        else:
+            valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
+
+        # Validate and normalize buttons with fallback to 'A'
+        normalized_buttons = []
+        invalid_buttons = []
+
+        for button in buttons:
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+
+            # Check if valid
+            if button_upper in valid_buttons:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                invalid_buttons.append(button)
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append("A")
 
         # Validate and normalize buttons with fallback to 'A'
         normalized_buttons = []
@@ -3744,13 +3952,17 @@ async def mcp_get_walkthrough(request: dict):
         except (ValueError, TypeError):
             return {"success": False, "error": f"Invalid part number: {part}"}
 
-        if not 1 <= part <= 21:
-            return {"success": False, "error": f"Part must be between 1 and 21 (got {part})"}
-
-        # Build Bulbapedia walkthrough URL
-        url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
-
-        logger.info(f"📖 Fetching Emerald walkthrough part {part}")
+        # Build Bulbapedia walkthrough URL (game-specific)
+        if game_type == "red":
+            if not 1 <= part <= 17:
+                return {"success": False, "error": f"Red walkthrough only has parts 1-17 (got {part})"}
+            url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Red_and_Blue/Part_{part}"
+            logger.info(f"📖 Fetching Red walkthrough part {part}")
+        else:
+            if not 1 <= part <= 21:
+                return {"success": False, "error": f"Part must be between 1 and 21 (got {part})"}
+            url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
+            logger.info(f"📖 Fetching Emerald walkthrough part {part}")
 
         # Fetch the page
         response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; PokeAgent/1.0)"})
@@ -3848,167 +4060,6 @@ async def mcp_save_memory(request: dict):
         return {"success": True, "message": f"Memory saved to {memory_file}", "path": memory_file}
     except Exception as e:
         logger.error(f"Failed to save memory: {e}")
-        return {"success": False, "error": str(e)}
-
-
-@app.post("/mcp/create_direct_objectives")
-async def mcp_create_direct_objectives(request: dict):
-    """MCP Tool: Create next 3 direct objectives dynamically"""
-    if env is None:
-        return {"success": False, "error": "Emulator not initialized"}
-
-    try:
-        from agents.objectives import DirectObjectiveManager
-
-        objectives_data = request.get("objectives", [])
-        reasoning = request.get("reasoning", "")
-
-        if len(objectives_data) != 3:
-            return {"success": False, "error": f"Must provide exactly 3 objectives (got {len(objectives_data)})"}
-
-        # Validate required fields
-        for i, obj in enumerate(objectives_data):
-            if not obj.get("id"):
-                return {"success": False, "error": f"Objective {i + 1} missing 'id' field"}
-            if not obj.get("description"):
-                return {"success": False, "error": f"Objective {i + 1} missing 'description' field"}
-            if not obj.get("action_type"):
-                return {"success": False, "error": f"Objective {i + 1} missing 'action_type' field"}
-
-        global direct_objectives_manager
-        if direct_objectives_manager is None:
-            direct_objectives_manager = DirectObjectiveManager()
-
-        category = request.get("category")
-
-        if direct_objectives_manager.mode == "categorized":
-            if not category:
-                return {"success": False, "error": "Category parameter required in categorized mode (story, battling, or dynamics)"}
-            if category not in ["story", "battling", "dynamics"]:
-                return {"success": False, "error": f"Invalid category: {category}. Must be story, battling, or dynamics"}
-
-            current_obj = direct_objectives_manager._get_current_objective_for_category(category)
-            if not current_obj:
-                return {
-                    "success": False,
-                    "error": f"No current {category} objective to create new objectives from"
-                }
-            if current_obj.action_type != "create_new_objectives":
-                return {
-                    "success": False,
-                    "error": (
-                        f"Cannot create new {category} objectives because the current {category} objective "
-                        f"is not a guidance objective (action_type='create_new_objectives')."
-                    ),
-                }
-
-            # Use run_data agent_scratch_space for dynamics backup
-            # CLI agents do not use objectives; pass None when POKEAGENT_CLI_MODE
-            from utils.data_persistence.run_data_manager import get_run_data_manager
-
-            run_manager = get_run_data_manager()
-            objectives_run_dir = (
-                None
-                if os.environ.get("POKEAGENT_CLI_MODE") == "1"
-                else (str(run_manager.get_scratch_space_dir()) if run_manager else None)
-            )
-
-            start_index = len(direct_objectives_manager._get_sequence_for_category(category))
-            direct_objectives_manager.add_objectives_to_category(
-                category, objectives_data, run_dir=objectives_run_dir
-            )
-            direct_objectives_manager._mark_objective_completed(current_obj)
-            if category == "story":
-                direct_objectives_manager.story_index = start_index
-            elif category == "battling":
-                direct_objectives_manager.battling_index = start_index
-            elif category == "dynamics":
-                direct_objectives_manager.dynamics_index = start_index
-            logger.info(
-                f"✅ Created {len(objectives_data)} {category} objectives and advanced index to {start_index}"
-            )
-            should_complete_auto_obj = False
-        else:
-            # Check if we need to complete the "sequence_complete_create_next_objectives" objective first
-            current_obj = direct_objectives_manager.get_current_objective()
-            should_complete_auto_obj = False
-            if current_obj and current_obj.id == "sequence_complete_create_next_objectives":
-                should_complete_auto_obj = True
-
-            # Add dynamic objectives (this will automatically set current_index to the first new objective)
-            direct_objectives_manager.add_dynamic_objectives(objectives_data, set_as_current=True)
-
-            # If we just created the auto-objective to create new objectives, mark it as completed
-            # Note: add_dynamic_objectives already set current_index to the first new objective,
-            # so we don't need to increment it again here
-            if should_complete_auto_obj:
-                direct_objectives_manager._mark_objective_completed(current_obj)
-                logger.info(
-                    f"✅ Marked sequence_complete_create_next_objectives as completed after creating {len(objectives_data)} new objectives"
-                )
-                logger.info(
-                    f"✅ Current objective index is now {direct_objectives_manager.current_index} (first of {len(objectives_data)} new objectives)"
-                )
-
-        # Persist full objectives state after mutation
-        direct_objectives_manager.auto_save()
-
-        # Update objectives cache for stream.html (fast file read)
-        _update_objectives_cache()
-
-        # Get current game state for context
-        from utils.state_formatter import format_state_for_llm
-        from server import game_tools
-
-        game_state_result = game_tools.get_game_state_direct(env, format_state_for_llm)
-        game_state = game_state_result.get("raw_state", {})
-
-        # Get next objective guidance (should now be the first of the newly created objectives)
-        if direct_objectives_manager.mode == "categorized":
-            next_guidance = direct_objectives_manager.get_categorized_objective_guidance(game_state)
-            sequence_status = {
-                "story": {
-                    "current_index": direct_objectives_manager.story_index,
-                    "total": len(direct_objectives_manager.story_sequence),
-                    "completed": sum(1 for obj in direct_objectives_manager.story_sequence if obj.completed),
-                },
-                "battling": {
-                    "current_index": direct_objectives_manager.battling_index,
-                    "total": len(direct_objectives_manager.battling_sequence),
-                    "completed": sum(1 for obj in direct_objectives_manager.battling_sequence if obj.completed),
-                },
-                "dynamics": {
-                    "current_index": direct_objectives_manager.dynamics_index,
-                    "total": len(direct_objectives_manager.dynamics_sequence),
-                    "completed": sum(1 for obj in direct_objectives_manager.dynamics_sequence if obj.completed),
-                },
-            }
-        else:
-            next_guidance = direct_objectives_manager.get_current_objective_guidance(game_state)
-            sequence_status = direct_objectives_manager.get_sequence_status()
-
-        from utils.json_utils import serialize_for_json
-        return serialize_for_json({
-            "success": True,
-            "message": f"Created {len(objectives_data)} objectives",
-            "reasoning": reasoning,
-            "next_objective": next_guidance,
-            "sequence_status": sequence_status,
-            "context": {
-                "current_location": game_state.get("player", {}).get("location"),
-                "milestones_completed": [
-                    m
-                    for m, d in (env.milestone_tracker.milestones.items() if env.milestone_tracker else [])
-                    if d.get("completed", False)
-                ],
-            },
-            "auto_objective_completed": should_complete_auto_obj,
-        })
-    except Exception as e:
-        logger.error(f"Error creating direct objectives: {e}")
-        import traceback
-
-        traceback.print_exc()
         return {"success": False, "error": str(e)}
 
 
@@ -4398,6 +4449,13 @@ async def sync_llm_metrics(request: Request):
             # Update cumulative metrics (but preserve server-managed metrics like start_time and total_actions)
             server_start_time = llm_logger.cumulative_metrics.get("start_time")
             server_total_actions = llm_logger.cumulative_metrics.get("total_actions")
+            server_total_tokens = llm_logger.cumulative_metrics.get("total_tokens", 0)
+            server_prompt_tokens = llm_logger.cumulative_metrics.get("prompt_tokens", 0)
+            server_completion_tokens = llm_logger.cumulative_metrics.get("completion_tokens", 0)
+            server_cached_tokens = llm_logger.cumulative_metrics.get("cached_tokens", 0)
+            server_cache_write_tokens = llm_logger.cumulative_metrics.get("cache_write_tokens", 0)
+            server_total_cost = llm_logger.cumulative_metrics.get("total_cost", 0.0)
+            server_total_llm_calls = llm_logger.cumulative_metrics.get("total_llm_calls", 0)
             server_milestones = llm_logger.cumulative_metrics.get("milestones")
             server_last_milestone_step = llm_logger.cumulative_metrics.get("_last_milestone_step")
             server_last_milestone_tokens = llm_logger.cumulative_metrics.get("_last_milestone_tokens")
@@ -4442,12 +4500,55 @@ async def sync_llm_metrics(request: Request):
             if server_last_update_time is not None:
                 llm_logger.cumulative_metrics["last_update_time"] = server_last_update_time
 
+            # Keep cumulative totals monotonic so restored totals are never downgraded by stale client payloads.
+            llm_logger.cumulative_metrics["total_tokens"] = max(
+                server_total_tokens, llm_logger.cumulative_metrics.get("total_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["prompt_tokens"] = max(
+                server_prompt_tokens, llm_logger.cumulative_metrics.get("prompt_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["completion_tokens"] = max(
+                server_completion_tokens, llm_logger.cumulative_metrics.get("completion_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["cached_tokens"] = max(
+                server_cached_tokens, llm_logger.cumulative_metrics.get("cached_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["cache_write_tokens"] = max(
+                server_cache_write_tokens, llm_logger.cumulative_metrics.get("cache_write_tokens", 0)
+            )
+            llm_logger.cumulative_metrics["total_cost"] = max(
+                server_total_cost, llm_logger.cumulative_metrics.get("total_cost", 0.0)
+            )
+            llm_logger.cumulative_metrics["total_llm_calls"] = max(
+                server_total_llm_calls, llm_logger.cumulative_metrics.get("total_llm_calls", 0)
+            )
+
             # Also sync to latest_metrics for stream.html display (excluding server-managed metrics)
             global latest_metrics
             with step_lock:
                 for key, value in cumulative_metrics.items():
-                    if key in latest_metrics and key not in ["total_actions", "start_time", "total_run_time"]:
+                    if key in latest_metrics and key not in [
+                        "total_actions",
+                        "start_time",
+                        "total_run_time",
+                        "total_tokens",
+                        "prompt_tokens",
+                        "completion_tokens",
+                        "cached_tokens",
+                        "cache_write_tokens",
+                        "total_cost",
+                        "total_llm_calls",
+                    ]:
                         latest_metrics[key] = value
+
+            with step_lock:
+                latest_metrics["total_tokens"] = llm_logger.cumulative_metrics.get("total_tokens", 0)
+                latest_metrics["prompt_tokens"] = llm_logger.cumulative_metrics.get("prompt_tokens", 0)
+                latest_metrics["completion_tokens"] = llm_logger.cumulative_metrics.get("completion_tokens", 0)
+                latest_metrics["cached_tokens"] = llm_logger.cumulative_metrics.get("cached_tokens", 0)
+                latest_metrics["cache_write_tokens"] = llm_logger.cumulative_metrics.get("cache_write_tokens", 0)
+                latest_metrics["total_cost"] = llm_logger.cumulative_metrics.get("total_cost", 0.0)
+                latest_metrics["total_llm_calls"] = llm_logger.cumulative_metrics.get("total_llm_calls", 0)
 
             # Persist to cache so steps/milestones are saved promptly
             llm_logger.save_cumulative_metrics()
@@ -4535,7 +4636,9 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    parser = argparse.ArgumentParser(description="Simple Pokemon Emerald Server")
+    parser = argparse.ArgumentParser(description="Simple Pokemon Server")
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
+                       help="Which game to run: 'red' (Pokemon Red, Game Boy) or 'emerald' (Pokemon Emerald, GBA)")
     parser.add_argument("--port", type=int, default=8000, help="Port for FastAPI server")
     parser.add_argument("--manual", action="store_true", help="Enable manual mode with keyboard input and overlay")
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
@@ -4562,6 +4665,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Set game type from args (also sync env var for modules like state_formatter)
+    global game_type
+    game_type = args.game
+    os.environ["GAME_TYPE"] = game_type
+    print(f"Game type: {game_type}")
+    
     # Set global direct objectives sequence
     global direct_objectives_sequence, direct_objectives_start_index, direct_objectives_battling_start_index
     if args.direct_objectives:
@@ -4698,7 +4807,7 @@ def main():
 
     # Disable dialogue detection if --no-ocr flag is set
     if args.no_ocr:
-        if env and env.memory_reader:
+        if env and env.memory_reader and hasattr(env.memory_reader, '_dialog_detection_enabled'):
             env.memory_reader._dialog_detection_enabled = False
             print("🚫 All dialogue detection disabled (--no-ocr flag)")
 
@@ -4721,8 +4830,8 @@ def main():
             if os.path.exists(grids_file):
                 print(f"🗺️  Loaded map grids from: {grids_file}")
 
-            # Map buffer should already be found by emulator.load_state()
-            if env.memory_reader and env.memory_reader._map_buffer_addr:
+            # Map buffer should already be found by emulator.load_state() (Emerald only)
+            if env.memory_reader and getattr(env.memory_reader, '_map_buffer_addr', None):
                 print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
 
             # Mark GAME_RUNNING milestone after state load
@@ -4757,6 +4866,16 @@ def main():
     print(f"   Local: http://localhost:{args.port}")
     print(f"   Network: http://{local_ip}:{args.port}")
     print(f"📺 Stream interface: http://{local_ip}:{args.port}/stream")
+
+    # Initialize video recording AFTER FastAPI server starts
+    # Try Playwright WebUI recording first; fall back to frame-based recording
+    if args.record:
+        pw_success = init_playwright_recording(args.port, run_id=run_id)
+        if not pw_success:
+            init_video_recording(True)
+    else:
+        # No recording requested
+        pass
     print("Available endpoints:")
     print("  /status - Server status")
     print("  /screenshot - Current screenshot")
@@ -4829,14 +4948,19 @@ def init_for_multiprocess():
             if not os.path.exists(rom_path):
                 raise RuntimeError(f"ROM not found at {rom_path}")
 
-            env = EmeraldEmulator(rom_path=rom_path)
+            if game_type == "red":
+                from pokemon_red_env.red_emulator import RedEmulator
+                env = RedEmulator(rom_path=rom_path)
+            else:
+                from pokemon_env.emulator import EmeraldEmulator
+                env = EmeraldEmulator(rom_path=rom_path)
             env.initialize()
 
             # Initialize video recording if requested
             init_video_recording(record_video)
 
             # Disable OCR if requested
-            if no_ocr and env and env.memory_reader:
+            if no_ocr and env and env.memory_reader and hasattr(env.memory_reader, '_dialog_detection_enabled'):
                 env.memory_reader._dialog_detection_enabled = False
                 print("🚫 All dialogue detection disabled (--no-ocr flag)")
 
@@ -4860,8 +4984,8 @@ def init_for_multiprocess():
                     if os.path.exists(grids_file):
                         print(f"🗺️  Loaded map grids from: {grids_file}")
 
-                    # Map buffer should already be found by emulator.load_state()
-                    if env.memory_reader and env.memory_reader._map_buffer_addr:
+                    # Map buffer should already be found by emulator.load_state() (Emerald only)
+                    if env.memory_reader and getattr(env.memory_reader, '_map_buffer_addr', None):
                         print(f"📍 Map buffer initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
 
                     print(f"✅ State loading complete for {load_state}")

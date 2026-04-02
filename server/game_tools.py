@@ -143,6 +143,29 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
             logger.debug("Using env.get_screenshot() (direct video buffer - may be stale)")
 
         state = env.get_comprehensive_state(screenshot=screenshot)
+
+        # For Red: inject red_whole_map so _format_red_map_info() can build the ASCII map
+        # and write porymap back into state for movement preview. porymap is NOT pre-injected
+        # here because _format_map_info() constructs it from red_whole_map automatically.
+        game_type = os.environ.get("GAME_TYPE", "emerald")
+        if game_type == "red":
+            try:
+                if hasattr(env, 'memory_reader') and hasattr(env.memory_reader, 'map_reader'):
+                    whole_map = env.memory_reader.map_reader.get_whole_map_data()
+                    if whole_map and whole_map.get("grid"):
+                        state.setdefault("map", {})["red_whole_map"] = whole_map
+                        # add back porymap field for movement preview
+                        state["map"]["porymap"] = {
+                            "grid": whole_map["grid"],
+                            "objects": whole_map.get("objects", []),
+                            "dimensions": whole_map.get("dimensions", {}),
+                            "warps": whole_map.get("warp_events", []),
+                            "raw_tiles": whole_map.get("raw_tiles"),
+                        }
+            except Exception as e:
+                logger.warning(f"Failed to inject red_whole_map in get_game_state_direct: {e}")
+
+        state["_memory_reader"] = getattr(env, "memory_reader", None)
         try:
             state_text = state_formatter(state, action_history=action_history)
         except Exception as formatter_err:
@@ -157,6 +180,8 @@ def get_game_state_direct(env, state_formatter, action_history=None, current_obs
                 f"Position: X={position.get('x', 'unknown')}, Y={position.get('y', 'unknown')}\n"
                 "Use the attached screenshot as the source of truth for the current UI."
             )
+
+        state.pop("_memory_reader", None)
 
         screenshot_b64 = None
         if screenshot is not None:
@@ -218,10 +243,35 @@ def navigate_to_direct(
 
         location_name = state.get("player", {}).get("location", "Unknown")
         coord_offset = None
-        if location_name and location_name not in ("Unknown", "TITLE_SEQUENCE"):
+
+        # --- Red: load native map data as porymap-compatible format ---
+        _game_type = os.environ.get("GAME_TYPE", "emerald")
+        if _game_type == "red":
+            try:
+                if hasattr(env, "memory_reader") and hasattr(env.memory_reader, "map_reader"):
+                    whole_map = env.memory_reader.map_reader.get_whole_map_data()
+                    if whole_map and whole_map.get("grid"):
+                        if "map" not in state:
+                            state["map"] = {}
+                        state["map"]["porymap"] = {
+                            "grid": whole_map["grid"],
+                            "objects": whole_map.get("objects", []),
+                            "dimensions": whole_map.get("dimensions", {}),
+                            "warps": whole_map.get("warp_events", []),
+                            "raw_tiles": whole_map.get("raw_tiles"),
+                        }
+                        logger.info(
+                            f"Loaded Red map for pathfinding: '{whole_map.get('location')}', "
+                            f"grid: {whole_map['dimensions'].get('width')}x{whole_map['dimensions'].get('height')}"
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to load Red map data for pathfinding: {e}")
+
+        elif location_name and location_name not in ("Unknown", "TITLE_SEQUENCE"):
             try:
                 from utils.mapping.porymap_json_builder import build_json_map_for_llm
                 from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
+                from utils.mapping.dynamic_map_overlay import apply_live_metatile_overlay
                 from utils.state_formatter import ROM_TO_PORYMAP_MAP
 
                 badge_count = 0
@@ -283,6 +333,10 @@ def navigate_to_direct(
                             state["map"]["porymap"]["dimensions"] = json_map.get("dimensions", {})
                             state["map"]["porymap"]["warps"] = json_map.get("warps", [])
                             state["map"]["porymap"]["raw_tiles"] = raw_tiles
+
+                            # For selected dynamic maps (e.g. Mauville Gym), replace static
+                            # porymap tiles with the current live map buffer state.
+                            apply_live_metatile_overlay(state, env, location_name)
 
                             grid_dims = (
                                 f"{len(json_map['grid'][0])}x{len(json_map['grid'])}"

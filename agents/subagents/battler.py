@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List
 
+from agents.prompts.paths import GAME_NAME
 from .utils.registry import BATTLE_ALLOWED_TOOL_NAMES
 
 
@@ -51,7 +52,7 @@ def build_battler_prompt(
     battle_history: str,
     turn_index: int,
 ) -> str:
-    return f"""You are the Pokemon Emerald battle subagent.
+    return f"""You are the {GAME_NAME} battle subagent.
 You are responsible only for resolving the active battle as efficiently and safely as possible.
 
 BATTLE TURN: {turn_index}

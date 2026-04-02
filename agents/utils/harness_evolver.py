@@ -14,8 +14,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from agents.prompts.paths import (
-    AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
-    POKEAGENT_BASE_PROMPT_PATH,
+    AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+    GAME_NAME,
+    AUTOEVOLVE_SYSTEM_PROMPT_PATH,
     resolve_repo_path,
 )
 from agents.utils.prompt_optimizer import PromptOptimizer
@@ -56,8 +57,8 @@ class HarnessEvolver:
         self,
         vlm,
         run_data_manager,
-        base_prompt_path: str = POKEAGENT_BASE_PROMPT_PATH,
-        system_prompt_path: str = AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+        base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+        system_prompt_path: str = AUTOEVOLVE_SYSTEM_PROMPT_PATH,
     ):
         # Compose the existing PromptOptimizer for prompt-level evolution
         self.prompt_optimizer = PromptOptimizer(
@@ -312,7 +313,7 @@ class HarnessEvolver:
         )
         tool_failures = self._extract_tool_failures(trajectories)
 
-        prompt = f"""You are a harness evolution system for an AI agent playing Pokemon Emerald.
+        prompt = f"""You are a harness evolution system for an AI agent playing {GAME_NAME}.
 The agent has NO walkthrough or wiki access — it learns entirely through gameplay.
 
 Your job: analyze recent trajectories and recommend changes to the agent's subagent library.
@@ -498,7 +499,7 @@ The agent called run_code {run_code_count} times but run_skill 0 times in the la
 
         changes_feedback = self._build_changes_feedback(skill_stats)
 
-        prompt = f"""You are a harness evolution system analyzing an AI agent's recent gameplay in Pokemon Emerald.
+        prompt = f"""You are a harness evolution system analyzing an AI agent's recent gameplay in {GAME_NAME}.
 
 Your job: identify reusable behavioral patterns (skills) from successful actions and evaluate existing skills.
 
@@ -627,7 +628,7 @@ Respond with ONLY a JSON object (no markdown fences):
             trajectories[-20:]  # Use last 20 for memory curation (lighter)
         )
 
-        prompt = f"""You are a memory curator for an AI agent playing Pokemon Emerald.
+        prompt = f"""You are a memory curator for an AI agent playing {GAME_NAME}.
 
 Your job: review the agent's memory store and recent trajectories, then recommend targeted improvements. Be conservative — the agent itself writes memory during gameplay. You fill gaps and clean up.
 
@@ -783,8 +784,8 @@ Respond with ONLY a JSON object (no markdown fences):
 def create_harness_evolver(
     vlm,
     run_data_manager,
-    base_prompt_path: str = POKEAGENT_BASE_PROMPT_PATH,
-    system_prompt_path: str = AUTOEVOLVE_BASE_SYSTEM_PROMPT_PATH,
+    base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+    system_prompt_path: str = AUTOEVOLVE_SYSTEM_PROMPT_PATH,
 ) -> HarnessEvolver:
     """Factory function to create a HarnessEvolver instance."""
     return HarnessEvolver(vlm, run_data_manager, base_prompt_path, system_prompt_path)

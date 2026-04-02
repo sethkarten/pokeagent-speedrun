@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import json
 import struct
 from typing import Optional, Dict, Any, List, Tuple
 import logging
@@ -6,7 +7,20 @@ import time
 
 from mgba._pylib import ffi, lib
 
-from pokemon_env.emerald_utils import ADDRESSES, Pokemon_format, parse_pokemon, EmeraldCharmap
+from pokemon_env.emerald_utils import (
+    ADDRESSES,
+    BAG_BERRIES_COUNT,
+    BAG_ITEMS_COUNT,
+    BAG_KEYITEMS_COUNT,
+    BAG_POKEBALLS_COUNT,
+    BAG_TMHM_COUNT,
+    EmeraldCharmap,
+    ItemSlot_format,
+    Pokemon_format,
+    SAVE_BLOCK_1_OFFSETS,
+    _item_id_to_name,
+    parse_pokemon,
+)
 from .enums import MetatileBehavior, StatusCondition, Tileset, PokemonType, PokemonSpecies, Move, Badge, MapLocation
 from .types import PokemonData
 from utils.ocr_dialogue import create_ocr_detector
@@ -261,7 +275,7 @@ class PokemonEmeraldReader:
         
         # Track A button presses to prevent dialogue cache repopulation
         self._a_button_pressed_time = 0.0
-        
+
     def _invalidate_mem_cache(self):
         self._mem_cache = {}
     
@@ -1139,17 +1153,15 @@ class PokemonEmeraldReader:
             return "Unknown"
 
     def read_badges(self) -> List[str]:
-        """Read obtained badges"""
+        """Read obtained badges from system save flags (badge_01..badge_08)."""
         try:
-            badge_byte = self._read_u8(self.addresses.PLAYER_BADGES)
             badge_names = ["Stone", "Knuckle", "Dynamo", "Heat", "Balance", "Feather", "Mind", "Rain"]
-            
-            obtained_badges = []
-            for i, badge_name in enumerate(badge_names):
-                if badge_byte & (1 << i):
-                    obtained_badges.append(badge_name)
-            
-            return obtained_badges
+            flags = self.read_flags()
+            return [
+                badge_name
+                for i, badge_name in enumerate(badge_names, start=1)
+                if flags.get(f"badge_{i:02d}", False)
+            ]
         except Exception as e:
             logger.warning(f"Failed to read badges: {e}")
             return []
@@ -1181,19 +1193,77 @@ class PokemonEmeraldReader:
             
             item_count = self._read_u16(count_addr)
             items = []
+            quantity_key = self._get_security_key() & 0xFFFF
             
             for i in range(min(item_count, 30)):
                 item_id = self._read_u16(items_addr + i * 4)
-                quantity = self._read_u16(items_addr + i * 4 + 2)
+                quantity = self._read_u16(items_addr + i * 4 + 2) ^ quantity_key
                 
-                if item_id > 0:
-                    item_name = f"Item_{item_id:03d}"
+                if item_id > 0 and quantity > 0:
+                    item_name = _item_id_to_name(item_id)
                     items.append((item_name, quantity))
             
             return items
         except Exception as e:
             logger.warning(f"Failed to read items: {e}")
             return []
+
+    def _decrypt_bag_quantity(self, encrypted_quantity: int) -> int:
+        """Bag quantities are XOR-encrypted with the low 16 bits of the save encryption key."""
+        return encrypted_quantity ^ (self._get_security_key() & 0xFFFF)
+
+    def _empty_inventory_template(self) -> Dict[str, List[Dict[str, Any]]]:
+        return {
+            "items": [],
+            "key_items": [],
+            "poke_balls": [],
+            "tms_hms": [],
+            "berries": [],
+        }
+
+    def read_full_inventory(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Read all bag pockets from SaveBlock1 and return structured inventory."""
+        inventory = self._empty_inventory_template()
+        try:
+            save_block1_ptr = self._read_u32(ADDRESSES["gSaveBlock1Ptr"])
+            if save_block1_ptr == 0:
+                return inventory
+
+            slot_size = struct.calcsize(ItemSlot_format)
+            pocket_specs = {
+                "items": ("bagPocket_Items", BAG_ITEMS_COUNT),
+                "key_items": ("bagPocket_KeyItems", BAG_KEYITEMS_COUNT),
+                "poke_balls": ("bagPocket_PokeBalls", BAG_POKEBALLS_COUNT),
+                "tms_hms": ("bagPocket_TMHM", BAG_TMHM_COUNT),
+                "berries": ("bagPocket_Berries", BAG_BERRIES_COUNT),
+            }
+
+            for inventory_key, (field_name, max_slots) in pocket_specs.items():
+                field_offset = SAVE_BLOCK_1_OFFSETS.get(field_name)
+                if field_offset is None:
+                    continue
+
+                pocket_addr = save_block1_ptr + field_offset
+                pocket_items: List[Dict[str, Any]] = []
+                for slot_idx in range(max_slots):
+                    slot_addr = pocket_addr + slot_idx * slot_size
+                    item_id = self._read_u16(slot_addr)
+                    quantity = self._decrypt_bag_quantity(self._read_u16(slot_addr + 2))
+                    if item_id <= 0 or quantity <= 0:
+                        continue
+
+                    pocket_items.append(
+                        {
+                            "item_id": item_id,
+                            "name": _item_id_to_name(item_id),
+                            "quantity": quantity,
+                        }
+                    )
+
+                inventory[inventory_key] = pocket_items
+        except Exception as e:
+            logger.warning(f"Failed to read full inventory: {e}")
+        return inventory
 
     def read_item_count(self) -> int:
         """Read number of items in bag"""
@@ -2435,7 +2505,7 @@ class PokemonEmeraldReader:
         logger.info("Starting comprehensive state reading")
         state = {
             "visual": {"screenshot": None, "resolution": [240, 160]},
-            "player": {"position": None, "location": None, "name": None},
+            "player": {"position": None, "location": None, "name": None, "inventory": None},
             "game": {
                 "money": None, "party": None, "game_state": None, "is_in_battle": None,
                 "time": None, "badges": None, "items": None, "item_count": None,
@@ -2566,6 +2636,11 @@ class PokemonEmeraldReader:
                 logger.info(f"Final state party: {state['player']['party']}")
             else:
                 self._rate_limited_warning("No Pokemon found in party", "party_empty")
+
+            # Bag inventory (all pockets)
+            inventory = self.read_full_inventory()
+            if any(inventory.values()):
+                state["player"]["inventory"] = inventory
         
                 
         except Exception as e:
@@ -3708,6 +3783,22 @@ class PokemonEmeraldReader:
         charmap = EmeraldCharmap()
         return byte < len(charmap.charmap) and charmap.charmap[byte] != ""
 
+    def _is_event_flag_set(self, flag_id: int) -> bool:
+        """Check whether a specific game event flag is set in SaveBlock1."""
+        try:
+            if flag_id <= 0:
+                return False
+            save_block_1_ptr = self._read_u32(self.addresses.SAVE_BLOCK1_PTR)
+            if save_block_1_ptr == 0:
+                return False
+            flags_addr = save_block_1_ptr + self.addresses.SAVE_BLOCK1_FLAGS_OFFSET
+            byte_idx = flag_id // 8
+            bit_idx = flag_id % 8
+            flag_byte = self._read_u8(flags_addr + byte_idx)
+            return bool(flag_byte & (1 << bit_idx))
+        except Exception:
+            return False
+
     def read_flags(self) -> Dict[str, bool]:
         """Read game flags to track progress and visited locations"""
         try:
@@ -3805,39 +3896,70 @@ class PokemonEmeraldReader:
     
     def read_object_events(self):
         """
-        Read NPC/trainer object events using OAM sprite detection for walking positions.
-        
-        1. First try OAM (Object Attribute Memory) for actual visual sprite positions
-        2. Fallback to static spawn positions from gObjectEvents
-        
-        Returns:
-            list: List of object events with their current walking positions
+        Read nearby NPC/trainer events from runtime memory.
+
+        Strategy order:
+        1) Canonical gObjectEvents struct read (stable local_id/source metadata)
+        2) OAM enhancement for walking interpolation
+        3) Known-address fallback for problematic save states
         """
         try:
-            # Get player position 
             player_coords = self.read_coordinates()
             if not player_coords:
                 self._rate_limited_warning("Could not read player coordinates for NPC search", "coordinates")
                 return []
             
             player_x, player_y = player_coords
-            object_events = []
-            
-            # Method 1: Get stable NPC base positions first
-            logger.debug("Reading base NPC positions from known addresses...")
-            known_npcs = self._read_known_npc_addresses(player_x, player_y)
-            
-            if known_npcs:
-                # Method 2: Try to enhance with walking positions from OAM
-                logger.debug("Enhancing NPCs with walking positions from OAM...")
-                enhanced_npcs = self._enhance_npcs_with_oam_walking(known_npcs, player_x, player_y)
-                object_events.extend(enhanced_npcs)
+            base_npcs = self._read_proper_gobject_events(player_x, player_y)
+            # region agent log
+            self._agent_debug_log(
+                "H1",
+                "memory_reader.py:read_object_events:base",
+                "Base NPC read complete",
+                {
+                    "player_x": player_x,
+                    "player_y": player_y,
+                    "base_count": len(base_npcs),
+                    "base_sample": [
+                        {
+                            "local_id": npc.get("local_id"),
+                            "graphics_id": npc.get("graphics_id"),
+                            "x": npc.get("current_x"),
+                            "y": npc.get("current_y"),
+                            "source": npc.get("source"),
+                        }
+                        for npc in base_npcs[:6]
+                    ],
+                },
+            )
+            # endregion
+            if base_npcs:
+                object_events = self._enhance_npcs_with_oam_walking(base_npcs, player_x, player_y)
             else:
-                logger.debug("No known NPCs found, this shouldn't happen in npc.state")
-                object_events = []
+                object_events = self._read_known_npc_addresses(player_x, player_y)
             
             # Filter out false positives (NPCs on door tiles)
             filtered_events = self._filter_door_false_positives(object_events, player_x, player_y)
+            # region agent log
+            self._agent_debug_log(
+                "H2",
+                "memory_reader.py:read_object_events:filtered",
+                "Filtered NPC list produced",
+                {
+                    "filtered_count": len(filtered_events),
+                    "filtered_sample": [
+                        {
+                            "local_id": npc.get("local_id"),
+                            "graphics_id": npc.get("graphics_id"),
+                            "x": npc.get("current_x"),
+                            "y": npc.get("current_y"),
+                            "source": npc.get("source"),
+                        }
+                        for npc in filtered_events[:8]
+                    ],
+                },
+            )
+            # endregion
             
             logger.info(f"📍 Found {len(filtered_events)} NPCs/trainers near player at ({player_x}, {player_y})")
             
@@ -3846,105 +3968,82 @@ class PokemonEmeraldReader:
         except Exception as e:
             logger.error(f"Failed to read object events: {e}")
             return []
+
+    def _validate_npc_coords(self, x, y, player_x, player_y, max_distance=15):
+        """Shared coordinate sanity checks for NPC readers."""
+        if x < -50 or x > 200 or y < -50 or y > 200:
+            return False
+        if x == 1023 and y == 1023:
+            return False
+        if x == 0 and y == 0:
+            return False
+
+        distance = abs(x - player_x) + abs(y - player_y)
+        if (x == 0 or y == 0) and distance > 3:
+            return False
+        if distance > max_distance:
+            return False
+        return True
+
+    def _build_npc_event(
+        self,
+        *,
+        slot_id,
+        obj_event_id,
+        local_id,
+        graphics_id,
+        movement_type,
+        current_x,
+        current_y,
+        initial_x,
+        initial_y,
+        trainer_type,
+        memory_address,
+        source,
+    ):
+        """Shared object event payload builder."""
+        return {
+            'id': slot_id,
+            'obj_event_id': obj_event_id,
+            'local_id': local_id,
+            'graphics_id': graphics_id,
+            'movement_type': movement_type,
+            'current_x': current_x,
+            'current_y': current_y,
+            'initial_x': initial_x,
+            'initial_y': initial_y,
+            'elevation': 0,
+            'trainer_type': trainer_type,
+            'active': 1,
+            'memory_address': memory_address,
+            'source': source,
+        }
+
+    def _agent_debug_log(self, hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "run1"):
+        # region agent log
+        try:
+            import json, time
+            payload = {
+                "sessionId": "b11f04",
+                "runId": run_id,
+                "hypothesisId": hypothesis_id,
+                "location": location,
+                "message": message,
+                "data": data,
+                "timestamp": int(time.time() * 1000),
+            }
+            with open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-b11f04.log", "a", encoding="utf-8") as f:
+                f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+        except Exception:
+            pass
+        # endregion
     
     def _read_runtime_object_events(self, player_x, player_y):
-        """
-        Try to read NPCs from runtime sources:
-        1. First try gSprites array (visual sprite positions)  
-        2. Fallback to EWRAM addresses and legacy gObjectEvents
-        """
-        object_events = []
-        
-        try:
-            # Method 1: Try gSprites array first - this contains actual visual positions
-            gsprites_npcs = self._read_gsprites_npcs(player_x, player_y)
-            if gsprites_npcs:
-                object_events.extend(gsprites_npcs)
-                logger.debug(f"Found {len(gsprites_npcs)} NPCs in gSprites")
-                
-            # Method 2: Try EWRAM runtime addresses  
-            runtime_addresses = [
-                (0x0300F428, "EWRAM_runtime_1"),  # Found with movement: (10,13) -> (10,2) -> etc
-                (0x03007428, "EWRAM_runtime_2"),  # Mirror of above  
-                (0x0300DCFC, "EWRAM_runtime_3"),  # Different movement pattern
-                (0x03005CFC, "EWRAM_runtime_4"),  # Mirror of above
-            ]
-            
-            found_npcs = 0
-            for addr, location_name in runtime_addresses:
-                try:
-                    # Read coordinates directly (they're at offset +8 and +10 in the structure)
-                    current_x = self._read_s16(addr + 8)
-                    current_y = self._read_s16(addr + 10)
-                    
-                    # Skip if coordinates are obviously invalid
-                    if current_x < -50 or current_x > 200 or current_y < -50 or current_y > 200:
-                        continue
-                    if current_x == 1023 and current_y == 1023:  # Common uninitialized value
-                        continue
-                    if current_x == 0 and current_y == 0:  # Likely uninitialized
-                        continue
-                    
-                    # Skip coordinates with one 0 when far from player
-                    distance = abs(current_x - player_x) + abs(current_y - player_y)
-                    if (current_x == 0 or current_y == 0) and distance > 3:
-                        continue  # Likely uninitialized if has a 0 coordinate and is far from player
-                    
-                    # Only include NPCs within reasonable range of player
-                    if distance > 10:  # Reduced from 15 to be more conservative
-                        continue
-                    
-                    # Read structure around coordinates to extract NPC properties
-                    context = self._read_bytes(addr, 24)
-                    
-                    # Try to extract graphics and movement data from surrounding bytes
-                    graphics_id = 1  # Default
-                    movement_type = 1  # Default
-                    trainer_type = 0   # Default
-                    
-                    # Look for reasonable graphics/movement values in context
-                    for offset in range(len(context)):
-                        val = context[offset]
-                        if 1 <= val <= 50 and offset < 16:  # Reasonable graphics ID
-                            graphics_id = val
-                        elif 0 <= val <= 10 and offset < 16:  # Reasonable movement type
-                            movement_type = val
-                        elif 1 <= val <= 5 and offset > 10:  # Possible trainer type
-                            trainer_type = val
-                    
-                    object_event = {
-                        'id': found_npcs,
-                        'obj_event_id': found_npcs,
-                        'local_id': found_npcs,
-                        'graphics_id': graphics_id,
-                        'movement_type': movement_type,
-                        'current_x': current_x,
-                        'current_y': current_y,
-                        'initial_x': current_x,  # Runtime position, use as initial too
-                        'initial_y': current_y,
-                        'elevation': 0,
-                        'trainer_type': trainer_type,
-                        'active': 1,
-                        'memory_address': addr,
-                        'source': f"ewram_runtime_{location_name}_dist_{distance}"
-                    }
-                    object_events.append(object_event)
-                    found_npcs += 1
-                    logger.debug(f"EWRAM Runtime NPC at {location_name}: ({current_x},{current_y}) graphics={graphics_id}")
-                    
-                except Exception as e:
-                    logger.debug(f"Failed to read EWRAM runtime NPC at {location_name}: {e}")
-                    continue
-            
-            # Fall back to legacy gObjectEvents if EWRAM method fails
-            if not object_events:
-                logger.debug("EWRAM runtime detection failed, trying legacy gObjectEvents...")
-                return self._read_legacy_gobject_events(player_x, player_y)
-                    
-        except Exception as e:
-            logger.debug(f"EWRAM runtime NPC reading failed: {e}")
-            
-        return object_events
+        """Compatibility wrapper for legacy callers."""
+        base_npcs = self._read_proper_gobject_events(player_x, player_y)
+        if base_npcs:
+            return self._enhance_npcs_with_oam_walking(base_npcs, player_x, player_y)
+        return self._read_known_npc_addresses(player_x, player_y)
     
     def _read_gsprites_npcs(self, player_x, player_y):
         """
@@ -4262,6 +4361,7 @@ class PokemonEmeraldReader:
             max_object_events = 16
             object_event_size = 68  # Size of ObjectEvent struct
             
+            slot_debug = []
             for i in range(max_object_events):
                 try:
                     event_addr = gobject_events_addr + (i * object_event_size)
@@ -4648,6 +4748,7 @@ class PokemonEmeraldReader:
             gobject_events_addr = 0x02037230
             max_object_events = 16
             object_event_size = 68  # Size of ObjectEvent struct
+            slot_debug = []
             
             for i in range(max_object_events):
                 try:
@@ -4657,6 +4758,23 @@ class PokemonEmeraldReader:
                     # u32 active:1 bitfield at offset 0x00
                     active_flags = self._read_u32(event_addr + 0x00)
                     active = active_flags & 0x1
+                    if i < 8:
+                        try:
+                            slot_debug.append(
+                                {
+                                    "slot": i,
+                                    "addr": hex(event_addr),
+                                    "active_flags": int(active_flags),
+                                    "active_bit": int(active),
+                                    "active_byte": int(self._read_u8(event_addr + 0x00)),
+                                    "x": int(self._read_s16(event_addr + 0x10)),
+                                    "y": int(self._read_s16(event_addr + 0x12)),
+                                    "local_id": int(self._read_u8(event_addr + 0x02)),
+                                    "graphics_id": int(self._read_u8(event_addr + 0x03)),
+                                }
+                            )
+                        except Exception:
+                            pass
                     
                     if not active:
                         continue
@@ -4665,18 +4783,10 @@ class PokemonEmeraldReader:
                     current_x = self._read_s16(event_addr + 0x10)
                     current_y = self._read_s16(event_addr + 0x12)
                     
-                    # Validate coordinates
-                    if current_x < -50 or current_x > 200 or current_y < -50 or current_y > 200:
+                    # Validate coordinates / distance
+                    if not self._validate_npc_coords(current_x, current_y, player_x, player_y, max_distance=15):
                         continue
-                    if current_x == 1023 and current_y == 1023:
-                        continue
-                    if current_x == 0 and current_y == 0:
-                        continue  # Filter out (0,0) coordinates which are often uninitialized
-                    
-                    # Check distance from player
                     distance = abs(current_x - player_x) + abs(current_y - player_y)
-                    if distance > 15:
-                        continue
                     
                     # Read NPC properties
                     graphics_id = self._read_u8(event_addr + 0x03)
@@ -4684,22 +4794,20 @@ class PokemonEmeraldReader:
                     trainer_type = self._read_u8(event_addr + 0x05)
                     local_id = self._read_u8(event_addr + 0x02)
                     
-                    object_event = {
-                        'id': i,
-                        'obj_event_id': self._read_u8(event_addr + 0x01),
-                        'local_id': local_id,
-                        'graphics_id': graphics_id,
-                        'movement_type': movement_type,
-                        'current_x': current_x,
-                        'current_y': current_y,
-                        'initial_x': current_x,
-                        'initial_y': current_y,
-                        'elevation': 0,
-                        'trainer_type': trainer_type,
-                        'active': 1,
-                        'memory_address': event_addr,
-                        'source': f"gobject_events_slot_{i}_dist_{distance}"
-                    }
+                    object_event = self._build_npc_event(
+                        slot_id=i,
+                        obj_event_id=self._read_u8(event_addr + 0x01),
+                        local_id=local_id,
+                        graphics_id=graphics_id,
+                        movement_type=movement_type,
+                        current_x=current_x,
+                        current_y=current_y,
+                        initial_x=current_x,
+                        initial_y=current_y,
+                        trainer_type=trainer_type,
+                        memory_address=event_addr,
+                        source=f"gobject_events_slot_{i}_dist_{distance}",
+                    )
                     object_events.append(object_event)
                     logger.debug(f"Active ObjectEvent {i}: ({current_x}, {current_y}) graphics={graphics_id}")
                     
@@ -4707,6 +4815,22 @@ class PokemonEmeraldReader:
                     logger.debug(f"Error reading ObjectEvent slot {i}: {e}")
                     continue
             
+            if not object_events and not hasattr(self, "_agent_logged_gobject_slots"):
+                # region agent log
+                self._agent_debug_log(
+                    "H6",
+                    "memory_reader.py:_read_proper_gobject_events:empty",
+                    "gObjectEvents strict scan found no active NPCs",
+                    {
+                        "player_x": player_x,
+                        "player_y": player_y,
+                        "gobject_base": hex(gobject_events_addr),
+                        "slot_debug": slot_debug,
+                    },
+                )
+                # endregion
+                self._agent_logged_gobject_slots = True
+
             return object_events
             
         except Exception as e:
@@ -4721,52 +4845,158 @@ class PokemonEmeraldReader:
         object_events = []
         
         try:
-            # Known addresses where real NPCs are stored in different save states
-            # These were discovered through ground truth validation
-            known_npc_addresses = [
-                # npc.state addresses
-                0x020266C4, 0x020266DC, 0x020266F4,
-                # npc1.state addresses  
-                0x020266C8,  # Adjacent NPC at (6,4) from player at (7,4)
-            ]
+            # Fallback coordinate states are laid out contiguously in this block.
+            # Earlier hardcoded addresses drifted and missed nearby NPCs (e.g. Birch).
+            known_npc_addresses = []
+            state_block_base = 0x020266C8
+            state_block_stride = 0x18
+            state_block_slots = 8
+            for slot in range(state_block_slots):
+                known_npc_addresses.append(state_block_base + (slot * state_block_stride))
             
+            addr_debug = []
+            slot_meta_debug = []
             for i, addr in enumerate(known_npc_addresses):
                 try:
+                    # ObjectEventTemplate layout (stride 0x18 = 24):
+                    #   struct_start = addr - 4
+                    #   +0: localId(u8) +1: graphicsId(u8) +2-3: padding
+                    #   +4: x(s16)  +6: y(s16)
+                    #   +8: elevation(u8)  +9: movementType(u8) +10: ranges(u8)
+                    #   +12: trainerType(u16) +14: trainerRange(u16)
+                    #   +16: script(u32)  +20: flagId(u16)
                     x = self._read_s16(addr)
                     y = self._read_s16(addr + 2)
-                    
-                    # Validate coordinates
-                    if x < -50 or x > 200 or y < -50 or y > 200:
+                    real_local_id = self._read_u8(addr - 4)
+                    real_graphics_id = self._read_u8(addr - 3)
+                    real_movement_type = self._read_u8(addr + 5)
+                    flag_id = self._read_u16(addr + 16)
+                    flag_is_set = self._is_event_flag_set(flag_id) if flag_id > 0 else False
+
+                    valid = self._validate_npc_coords(x, y, player_x, player_y, max_distance=15)
+                    if i < 8:
+                        try:
+                            slot_meta_debug.append(
+                                {
+                                    "idx": i,
+                                    "addr": hex(addr),
+                                    "local_id": int(real_local_id),
+                                    "graphics_id": int(real_graphics_id),
+                                    "flag_id": int(flag_id),
+                                    "flag_is_set": flag_is_set,
+                                    "x": int(x),
+                                    "y": int(y),
+                                }
+                            )
+                        except Exception:
+                            pass
+                    addr_debug.append(
+                        {
+                            "idx": i,
+                            "addr": hex(addr),
+                            "x": int(x),
+                            "y": int(y),
+                            "valid": bool(valid),
+                            "flag_id": int(flag_id),
+                            "flag_hidden": flag_is_set,
+                        }
+                    )
+
+                    if not valid:
                         continue
-                    if x == 1023 and y == 1023:
+                    if flag_id > 0 and flag_is_set:
                         continue
-                    
                     distance = abs(x - player_x) + abs(y - player_y)
-                    if distance > 15:
-                        continue
-                    
-                    object_event = {
-                        'id': i,
-                        'obj_event_id': i,
-                        'local_id': i,
-                        'graphics_id': 1,  # Default for regular NPC
-                        'movement_type': 0,  # Default stationary
-                        'current_x': x,
-                        'current_y': y,
-                        'initial_x': x,
-                        'initial_y': y,
-                        'elevation': 0,
-                        'trainer_type': 0,  # Regular NPC
-                        'active': 1,
-                        'memory_address': addr,
-                        'source': f"known_addr_0x{addr:08X}_dist_{distance}"
-                    }
+
+                    object_event = self._build_npc_event(
+                        slot_id=i,
+                        obj_event_id=i,
+                        local_id=real_local_id,
+                        graphics_id=real_graphics_id,
+                        movement_type=real_movement_type,
+                        current_x=x,
+                        current_y=y,
+                        initial_x=x,
+                        initial_y=y,
+                        trainer_type=0,
+                        memory_address=addr,
+                        source=f"known_addr_0x{addr:08X}_dist_{distance}",
+                    )
                     object_events.append(object_event)
-                    logger.debug(f"Known NPC {i}: ({x}, {y}) distance={distance}")
+                    logger.debug(f"Known NPC {i}: ({x}, {y}) local_id={real_local_id} graphics_id={real_graphics_id} flag={flag_id} distance={distance}")
                     
                 except Exception as e:
                     logger.debug(f"Error reading known NPC at 0x{addr:08X}: {e}")
                     continue
+
+            if not hasattr(self, "_agent_logged_known_addr_scan"):
+                # region agent log
+                self._agent_debug_log(
+                    "H7",
+                    "memory_reader.py:_read_known_npc_addresses:scan",
+                    "Known-address fallback scan results",
+                    {
+                            "player_x": player_x,
+                        "player_y": player_y,
+                            "state_block_base": hex(state_block_base),
+                            "state_block_stride": state_block_stride,
+                            "state_block_slots": state_block_slots,
+                        "addr_debug": addr_debug,
+                        "accepted_count": len(object_events),
+                    },
+                )
+                # endregion
+                self._agent_logged_known_addr_scan = True
+
+            if not hasattr(self, "_agent_logged_known_addr_slot_meta"):
+                # region agent log
+                self._agent_debug_log(
+                    "H9",
+                    "memory_reader.py:_read_known_npc_addresses:slot_meta",
+                    "Known-address fallback slot metadata sample",
+                    {
+                        "player_x": player_x,
+                        "player_y": player_y,
+                        "slot_meta_debug": slot_meta_debug,
+                    },
+                )
+                # endregion
+                self._agent_logged_known_addr_slot_meta = True
+
+            if not hasattr(self, "_agent_logged_known_addr_window"):
+                # region agent log
+                window_hits = []
+                base = 0x02026600
+                end = 0x02026720
+                for addr in range(base, end, 4):
+                    try:
+                        x = self._read_s16(addr)
+                        y = self._read_s16(addr + 2)
+                        if self._validate_npc_coords(x, y, player_x, player_y, max_distance=10):
+                            window_hits.append(
+                                {
+                                    "addr": hex(addr),
+                                    "x": int(x),
+                                    "y": int(y),
+                                    "dist": int(abs(x - player_x) + abs(y - player_y)),
+                                }
+                            )
+                    except Exception:
+                        continue
+                self._agent_debug_log(
+                    "H8",
+                    "memory_reader.py:_read_known_npc_addresses:window_scan",
+                    "Coordinate window scan near known address block",
+                    {
+                        "player_x": player_x,
+                        "player_y": player_y,
+                        "scan_base": hex(base),
+                        "scan_end": hex(end),
+                        "hits": window_hits[:30],
+                    },
+                )
+                # endregion
+                self._agent_logged_known_addr_window = True
             
             return object_events
             

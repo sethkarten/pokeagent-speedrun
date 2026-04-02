@@ -10,7 +10,7 @@ import json
 import logging
 import numpy as np
 from PIL import Image
-from utils.mapping.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol
+from utils.mapping.map_formatter import format_map_grid, format_map_for_llm, generate_dynamic_legend, format_tile_to_symbol, _get_behavior_enum
 import base64
 import io
 import os, sys
@@ -18,6 +18,7 @@ from typing import Optional, List, Tuple
 from pokemon_env.enums import MetatileBehavior
 from utils import state_formatter as sf
 from utils.mapping.porymap_state import (
+    PorymapResult,
     ROM_TO_PORYMAP_MAP,
     _format_porymap_info,
     _get_pokeemerald_root,
@@ -244,10 +245,12 @@ def _format_state_summary(state_data):
     if position and isinstance(position, dict):
         summary_parts.append(f"Pos: ({position.get('x', '?')}, {position.get('y', '?')})")
     
-    # Facing direction - removed as it's often unreliable
-    # facing = player_data.get('facing')
-    # if facing:
-    #     summary_parts.append(f"Facing: {facing}")
+    # Facing direction (Red only — Emerald's is unreliable)
+    _game_type_facing = os.environ.get("GAME_TYPE", "emerald")
+    if _game_type_facing == "red":
+        facing = player_data.get('facing')
+        if facing:
+            summary_parts.append(f"Facing: {facing}")
     
     # Game state
     game_state = game_data.get('game_state')
@@ -294,9 +297,13 @@ def _format_state_summary(state_data):
             badge_count = badges
         summary_parts.append(f"Badges: {badge_count}")
     
-    # Items
+    # Items (Gen 1 bag holds max 20 unique item types)
+    items = game_data.get('items')
     item_count = game_data.get('item_count')
-    if item_count is not None:
+    if items and len(items) > 0:
+        item_names = [f"{it['name']}×{it['quantity']}" for it in items[:20]]
+        summary_parts.append(f"Items ({len(items)}): {', '.join(item_names)}")
+    elif item_count is not None:
         summary_parts.append(f"Items: {item_count}")
     
     # Game time
@@ -469,6 +476,15 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         context_parts.append("\n=== PARTY STATUS ===")
         party_context = _format_party_info(player_data, game_data)
         context_parts.extend(party_context)
+
+        # Inventory information (battle-relevant subset)
+        inventory_context = _format_inventory_info(
+            player_data,
+            game_data,
+            include_only_pockets={"poke_balls"},
+            header="\n=== BAG STATUS ===",
+        )
+        context_parts.extend(inventory_context)
         
         # Trainer info if available
         if 'name' in player_data and player_data['name']:
@@ -506,12 +522,16 @@ def _format_state_detailed(state_data, include_debug_info=False, include_npcs=Tr
         party_context = _format_party_info(player_data, game_data)
         context_parts.extend(party_context)
 
+        # Inventory
+        inventory_context = _format_inventory_info(player_data, game_data, header="\nBag Inventory:")
+        context_parts.extend(inventory_context)
+
         # Menu-like UI screens (e.g. naming/gender selection) can have incomplete map data.
         # Preserve the screenshot-driven state but skip heavy map formatting unless we're in
         # an overworld-style state where map traversal context is actually useful.
         game_state_name = game_data.get('game_state')
         if game_state_name in {'overworld', 'dialog'}:
-            map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data)
+            map_context = _format_map_info(state_data.get('map', {}), player_data, include_debug_info, include_npcs, state_data, memory_reader=state_data.get('_memory_reader'))
             context_parts.extend(map_context)
         elif game_state_name:
             context_parts.append("\n=== LOCATION & MAP INFO ===")
@@ -636,7 +656,49 @@ def _format_party_info(player_data, game_data):
     
     return context_parts
 
-def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None):
+
+def _format_inventory_info(player_data, game_data, include_only_pockets=None, header=None):
+    """Format bag inventory information from structured player/game state."""
+    context_parts = []
+    inventory = player_data.get('inventory') or game_data.get('inventory')
+    if not isinstance(inventory, dict):
+        return context_parts
+
+    pocket_labels = {
+        "items": "Items",
+        "key_items": "Key Items",
+        "poke_balls": "Poke Balls",
+        "tms_hms": "TMs/HMs",
+        "berries": "Berries",
+    }
+    if include_only_pockets is not None:
+        selected_pockets = [k for k in pocket_labels if k in include_only_pockets]
+    else:
+        selected_pockets = list(pocket_labels.keys())
+
+    non_empty_pockets = [k for k in selected_pockets if inventory.get(k)]
+    if not non_empty_pockets:
+        return context_parts
+
+    if header:
+        context_parts.append(header)
+
+    max_items_per_pocket = 20
+    for pocket_key in non_empty_pockets:
+        items = inventory.get(pocket_key) or []
+        label = pocket_labels[pocket_key]
+        context_parts.append(f"  {label}:")
+        for entry in items[:max_items_per_pocket]:
+            item_name = entry.get("name", f"Item_{entry.get('item_id', '?')}")
+            quantity = entry.get("quantity", "?")
+            context_parts.append(f"    - {item_name} x{quantity}")
+        remaining = len(items) - max_items_per_pocket
+        if remaining > 0:
+            context_parts.append(f"    - ... and {remaining} more")
+
+    return context_parts
+
+def _format_map_info(map_info, player_data=None, include_debug_info=False, include_npcs=True, full_state_data=None, memory_reader=None):
     """Format map and traversability information using MapStitcher."""
     context_parts = []
     
@@ -692,48 +754,192 @@ def _format_map_info(map_info, player_data=None, include_debug_info=False, inclu
         elif isinstance(badges, int):
             badge_count = badges
     
-    # Check for coordinate offset if using an override map
-    # This translates ROM coordinates to the local override map coordinate space
-    from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
-    porymap_map_name = _get_porymap_map_name(location_name)
-    coord_offset = None
-    if porymap_map_name:
-        effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
-        override = get_override(effective_map_name)
-        if override and ('offset_x' in override or 'offset_y' in override):
-            offset_x = override.get('offset_x', 0)
-            offset_y = override.get('offset_y', 0)
-            coord_offset = (offset_x, offset_y)
-            if rom_player_coords:
-                # Translate ROM coordinates to local map coordinates
-                player_coords = (rom_player_coords[0] - offset_x, rom_player_coords[1] - offset_y)
-    
-    # Display player position (translated if using override map)
-    if player_coords:
-        context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
-    
-    # Add porymap ground truth data (JSON and ASCII map)
-    porymap_result = _format_porymap_info(location_name, player_coords, badge_count=badge_count)
-    if isinstance(porymap_result, tuple):
-        porymap_info, porymap_data = porymap_result
-        if porymap_info:
-            context_parts.extend(porymap_info)
-            # Store porymap data in map_info for pathfinding (don't add to context text)
-            if 'porymap' not in map_info:
-                map_info['porymap'] = {}
-            map_info['porymap']['grid'] = porymap_data.get('grid')
-            map_info['porymap']['objects'] = porymap_data.get('objects', [])
-            map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
-            map_info['porymap']['raw_tiles'] = porymap_data.get('raw_tiles')  # Include raw tiles with elevation
+    # Game-type detection for map data source
+    _game_type = os.environ.get("GAME_TYPE", "emerald")
+    porymap_data = None
 
-            # Debug: Verify the grid was stored
-            stored_grid = map_info['porymap'].get('grid')
-            if stored_grid:
-                logger.debug(f"Stored elevation-filtered porymap grid: {len(stored_grid)}x{len(stored_grid[0]) if stored_grid else 0}")
-    elif porymap_result:
-        context_parts.extend(porymap_result)
-    
+    if _game_type != "red":
+        # Check for coordinate offset if using an override map (Emerald porymap)
+        # This translates ROM coordinates to the local override map coordinate space
+        from utils.mapping.ascii_map_loader import get_effective_map_name, get_override
+        porymap_map_name = _get_porymap_map_name(location_name)
+        coord_offset = None
+        if porymap_map_name:
+            effective_map_name = get_effective_map_name(porymap_map_name, badge_count=badge_count)
+            override = get_override(effective_map_name)
+            if override and ('offset_x' in override or 'offset_y' in override):
+                offset_x = override.get('offset_x', 0)
+                offset_y = override.get('offset_y', 0)
+                coord_offset = (offset_x, offset_y)
+                if rom_player_coords:
+                    # Translate ROM coordinates to local map coordinates
+                    player_coords = (rom_player_coords[0] - offset_x, rom_player_coords[1] - offset_y)
+
+        # Display player position (translated if using override map)
+        if player_coords:
+            context_parts.append(f"Player Position: ({player_coords[0]}, {player_coords[1]})")
+
+    # Add map data (game-specific)
+    if _game_type == "red":
+        porymap_result = _format_red_map_info(location_name, player_coords, map_info)
+        if isinstance(porymap_result, tuple):
+            porymap_info, porymap_data = porymap_result
+            if porymap_info:
+                context_parts.extend(porymap_info)
+    else:
+        # Add porymap ground truth data (JSON and ASCII map)
+        # region agent log
+        try:
+            import time
+            runtime_events = map_info.get("object_events", [])
+            with open("/data3/tu8435/thesis-remote/pokeagent-speedrun/.cursor/debug-b11f04.log", "a", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(
+                        {
+                            "sessionId": "b11f04",
+                            "runId": "run1",
+                            "hypothesisId": "H5",
+                            "location": "state_formatter.py:_format_map_info:before_porymap_call",
+                            "message": "Passing runtime object_events into porymap formatter",
+                            "data": {
+                                "location_name": location_name,
+                                "runtime_count": len(runtime_events),
+                                "runtime_sample": [
+                                    {
+                                        "local_id": obj.get("local_id"),
+                                        "graphics_id": obj.get("graphics_id"),
+                                        "x": obj.get("current_x", obj.get("x")),
+                                        "y": obj.get("current_y", obj.get("y")),
+                                        "source": obj.get("source"),
+                                    }
+                                    for obj in runtime_events[:8]
+                                ],
+                            },
+                            "timestamp": int(time.time() * 1000),
+                        },
+                        ensure_ascii=True,
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # endregion
+        porymap_result = _format_porymap_info(
+            location_name,
+            player_coords,
+            badge_count=badge_count,
+            memory_reader=memory_reader,
+            runtime_object_events=map_info.get("object_events", []),
+        )
+        if isinstance(porymap_result, PorymapResult):
+            if porymap_result.context_parts:
+                context_parts.extend(porymap_result.context_parts)
+            if porymap_result.json_map:
+                porymap_data = porymap_result.json_map
+
+    # Store porymap data in map_info for pathfinding (don't add to context text)
+    if porymap_data:
+        if 'porymap' not in map_info:
+            map_info['porymap'] = {}
+        map_info['porymap']['grid'] = porymap_data.get('grid')
+        map_info['porymap']['objects'] = porymap_data.get('objects', [])
+        map_info['porymap']['dimensions'] = porymap_data.get('dimensions', {})
+        if _game_type != "red":
+            map_info['porymap']['ascii'] = porymap_data.get('ascii')
+        map_info['porymap']['raw_tiles'] = porymap_data.get('raw_tiles')  # Include raw tiles with elevation
+
+        # Debug: Verify the grid was stored
+        stored_grid = map_info['porymap'].get('grid')
+        if stored_grid:
+            logger.debug(f"Stored elevation-filtered porymap grid: {len(stored_grid)}x{len(stored_grid[0]) if stored_grid else 0}")
+
+    # Fallback: display existing visual_map (e.g. from Red's map reader) if no porymap map was added
+    has_map_content = any("MAP" in p.upper() or "Grid" in p for p in context_parts[2:] if isinstance(p, str))
+    if not has_map_content:
+        visual_map = map_info.get("visual_map")
+        if visual_map:
+            context_parts.append(f"\n--- MAP (viewport) ---")
+            context_parts.append(visual_map)
+            source = map_info.get("map_source", "memory")
+            context_parts.append(f"(Source: {source})")
+
     return context_parts
+
+def _format_red_map_info(location_name: Optional[str], player_coords: Optional[Tuple[int, int]], map_info: dict):
+    """Format Red's native map data for the agent (equivalent to _format_porymap_info for Emerald).
+
+    Returns same shape as _format_porymap_info: either (context_parts, map_data) tuple or plain list.
+    """
+    context_parts = []
+
+    if not location_name or location_name in ('TITLE_SEQUENCE', 'Unknown'):
+        return context_parts
+
+    whole_map = map_info.get('red_whole_map')
+    if not whole_map or not whole_map.get('grid'):
+        return context_parts
+
+    grid = whole_map['grid']
+    dims = whole_map.get('dimensions', {})
+    w, h = dims.get('width', 0), dims.get('height', 0)
+
+    context_parts.append("\n=== MAP (FULL) ===")
+    context_parts.append(f"Location: {location_name}")
+    context_parts.append(f"Dimensions: {w}x{h}")
+
+    # Build ASCII map string: Poké Balls as 'O', other NPCs as 'N', player as 'I' (wins ties)
+    objects = whole_map.get('objects', [])
+    # Map (y, x) → display symbol; Poké Balls get 'O', everything else gets 'N'
+    obj_symbol: dict = {}
+    for obj in objects:
+        ny, nx = obj.get('y'), obj.get('x')
+        if ny is None or nx is None:
+            continue
+        is_pokeball = "POKE_BALL" in obj.get('sprite_name', '').upper()
+        obj_symbol[(int(ny), int(nx))] = 'O' if is_pokeball else 'N'
+
+    ascii_lines = []
+    for y, row in enumerate(grid):
+        line = list(row)
+        # Overlay objects first (Poké Balls as 'O', NPCs as 'N')
+        for (oy, ox), sym in obj_symbol.items():
+            if oy == y and 0 <= ox < len(line):
+                line[ox] = sym
+        # Player always on top
+        if player_coords and y == player_coords[1]:
+            px = player_coords[0]
+            if 0 <= px < len(line):
+                line[px] = 'I'
+        ascii_lines.append(''.join(line))
+    ascii_map = '\n'.join(ascii_lines)
+
+    context_parts.append("\nASCII Map:")
+    context_parts.append(ascii_map)
+    context_parts.append("(Legend: I=Player .=walkable #=wall t=cuttable tree (use HM01 Cut) ~=grass W=water D=door G=Card Key gate (blocked, walk into and press A) !=sign ?=hidden item O=pokéball ↓/←/→=ledge C=counter B=bookshelf U=trash ^=display/blueprint P=computer '='=bench T=TV/machine N=NPC *=spinner stop)")
+
+    # Compact JSON summary (warp_events, bg_events, objects)
+    compact_json = {
+        "name": location_name,
+        "dimensions": dims,
+        "warp_events": whole_map.get('warp_events', []),
+        "bg_events":   whole_map.get('bg_events', []),
+        "objects":     whole_map.get('objects', []),
+    }
+    context_parts.append("\nMap Data (JSON):")
+    context_parts.append(json.dumps(compact_json, indent=2))
+
+    # Return same tuple shape as _format_porymap_info
+    # map_data['warps'] is populated from warp_events for pathfinder compat
+    map_data = {
+        'grid':       grid,
+        'raw_tiles':  whole_map.get('raw_tiles'),
+        'dimensions': dims,
+        'objects':    whole_map.get('objects', []),
+        'warps':      whole_map.get('warp_events', []),
+    }
+
+    logger.info(f"Red map: formatted '{location_name}' ({w}x{h}) with {len(whole_map.get('warp_events', []))} warps, {len(whole_map.get('objects', []))} objects")
+    return context_parts, map_data
 
 def _add_local_map_fallback(context_parts, map_info, include_npcs, location_name=None):
     """Helper function to add local map display as fallback"""
@@ -1262,6 +1468,9 @@ def get_movement_preview(state_data):
     # Try to use porymap grid first (elevation-filtered and more accurate)
     porymap = map_info.get('porymap', {})
     porymap_grid = porymap.get('grid')
+    # Emerald stores a rendered ASCII map in porymap['ascii'] (includes N/I/O markers)
+    porymap_ascii = porymap.get('ascii')
+    porymap_ascii_lines = porymap_ascii.split('\n') if isinstance(porymap_ascii, str) and porymap_ascii else []
     raw_tiles_for_elevation = porymap.get('raw_tiles') if porymap else None
 
     # Fallback to memory-read tiles if porymap not available
@@ -1271,8 +1480,16 @@ def get_movement_preview(state_data):
         # print( Movement preview - No tiles. map_info keys: {list(map_info.keys()) if map_info else 'None'}")
         return {}
     
-    # Get NPCs from map info
-    npcs = map_info.get('object_events', [])
+    # Get NPCs from map info.
+    # Emerald: prefer reconciled/flag-filtered porymap objects so movement preview
+    # matches the final rendered porymap ASCII map.
+    # Red: stores NPCs in porymap['objects'] (set by game_tools.py).
+    # Fall back to map_info['object_events'] if porymap objects unavailable.
+    porymap_objects = porymap.get('objects') if isinstance(porymap, dict) else None
+    if isinstance(porymap_objects, list) and porymap_objects:
+        npcs = porymap_objects
+    else:
+        npcs = map_info.get('object_events', [])
     
     directions = {
         'UP': (0, -1),
@@ -1328,10 +1545,24 @@ def get_movement_preview(state_data):
             # Use porymap grid (already filtered by elevation)
             try:
                 tile_symbol = porymap_grid[new_world_y][new_world_x]
+                # For Emerald: if available, use the final rendered ASCII symbol
+                # (includes N/I/O markers) so movement preview reflects what the agent sees.
+                if porymap_ascii_lines and 0 <= new_world_y < len(porymap_ascii_lines):
+                    ascii_row = porymap_ascii_lines[new_world_y]
+                    if 0 <= new_world_x < len(ascii_row):
+                        tile_symbol = ascii_row[new_world_x]
                 target_tile = None  # Don't have the raw tile data when using porymap grid
 
-                # Determine if movement is blocked by terrain (using porymap symbols)
-                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'X']  # Walls, water, out of bounds
+                # Determine if movement is blocked by terrain (using porymap symbols).
+                # Whitelist of all symbols that are passable in either Emerald or Red.
+                # Everything else — furniture, interactables, walls — is blocked.
+                # '?' = hidden item in Red (walkable); '!' = sign (blocked); 'O' = Poké Ball (blocked).
+                _PASSABLE_SYMBOLS = {
+                    ".", "~", "D", "S",
+                    "↓", "←", "→", "↑", "↗", "↖", "↘", "↙",
+                    "&", "?",
+                }
+                is_blocked_by_terrain = tile_symbol not in _PASSABLE_SYMBOLS
 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
@@ -1352,8 +1583,18 @@ def get_movement_preview(state_data):
                     tile_description = 'Grass'
                 elif tile_symbol == '#':
                     tile_description = 'Wall'
+                elif tile_symbol == '^':
+                    tile_description = 'Walkable (different elevation)'
                 elif tile_symbol == 'W':
                     tile_description = 'Water'
+                elif tile_symbol == '!':
+                    tile_description = 'Sign/Signpost (cannot walk through)'
+                elif tile_symbol == '?':
+                    tile_description = 'Hidden item (walkable)'
+                elif tile_symbol == 'O':
+                    tile_description = 'Poké Ball (interact from adjacent tile)'
+                elif tile_symbol == 't':
+                    tile_description = 'Cuttable tree (use HM Cut)'
                 else:
                     tile_description = f'Tile ({tile_symbol})'
 
@@ -1363,11 +1604,10 @@ def get_movement_preview(state_data):
                 preview_info['tile_description'] = tile_description
                 preview_info['npc_at_position'] = npc_at_position is not None
                 if npc_at_position:
-                    preview_info['npc_info'] = {
-                        'graphics_id': npc_at_position.get('graphics_id', 'Unknown'),
-                        'x': npc_at_position.get('x', 0),
-                        'y': npc_at_position.get('y', 0)
-                    }
+                    npc_gfx = npc_at_position.get('graphics_id', npc_at_position.get('sprite_name', 'Unknown'))
+                    npc_display_x = npc_at_position.get('current_x', npc_at_position.get('x', '?'))
+                    npc_display_y = npc_at_position.get('current_y', npc_at_position.get('y', '?'))
+                    preview_info['npc_info'] = f"NPC (gfx={npc_gfx}) at ({npc_display_x},{npc_display_y})"
 
             except (IndexError, TypeError):
                 tile_symbol = '#'
@@ -1386,7 +1626,7 @@ def get_movement_preview(state_data):
                 tile_symbol = format_tile_to_symbol(target_tile)
                 
                 # Determine if movement is blocked by terrain
-                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N']  # Walls, water, and NPCs block movement
+                is_blocked_by_terrain = tile_symbol in ['#', 'W', 'N', 't']  # Walls, water, NPCs, and cuttable trees block movement
                 
                 # Check if movement is blocked by NPC
                 is_blocked_by_npc = False
@@ -1435,7 +1675,9 @@ def get_movement_preview(state_data):
                         behavior_name = behavior.name
                     elif isinstance(behavior, int):
                         try:
-                            behavior_enum = MetatileBehavior(behavior)
+                            # Use Red's enum for Red maps so that RedMetatileBehavior
+                            # integer codes resolve to the correct names.
+                            behavior_enum = _get_behavior_enum()(behavior)
                             behavior_name = behavior_enum.name
                         except (ValueError, ImportError):
                             behavior_name = f"BEHAVIOR_{behavior}"
@@ -1456,6 +1698,8 @@ def get_movement_preview(state_data):
                         tile_description = f"Walkable path (ID: {tile_id})"
                     elif tile_symbol == '#':
                         tile_description = f"BLOCKED - Wall/Obstacle (ID: {tile_id}, {behavior_name})"
+                    elif tile_symbol == 't':
+                        tile_description = f"BLOCKED - Cuttable tree (use HM Cut) (ID: {tile_id})"
                     elif tile_symbol == 'W':
                         tile_description = f"BLOCKED - Water (need Surf) (ID: {tile_id})"
                     elif tile_symbol == '~':
@@ -1538,10 +1782,11 @@ def format_movement_preview_for_llm(state_data):
             symbol = info['tile_symbol']
             status = "BLOCKED" if info['blocked'] else "WALKABLE"
             
-            # Special override: if description contains "Stairs" or "Warp", show 'W' instead of any other symbol
+            # Special override: if description confirms Stairs/Warp, show 'S' symbol.
+            # ('W' must NOT be used here — it means Water in both Emerald and Red grids.)
             desc = info.get('tile_description', '')
             if not info['blocked'] and ('Stairs' in desc or 'Warp' in desc):
-                symbol = 'W'
+                symbol = 'S'
             
             lines.append(f"  {direction:5}: ({new_x:3},{new_y:3}) [{symbol}] {status}")
             
