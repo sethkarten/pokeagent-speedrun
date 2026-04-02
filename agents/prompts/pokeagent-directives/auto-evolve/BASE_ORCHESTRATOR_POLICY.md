@@ -1,6 +1,6 @@
 # Strategic Guidance (Seed)
 
-You are playing **Pokemon Emerald** with no walkthrough or wiki. Learn game mechanics through observation and store them in memory.
+You are playing **{game_name}** with no walkthrough or wiki. Learn game mechanics through observation and store them in memory.
 
 ## Decision Framework
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PokeAgent for Pokemon Emerald
+PokeAgent for Pokemon Emerald / Red
 This version creates its own objectives and has access to all available tools.
 Uses Gemini API (or VertexAI) directly with MCP tools exposed as function declarations.
 Maintains conversation history with automatic compaction over time.
@@ -43,6 +43,7 @@ from agents.subagents import (
     build_battler_prompt,
     build_gym_puzzle_prompt,
     build_local_subagent_tool_declarations,
+    build_red_puzzle_prompt,
     build_reflect_prompt,
     build_summarize_prompt,
     build_verify_prompt,
@@ -52,10 +53,12 @@ from agents.subagents import (
     format_battler_history,
     get_gym_puzzle_info,
     get_local_subagent_spec,
+    get_red_puzzle_info,
     is_local_subagent_tool,
     load_subagent_context,
     parse_verify_response,
     resolve_gym_name,
+    resolve_location_name,
     resolve_verification_target,
 )
 from agents.subagents.utils.executor import SubagentExecutor
@@ -73,6 +76,7 @@ from agents.prompts.paths import (
     AUTOEVOLVE_SYSTEM_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
     SIMPLE_PROMPT_PATH,
+    render_prompt,
     resolve_repo_path,
 )
 
@@ -290,11 +294,14 @@ class PokeAgent:
         filepath = resolve_repo_path(filename)
         if not filepath.exists():
             logger.warning(f"System instructions file not found: {filepath}")
-            return "You are an AI agent playing Pokemon Emerald. Use the available tools to progress through the game."
+            _gt = os.environ.get("GAME_TYPE", "emerald").lower()
+            _gl = "Pokemon Red" if _gt == "red" else "Pokemon Emerald"
+            return f"You are an AI agent playing {_gl}. Use the available tools to progress through the game."
 
         with open(filepath, 'r') as f:
             content = f.read()
 
+        content = render_prompt(content)
         logger.info(f"✅ Loaded system instructions from {filename} ({len(content)} chars)")
         return content
     
@@ -323,22 +330,27 @@ class PokeAgent:
         if not filepath.exists():
             logger.warning(f"Base prompt file not found: {filepath}, using minimal default")
             return """# Strategic Guidance
-## Make intelligent decisions to progress through Pokemon Emerald.
+## Make intelligent decisions to progress through the game.
 - Think step-by-step
 - Use tools effectively
 - Store memories
 - Complete objectives"""
-        
+
         with open(filepath, 'r') as f:
             content = f.read()
-        
+
         logger.info(f"📋 Loaded base prompt from file ({len(content)} chars)")
-        return content
+        return render_prompt(content)
 
     def _create_tool_declarations(self):
         """Create Gemini function declarations for ALL MCP tools (Pokemon + Baseline) - ALL ENABLED."""
 
         # Use Gemini's declaration format with proper types
+        _gt = os.environ.get("GAME_TYPE", "emerald").lower()
+        if _gt == "red":
+            _btn_desc = "Press Game Boy buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, WAIT (Game Boy has no L/R shoulder buttons). Use WAIT to observe without pressing any button."
+        else:
+            _btn_desc = "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT. Use WAIT to observe without pressing any button."
 
         tools = [
             # ============================================================
@@ -348,7 +360,7 @@ class PokeAgent:
             # Game Control Tools
             {
                 "name": "press_buttons",
-                "description": "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT. Use WAIT to observe without pressing any button.",
+                "description": _btn_desc,
                 "parameters": {
                     "type_": "OBJECT",
                     "properties": {
@@ -894,7 +906,7 @@ class PokeAgent:
     ):
         """Lazily create cached VLMs for local subagents with LRU eviction.
 
-        Tool-less subagents (reflect, verify, summarize, gym_puzzle) get a bare
+        Tool-less subagents (reflect, verify, summarize, gym/red_puzzle) get a bare
         VLM without tools or system instructions.  Tool-using subagents (battler,
         planner) get a VLM with only their allowed tool declarations AND the
         orchestrator's system instructions so they inherit the same behavioural
@@ -1061,6 +1073,10 @@ class PokeAgent:
             return self._execute_subagent_gym_puzzle(
                 {"gym_name": arguments.get("gym_name")},
             )
+        if name == "Red Puzzle Analysis":
+            return self._execute_subagent_red_puzzle(
+                {"location_name": arguments.get("location_name")},
+            )
 
         logger.warning("Built-in subagent %s (%s) has no delegation mapping", subagent_id, name)
         return None
@@ -1198,6 +1214,49 @@ class PokeAgent:
             )
         except Exception as e:
             logger.error(f"Error in solve_gym_puzzle execution: {e}")
+            traceback.print_exc()
+            return json.dumps({"success": False, "error": str(e)}, indent=2)
+
+    def _execute_subagent_red_puzzle(self, arguments: dict) -> str:
+        """Execute Red puzzle solving using a lightweight local subagent."""
+        try:
+            game_state = self.mcp_adapter.call_tool("get_game_state", {})
+            if not game_state.get("success"):
+                return json.dumps({"success": False, "error": "Failed to get game state"})
+
+            state_text = game_state.get("state_text", "")
+            location_name = resolve_location_name(arguments, state_text)
+            puzzle_info = get_red_puzzle_info(location_name)
+            current_image = decode_screenshot_base64(game_state.get("screenshot_base64"))
+            if current_image is None:
+                return json.dumps({"success": False, "error": "No frame available in game state"})
+
+            step_number, puzzle_text = self._run_one_step_subagent(
+                prompt=build_red_puzzle_prompt(
+                    location_name=location_name,
+                    puzzle_info=puzzle_info,
+                    state_text=state_text,
+                    action_history=self._format_action_history(),
+                    function_results=self._get_function_results_context(),
+                ),
+                interaction_name="Red_Puzzle_Analysis",
+                current_image=current_image,
+                orchestrator_args={**arguments, "location_name": location_name},
+                metrics_arg_keys=("location_name",),
+            )
+
+            logger.info(f"✅ Red puzzle analysis complete ({len(puzzle_text)} chars)")
+            return json.dumps(
+                {
+                    "success": True,
+                    "location": location_name,
+                    "analysis": puzzle_text,
+                    "step_number": step_number,
+                },
+                indent=2,
+            )
+        except Exception as e:
+            logger.error(f"Error in red_puzzle_agent execution: {e}")
             traceback.print_exc()
             return json.dumps({"success": False, "error": str(e)}, indent=2)
 
@@ -2169,6 +2228,19 @@ class PokeAgent:
                     except Exception as e:
                         logger.debug(f"Could not extract subagent_gym_puzzle details: {e}")
                         action_details = "Executed subagent_gym_puzzle"
+                elif last_tool_call['name'] == "red_puzzle_agent":
+                    # Extract Red puzzle analysis to include in history
+                    try:
+                        result_data = json_module.loads(last_tool_call['result'])
+                        if result_data.get("success"):
+                            loc = result_data.get("location", "Unknown")
+                            analysis = result_data.get("analysis", "")
+                            action_details = f"red_puzzle_agent({loc})\nAnalysis: {analysis}"
+                        else:
+                            action_details = f"red_puzzle_agent failed: {result_data.get('error', 'Unknown error')}"
+                    except Exception as e:
+                        logger.debug(f"Could not extract red_puzzle_agent details: {e}")
+                        action_details = "Executed red_puzzle_agent"
                 else:
                     action_details = f"Executed {last_tool_call['name']}"
 
@@ -3161,7 +3233,8 @@ Step {step_count}"""
         logger.info("🧹 Cleared conversation history (fresh start)")
 
         logger.info("=" * 70)
-        logger.info("🎮 Pokemon Emerald PokeAgent")
+        _game_label = "Red" if os.environ.get("GAME_TYPE", "emerald").lower() == "red" else "Emerald"
+        logger.info(f"🎮 Pokemon {_game_label} PokeAgent")
         logger.info("=" * 70)
         logger.info(f"Model: {self.model}")
         logger.info(f"Backend: {self.backend}")
@@ -3423,7 +3496,7 @@ def main():
     """Main entry point."""
     import argparse
 
-    parser = argparse.ArgumentParser(description="Pokemon Emerald PokeAgent")
+    parser = argparse.ArgumentParser(description="Pokemon PokeAgent")
     parser.add_argument(
         "--server-url",
         type=str,

@@ -3,7 +3,7 @@
 Entry point for external CLI agent experiments (Claude Code, Codex CLI, Gemini CLI, etc.).
 
 This script:
-1. Spawns the Pokemon Emerald server with MCP endpoints
+1. Spawns the game server (Pokemon Emerald or Red) with MCP endpoints
 2. Launches an external CLI agent (e.g., claude, codex, gemini) as a subprocess
 3. Monitors termination conditions (e.g., gym badge count) and terminates when met
 
@@ -311,6 +311,12 @@ def start_server(args, run_id=None):
     if run_id:
         server_env["RUN_DATA_ID"] = run_id
     server_env["POKEAGENT_CLI_MODE"] = "1"  # Enable CLI-specific behavior (milestone backups, skip objectives)
+
+    # Pass game type to server
+    if hasattr(args, 'game') and args.game:
+        server_cmd.extend(["--game", args.game])
+        server_env["GAME_TYPE"] = args.game
+        os.environ["GAME_TYPE"] = args.game  # Also set in client process for prompt resolution
 
     # Pass LLM session_id if available
     llm_session_id = os.environ.get("LLM_SESSION_ID")
@@ -891,8 +897,10 @@ def _run_agent_loop(
 def main():
     """Main entry point for CLI agent experiments."""
     parser = argparse.ArgumentParser(
-        description="Run external CLI agents (Claude Code, Codex) for Pokemon Emerald experiments"
+        description="Run external CLI agents (Claude Code, Codex) for Pokemon experiments"
     )
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
+                       help="Which game to run: 'red' (Pokemon Red) or 'emerald' (Pokemon Emerald, default)")
     parser.add_argument("--backend", type=str, default="claude", choices=["claude", "gemini", "codex", "hermes"],
                        help="Backend to use for the CLI agent (default: claude)")
     parser.add_argument("--api-gateway", type=str, default="login", choices=["login", "openrouter"],
@@ -930,7 +938,8 @@ def main():
     args = parser.parse_args()
 
     print("=" * 60)
-    print("🎮 Pokemon Emerald - External CLI Agent Experiment")
+    game_label = "Red" if args.game == "red" else "Emerald"
+    print(f"🎮 Pokemon {game_label} - External CLI Agent Experiment")
     print("=" * 60)
 
     from utils.data_persistence.run_data_manager import initialize_run_data_manager

@@ -4,6 +4,7 @@ Fixed Pokemon Emerald server - headless FastAPI server
 """
 
 # Standard library imports
+import asyncio
 import base64
 import datetime
 import glob
@@ -37,8 +38,7 @@ import hashlib
 # Add parent directory to path for local modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Local application imports
-from pokemon_env.emulator import EmeraldEmulator
+# Local application imports — emulator imported conditionally in setup_environment()
 from utils.anticheat import AntiCheatTracker
 from utils.json_utils import normalize_replan_edits
 from utils.llm_provider_ui import infer_llm_provider_family
@@ -46,6 +46,9 @@ from utils.llm_provider_ui import infer_llm_provider_family
 # Set up logging - reduced verbosity for multiprocess mode
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
+
+# Game type: "emerald" (GBA, default) or "red" (Game Boy)
+game_type = os.environ.get("GAME_TYPE", "emerald").lower()
 
 # Global state
 env = None
@@ -60,6 +63,9 @@ direct_objectives_battling_start_index = 0
 direct_objectives_manager = None
 current_run_dir = None  # Timestamped directory for this execution run
 agent_step_count = 0  # Track agent steps separately from frame steps
+debug_state_enabled = False  # Save game state JSON on each get_game_state call (--debug-state)
+_debug_state_counter = 0  # Step index for debug state entries
+_debug_state_log = []  # Accumulates all debug state snapshots (written to debug_states.json)
 current_obs = None
 fps = 80
 
@@ -166,6 +172,11 @@ video_recording = False
 video_filename = ""
 video_frame_counter = 0
 video_frame_skip = 4  # Record every 4th frame (120/4 = 30 FPS)
+
+# Playwright WebUI recording state
+playwright_recording = False       # signal flag: set False to stop the recording thread
+playwright_thread = None           # background thread running the async recording loop
+playwright_video_path = None       # final .mp4 path set when recording finishes
 
 # Frame cache for separate frame server
 # Use cache directory instead of /tmp
@@ -446,6 +457,14 @@ def periodic_milestone_updater():
                 if env and env.memory_reader:
                     try:
                         # Use lightweight state for milestone updates only
+                        party = env.get_party_pokemon() or []
+                        location = env.get_location()
+                        badges = []
+                        if hasattr(env, 'memory_reader') and env.memory_reader and hasattr(env.memory_reader, 'read_badges'):
+                            try:
+                                badges = env.memory_reader.read_badges() or []
+                            except Exception:
+                                badges = []
                         basic_state = {
                             "player": {
                                 "money": env.get_money(),
@@ -561,11 +580,18 @@ def setup_environment(skip_initial_state=False):
     global env, current_obs, anticheat_tracker
 
     try:
-        rom_path = "Emerald-GBAdvance/rom.gba"
-        if not os.path.exists(rom_path):
-            raise RuntimeError(f"ROM not found at {rom_path}")
-
-        env = EmeraldEmulator(rom_path=rom_path)
+        if game_type == "red":
+            from pokemon_red_env.red_emulator import RedEmulator
+            rom_path = "PokemonRed-GBC/pokered.gbc"
+            if not os.path.exists(rom_path):
+                raise RuntimeError(f"ROM not found at {rom_path}")
+            env = RedEmulator(rom_path=rom_path)
+        else:
+            from pokemon_env.emulator import EmeraldEmulator
+            rom_path = "Emerald-GBAdvance/rom.gba"
+            if not os.path.exists(rom_path):
+                raise RuntimeError(f"ROM not found at {rom_path}")
+            env = EmeraldEmulator(rom_path=rom_path)
         env.initialize()
 
         # Initialize AntiCheat tracker for submission logging
@@ -636,7 +662,8 @@ def step_environment(actions_pressed):
     try:
         screenshot = env.get_screenshot()
         if screenshot:
-            record_frame(screenshot)
+            if not playwright_recording:
+                record_frame(screenshot)
             update_frame_cache(screenshot)  # Update frame cache for separate frame server
             with obs_lock:
                 current_obs = np.array(screenshot)
@@ -907,6 +934,16 @@ async def get_stream():
 
 
 # FastAPI endpoints
+@app.get("/config")
+async def get_config():
+    """Return server configuration (game type, resolution) for dynamic UI"""
+    return {
+        "game": game_type,
+        "width": env.width if env else 240,
+        "height": env.height if env else 160,
+    }
+
+
 @app.get("/health")
 async def get_health():
     """Health check endpoint for server monitoring"""
@@ -1438,7 +1475,7 @@ async def get_comprehensive_state():
         # PRIORITY 1.5: Build final porymap map for UI parity with LLM map context.
         # This ensures the "Map & Actions" UI uses the same post-filtered map
         # (reconciliation + flag filtering + object markers) when available.
-        if current_location and current_location != "Unknown" and state.get("map", {}).get("map_source") != "agent_slam":
+        if game_type != "red" and current_location and current_location != "Unknown" and state.get("map", {}).get("map_source") != "agent_slam":
             try:
                 from utils.mapping.porymap_state import _format_porymap_info
 
@@ -1630,10 +1667,12 @@ async def get_comprehensive_state():
             # Remove the PIL image object to avoid serialization issues
             del state["visual"]["screenshot"]
 
-        # Expensive: refresh full elevation-filtered porymap grid only when idle (FPS)
-        current_queue_length = len(action_queue)
+        # Add porymap ground truth data with elevation filtering for frontend display
+        # Skip during queued actions to avoid FPS slowdown (Emerald only — Red uses its own map reader)
+        current_queue_length = len(action_queue)  # Check queue before expensive porymap operations
         if (
-            current_location
+            game_type != "red"
+            and current_location
             and current_location != "Unknown"
             and current_location != "TITLE_SEQUENCE"
             and current_queue_length == 0
@@ -1661,8 +1700,15 @@ async def get_comprehensive_state():
                 logger.warning(f"Failed to add porymap data to /state: {e}")
 
         # Cheap: 15x15 stream UI from cached or freshly refreshed grid (also while actions are queued)
-        if current_location and current_location not in ("Unknown", "TITLE_SEQUENCE") and player_coords:
+        if game_type != "red" and current_location and current_location not in ("Unknown", "TITLE_SEQUENCE") and player_coords:
             _build_porymap_visual_map_15x15(state, player_coords)
+        elif game_type == "red":
+            # stream UI map for Red has been built in red_map_reader.py
+            visual_map = env.memory_reader.map_reader.format_map_for_llm(radius=7)
+            state["map"]["visual_map"] = visual_map
+            state["map"]["map_source"] = "red_map_reader"
+            whole_map = env.memory_reader.map_reader.get_whole_map_data()
+            state["map"]["red_whole_map"] = whole_map
 
         with step_lock:
             current_step = step_count
@@ -1670,8 +1716,9 @@ async def get_comprehensive_state():
         # Include action queue info for multiprocess coordination
         queue_length = len(action_queue)  # Action queue access is atomic for len()
 
-        # Cache map data for this location (5 second TTL) - reduces load on subsequent requests
+        # Cache map data for this location+position - reduces load on rapid repeated requests
         _state_cache["location"] = current_location
+        _state_cache["player_coords"] = player_coords
         _state_cache["map_data"] = state.get("map", {}).copy()
         _state_cache["portal_data"] = {"location_connections": state.get("location_connections", {})}
         _state_cache["timestamp"] = time.time()
@@ -1699,6 +1746,20 @@ async def get_whole_map():
     if env is None:
         raise HTTPException(status_code=400, detail="Emulator not initialized")
 
+    # Red: use RedEmulator.get_whole_map() directly (returns compatible dict)
+    if game_type == "red":
+        try:
+            result = env.get_whole_map()
+            if not result or not result.get("grid"):
+                raise HTTPException(status_code=400, detail="No valid location loaded")
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting whole map (Red): {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # Emerald: use porymap ground truth
     try:
         # Get current location
         state = env.get_comprehensive_state()
@@ -2948,11 +3009,26 @@ async def mcp_get_map_data():
         pos = state_result.get("player_position", {})
         location = state_result.get("location", "Unknown")
 
+        # Game-specific player marker and legend
+        _gt = os.environ.get("GAME_TYPE", "emerald").lower()
+        if _gt == "red":
+            _player_marker = "I"
+            _grid_legend = (
+                "I=player .=walkable #=wall ~=grass W=water D=door "
+                "t=cuttable tree G=Card Key gate !=sign ?=hidden item "
+                "O=pokeball N=NPC(blocked) ↓/←/→=jump ledge "
+                "C=counter *=spinner stop B=bookshelf U=trash "
+                "^=display/blueprint P=computer ==bench T=TV/machine"
+            )
+        else:
+            _player_marker = "P"
+            _grid_legend = "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)"
+
         result = {
             "success": True,
             "location": location,
             "player": {"x": pos.get("x", 0), "y": pos.get("y", 0)},
-            "grid_legend": "P=player .=walkable #=blocked ~=grass D=door S=stairs/warp I=item N=NPC(blocked)",
+            "grid_legend": _grid_legend,
         }
 
         # Get the FULL map grid (not windowed) from the porymap data in raw_state
@@ -2966,15 +3042,15 @@ async def mcp_get_map_data():
             grid = [list(row) for row in porymap_grid]
             px, py = pos.get("x", 0), pos.get("y", 0)
             if 0 <= py < len(grid) and 0 <= px < len(grid[0]):
-                grid[py][px] = "P"
+                grid[py][px] = _player_marker
 
             # Mark live NPC positions as 'N' (blocked for pathfinding)
-            obj_events = raw_state.get("map", {}).get("object_events", [])
+            obj_events = raw_state.get("map", {}).get("object_events", []) # object_events - from runtime memory; objects - from porymap data
             for obj in obj_events:
                 ox = obj.get("current_x", -1)
                 oy = obj.get("current_y", -1)
                 if (ox, oy) != (px, py) and 0 <= oy < len(grid) and 0 <= ox < len(grid[0]):
-                    if grid[oy][ox] not in ('#', 'P'):
+                    if grid[oy][ox] not in ('#', _player_marker):
                         grid[oy][ox] = 'N'
 
             grid = ["".join(row) for row in grid]
@@ -3007,7 +3083,7 @@ async def mcp_get_map_data():
                             end = i + 1
                             break
                     map_json = _json.loads(json_section[start:end])
-                    result["warps"] = map_json.get("warps", [])
+                    result["warps"] = map_json.get("warps") or map_json.get("warp_events", [])
                     result["objects"] = map_json.get("objects", [])
                     result["connections"] = map_json.get("connections", [])
                     if not result.get("dimensions"):
@@ -3067,8 +3143,34 @@ async def mcp_press_buttons(request: dict):
         if not buttons:
             return {"success": False, "error": "No buttons specified"}
 
+        # GBC (Red) has no shoulder buttons — reject L/R
+        if game_type == "red":
+            invalid_shoulder = [b for b in buttons if str(b).upper().strip() in ("L", "R")]
+            if invalid_shoulder:
+                return {"success": False, "error": f"Game Boy has no shoulder buttons: {invalid_shoulder}"}
+
         # Valid buttons (including WAIT for no-op)
-        valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
+        if game_type == "red":
+            valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "WAIT"]
+        else:
+            valid_buttons = ["A", "B", "START", "SELECT", "UP", "DOWN", "LEFT", "RIGHT", "L", "R", "WAIT"]
+
+        # Validate and normalize buttons with fallback to 'A'
+        normalized_buttons = []
+        invalid_buttons = []
+
+        for button in buttons:
+            # Normalize to uppercase
+            button_upper = str(button).upper().strip()
+
+            # Check if valid
+            if button_upper in valid_buttons:
+                normalized_buttons.append(button_upper)
+            else:
+                # Invalid button - fallback to A and warn
+                invalid_buttons.append(button)
+                logger.warning(f"Invalid button '{button}' requested, falling back to 'A'")
+                normalized_buttons.append("A")
 
         # Validate and normalize buttons with fallback to 'A'
         normalized_buttons = []
@@ -3850,13 +3952,17 @@ async def mcp_get_walkthrough(request: dict):
         except (ValueError, TypeError):
             return {"success": False, "error": f"Invalid part number: {part}"}
 
-        if not 1 <= part <= 21:
-            return {"success": False, "error": f"Part must be between 1 and 21 (got {part})"}
-
-        # Build Bulbapedia walkthrough URL
-        url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
-
-        logger.info(f"📖 Fetching Emerald walkthrough part {part}")
+        # Build Bulbapedia walkthrough URL (game-specific)
+        if game_type == "red":
+            if not 1 <= part <= 17:
+                return {"success": False, "error": f"Red walkthrough only has parts 1-17 (got {part})"}
+            url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Red_and_Blue/Part_{part}"
+            logger.info(f"📖 Fetching Red walkthrough part {part}")
+        else:
+            if not 1 <= part <= 21:
+                return {"success": False, "error": f"Part must be between 1 and 21 (got {part})"}
+            url = f"https://bulbapedia.bulbagarden.net/wiki/Walkthrough:Pok%C3%A9mon_Emerald/Part_{part}"
+            logger.info(f"📖 Fetching Emerald walkthrough part {part}")
 
         # Fetch the page
         response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (compatible; PokeAgent/1.0)"})
@@ -4530,7 +4636,9 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    parser = argparse.ArgumentParser(description="Simple Pokemon Emerald Server")
+    parser = argparse.ArgumentParser(description="Simple Pokemon Server")
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
+                       help="Which game to run: 'red' (Pokemon Red, Game Boy) or 'emerald' (Pokemon Emerald, GBA)")
     parser.add_argument("--port", type=int, default=8000, help="Port for FastAPI server")
     parser.add_argument("--manual", action="store_true", help="Enable manual mode with keyboard input and overlay")
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
@@ -4557,6 +4665,12 @@ def main():
 
     args = parser.parse_args()
 
+    # Set game type from args (also sync env var for modules like state_formatter)
+    global game_type
+    game_type = args.game
+    os.environ["GAME_TYPE"] = game_type
+    print(f"Game type: {game_type}")
+    
     # Set global direct objectives sequence
     global direct_objectives_sequence, direct_objectives_start_index, direct_objectives_battling_start_index
     if args.direct_objectives:
@@ -4693,7 +4807,7 @@ def main():
 
     # Disable dialogue detection if --no-ocr flag is set
     if args.no_ocr:
-        if env and env.memory_reader:
+        if env and env.memory_reader and hasattr(env.memory_reader, '_dialog_detection_enabled'):
             env.memory_reader._dialog_detection_enabled = False
             print("🚫 All dialogue detection disabled (--no-ocr flag)")
 
@@ -4716,8 +4830,8 @@ def main():
             if os.path.exists(grids_file):
                 print(f"🗺️  Loaded map grids from: {grids_file}")
 
-            # Map buffer should already be found by emulator.load_state()
-            if env.memory_reader and env.memory_reader._map_buffer_addr:
+            # Map buffer should already be found by emulator.load_state() (Emerald only)
+            if env.memory_reader and getattr(env.memory_reader, '_map_buffer_addr', None):
                 print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
 
             # Mark GAME_RUNNING milestone after state load
@@ -4752,6 +4866,16 @@ def main():
     print(f"   Local: http://localhost:{args.port}")
     print(f"   Network: http://{local_ip}:{args.port}")
     print(f"📺 Stream interface: http://{local_ip}:{args.port}/stream")
+
+    # Initialize video recording AFTER FastAPI server starts
+    # Try Playwright WebUI recording first; fall back to frame-based recording
+    if args.record:
+        pw_success = init_playwright_recording(args.port, run_id=run_id)
+        if not pw_success:
+            init_video_recording(True)
+    else:
+        # No recording requested
+        pass
     print("Available endpoints:")
     print("  /status - Server status")
     print("  /screenshot - Current screenshot")
@@ -4824,14 +4948,19 @@ def init_for_multiprocess():
             if not os.path.exists(rom_path):
                 raise RuntimeError(f"ROM not found at {rom_path}")
 
-            env = EmeraldEmulator(rom_path=rom_path)
+            if game_type == "red":
+                from pokemon_red_env.red_emulator import RedEmulator
+                env = RedEmulator(rom_path=rom_path)
+            else:
+                from pokemon_env.emulator import EmeraldEmulator
+                env = EmeraldEmulator(rom_path=rom_path)
             env.initialize()
 
             # Initialize video recording if requested
             init_video_recording(record_video)
 
             # Disable OCR if requested
-            if no_ocr and env and env.memory_reader:
+            if no_ocr and env and env.memory_reader and hasattr(env.memory_reader, '_dialog_detection_enabled'):
                 env.memory_reader._dialog_detection_enabled = False
                 print("🚫 All dialogue detection disabled (--no-ocr flag)")
 
@@ -4855,8 +4984,8 @@ def init_for_multiprocess():
                     if os.path.exists(grids_file):
                         print(f"🗺️  Loaded map grids from: {grids_file}")
 
-                    # Map buffer should already be found by emulator.load_state()
-                    if env.memory_reader and env.memory_reader._map_buffer_addr:
+                    # Map buffer should already be found by emulator.load_state() (Emerald only)
+                    if env.memory_reader and getattr(env.memory_reader, '_map_buffer_addr', None):
                         print(f"📍 Map buffer initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
 
                     print(f"✅ State loading complete for {load_state}")

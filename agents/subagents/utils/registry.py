@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, Optional, Sequence
 
@@ -15,6 +16,14 @@ class LocalSubagentSpec:
     description: str
     parameters: Dict[str, Any]
     allowed_tool_names: Sequence[str] = ()
+
+
+def _is_red() -> bool:
+    return os.environ.get("GAME_TYPE", "emerald").lower() == "red"
+
+
+def _puzzle_tool_name() -> str:
+    return "red_puzzle_agent" if _is_red() else "subagent_gym_puzzle"
 
 
 BATTLE_ALLOWED_TOOL_NAMES = (
@@ -40,7 +49,7 @@ PLANNER_ALLOWED_TOOL_NAMES = (
     "subagent_summarize",
     "subagent_verify",
     "subagent_reflect",
-    "subagent_gym_puzzle",
+    _puzzle_tool_name(),
     "replan_objectives",
 )
 
@@ -51,12 +60,64 @@ SUBAGENT_FORBIDDEN_TOOLS: FrozenSet[str] = frozenset({"execute_custom_subagent"}
 BUILTIN_SUBAGENT_TOOL_NAMES: FrozenSet[str] = frozenset({
     "subagent_reflect",
     "subagent_verify",
-    "subagent_gym_puzzle",
+    _puzzle_tool_name(),
     "subagent_summarize",
     "subagent_battler",
     "subagent_plan_objectives",
     "subagent_cleanup_run_artifacts",
 })
+
+
+_EMERALD_PUZZLE_SPEC = LocalSubagentSpec(
+    tool_name="subagent_gym_puzzle",
+    handler_type="one_step",
+    interaction_name="Gym_Puzzle_Analysis",
+    handler_method="_execute_subagent_gym_puzzle",
+    description=(
+        "Get expert guidance on solving gym puzzles. Use this when you're "
+        "in a gym and need help understanding the puzzle mechanics or "
+        "finding the solution."
+    ),
+    parameters={
+        "type_": "OBJECT",
+        "properties": {
+            "gym_name": {
+                "type_": "STRING",
+                "description": (
+                    "Gym / map identifier from the current game state, e.g. "
+                    "'LAVARIDGE_TOWN_GYM_1F' or 'MOSSDEEP_CITY_GYM'."
+                ),
+            }
+        },
+        "required": [],
+    },
+)
+
+_RED_PUZZLE_SPEC = LocalSubagentSpec(
+    tool_name="red_puzzle_agent",
+    handler_type="one_step",
+    interaction_name="Red_Puzzle_Analysis",
+    handler_method="_execute_subagent_red_puzzle",
+    description=(
+        "Get expert guidance on solving puzzles in Pokemon Red. Use this when "
+        "you're in a location with a puzzle (spinner mazes, warp mazes, etc.) "
+        "and need help understanding the mechanics or finding the solution."
+    ),
+    parameters={
+        "type_": "OBJECT",
+        "properties": {
+            "location_name": {
+                "type_": "STRING",
+                "description": (
+                    "Name of the location you're currently in (e.g., "
+                    "'RocketHideoutB2f', 'RocketHideoutB3f'). Use the exact "
+                    "location name shown in your game state."
+                ),
+            }
+        },
+        "required": [],
+    },
+)
 
 
 LOCAL_SUBAGENT_SPECS = (
@@ -134,30 +195,7 @@ LOCAL_SUBAGENT_SPECS = (
             "required": ["reasoning"],
         },
     ),
-    LocalSubagentSpec(
-        tool_name="subagent_gym_puzzle",
-        handler_type="one_step",
-        interaction_name="Gym_Puzzle_Analysis",
-        handler_method="_execute_subagent_gym_puzzle",
-        description=(
-            "Get expert guidance on solving gym puzzles. Use this when you're "
-            "in a gym and need help understanding the puzzle mechanics or "
-            "finding the solution."
-        ),
-        parameters={
-            "type_": "OBJECT",
-            "properties": {
-                "gym_name": {
-                    "type_": "STRING",
-                    "description": (
-                        "Gym / map identifier from the current game state, e.g. "
-                        "'LAVARIDGE_TOWN_GYM_1F' or 'MOSSDEEP_CITY_GYM'."
-                    ),
-                }
-            },
-            "required": [],
-        },
-    ),
+    _RED_PUZZLE_SPEC if _is_red() else _EMERALD_PUZZLE_SPEC,
     LocalSubagentSpec(
         tool_name="subagent_summarize",
         handler_type="one_step",

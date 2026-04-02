@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 from agents.prompts.paths import (
+    GAME_NAME,
     AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
     POKEAGENT_SYSTEM_PROMPT_PATH,
+    render_prompt,
     resolve_repo_path,
 )
 from agents.subagents.utils.trajectory_window import (
@@ -44,7 +46,7 @@ class PromptOptimizer:
         self.system_prompt_content = None
         if system_prompt_file.exists():
             with open(system_prompt_file, 'r') as f:
-                self.system_prompt_content = f.read()
+                self.system_prompt_content = render_prompt(f.read())
             logger.info(f"📋 Loaded system prompt for optimizer: {system_prompt_path} ({len(self.system_prompt_content)} chars)")
         else:
             logger.warning(f"System prompt not found at {system_prompt_path}, optimizer will not know available tools")
@@ -62,10 +64,10 @@ class PromptOptimizer:
         _base = Path(base_prompt_path)
         self.base_prompt_path = _base if _base.is_absolute() else resolve_repo_path(base_prompt_path)
 
-        # Load initial base prompt
+        # Load initial base prompt and render template placeholders
         if self.base_prompt_path.exists():
             with open(self.base_prompt_path, 'r') as f:
-                self.current_base_prompt = f.read()
+                self.current_base_prompt = render_prompt(f.read())
         else:
             logger.warning(f"Base prompt not found at {base_prompt_path}, using default")
             self.current_base_prompt = self._get_default_prompt()
@@ -179,7 +181,7 @@ The main agent receives this as its **system** message every step. You must **no
 """
         
         # Create optimization prompt
-        optimization_prompt = f"""You are a prompt optimization expert. Your task is to improve an AI agent's strategic guidance prompt based on its recent performance in playing Pokemon Emerald.
+        optimization_prompt = f"""You are a prompt optimization expert. Your task is to improve an AI agent's strategic guidance prompt based on its recent performance in playing {GAME_NAME}.
 {system_prompt_section}## Current Base Prompt (Strategic Guidance):
 This is the optimizable strategic guidance that gets combined with runtime context (action history, objectives, game state) and sent to the main agent. You can modify this to improve the agent's decision-making.
 

@@ -7,6 +7,7 @@ from .battler import (
     format_battler_history,
 )
 from .gym_puzzle import build_gym_puzzle_prompt, get_gym_puzzle_info, resolve_gym_name
+from .red_puzzle import build_red_puzzle_prompt, get_red_puzzle_info, resolve_location_name, RED_PUZZLES
 from .planner import (
     PLANNER_HISTORY_CAP,
     PLANNER_SAFETY_CAP,
@@ -44,6 +45,7 @@ __all__ = [
     "build_battler_prompt",
     "build_gym_puzzle_prompt",
     "build_local_subagent_tool_declarations",
+    "build_red_puzzle_prompt",
     "build_planner_prompt",
     "build_reflect_prompt",
     "build_summarize_prompt",
@@ -59,7 +61,9 @@ __all__ = [
     "format_trajectory_window",
     "get_gym_puzzle_info",
     "get_local_subagent_spec",
+    "get_red_puzzle_info",
     "GYM_PUZZLES",
+    "RED_PUZZLES",
     "is_local_subagent_tool",
     "LOCAL_SUBAGENT_SPECS",
     "load_recent_trajectories",
@@ -72,5 +76,6 @@ __all__ = [
     "PokeAgentRuntime",
     "REPLAN_OBJECTIVES_TOOL_DECLARATION",
     "resolve_gym_name",
+    "resolve_location_name",
     "resolve_verification_target",
 ]
