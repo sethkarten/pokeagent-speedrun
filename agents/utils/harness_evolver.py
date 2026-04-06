@@ -24,14 +24,22 @@ from agents.utils.prompt_optimizer import PromptOptimizer
 
 logger = logging.getLogger(__name__)
 
-# Minimum steps before the first evolution fires.
-MIN_WARMUP_STEPS = 25
-
-# Evolution frequency adapts: frequent early (every 25 steps for first 200),
-# then backs off (every 100 steps) once the harness stabilizes.
-EARLY_PHASE_CUTOFF = 200
-EARLY_FREQUENCY = 25
-STABLE_FREQUENCY = 100
+# Evolution cadence — adaptive: frequent early to bootstrap the harness,
+# then backs off once capabilities stabilize. Branched per game type because
+# browser games typically run for fewer total steps and have a much smaller
+# action space, so they benefit from tighter early evolution.
+if os.environ.get("GAME_TYPE", "emerald").lower() == "browser":
+    # Browser: every 10 steps for the first 100, then every 25.
+    MIN_WARMUP_STEPS = 10
+    EARLY_PHASE_CUTOFF = 100
+    EARLY_FREQUENCY = 10
+    STABLE_FREQUENCY = 25
+else:
+    # Pokemon: every 25 steps for the first 200, then every 100.
+    MIN_WARMUP_STEPS = 25
+    EARLY_PHASE_CUTOFF = 200
+    EARLY_FREQUENCY = 25
+    STABLE_FREQUENCY = 100
 
 # Tools that exist for every scaffold (used to validate subagent tool lists)
 # Tools available in the autoevolve scaffold (no navigate_to, no walkthrough, no wiki)
@@ -113,9 +121,12 @@ class HarnessEvolver:
     def should_evolve(self, current_step: int, frequency: int) -> bool:
         """Return True if evolution should fire at this step.
 
-        Uses adaptive frequency: evolve more often early (every 25 steps
-        for the first 200 steps) to bootstrap the harness quickly, then
-        back off to every 100 steps once capabilities stabilize.
+        Uses an adaptive frequency that depends on game type — see the
+        module-level MIN_WARMUP_STEPS / EARLY_PHASE_CUTOFF / EARLY_FREQUENCY
+        / STABLE_FREQUENCY constants. Browser games evolve more aggressively
+        (every 10 steps for the first 100, then every 25) since they tend
+        to be shorter and need tighter feedback. Pokemon games keep the
+        original 25/200/100 schedule.
         The caller's ``frequency`` arg is ignored in favor of the adaptive schedule.
         """
         if current_step < MIN_WARMUP_STEPS or current_step <= 0:
