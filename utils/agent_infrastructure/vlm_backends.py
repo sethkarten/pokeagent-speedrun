@@ -94,12 +94,14 @@ def _openai_text_part(text: str):
 
 def _format_function_call_for_thinking(function_call) -> str:
     """One-line summary of a single function_call for agent-thinking / JSONL logging."""
+    from utils.json_utils import convert_protobuf_args
+
     name = getattr(function_call, "name", None) or "unknown_tool"
     raw_args = getattr(function_call, "args", None)
     args: Dict[str, Any] = {}
     if raw_args is not None:
         try:
-            args = dict(raw_args)  # type: ignore[arg-type]
+            args = convert_protobuf_args(raw_args)
         except (TypeError, ValueError):
             if isinstance(raw_args, dict):
                 args = raw_args
@@ -2254,7 +2256,13 @@ class GeminiBackend(VLMBackend):
         """
 
         # Use longer timeout for preview models which are much slower
-        timeout = 180 if "preview" in self.model_name or "3-pro" in self.model_name else 60
+        # Flash models respond in <30s normally; pro/preview models may be slower
+        if "3-pro" in self.model_name:
+            timeout = 180
+        elif "preview" in self.model_name:
+            timeout = 90
+        else:
+            timeout = 60
 
         max_retries = 5
         base_delay = 2  # Start with 2 second delay
@@ -2428,13 +2436,9 @@ class GeminiBackend(VLMBackend):
 
         except Exception as e:
             logger.error(f"Error in Gemini image query: {e}")
-            # Try text-only fallback for any Gemini error
-            try:
-                logger.info(f"[{module_name}] Attempting text-only fallback due to error: {e}")
-                return self.get_text_query(text, module_name)
-            except Exception as fallback_error:
-                logger.error(f"[{module_name}] Text-only fallback also failed: {fallback_error}")
-                raise e
+            # Do NOT fall back to text-only — sending an image-referencing prompt
+            # without the image causes Gemini to hang. Let the caller retry.
+            raise
 
     def get_text_query(self, text: str, module_name: str = "Unknown") -> str:
         """Process a text-only prompt using Gemini API"""

@@ -47,8 +47,10 @@ from utils.llm_provider_ui import infer_llm_provider_family
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
-# Game type: "emerald" (GBA, default) or "red" (Game Boy)
+# Game type: "emerald" (GBA, default), "red" (Game Boy), or "browser" (Playwright)
 game_type = os.environ.get("GAME_TYPE", "emerald").lower()
+game_url = os.environ.get("GAME_URL", "")  # URL for browser games
+browser_last_action = None  # Track last browser action for state reporting
 
 # Global state
 env = None
@@ -313,8 +315,9 @@ def update_frame_cache(screenshot):
     # Increment counter on every call
     frame_cache_counter += 1
 
-    # Only update every 2 frames (80 FPS / 2 = 40 FPS stream rate)
-    if frame_cache_counter % 2 != 0:
+    # For emulator games (80 FPS), skip every other frame for 40 FPS stream.
+    # For browser games, frames are rare (one per agent step) — never skip.
+    if game_type != "browser" and frame_cache_counter % 2 != 0:
         return
 
     try:
@@ -580,6 +583,25 @@ def setup_environment(skip_initial_state=False):
     global env, current_obs, anticheat_tracker
 
     try:
+        if game_type == "browser":
+            from browser_env.browser_emulator import BrowserEnv
+            if not game_url:
+                raise RuntimeError("GAME_URL environment variable required for browser games")
+            browser_headed = os.environ.get("BROWSER_HEADED", "0") == "1"
+            env = BrowserEnv(game_url=game_url, headless=not browser_headed)
+            env.initialize()
+
+            screenshot = env.get_screenshot()
+            if screenshot:
+                with obs_lock:
+                    current_obs = np.array(screenshot)
+            else:
+                with obs_lock:
+                    current_obs = np.zeros((env.height, env.width, 3), dtype=np.uint8)
+
+            print(f"Browser environment initialized for {game_url}")
+            return True
+
         if game_type == "red":
             from pokemon_red_env.red_emulator import RedEmulator
             rom_path = "PokemonRed-GBC/pokered.gbc"
@@ -620,7 +642,7 @@ def setup_environment(skip_initial_state=False):
         return True
 
     except Exception as e:
-        print(f"Failed to initialize emulator: {e}")
+        print(f"Failed to initialize environment: {e}")
         return False
 
 
@@ -769,6 +791,14 @@ def reset_game():
 def game_loop(manual_mode=False):
     """Main game loop - runs in main thread, always headless"""
     global running, step_count
+
+    # Browser games don't need a frame-by-frame loop — the browser runs its own event loop.
+    # Just keep the thread alive so the server stays up.
+    if game_type == "browser":
+        print("Starting browser game loop (idle — browser runs its own event loop)...")
+        while running:
+            time.sleep(0.5)
+        return
 
     print("Starting headless game loop...")
 
@@ -956,6 +986,13 @@ async def get_status():
     with step_lock:
         current_step = step_count
 
+    if game_type == "browser":
+        return {
+            "status": "running",
+            "game_type": "browser",
+            "step_count": current_step,
+        }
+
     # Get current FPS (may be 4x during dialog)
     current_fps = env.get_current_fps(fps) if env else fps
     # Use cached dialog state for consistency with FPS calculation
@@ -977,7 +1014,15 @@ async def get_screenshot():
     global current_obs, step_count
 
     if env is None:
-        raise HTTPException(status_code=400, detail="Emulator not initialized")
+        raise HTTPException(status_code=400, detail="Environment not initialized")
+
+    if game_type == "browser":
+        try:
+            screenshot = env.get_screenshot()
+            screenshot_b64 = _pil_to_base64(screenshot)
+            return {"screenshot": screenshot_b64, "step_count": step_count}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
     with obs_lock:
         obs_copy = current_obs.copy() if current_obs is not None else None
@@ -1381,7 +1426,10 @@ def _build_porymap_visual_map_15x15(state: Dict[str, Any], player_coords: Tuple[
 async def get_comprehensive_state():
     """Get comprehensive game state including visual and memory data"""
     if env is None:
-        raise HTTPException(status_code=400, detail="Emulator not initialized")
+        raise HTTPException(status_code=400, detail="Environment not initialized")
+
+    if game_type == "browser":
+        return {"game": {"game_state": "browser"}, "player": {}, "milestones": {}}
 
     try:
         # Use the emulator's built-in caching (100ms cache)
@@ -2632,7 +2680,10 @@ def _update_objectives_cache():
 async def get_milestones():
     """Get current milestones achieved based on persistent tracking"""
     if env is None:
-        raise HTTPException(status_code=400, detail="Emulator not initialized")
+        raise HTTPException(status_code=400, detail="Environment not initialized")
+
+    if game_type == "browser":
+        return {"milestones": {}, "agent_step_count": agent_step_count}
 
     try:
         # Get milestones directly from emulator
@@ -2822,7 +2873,47 @@ async def test_milestone_operations():
 async def mcp_get_game_state():
     """MCP Tool: Get current game state"""
     if env is None:
-        return {"success": False, "error": "Emulator not initialized"}
+        return {"success": False, "error": "Environment not initialized"}
+
+    # Browser games: return screenshot + page text + game info (no emulator state)
+    if game_type == "browser":
+        try:
+            screenshot = env.get_screenshot()
+            screenshot_b64 = _pil_to_base64(screenshot)
+            game_info = env.get_game_info()
+            page_text = env.get_page_text()
+
+            # Push frame to stream
+            update_frame_cache(screenshot)
+
+            # Build a state_text similar to emulator games
+            cw = game_info.get('canvas_width', 0)
+            ch = game_info.get('canvas_height', 0)
+            state_text = f"=== BROWSER GAME STATE ===\n"
+            state_text += f"URL: {game_info.get('url', '')}\n"
+            state_text += f"Title: {game_info.get('title', '')}\n"
+            state_text += f"Canvas: {cw}x{ch} (valid click range: x=0-{cw}, y=0-{ch})\n"
+            if browser_last_action:
+                la = browser_last_action
+                if la["type"] == "mouse_click":
+                    state_text += f"Last click: ({la['x']}, {la['y']})\n"
+                elif la["type"] == "press_keys":
+                    state_text += f"Last keys: {la['keys']}\n"
+                elif la["type"] == "hold_key":
+                    state_text += f"Last hold: {la['key']} for {la['duration_ms']}ms\n"
+            if page_text:
+                state_text += f"\n--- Visible Text ---\n{page_text[:2000]}\n"
+
+            return {
+                "success": True,
+                "state_text": state_text,
+                "screenshot_base64": screenshot_b64,
+                "game_info": game_info,
+                "page_text": page_text[:2000] if page_text else "",
+            }
+        except Exception as e:
+            logger.error(f"Browser get_game_state error: {e}")
+            return {"success": False, "error": str(e)}
 
     try:
         from utils.state_formatter import format_state_for_llm
@@ -3219,6 +3310,179 @@ async def mcp_press_buttons(request: dict):
     except Exception as e:
         logger.error(f"Error pressing buttons: {e}")
         return {"success": False, "error": str(e)}
+
+
+# ---------------------------------------------------------------------------
+# Browser game MCP endpoints (only active when game_type == "browser")
+# ---------------------------------------------------------------------------
+
+@app.post("/mcp/press_keys")
+async def mcp_press_keys(request: dict):
+    """MCP Tool: Press keyboard keys in a browser game."""
+    if game_type != "browser":
+        return {"success": False, "error": "press_keys is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        keys = request.get("keys", [])
+        reasoning = request.get("reasoning", "")
+        if isinstance(keys, str):
+            keys = [keys]
+        if not keys:
+            return {"success": False, "error": "No keys specified"}
+
+        env.press_keys_sequence(keys)
+
+        global browser_last_action
+        browser_last_action = {"type": "press_keys", "keys": keys}
+
+        # Return fresh screenshot and push to stream
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(len(keys))
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "keys_pressed": keys,
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"press_keys error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/mouse_click")
+async def mcp_mouse_click(request: dict):
+    """MCP Tool: Click at (x, y) coordinates in a browser game."""
+    if game_type != "browser":
+        return {"success": False, "error": "mouse_click is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        x = int(request.get("x", 0))
+        y = int(request.get("y", 0))
+        reasoning = request.get("reasoning", "")
+
+        env.click_at(x, y)
+
+        global browser_last_action
+        browser_last_action = {"type": "mouse_click", "x": x, "y": y}
+
+        # Return fresh screenshot and push to stream
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "clicked": {"x": x, "y": y},
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"mouse_click error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/double_click")
+async def mcp_double_click(request: dict):
+    """MCP Tool: Double-click at (x, y) coordinates in a browser game."""
+    if game_type != "browser":
+        return {"success": False, "error": "double_click is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        x = int(request.get("x", 0))
+        y = int(request.get("y", 0))
+        reasoning = request.get("reasoning", "")
+
+        env.double_click_at(x, y)
+
+        global browser_last_action
+        browser_last_action = {"type": "double_click", "x": x, "y": y}
+
+        # Return fresh screenshot and push to stream
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "double_clicked": {"x": x, "y": y},
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"double_click error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/hold_key")
+async def mcp_hold_key(request: dict):
+    """MCP Tool: Hold a keyboard key for a specified duration in a browser game."""
+    if game_type != "browser":
+        return {"success": False, "error": "hold_key is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        key = request.get("key", "")
+        duration_ms = int(request.get("duration_ms", 500))
+        reasoning = request.get("reasoning", "")
+        if not key:
+            return {"success": False, "error": "No key specified"}
+
+        env.hold_key(key, duration_ms=duration_ms)
+
+        global browser_last_action
+        browser_last_action = {"type": "hold_key", "key": key, "duration_ms": duration_ms}
+
+        # Return fresh screenshot and push to stream
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "key_held": key,
+            "duration_ms": duration_ms,
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"hold_key error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def _pil_to_base64(img) -> str:
+    """Convert a PIL Image to base64 string."""
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
 @app.post("/mcp/complete_direct_objective")
@@ -4403,14 +4667,14 @@ async def save_checkpoint(request_data: dict = None):
         from utils.data_persistence.run_data_manager import get_cache_path
         step_count = request_data.get("step_count", 0) if request_data else 0
 
-        # Save emulator state
+        # Save emulator state (not applicable for browser games)
         checkpoint_state = str(get_cache_path("checkpoint.state"))
-        if env:
+        if env and hasattr(env, "save_state"):
             env.save_state(checkpoint_state)
             logger.info(f"💾 Server: Saved checkpoint state at step {step_count}")
 
             # Save milestones
-            if env.milestone_tracker:
+            if hasattr(env, "milestone_tracker") and env.milestone_tracker:
                 milestone_file = env.milestone_tracker.save_milestones_for_state(checkpoint_state)
                 logger.info(f"💾 Server: Saved checkpoint milestones")
 
@@ -4636,9 +4900,11 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    parser = argparse.ArgumentParser(description="Simple Pokemon Server")
-    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
-                       help="Which game to run: 'red' (Pokemon Red, Game Boy) or 'emerald' (Pokemon Emerald, GBA)")
+    parser = argparse.ArgumentParser(description="Game Agent Server")
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald", "browser"],
+                       help="Which game to run: 'red', 'emerald', or 'browser' (Playwright)")
+    parser.add_argument("--game-url", type=str, default=None,
+                       help="URL of browser game (itch.io page). Required when --game=browser")
     parser.add_argument("--port", type=int, default=8000, help="Port for FastAPI server")
     parser.add_argument("--manual", action="store_true", help="Enable manual mode with keyboard input and overlay")
     parser.add_argument("--load-state", type=str, help="Load a saved state file on startup")
@@ -4666,10 +4932,17 @@ def main():
     args = parser.parse_args()
 
     # Set game type from args (also sync env var for modules like state_formatter)
-    global game_type
+    global game_type, game_url
     game_type = args.game
     os.environ["GAME_TYPE"] = game_type
+    if args.game_url:
+        game_url = args.game_url
+        os.environ["GAME_URL"] = game_url
+    elif os.environ.get("GAME_URL"):
+        game_url = os.environ["GAME_URL"]
     print(f"Game type: {game_type}")
+    if game_type == "browser":
+        print(f"Game URL: {game_url}")
     
     # Set global direct objectives sequence
     global direct_objectives_sequence, direct_objectives_start_index, direct_objectives_battling_start_index
@@ -4799,56 +5072,57 @@ def main():
         print("OCR dialogue detection disabled")
     print("Press Ctrl+C to stop")
 
-    # Initialize emulator
-    # Skip initial state reading if we're going to load a state
+    # Initialize environment (emulator or browser)
     if not setup_environment(skip_initial_state=(args.load_state is not None)):
-        print("Failed to initialize emulator")
+        print("Failed to initialize environment")
         return
 
-    # Disable dialogue detection if --no-ocr flag is set
-    if args.no_ocr:
-        if env and env.memory_reader and hasattr(env.memory_reader, '_dialog_detection_enabled'):
+    # Disable dialogue detection if --no-ocr flag is set (emulator-only)
+    if args.no_ocr and game_type != "browser":
+        if env and hasattr(env, 'memory_reader') and env.memory_reader and hasattr(env.memory_reader, '_dialog_detection_enabled'):
             env.memory_reader._dialog_detection_enabled = False
             print("🚫 All dialogue detection disabled (--no-ocr flag)")
 
     # Load state if specified
-    if args.load_state:
-        try:
-            env.load_state(args.load_state)
-            print(f"Loaded state from: {args.load_state}")
-
-            # Milestones and map data are automatically loaded by env.load_state()
-            # Check what was loaded
-            state_dir = os.path.dirname(args.load_state)
-            base_name = os.path.splitext(os.path.basename(args.load_state))[0]
-
-            milestone_file = os.path.join(state_dir, f"{base_name}_milestones.json")
-            if os.path.exists(milestone_file):
-                print(f"📂 Loaded milestones from: {milestone_file}")
-
-            grids_file = os.path.join(state_dir, f"{base_name}_grids.json")
-            if os.path.exists(grids_file):
-                print(f"🗺️  Loaded map grids from: {grids_file}")
-
-            # Map buffer should already be found by emulator.load_state() (Emerald only)
-            if env.memory_reader and getattr(env.memory_reader, '_map_buffer_addr', None):
-                print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
-
-            # Mark GAME_RUNNING milestone after state load
-            # Defer expensive state logging - it will happen on first state request
+    # State loading and milestone tracking (emulator-only)
+    if game_type != "browser":
+        if args.load_state:
             try:
-                env.milestone_tracker.mark_completed("GAME_RUNNING")
-                print("GAME_RUNNING milestone marked after state load - initial logging deferred")
-            except Exception as e:
-                print(f"Warning: Could not mark initial milestone: {e}")
-        except Exception as e:
-            print(f"Failed to load state from {args.load_state}: {e}")
-            print("Continuing with fresh game state...")
+                env.load_state(args.load_state)
+                print(f"Loaded state from: {args.load_state}")
 
-    # Start lightweight milestone updater thread
-    state_update_running = True
-    state_update_thread = threading.Thread(target=periodic_milestone_updater, daemon=True)
-    state_update_thread.start()
+                # Milestones and map data are automatically loaded by env.load_state()
+                # Check what was loaded
+                state_dir = os.path.dirname(args.load_state)
+                base_name = os.path.splitext(os.path.basename(args.load_state))[0]
+
+                milestone_file = os.path.join(state_dir, f"{base_name}_milestones.json")
+                if os.path.exists(milestone_file):
+                    print(f"📂 Loaded milestones from: {milestone_file}")
+
+                grids_file = os.path.join(state_dir, f"{base_name}_grids.json")
+                if os.path.exists(grids_file):
+                    print(f"🗺️  Loaded map grids from: {grids_file}")
+
+                # Map buffer should already be found by emulator.load_state() (Emerald only)
+                if env.memory_reader and getattr(env.memory_reader, '_map_buffer_addr', None):
+                    print(f"Map buffer already initialized at 0x{env.memory_reader._map_buffer_addr:08X}")
+
+                # Mark GAME_RUNNING milestone after state load
+                # Defer expensive state logging - it will happen on first state request
+                try:
+                    env.milestone_tracker.mark_completed("GAME_RUNNING")
+                    print("GAME_RUNNING milestone marked after state load - initial logging deferred")
+                except Exception as e:
+                    print(f"Warning: Could not mark initial milestone: {e}")
+            except Exception as e:
+                print(f"Failed to load state from {args.load_state}: {e}")
+                print("Continuing with fresh game state...")
+
+        # Start lightweight milestone updater thread
+        state_update_running = True
+        state_update_thread = threading.Thread(target=periodic_milestone_updater, daemon=True)
+        state_update_thread.start()
 
     # Start FastAPI server in background thread
     server_thread = threading.Thread(target=run_fastapi_server, args=(args.port,), daemon=True)

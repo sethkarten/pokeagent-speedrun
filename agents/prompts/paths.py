@@ -13,6 +13,7 @@ game_type = os.environ.get("GAME_TYPE", "emerald").lower()  # game type: red or 
 GAME_NAMES = {
     "emerald": "Pokemon Emerald",
     "red": "Pokemon Red",
+    "browser": "Browser Game",
 }
 GAME_NAME = GAME_NAMES.get(game_type, "Pokemon Emerald")
 
@@ -44,9 +45,11 @@ _simple_prompts = {
     "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/SIMPLE.md",
 }
 
-POKEAGENT_PROMPT_PATH = _default_system_prompts[game_type]
-POKEAGENT_SYSTEM_PROMPT_PATH = _optimization_enabled_prompts[game_type]
-SIMPLE_PROMPT_PATH = _simple_prompts[game_type]
+# Browser games use their own prompt paths; fall back to emerald for Pokemon
+_pokemon_game_type = game_type if game_type in ("red", "emerald") else "emerald"
+POKEAGENT_PROMPT_PATH = _default_system_prompts[_pokemon_game_type]
+POKEAGENT_SYSTEM_PROMPT_PATH = _optimization_enabled_prompts[_pokemon_game_type]
+SIMPLE_PROMPT_PATH = _simple_prompts[_pokemon_game_type]
 
 # ---------------------------------------------------------------------------
 # Templated files: single file with {game_name}, rendered at load time
@@ -62,8 +65,12 @@ _autoevolve_system_prompts = {
     "red": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/SYSTEM_PROMPT_RED.md",
     "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/auto-evolve/SYSTEM_PROMPT.md",
 }
-AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH = _autoevolve_base_orchestrator_policies[game_type]
-AUTOEVOLVE_SYSTEM_PROMPT_PATH = _autoevolve_system_prompts[game_type]
+AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH = _autoevolve_base_orchestrator_policies[_pokemon_game_type]
+AUTOEVOLVE_SYSTEM_PROMPT_PATH = _autoevolve_system_prompts[_pokemon_game_type]
+
+# Browser game prompt paths
+BROWSER_GAME_SYSTEM_PROMPT_PATH = f"{PROMPTS_ROOT}/browser-game-directives/SYSTEM_PROMPT.md"
+BROWSER_GAME_BASE_ORCHESTRATOR_POLICY_PATH = f"{PROMPTS_ROOT}/browser-game-directives/BASE_ORCHESTRATOR_POLICY.md"
 
 
 def resolve_repo_path(relative_path: str) -> Path:

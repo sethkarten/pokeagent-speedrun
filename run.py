@@ -85,6 +85,19 @@ CUSTOM_AGENT_CONFIGS = {
         "supports_walkthrough": True,
         "supports_slam": True,
     },
+    "browser_autoevolve": {
+        "name": "BrowserGameAgent",
+        "details": [
+            "Browser game agent (AutoEvolve) via Playwright",
+            "Vision-only, no game-specific knowledge",
+            "Builds skills/subagents through gameplay",
+        ],
+        "module": "agents.browser_game_agent",
+        "class": "BrowserGameAgent",
+        "use_backend": True,
+        "supports_prompt_optimization": True,
+        "supports_game_url": True,
+    },
 }
 
 SCAFFOLD_DESCRIPTIONS = {
@@ -94,6 +107,7 @@ SCAFFOLD_DESCRIPTIONS = {
     "autoevolve": "AutoEvolve (H_auto: H_min + reset-free evolutionary optimization)",
     "autonomous_cli": "PokeAgent (legacy alias)",
     "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",
+    "browser_autoevolve": "Browser Game Agent (AutoEvolve via Playwright)",
 }
 
 SUPPORTED_SCAFFOLDS = list(CUSTOM_AGENT_CONFIGS.keys())
@@ -125,9 +139,16 @@ def start_server(args, run_id=None):
     # Single-writer metrics: server is the only writer
     server_env["LLM_METRICS_WRITE_ENABLED"] = "true"
 
-    # simple/simplest/autoevolve scaffolds start with an empty subagent registry
-    if getattr(args, "scaffold", "pokeagent") in ("simple", "simplest", "autoevolve"):
+    # simple/simplest/autoevolve/browser scaffolds start with an empty subagent registry
+    if getattr(args, "scaffold", "pokeagent") in ("simple", "simplest", "autoevolve", "browser_autoevolve"):
         server_env["EXCLUDE_BUILTIN_SUBAGENTS"] = "1"
+
+    # Pass game URL and headed flag for browser games
+    if hasattr(args, "game_url") and args.game_url:
+        server_cmd.extend(["--game-url", args.game_url])
+        server_env["GAME_URL"] = args.game_url
+    if getattr(args, "headed", False):
+        server_env["BROWSER_HEADED"] = "1"
 
     # Pass through server-relevant arguments
     if args.game:
@@ -180,9 +201,23 @@ def start_server(args, run_id=None):
             bufsize=1
         )
         print(f"✅ Server started with PID {server_process.pid}")
-        print("⏳ Waiting 3 seconds for server to initialize...")
-        time.sleep(3)
-        
+
+        # Wait for server to be ready (browser games take longer due to Playwright startup)
+        max_wait = 60 if getattr(args, "game", "") == "browser" else 10
+        print(f"⏳ Waiting up to {max_wait}s for server to initialize...")
+        import requests as _req
+        for i in range(max_wait):
+            time.sleep(1)
+            try:
+                r = _req.get(f"http://localhost:{args.port}/health", timeout=2)
+                if r.status_code == 200:
+                    print(f"✅ Server ready after {i+1}s")
+                    break
+            except Exception:
+                pass
+        else:
+            print(f"⚠️ Server may not be fully ready after {max_wait}s, continuing anyway...")
+
         return server_process
         
     except Exception as e:
@@ -263,6 +298,10 @@ def start_custom_agent(agent_config, args):
     if agent_config.get("class") == "PokeAgent":
         agent_kwargs["scaffold"] = args.scaffold
 
+    # Pass game_url for browser game agents
+    if agent_config.get("supports_game_url", False) and hasattr(args, "game_url"):
+        agent_kwargs["game_url"] = args.game_url or ""
+
     agent = agent_class(**agent_kwargs)
     print("✅ Agent created", flush=True)
 
@@ -274,8 +313,10 @@ def main():
     parser = argparse.ArgumentParser(description="Pokemon AI Agent")
     
     # Core arguments
-    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald"],
-                       help="Which game to run: 'red' (Pokemon Red, Game Boy) or 'emerald' (Pokemon Emerald, GBA)")
+    parser.add_argument("--game", type=str, default="emerald", choices=["red", "emerald", "browser"],
+                       help="Which game to run: 'red', 'emerald', or 'browser' (Playwright)")
+    parser.add_argument("--game-url", type=str, default=None,
+                       help="URL of browser game (itch.io page). Required when --game=browser")
     parser.add_argument("--rom", type=str, default="Emerald-GBAdvance/rom.gba",
                        help="Path to ROM file")
     parser.add_argument("--port", type=int, default=8000,
@@ -292,7 +333,7 @@ def main():
     # Agent configuration
     parser.add_argument("--backend", type=str, default="gemini", 
                        help="VLM backend (openai, gemini, openrouter, anthropic, auto)")
-    parser.add_argument("--model-name", type=str, default="gemini-2.5-flash", 
+    parser.add_argument("--model-name", type=str, default="gemini-3-flash-preview", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="pokeagent",
                        choices=SUPPORTED_SCAFFOLDS,
@@ -332,6 +373,10 @@ def main():
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",
                        help="Enable SLAM (map building) for vision_only agent")
+    parser.add_argument("--max-steps", type=int, default=None,
+                       help="Maximum number of agent steps to run")
+    parser.add_argument("--headed", action="store_true",
+                       help="Show the browser window (browser games only)")
     args = parser.parse_args()
 
     # Set GAME_TYPE early — MUST happen before any import from the agents
@@ -339,22 +384,36 @@ def main():
     # agents.prompts.paths, and paths.py reads GAME_TYPE at module level.
     os.environ["GAME_TYPE"] = args.game
 
+    # Browser game: auto-set scaffold and enable optimization
+    if args.game == "browser":
+        if not args.game_url:
+            print("❌ --game-url is required when --game=browser")
+            return 1
+        args.scaffold = "browser_autoevolve"
+        args.enable_prompt_optimization = True
+        os.environ["GAME_URL"] = args.game_url
+
     # Fix ROM default for Red (parser default is Emerald ROM)
     if args.rom == "Emerald-GBAdvance/rom.gba" and args.game == "red":
         args.rom = "PokemonRed-GBC/pokered.gbc"
 
     print("=" * 60)
-    game_label = "Pokemon Red" if args.game == "red" else "Pokemon Emerald"
+    if args.game == "browser":
+        game_label = f"Browser Game: {args.game_url}"
+    elif args.game == "red":
+        game_label = "Pokemon Red"
+    else:
+        game_label = "Pokemon Emerald"
     print(f"🎮 {game_label} AI Agent")
     print("=" * 60)
-    
-    # Get first objective info for consistent run naming
+
+    # Get first objective info for consistent run naming (Pokemon only)
     first_objective_id = None
     first_objective_desc = None
-    if args.direct_objectives:
+    if args.direct_objectives and args.game != "browser":
         from agents.objectives import get_first_objective_info
         first_objective_id, first_objective_desc = get_first_objective_info(
-            args.direct_objectives, 
+            args.direct_objectives,
             args.direct_objectives_start
         )
         if first_objective_id:
