@@ -951,6 +951,72 @@ def run_fastapi_server(port):
     )
 
 
+# ---------------------------------------------------------------------------
+# Continuous frame polling for browser games
+# ---------------------------------------------------------------------------
+# Browser games are turn-based at the agent level (no internal game loop on
+# the server side), so update_frame_cache() only fires when an MCP action
+# endpoint runs. That leaves the /ws/frames stream frozen for ~17 s between
+# agent steps even though the canvas is animating (Unity particles, NPCs,
+# loading bars, etc). This background task polls the BrowserEnv at a fixed
+# cadence so the stream stays live even while the agent is mid-VLM-call.
+#
+# Tunable via BROWSER_STREAM_FPS (default 4, set to 0 to disable). Each
+# screenshot dispatches into the Playwright thread via env._call which is
+# already serialized, so concurrent polls + agent get_game_state calls are
+# safe — they queue.
+
+_browser_poll_task = None
+
+
+async def _browser_frame_poll_loop():
+    """Continuously push fresh screenshots to frame_manager.latest_frame.
+
+    Runs as an asyncio task on the FastAPI event loop. Uses asyncio.to_thread
+    to avoid blocking the event loop on the synchronous env.get_screenshot
+    call (which dispatches across the Playwright thread).
+    """
+    import asyncio
+
+    try:
+        fps = float(os.environ.get("BROWSER_STREAM_FPS", "4"))
+    except (TypeError, ValueError):
+        fps = 4.0
+    if fps <= 0:
+        logger.info("Browser frame poll disabled (BROWSER_STREAM_FPS=0)")
+        return
+    interval = 1.0 / fps
+    logger.info(f"Browser frame poll loop started at {fps:.1f} fps")
+
+    while True:
+        try:
+            if env is not None and hasattr(env, "get_screenshot"):
+                screenshot = await asyncio.to_thread(env.get_screenshot)
+                if screenshot is not None:
+                    update_frame_cache(screenshot)
+        except Exception as e:
+            logger.debug(f"Browser frame poll iteration failed: {e}")
+        await asyncio.sleep(interval)
+
+
+@app.on_event("startup")
+async def _start_browser_frame_poll():
+    """Spawn the frame poller after uvicorn starts the event loop.
+
+    Only fires for browser games. For Pokemon games the existing emulator
+    loop already pushes frames at 40 fps via update_frame_cache, so this
+    poller would be redundant.
+    """
+    import asyncio
+
+    global _browser_poll_task
+    if game_type != "browser":
+        return
+    if _browser_poll_task is not None:
+        return
+    _browser_poll_task = asyncio.create_task(_browser_frame_poll_loop())
+
+
 # Serve stream.html
 @app.get("/stream")
 async def get_stream():
@@ -2897,6 +2963,15 @@ async def mcp_get_game_state():
                 la = browser_last_action
                 if la["type"] == "mouse_click":
                     state_text += f"Last click: ({la['x']}, {la['y']})\n"
+                elif la["type"] == "double_click":
+                    state_text += f"Last double-click: ({la['x']}, {la['y']})\n"
+                elif la["type"] == "mouse_move":
+                    state_text += f"Last mouse move: ({la['x']}, {la['y']})\n"
+                elif la["type"] == "mouse_drag":
+                    state_text += (
+                        f"Last drag: ({la['x1']}, {la['y1']}) -> "
+                        f"({la['x2']}, {la['y2']})\n"
+                    )
                 elif la["type"] == "press_keys":
                     state_text += f"Last keys: {la['keys']}\n"
                 elif la["type"] == "hold_key":
@@ -3475,6 +3550,99 @@ async def mcp_hold_key(request: dict):
         }
     except Exception as e:
         logger.error(f"hold_key error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/mouse_move")
+async def mcp_mouse_move(request: dict):
+    """MCP Tool: Move the mouse cursor (without clicking) in a browser game.
+
+    Useful for hover-driven UI: tooltips, paddle-follows-cursor, mouse-look,
+    or any game that reacts to ``mousemove`` events without a click.
+    Coordinates are canvas-relative.
+    """
+    if game_type != "browser":
+        return {"success": False, "error": "mouse_move is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        x = int(request.get("x", 0))
+        y = int(request.get("y", 0))
+        steps = int(request.get("steps", 8))
+        reasoning = request.get("reasoning", "")
+
+        env.move_to(x, y, steps=steps)
+
+        global browser_last_action
+        browser_last_action = {"type": "mouse_move", "x": x, "y": y}
+
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "moved_to": {"x": x, "y": y},
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"mouse_move error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/mouse_drag")
+async def mcp_mouse_drag(request: dict):
+    """MCP Tool: Press at (x1, y1), drag to (x2, y2), release.
+
+    Coordinates are canvas-relative. Useful for drag-to-aim, dragging
+    items, sliders, drawing, etc.
+    """
+    if game_type != "browser":
+        return {"success": False, "error": "mouse_drag is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        x1 = int(request.get("x1", 0))
+        y1 = int(request.get("y1", 0))
+        x2 = int(request.get("x2", 0))
+        y2 = int(request.get("y2", 0))
+        steps = int(request.get("steps", 12))
+        hold_ms = int(request.get("hold_ms", 50))
+        reasoning = request.get("reasoning", "")
+
+        env.drag_to(x1, y1, x2, y2, steps=steps, hold_ms=hold_ms)
+
+        global browser_last_action
+        browser_last_action = {
+            "type": "mouse_drag",
+            "x1": x1, "y1": y1, "x2": x2, "y2": y2,
+        }
+
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "dragged": {"from": [x1, y1], "to": [x2, y2]},
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"mouse_drag error: {e}")
         return {"success": False, "error": str(e)}
 
 

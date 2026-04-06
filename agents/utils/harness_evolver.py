@@ -56,7 +56,9 @@ _COMMON_EVOLVER_TOOLS = frozenset({
     "replan_objectives",
 })
 
-if os.environ.get("GAME_TYPE", "emerald").lower() == "browser":
+_IS_BROWSER_GAME = os.environ.get("GAME_TYPE", "emerald").lower() == "browser"
+
+if _IS_BROWSER_GAME:
     # Browser games use Playwright-driven input primitives instead of the
     # Pokemon press_buttons / navigate_to / get_map_data tools.
     _ALWAYS_AVAILABLE_TOOLS = _COMMON_EVOLVER_TOOLS | frozenset({
@@ -64,12 +66,92 @@ if os.environ.get("GAME_TYPE", "emerald").lower() == "browser":
         "mouse_click",
         "double_click",
         "hold_key",
+        "mouse_move",
+        "mouse_drag",
     })
 else:
     _ALWAYS_AVAILABLE_TOOLS = _COMMON_EVOLVER_TOOLS | frozenset({
         "press_buttons",
         "get_map_data",
     })
+
+
+# Per-game text inserted into the LLM prompts that drive skill / subagent
+# evolution. These have to match what the agent's run_skill sandbox actually
+# exposes (see ``BrowserGameAgent._execute_run_skill`` /
+# ``PokeAgent._execute_run_skill``); otherwise the LLM emits code that crashes
+# at exec() time.
+_BROWSER_SKILL_API_BLOCK = """## Skill Code API (MUST follow this exactly)
+
+Skill code runs as inline Python (NOT a function definition). It has access to:
+- `tools['press_keys'](keys=['Space'], reasoning='...')` — press one or more keys in sequence
+- `tools['mouse_click'](x=480, y=300, reasoning='...')` — click the canvas at (x, y)
+- `tools['double_click'](x=50, y=200, reasoning='...')` — double-click the canvas
+- `tools['hold_key'](key='ArrowRight', duration_ms=500, reasoning='...')` — hold a key for N ms
+- `tools['mouse_move'](x=480, y=300, steps=8, reasoning='...')` — move cursor without clicking (hover, paddle-follow, mouse-look)
+- `tools['mouse_drag'](x1=100, y1=100, x2=300, y2=200, steps=12, reasoning='...')` — press, drag, release (drag-to-aim, sliders, drawing)
+- `tools['get_game_state']()` — returns dict with `screenshot_base64`, `page_text`, `game_info` (canvas dims, last action), and `success`
+- `tools['process_memory'](edits=[...])` — read/write the agent's memory store
+- `args` — dict of arguments passed by the caller (e.g. `args['x']`, `args['target']`)
+- `result` — set this variable to return data
+- Libraries: `collections`, `heapq`, `numpy`/`np`, `json`, `re`, `math`, `random`, `time`
+
+CRITICAL: Use `tools['function_name'](...)` syntax. Do NOT call bare `press_keys()` or `mouse_click()`.
+Do NOT write `def skill_name():` — write inline code that reads `args` and sets `result`.
+
+NEVER reference Pokemon-only tools like `press_buttons`, `get_map_data`, `navigate_to`, or fields like `player_position`/`player_coords`/`grid`/`warps` — they do not exist in the browser sandbox and the skill will crash at exec() time."""
+
+_POKEMON_SKILL_API_BLOCK = """## Skill Code API (MUST follow this exactly)
+
+Skill code runs as inline Python (NOT a function definition). It has access to:
+- `tools['press_buttons'](buttons=['UP'], reasoning='...')` — press buttons (waits for emulator)
+- `tools['get_game_state']()` — returns dict with `player_position`, `location`, `state_text`
+- `tools['get_map_data']()` — returns dict with `grid` (list of strings), `player`, `dimensions`, `warps`, `objects`
+- `args` — dict of arguments passed by the caller (e.g. `args['x']`, `args['y']`)
+- `result` — set this variable to return data
+- Libraries: `collections`, `heapq`, `numpy`/`np`, `json`, `re`, `math`, `random`
+
+CRITICAL: Use `tools['function_name'](...)` syntax. Do NOT call bare `get_game_state()` or `press_buttons()`.
+Do NOT write `def skill_name():` — write inline code that reads `args` and sets `result`."""
+
+SKILL_API_BLOCK = _BROWSER_SKILL_API_BLOCK if _IS_BROWSER_GAME else _POKEMON_SKILL_API_BLOCK
+
+# Hint shown alongside an UNDERPERFORMING skill the LLM is asked to rewrite.
+# Pokemon hint pushes toward grid pathfinding; browser hint pushes toward
+# pixel-based UI calibration since browser games have no map data.
+_BROWSER_REWRITE_HINT = (
+    "`tools['get_game_state']()` returns the current screenshot as base64 "
+    "and the canvas dimensions, so the rewritten code can decode it with PIL "
+    "and inspect pixel regions to find UI elements before clicking. All standard "
+    "libraries (collections, heapq, numpy, etc) are available."
+)
+_POKEMON_REWRITE_HINT = (
+    "`tools['get_map_data']()` which returns structured grid/position/warp data, "
+    "and all standard libraries (collections, heapq, numpy, etc)."
+)
+SKILL_REWRITE_HINT = _BROWSER_REWRITE_HINT if _IS_BROWSER_GAME else _POKEMON_REWRITE_HINT
+
+# Patterns the skills evolver suggests when proposing rewrites. Browser games
+# don't have grids/A*, they have UI calibration and timed input sequences.
+_BROWSER_SKILL_PATTERNS = """   - **UI calibration**: Decode `tools['get_game_state']()['screenshot_base64']` with PIL and scan for distinctive RGB regions to locate buttons/icons before clicking
+   - **Timed input sequences**: Chain `press_keys` / `mouse_click` calls with `time.sleep` between them to perform combo moves
+   - **Wait-and-check loops**: Poll `get_game_state` until `page_text` or pixel state matches an expected condition, then act
+   - **Coordinate templates**: Parameterise click targets via `args` so one skill can open any of N similar icons"""
+
+_POKEMON_SKILL_PATTERNS = """   - **Pathfinding**: BFS (collections.deque), A* (heapq) on `tools['get_map_data']()['grid']`
+   - **State machines**: Track game mode transitions and act accordingly
+   - **Decision logic**: Evaluate options (damage, resources)
+   - **Parsing**: Extract info from game state text (regex, string splitting)"""
+
+SKILL_PATTERNS_BLOCK = _BROWSER_SKILL_PATTERNS if _IS_BROWSER_GAME else _POKEMON_SKILL_PATTERNS
+
+# Example tool list shown in the subagent recommendation JSON template — must
+# match the actual tools available so the LLM emits valid recommendations.
+SUBAGENT_EXAMPLE_TOOLS = (
+    '["press_keys", "mouse_click", "double_click", "mouse_move", "mouse_drag", "get_game_state"]'
+    if _IS_BROWSER_GAME
+    else '["press_buttons", "navigate_to", ...]'
+)
 
 
 class HarnessEvolver:
@@ -373,7 +455,7 @@ Respond with ONLY a JSON object (no markdown fences):
       "description": "string",
       "handler_type": "one_step or looping",
       "max_turns": 25,
-      "available_tools": ["press_buttons", "navigate_to", ...],
+      "available_tools": {SUBAGENT_EXAMPLE_TOOLS},
       "system_instructions": "Detailed instructions for the subagent (what it does, how to behave)",
       "directive": "Default task directive",
       "return_condition": "Condition to signal completion back to orchestrator"
@@ -512,8 +594,7 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
                         f"Stats: {stats['calls']} calls, {stats['stuck']} stuck ({100*stats['stuck']//stats['calls']}% failure)\n"
                         f"Current code:\n```python\n{entry.code}\n```\n"
                         f"Rewrite this skill with a better algorithm. The code has access to "
-                        f"`tools['get_map_data']()` which returns structured grid/position/warp data, "
-                        f"and all standard libraries (collections, heapq, numpy, etc).\n"
+                        f"{SKILL_REWRITE_HINT}\n"
                     )
 
         # Detect antipattern: using run_code repeatedly instead of saving as skills
@@ -552,30 +633,16 @@ Your job: identify reusable behavioral patterns (skills) from successful actions
 {antipattern_warning}
 {underperforming_skills}
 
-## Skill Code API (MUST follow this exactly)
-
-Skill code runs as inline Python (NOT a function definition). It has access to:
-- `tools['press_buttons'](buttons=['UP'], reasoning='...')` — press buttons (waits for emulator)
-- `tools['get_game_state']()` — returns dict with `player_position`, `location`, `state_text`
-- `tools['get_map_data']()` — returns dict with `grid` (list of strings), `player`, `dimensions`, `warps`, `objects`
-- `args` — dict of arguments passed by the caller (e.g. `args['x']`, `args['y']`)
-- `result` — set this variable to return data
-- Libraries: `collections`, `heapq`, `numpy`/`np`, `json`, `re`, `math`, `random`
-
-CRITICAL: Use `tools['function_name'](...)` syntax. Do NOT call bare `get_game_state()` or `press_buttons()`.
-Do NOT write `def skill_name():` — write inline code that reads `args` and sets `result`.
+{SKILL_API_BLOCK}
 
 ## Analysis Tasks
 
 1. **Rewrite underperforming executable skills**: If any skills are shown as UNDERPERFORMING above, you MUST rewrite their code. Include the FULL replacement `code` in your update. Common patterns:
-   - **Pathfinding**: BFS (collections.deque), A* (heapq) on `tools['get_map_data']()['grid']`
-   - **State machines**: Track game mode transitions and act accordingly
-   - **Decision logic**: Evaluate options (damage, resources)
-   - **Parsing**: Extract info from game state text (regex, string splitting)
+{SKILL_PATTERNS_BLOCK}
 
 2. **Fix broken skills**: If skills error or use wrong API fields, fix the code.
 
-3. **Record new skills**: Look for successful action sequences. Include `code` for skills that automate multi-step actions. Make skills game-specific and useful.
+3. **Record new skills**: Look for successful action sequences. Include `code` for skills that automate multi-step actions. Make skills game-specific and useful. ALWAYS include a `code` field when proposing an executable skill — note-only skills (no code) cannot be invoked via run_skill.
 
 4. **Update effectiveness ratings** based on trajectory outcomes.
 
@@ -619,16 +686,22 @@ Respond with ONLY a JSON object (no markdown fences):
                         path=spec.get("path", "general"),
                         name=spec.get("name", "Unnamed Skill"),
                         description=spec.get("description", ""),
+                        # Forward `code` so executable skills the LLM produces
+                        # actually become invocable via run_skill instead of
+                        # silently turning into note-only entries.
+                        code=spec.get("code", ""),
                         effectiveness=spec.get("effectiveness", "medium"),
                         importance=spec.get("importance", 3),
                         source="evolved",
                     )
                     entry = store.get(entry_id)
+                    has_code = bool(getattr(entry, "code", ""))
                     result["created"].append(entry_id)
                     logger.info(
-                        "Created evolved skill: %s (%s)",
+                        "Created evolved skill: %s (%s)%s",
                         entry_id,
                         getattr(entry, "name", spec.get("name", "")),
+                        " [executable]" if has_code else " [note-only]",
                     )
                 except Exception as e:
                     logger.error("Failed to create skill %s: %s", spec.get("name"), e)

@@ -87,6 +87,35 @@ class BrowserEnv:
     def double_click_at(self, x: int, y: int) -> None:
         self._call("double_click_at", x, y)
 
+    def move_to(self, x: int, y: int, steps: int = 8) -> None:
+        """Move the mouse cursor to (x, y) without clicking.
+
+        Coordinates are canvas-relative (same convention as click_at).
+        ``steps`` controls the number of intermediate mousemove events
+        Playwright dispatches — useful for hover-driven UI that animates
+        during cursor motion.
+        """
+        self._call("move_to", x, y, steps)
+
+    def drag_to(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        steps: int = 12,
+        hold_ms: int = 50,
+    ) -> None:
+        """Press at (x1, y1), drag to (x2, y2), release.
+
+        Both endpoints are canvas-relative. ``steps`` controls how many
+        mousemove events are issued during the drag (matters for games
+        that sample the cursor position continuously). ``hold_ms`` is a
+        small delay between mousedown and the first move so games that
+        debounce can register the press.
+        """
+        self._call("drag_to", x1, y1, x2, y2, steps, hold_ms)
+
     # ------------------------------------------------------------------
     # Dispatch helpers
     # ------------------------------------------------------------------
@@ -356,6 +385,56 @@ class BrowserEnv:
             except Exception as e:
                 logger.error("double_click_at(%d, %d) failed: %s", x, y, e)
 
+        def _canvas_to_page(x: int, y: int) -> Optional[tuple]:
+            """Convert canvas-relative (x, y) to page-absolute coordinates.
+
+            Locator.click(position=...) handles the offset for us, but
+            page.mouse.move()/down()/up() take page-absolute coordinates,
+            so for the move/drag primitives we have to add the canvas
+            (or iframe) origin ourselves. Returns None if neither the
+            canvas nor the iframe has a bounding box yet.
+            """
+            try:
+                if canvas is not None:
+                    box = canvas.bounding_box(timeout=2_000)
+                    if box:
+                        return (box["x"] + x, box["y"] + y)
+                if game_frame is not None:
+                    iframe_el = page.locator(
+                        "iframe#game_drop, .game_frame iframe"
+                    ).first
+                    box = iframe_el.bounding_box(timeout=2_000)
+                    if box:
+                        return (box["x"] + x, box["y"] + y)
+            except Exception as e:
+                logger.warning("_canvas_to_page(%d, %d) failed: %s", x, y, e)
+            return None
+
+        def _do_move_to(x: int, y: int, steps: int):
+            try:
+                page_xy = _canvas_to_page(x, y)
+                if page_xy is None:
+                    # Fall back to treating coordinates as page-absolute
+                    page_xy = (x, y)
+                page.mouse.move(page_xy[0], page_xy[1], steps=max(1, int(steps)))
+            except Exception as e:
+                logger.error("move_to(%d, %d) failed: %s", x, y, e)
+
+        def _do_drag_to(x1: int, y1: int, x2: int, y2: int, steps: int, hold_ms: int):
+            try:
+                start = _canvas_to_page(x1, y1) or (x1, y1)
+                end = _canvas_to_page(x2, y2) or (x2, y2)
+                page.mouse.move(start[0], start[1], steps=1)
+                page.mouse.down()
+                if hold_ms > 0:
+                    time.sleep(hold_ms / 1000.0)
+                page.mouse.move(end[0], end[1], steps=max(1, int(steps)))
+                page.mouse.up()
+            except Exception as e:
+                logger.error(
+                    "drag_to((%d,%d)->(%d,%d)) failed: %s", x1, y1, x2, y2, e
+                )
+
         # ---- dispatch map ----
         dispatch = {
             "_init": lambda: _do_init(),
@@ -369,6 +448,8 @@ class BrowserEnv:
             "hold_key": lambda k, d: _do_hold_key(k, d),
             "click_at": lambda x, y: _do_click_at(x, y),
             "double_click_at": lambda x, y: _do_double_click_at(x, y),
+            "move_to": lambda x, y, s: _do_move_to(x, y, s),
+            "drag_to": lambda x1, y1, x2, y2, s, h: _do_drag_to(x1, y1, x2, y2, s, h),
         }
 
         # ---- event loop ----

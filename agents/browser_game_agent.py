@@ -71,6 +71,8 @@ class BrowserMCPToolAdapter:
             "mouse_click": "/mcp/mouse_click",
             "double_click": "/mcp/double_click",
             "hold_key": "/mcp/hold_key",
+            "mouse_move": "/mcp/mouse_move",
+            "mouse_drag": "/mcp/mouse_drag",
             # Stores (generic — work for any game type)
             "process_memory": "/mcp/process_memory",
             "get_memory_overview": "/mcp/get_memory_overview",
@@ -335,6 +337,73 @@ class BrowserGameAgent:
                     "required": ["key", "duration_ms", "reasoning"],
                 },
             },
+            {
+                "name": "mouse_move",
+                "description": (
+                    "Move the mouse cursor to (x, y) on the game canvas WITHOUT clicking. "
+                    "Use for hover-driven UI: tooltips, paddle/cursor-following games, "
+                    "mouse-look in 3D games, or any game that reacts to mousemove events. "
+                    "Coordinates are relative to the game canvas (0,0 = top-left)."
+                ),
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "x": {
+                            "type_": "INTEGER",
+                            "description": "X coordinate (pixels from left edge)",
+                        },
+                        "y": {
+                            "type_": "INTEGER",
+                            "description": "Y coordinate (pixels from top edge)",
+                        },
+                        "steps": {
+                            "type_": "INTEGER",
+                            "description": (
+                                "Number of intermediate mousemove events (default 8). "
+                                "Higher = smoother motion for games that animate during the move."
+                            ),
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Why you are moving the cursor here",
+                        },
+                    },
+                    "required": ["x", "y", "reasoning"],
+                },
+            },
+            {
+                "name": "mouse_drag",
+                "description": (
+                    "Press at (x1, y1), drag to (x2, y2), release. "
+                    "Use for drag-to-aim, dragging items in inventories, sliders, "
+                    "drawing, or any drag interaction. Coordinates are canvas-relative."
+                ),
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "x1": {"type_": "INTEGER", "description": "Start X (pixels from left)"},
+                        "y1": {"type_": "INTEGER", "description": "Start Y (pixels from top)"},
+                        "x2": {"type_": "INTEGER", "description": "End X (pixels from left)"},
+                        "y2": {"type_": "INTEGER", "description": "End Y (pixels from top)"},
+                        "steps": {
+                            "type_": "INTEGER",
+                            "description": (
+                                "Number of intermediate mousemove events during drag (default 12). "
+                                "Higher = smoother for games that sample cursor continuously."
+                            ),
+                        },
+                        "hold_ms": {
+                            "type_": "INTEGER",
+                            "description": "Delay between mousedown and the first move (default 50ms)",
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Why you are performing this drag",
+                        },
+                    },
+                    "required": ["x1", "y1", "x2", "y2", "reasoning"],
+                },
+            },
         ]
 
         # Memory / Skill / Subagent tools (from shared declarations)
@@ -449,6 +518,7 @@ class BrowserGameAgent:
         sandbox_tools = {}
         for tool_name in (
             "press_keys", "mouse_click", "double_click", "hold_key",
+            "mouse_move", "mouse_drag",
             "get_game_state", "process_memory",
         ):
             sandbox_tools[tool_name] = _tool_caller(tool_name)

@@ -1,6 +1,6 @@
 # Game Agent — Browser AutoEvolve Scaffold
 
-You are playing a **browser-based game**. You receive screenshots and per-step text (game info, history). You start with NO pre-built subagents, NO game knowledge, and NO skills. You navigate with `press_keys` and `mouse_click` only and build your own capabilities through gameplay.
+You are playing a **browser-based game**. You receive screenshots and per-step text (game info, history). You start with NO pre-built subagents, NO game knowledge, and NO skills. You navigate with `press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, and `mouse_drag` and build your own capabilities through gameplay.
 
 **You must discover how the game works through observation and experimentation.** Store what you learn in memory.
 
@@ -24,6 +24,20 @@ You are playing a **browser-based game**. You receive screenshots and per-step t
 - **Required:** `key` (string), `duration_ms` (integer), `reasoning` (string)
 - Hold a key down for a specified duration in milliseconds.
 - Use for: continuous movement, charging attacks, or any action that requires holding a key.
+
+**double_click**
+- **Required:** `x` (integer), `y` (integer), `reasoning` (string)
+- Double-click the canvas at (x, y). Use for opening folders/files in desktop-themed games or any element that requires a double-click.
+
+**mouse_move**
+- **Required:** `x` (integer), `y` (integer), `reasoning` (string)
+- **Optional:** `steps` (integer, default 8) — number of intermediate `mousemove` events
+- Move the cursor to (x, y) **without clicking**. Use for hover-driven UI: tooltips, paddle/cursor-following games, mouse-look in 3D games, or any game that reacts to `mousemove` events.
+
+**mouse_drag**
+- **Required:** `x1`, `y1`, `x2`, `y2` (integers), `reasoning` (string)
+- **Optional:** `steps` (default 12), `hold_ms` (default 50ms before the drag starts)
+- Press at `(x1, y1)`, drag to `(x2, y2)`, release. Use for drag-to-aim, dragging items in inventories, sliders, drawing.
 
 ### Long-Term Memory
 
@@ -57,7 +71,10 @@ You are playing a **browser-based game**. You receive screenshots and per-step t
 - Executes a saved skill's `code` field in a sandbox with tool access:
   - `tools['press_keys'](keys=[...], reasoning='...')` — press keyboard keys
   - `tools['mouse_click'](x=..., y=..., reasoning='...')` — click at coordinates
+  - `tools['double_click'](x=..., y=..., reasoning='...')` — double-click at coordinates
   - `tools['hold_key'](key=..., duration_ms=..., reasoning='...')` — hold a key
+  - `tools['mouse_move'](x=..., y=..., steps=..., reasoning='...')` — move cursor without clicking
+  - `tools['mouse_drag'](x1=..., y1=..., x2=..., y2=..., steps=..., reasoning='...')` — press, drag, release
   - `tools['get_game_state']()` — read current game state
   - `tools['process_memory'](action='...', entries=[...], reasoning='...')` — memory CRUD
 - Set a `result` variable in the code to return data to yourself.
@@ -137,12 +154,12 @@ You start with an **empty** subagent registry and skill library. Build them as y
 - **One-step** (`handler_type: "one_step"`): Single VLM analysis pass. Good for reflection, verification, situation assessment. No tool access.
 - **Looping** (`handler_type: "looping"`): Multi-turn loop with tool access. Good for multi-step game sequences. Include `return_condition` to specify when to hand back control.
 - Keep `max_turns` reasonable (10-25 for looping subagents).
-- Only include tools the subagent actually needs in `available_tools`. Available tools for subagents: `press_keys`, `mouse_click`, `hold_key`, `get_game_state`, `process_memory`, `process_skill`, `run_skill`, `run_code`, `process_subagent`, `process_trajectory_history`.
+- Only include tools the subagent actually needs in `available_tools`. Available tools for subagents: `press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`, `get_game_state`, `process_memory`, `process_skill`, `run_skill`, `run_code`, `process_subagent`, `process_trajectory_history`.
 - Use inline `config` for one-off tasks; persist to registry for recurring patterns.
 
 ## Constraints
 
 - **Coordinates**: (0, 0) is the top-left corner of the game canvas. X increases to the right, Y increases downward.
 - **Key names**: Use Playwright key names (e.g., `ArrowUp` not `UP`, `Space` not `SPACE`).
-- **Every step must end** with an action tool (`press_keys`, `mouse_click`, `hold_key`) or `run_skill`.
+- **Every step must end** with an action tool (`press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`) or `run_skill`.
 - **If the game shows a loading screen or title screen**, try pressing Space, Enter, or clicking the center of the canvas to proceed.

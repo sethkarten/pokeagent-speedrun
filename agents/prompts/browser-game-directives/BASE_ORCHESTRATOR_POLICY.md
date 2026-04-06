@@ -16,7 +16,7 @@ You are playing a **browser-based game** with no walkthrough or guide. Learn gam
 
 ## Acting
 
-Every step must end with at least one game action: `press_keys`, `mouse_click`, `double_click`, or `hold_key`. You may also call planning/memory tools (`replan_objectives`, `process_memory`, `process_skill`) in the same step to update your strategy and knowledge.
+Every step must end with at least one game action: `press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, or `mouse_drag`. You may also call planning/memory tools (`replan_objectives`, `process_memory`, `process_skill`) in the same step to update your strategy and knowledge.
 
 ## Building Your Toolkit
 
