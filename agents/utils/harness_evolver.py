@@ -9,6 +9,7 @@ recent trajectories and improve all harness components mid-episode.
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -34,11 +35,9 @@ STABLE_FREQUENCY = 100
 
 # Tools that exist for every scaffold (used to validate subagent tool lists)
 # Tools available in the autoevolve scaffold (no navigate_to, no walkthrough, no wiki)
-_ALWAYS_AVAILABLE_TOOLS = frozenset({
-    "press_buttons",
+_COMMON_EVOLVER_TOOLS = frozenset({
     "complete_direct_objective",
     "get_game_state",
-    "get_map_data",
     "process_memory",
     "process_skill",
     "run_skill",
@@ -48,6 +47,21 @@ _ALWAYS_AVAILABLE_TOOLS = frozenset({
     "process_trajectory_history",
     "replan_objectives",
 })
+
+if os.environ.get("GAME_TYPE", "emerald").lower() == "browser":
+    # Browser games use Playwright-driven input primitives instead of the
+    # Pokemon press_buttons / navigate_to / get_map_data tools.
+    _ALWAYS_AVAILABLE_TOOLS = _COMMON_EVOLVER_TOOLS | frozenset({
+        "press_keys",
+        "mouse_click",
+        "double_click",
+        "hold_key",
+    })
+else:
+    _ALWAYS_AVAILABLE_TOOLS = _COMMON_EVOLVER_TOOLS | frozenset({
+        "press_buttons",
+        "get_map_data",
+    })
 
 
 class HarnessEvolver:
@@ -383,9 +397,16 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
                     tools = spec.get("available_tools", [])
                     valid_tools = [t for t in tools if t in _ALWAYS_AVAILABLE_TOOLS]
                     if not valid_tools:
-                        valid_tools = ["press_buttons"]
+                        # Pick a sensible default per game type
+                        valid_tools = (
+                            ["press_keys"]
+                            if "press_keys" in _ALWAYS_AVAILABLE_TOOLS
+                            else ["press_buttons"]
+                        )
 
-                    entry = store.add(
+                    # BaseStore.add returns the entry ID (string), not the
+                    # entry object — look up the entry afterwards.
+                    entry_id = store.add(
                         path=f"evolved/{spec.get('name', 'unnamed').lower().replace(' ', '_')}",
                         name=spec.get("name", "Unnamed"),
                         description=spec.get("description", ""),
@@ -398,8 +419,13 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
                         importance=3,
                         source="evolved",
                     )
-                    result["created"].append(entry.id)
-                    logger.info("Created evolved subagent: %s (%s)", entry.id, entry.name)
+                    entry = store.get(entry_id)
+                    result["created"].append(entry_id)
+                    logger.info(
+                        "Created evolved subagent: %s (%s)",
+                        entry_id,
+                        getattr(entry, "name", spec.get("name", "")),
+                    )
                 except Exception as e:
                     logger.error("Failed to create subagent %s: %s", spec.get("name"), e)
 
@@ -578,7 +604,7 @@ Respond with ONLY a JSON object (no markdown fences):
 
             for spec in recommendations.get("add", []):
                 try:
-                    entry = store.add(
+                    entry_id = store.add(
                         path=spec.get("path", "general"),
                         name=spec.get("name", "Unnamed Skill"),
                         description=spec.get("description", ""),
@@ -586,8 +612,13 @@ Respond with ONLY a JSON object (no markdown fences):
                         importance=spec.get("importance", 3),
                         source="evolved",
                     )
-                    result["created"].append(entry.id)
-                    logger.info("Created evolved skill: %s (%s)", entry.id, entry.name)
+                    entry = store.get(entry_id)
+                    result["created"].append(entry_id)
+                    logger.info(
+                        "Created evolved skill: %s (%s)",
+                        entry_id,
+                        getattr(entry, "name", spec.get("name", "")),
+                    )
                 except Exception as e:
                     logger.error("Failed to create skill %s: %s", spec.get("name"), e)
 
@@ -682,15 +713,20 @@ Respond with ONLY a JSON object (no markdown fences):
 
             for spec in recommendations.get("add", []):
                 try:
-                    entry = store.add(
+                    entry_id = store.add(
                         path=spec.get("path", "general"),
                         title=spec.get("title", "Untitled"),
                         content=spec.get("content", ""),
                         importance=spec.get("importance", 3),
                         source="evolved",
                     )
-                    result["created"].append(entry.id)
-                    logger.info("Created evolved memory: %s (%s)", entry.id, entry.title)
+                    entry = store.get(entry_id)
+                    result["created"].append(entry_id)
+                    logger.info(
+                        "Created evolved memory: %s (%s)",
+                        entry_id,
+                        getattr(entry, "title", spec.get("title", "")),
+                    )
                 except Exception as e:
                     logger.error("Failed to create memory: %s", e)
 

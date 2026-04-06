@@ -752,18 +752,56 @@ class BrowserGameAgent:
         return size
 
     def _log_trajectory_for_step(self, step, pre_state, tool_calls, reasoning, **kwargs):
+        """Append one trajectory entry to trajectory_history.jsonl.
+
+        HarnessEvolver / PromptOptimizer read this file each evolution cycle.
+        Without it, auto-evolve fires but immediately bails with
+        "No trajectories — skipping evolution", and the prompt/skill/subagent/
+        memory passes never run. Format must match the schema in
+        ``RunDataManager.log_trajectory`` so the optimizer can parse it.
+        """
         run_manager = get_run_data_manager()
         if not run_manager:
             return
         try:
-            run_manager.save_trajectory_entry(
+            def _strip(value):
+                # Trim screenshots and oversize blobs from anything we persist —
+                # the trajectory file is read every evolution cycle, so keeping
+                # it small matters for both disk and prompt budgets.
+                if isinstance(value, dict):
+                    return {
+                        k: _strip(v)
+                        for k, v in value.items()
+                        if k not in ("screenshot_base64", "screenshot")
+                    }
+                if isinstance(value, list):
+                    return [_strip(v) for v in value]
+                if isinstance(value, str) and len(value) > 4000:
+                    return value[:4000] + "...[truncated]"
+                return value
+
+            sanitized_calls = [
+                {
+                    "name": tc.get("name"),
+                    "args": _strip(tc.get("args") or {}),
+                    "result": _strip(tc.get("result", "")),
+                }
+                for tc in (tool_calls or [])
+            ]
+            action = {
+                "type": "tool_calls",
+                "tool_calls": sanitized_calls,
+                "total_tool_calls": len(sanitized_calls),
+            }
+            run_manager.log_trajectory(
                 step=step,
-                pre_state=pre_state,
-                action={"tool_calls": tool_calls, "reasoning": reasoning},
-                **kwargs,
+                reasoning=reasoning or "",
+                action=action,
+                pre_state=pre_state or {},
+                outcome={"success": True, "objectives_completed": []},
             )
         except Exception as e:
-            logger.debug(f"Trajectory save error: {e}")
+            logger.warning(f"Trajectory save error: {e}", exc_info=True)
 
     # ------------------------------------------------------------------
     # VLM response handling

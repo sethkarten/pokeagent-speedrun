@@ -314,9 +314,16 @@ IMPROVED BASE PROMPT:
                 
                 if movement_attempted:
                     step_text += "⚠️ **Issue:** Movement attempted but coordinates unchanged (possibly blocked)\n"
-            
-            # Check for repeated locations
-            if i > 1 and pre_state.get('player_coords') == trajectories[i-2].get('pre_state', {}).get('player_coords'):
+
+            # Check for repeated locations (skip when player_coords is missing,
+            # e.g. browser games have no concept of player coordinates and would
+            # otherwise flag every single step as a loop because None == None).
+            cur_coords = pre_state.get('player_coords')
+            if (
+                i > 1
+                and cur_coords is not None
+                and cur_coords == trajectories[i-2].get('pre_state', {}).get('player_coords')
+            ):
                 step_text += "⚠️ **Pattern:** Same location as 2 steps ago (possible loop)\n"
             
             formatted.append(step_text)
