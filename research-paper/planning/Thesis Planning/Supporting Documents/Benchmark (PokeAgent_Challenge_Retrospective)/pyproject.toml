@@ -1,0 +1,12 @@
+[project]
+name = "pokeagent-latex"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "adjusttext>=1.3.0",
+    "harcx>=0.2.0",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.1",
+]

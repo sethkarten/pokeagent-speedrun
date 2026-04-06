@@ -1,0 +1,80 @@
+\documentclass[11pt]{article}
+
+
+% Title and author information
+\usepackage[preprint]{colm2025_conference} % [submission] for review, [preprint] for preprint, [final] for camera-ready
+\usepackage[utf8]{inputenc}
+\usepackage{pdfpages}
+\usepackage{amsmath}
+\usepackage{times}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\newcommand{\red}[1]{{\color{red} #1}}
+\newcommand{\ignore}[1]{{}}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+
+\title{NeurIPS 2025 PokéAgent Challenge: \\Methodology Description for Organizer Baseline}
+\author{Tersoo Upaa Jr., Seth Karten\\Princeton University}
+\date{January 14, 2026}
+
+\begin{document}
+% \includepdf[pages=-]{Thesis/figures/preamble.pdf}
+
+\maketitle
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Thesis/figures/agent_schema.png}
+    \caption{\textbf{High-level architecture of our basic agent.} The primary loop (left) composes a prompt (mid) with constituent information from the game-state, like a textual map with object and non-playable character (NPC) coordinates, a system prompt exposing the available tools (mid), the \textbf{Base Prompt}, which is a human-engineered textual policy that provides guidance on how to effectively structure reasoning and action. The current objective and the visual frame (240x160 RGB image) are also provided to the VLM, though the image data is explicitly passed at call-time.} %Note to self: Refactor this image so the visual frame isn't in the prompt section. Also, potentially change the name of the 'base prompt.'
+    \label{fig:agent_schema}
+\end{figure}
+
+\section{Axes of Performance}
+The PokéAgent Challenge provides a benchmark for testing the performance of agents across several axes that we identify as vital for effective embodied play.  (1) Meaningful story progress across Pokémon Emerald’s narrative structure requires long-term coherence in the agent’s memory. In the absence of long and short-term memory abstractions, we observe increases in the frequency of confusion or outright hallucination—events that can completely derail a run. (2) Furthermore, agents require a strong spatial understanding to accurately discern the visual frame and effectively interact with the environment.  We find that much of our baseline's performance in this regard is quite sensitive to the sophistication of the underlying \textbf{Vision-Language Model (VLM)} and the extent to which tile-level player-cooplayer coordinates and map information are exposed, at each step, to support \textbf{Simultaneous Localization and Mapping (SLAM)}. (3) Finally, the agent must effectively translate the demands imposed by the narrative structure of Pokémon Emerald (e.g., collect starter, battle Team Aqua Grunt, and defeat the first gym leader) into a logical sequence of objectives specified at appropriate levels of granularity. Put simply, our baseline defines a scaffold that provides the agent with appropriate tools to support performance across all three of these axes. 
+\section{Baseline Agent Scaffold}
+% Note: modify this section as basic scaffold changes, flesh out for final report
+Our flagship scaffold (AutonomousCLIAgent) is centered around a modular \textbf{Model Context Protocol (MCP)} agent for Pokémon Emerald that cleanly separates high-level planning (e.g., functions for objective creation and making reads/writes to a central knowledge base) from the low-level action execution sequences necessary for movement and interaction. In this capacity, we expose several tools \cite{systemprompt2025code} for the underlying VLM---with native function-calling support---to use.  These tool invocations are made via HTTP requests and are tightly coupled within a \textbf{Primary Agent Loop} (Figure \ref{fig:agent_schema}) that constantly cycles between action, state updates, and prompt-composition. We find that the choice of underlying VLM  affects the latency, cost, and quality of inference. Our baseline submission primarily uses Google Gemini 3.0 Pro as it demonstrates substantial improvements over Gemini 2.5 Pro and Flash models in both vision and reasoning as well as an expansive 1M token context-window.
+
+\paragraph{1) Agent Memory.}
+Memory is abstracted into both long and short-term memory. Short-term memory is encoded as an action history within the prompt that the VLM receives at each step. This action history details the specific tool-calls made at each step as well as the agent's reasoning, up to 20-steps in the past. Long-term memory is encoded in a \textbf{Knowledge Base}, which is a structured JSON file that the agent can append memories---usually involving details concerning action completion or item acquisition----to via tool. This memory is manually invoked in the objective creation process to better align the agents next actions with existing game progress.
+
+\paragraph{2) SLAM}
+Our agents interacts with the game environment by leveraging the PokéAgent Speed-running Track's test harness, receiving observations in the form of raw images, structured state text derived from  the \textbf{Read-Only Memory (ROM)}. We further expanded the structured state representation with data from \textbf{Porymap,} a Pokémon Emerald decompilation project \citep{huderlem2025porymap}. This inclusion enhances the agents observability of its environment, exposing the coordinates of  NPCs, item, and warps to different locations.  To complement this textual state representation, we developed a pathfinding tool that the agent can invoke to automatically navigate from point A to B via a modified A* algorithm with optional levels of path-variance to improve navigation in congested environments. 
+
+\paragraph{3) Objective System. }
+
+The \textbf{Direct Objective System}  defines a sequence of high-level objectives that are dynamically created by the agent. Our agent is instructed to call a sequence of tools which summarizes its knowledge base via memory importance, lookup information on Pokémon Emerald’s storyline via a publicly available walkthrough on Bulbapedia, before finally creating a variable-length sequence of objectives.  Naturally, the agent is also equipped with a tool to complete and step through this sequence of objectives. We find that this objective system is vital for effectively aligning the agents behavior with the tasks it needs to complete. Conversely, inappropriate objectives will at best delay game progress and at worst, completely derail a run, which is why the creation of objectives is grounded by the agents persistent memory and clear guidance from an external knowledge base (e.g., Serebii, Bulbapedia).
+
+
+
+
+
+% Note to self: Add detail around state-formatter, pathfinding module, Vision-only mode?
+
+% Retrospective Paper vs. COLM
+    % Retrospective is a combination of a competition/benchmark paper
+    % COLM is more for the prompt-evolution setup
+
+% Improve figure: too much text... need to emphasise our provision of structure, not explicitly providing.
+% Make sure we add some more points about our architecture. right now we have + justification: 
+    % Objectives (up front vs as-we-go)
+        % want to change this structure to diversify the set of the objectives (story (sequential), teambuilding (sequential), miscellaneous [on the fly])... can always have 3 at a time
+    
+    % Multi-Agent Scaffolding
+        % Reflecting Agent
+        % Battling Agent
+        % (Voyager) General sub-agents
+
+    % Knowledge-Base
+        % Notes for tracking progress
+
+    % Tools
+        % Map
+        % Navigate_to()
+        % Summary/Compation Tool (new)
+
+\bibliographystyle{colm2025_conference}
+\bibliography{references}
+\end{document}

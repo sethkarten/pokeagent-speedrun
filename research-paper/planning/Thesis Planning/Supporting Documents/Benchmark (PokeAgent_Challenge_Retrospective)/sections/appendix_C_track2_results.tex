@@ -1,0 +1,15 @@
+\section{Speedrunning Track: Full Competition Results}
+\label{sec:track2-full-results}
+
+The Speedrunning Track challenged participants to complete Pokémon Emerald as quickly as possible (see Appendix~\ref{sec:participant-methodologies} for detailed descriptions of participant methods). Of 22 teams that submitted, 6 achieved 100\% completion. Figure~\ref{fig:track2_time_main} presents the final standings, showing both wall-clock time and step-count views. Heatz won with a 40:13 completion time using Scripted Policy Distillation (SPD); see Section~\ref{sec:neurips} for a discussion of the winning approach and the time-vs-efficiency tradeoff across teams.
+
+As discussed in Section~\ref{sec:neurips}, a harness is a prerequisite for any OOD performance---not a marginal optimization. The successful harness architectures decompose into four components:
+\begin{itemize}
+    \item \textbf{Perception}: Vision-to-text translation for game state understanding
+    \item \textbf{Memory}: Maintaining coherent state across thousands of timesteps
+    \item \textbf{Planning}: High-level goal decomposition and route optimization
+    \item \textbf{Action}: Low-level control for navigation and battle execution
+\end{itemize}
+Benchmark results therefore reflect the joint capability of model + harness, and differences between models cannot be attributed to ``raw'' model capability alone.
+
+\textbf{Judge's Choice:} Deepest was recognized for achieving completion with the fewest total actions, demonstrating efficient reasoning despite a slower wall-clock time.

@@ -1,0 +1,73 @@
+\section{Introduction}\label{sec:introduction}
+
+Agentic harnesses, the scaffolding that enables foundation models with tools, memory, and planning, have become the standard way to deploy agents on complex tasks. In software engineering, harnesses like Claude Code~\citep{anthropic2025claudecode}, OpenHands~\citep{wang2024openhands}, and OpenClaw~\citep{steinberger2025openclaw} let models navigate codebases, run commands, and maintain state across long interactions. The pattern is consistent: raw model capability alone is not enough; the harness is what makes autonomous operation work.
+
+Embodied agents need harnesses too, but existing ones require heavy human engineering. The PokeAgent Challenge~\citep{karten2025pokeagent} showed that without a domain-specific harness, frontier vision-language models make minimal progress on RPG gameplay, even though the same models succeed when properly scaffolded. Building that scaffold took hand-crafted sub-agents for battling, navigation, and puzzle-solving, a curated knowledge base, and carefully sequenced objectives. 
+
+This raises a natural question: \emph{can an autonomous agent design its own harness?}
+
+We introduce \textbf{AutoEvolve}, a framework where an embodied agent adds to and refines its own scaffolding through gameplay experience. Given only a minimal interface to the environment (frame observations and button inputs), AutoEvolve bootstraps its own system prompt, creates specialized sub-agents, builds a skill library, and evolves all of these through in-context optimization over trajectory segments. Unlike prompt-evolution methods such as GEPA~\citep{agrawal2025gepa} that require full episodes and environment resets, AutoEvolve refines its harness mid-episode using partial trajectory windows, enabling continuous self-improvement without restarting.
+
+We first present results from the Gemini Plays Pok\'{e}mon (GPP) project from 2025, a series of long-running livestreamed experiments in which we iteratively evolved a harness with human-in-the-loop feedback over thousands of hours of gameplay. Over the course of GPP, the harness evolved from a minimal screenshot-and-buttons interface into a multi-agent system with spatial memory, pathfinding agents, and a critique loop. In later runs, we removed the human-designed agents and replaced them with meta-tools (\texttt{define\_agent}, \texttt{run\_code}, custom tool creation), allowing the model to construct its own sub-agents and reusable scripts during gameplay. This produced the first AI system to complete multiple Pok\'{e}mon RPGs: agents beat Pok\'{e}mon Blue in May 2025, defeated the Elite Four in Pok\'{e}mon Yellow Legacy on hard mode (with level caps and set battle style) in August 2025, and completed Pok\'{e}mon Crystal without losing a single battle in November 2025. In a head-to-head comparison on Crystal, Gemini 3 Pro used half the turns and 60\% fewer tokens than Gemini 2.5 Pro to reach the same milestones, spontaneously developing emergent strategies (multi-step battle plans, tool loophole exploitation, systematic map coverage) that the harness did not explicitly prompt for. AutoEvolve formalizes and automates this process: what GPP achieved through months of manual iteration, AutoEvolve reproduces within a single episode through reset-free evolutionary optimization.
+
+AutoEvolve fills a gap in the current landscape of autonomous agent systems. Coding harnesses like Claude Code and OpenHands operate in textual environments with programmatic feedback. General-purpose frameworks like Hermes Agent~\citep{nousresearch2026hermes} and OpenClaw offer persistent memory and skill generation but target assistant-style tasks, not embodied autonomy. Voyager~\citep{wang2023voyager} showed open-ended skill acquisition for embodied agents in Minecraft but relies on a programmatic API rather than raw perceptual input. To our knowledge, AutoEvolve is the first system that evolves a complete agentic harness for embodied environments from purely perceptual interaction and minimal text state.
+
+\seth{how to reconcile GPP with autoharness experiement envs?} We evaluate on two Pok\'{e}mon RPGs (Red and Emerald) to test generality across similar environments. We compare AutoEvolve against a minimalist baseline harness (frame + buttons only) and the human-designed PokeAgent expert harness across multiple frontier models. We also show that the evolved harness transfers to a smaller open-source model (Qwen 3.5 9B) through fine-tuning on frontier-model trajectories, evidence that the harness, not the model, is the primary bottleneck for embodied agent performance.
+
+We present the first AI system to complete multiple Pok\'{e}mon RPGs through human-in-the-loop harness evolution in the GPP project, showing that frontier models given meta-tools spontaneously construct their own sub-agents, reusable tools, and strategies during long-horizon gameplay. We formalize and automate this process with AutoEvolve, a reset-free evolutionary framework that constructs harnesses for embodied agents from a minimal environment interface. We evaluate across two Pok\'{e}mon RPGs and multiple frontier models, showing that AutoEvolve improves during gameplay and approaches the performance of human-engineered harnesses. As a proof of concept, we show the evolved harness transfers to an open-source model via fine-tuning.
+
+% joel's todo
+% first time appearing from GPP + some details in gemini 2.5 report (cite)
+% intro to this section should have context about the second blue run (limitations of first blue harness) --> model should make own tools and agents (expands agent's capability and allows model to learn with this new model construction (only visible in challenging game and long-running settings)
+% qual agent prompts (general)
+% quant elite 4 in yellow (attempts vs winrate, "model is learning decision tree in text"--complexity of tree as model evolves prompt, subagents "prepare (before battle)" and other agents), gemini 2.5?
+% qual crystal tool analysis + battle tower (prompt changing over time), evolution of tools: multi-input, pathfinder, check crystal blog post for more; num tools used over time; gemini 3?
+
+% narrative edits
+% add better claims for GPP work since this is first paper showing results from Joel
+% timeline for when things happened to show what was completed when for proper attribution
+% better connections in related work
+
+% delta between additional finetuning on harness
+% run flash-lite, flash, pro
+
+% notes 3/26:
+% explicit steps in autoevolve instead of implicit reflect in GPP
+% we have come up with improvements for the in-context learning harness on top of GPP
+% stay in very controlled settings and see if we can scientifically ablate setup
+
+% experiments we are looking for: "Meta-harness" "meta-scaffold"
+% red/emerald pokedex-->3rd gym: ablate tweaks to meta-evolution, skills, memory, subagents, planning
+% previous analysis for full runs from yellow and crystal
+% crystal battle tower: analyze most difficult setting (human framing for why its hard)
+% + potentially battle frontier
+% we tried open source model with + without finetuning on the harness
+% show end harness is generalizable to another model as well
+
+\kiran{kiran comments}
+%%%%% KIRAN COMMENTS %%%%%
+% Framing:
+% GPP --> self-improving agent
+% showed it's possible to have cool things happen in this framework
+% in this paper, we control the setting more scientifically and
+% identify tweaks to the basic meta-algorithm which improve performance
+% Tweak 1: specific reflection phase for in-context learning vs. critique
+% Tweak 2: ...
+% Tweak 3: ...
+% and then, gesture at finetuning 
+
+
+
+%% ---- framing for extra experiments
+% yellow legacy / crystal, cool stuff happened
+% now we did a scientific controlled study on improvements to meta-harness in Red/Emerald
+% we got results here
+% as a generalization test for the updated harness,
+% we went back to crystal difficult portion of game (battle tower)
+% and checked whether we saw improvements relative to baseline.
+% maybe later: battle frontier?
+
+% we also tried open source model w/ and w/out fine-tuning on harness
+
+
+

@@ -1,0 +1,80 @@
+\section{Experiments}\label{sec:experiments}
+
+We design experiments to test the following hypotheses about AutoEvolve's self-improving harness.
+
+\subsection{Experimental Setup}
+
+\paragraph{Environments.} We evaluate on two Pok\'{e}mon RPGs, Red and Emerald, to test generality across similar but distinct embodied environments. Both games require long-horizon planning, strategic battle decisions, navigation, and puzzle solving, but differ in map layout, game mechanics, and difficulty. We use the standardized milestone evaluation from PokeAgent~\citep{karten2025pokeagent}, measuring \textbf{steps to milestone} as the primary metric across sequential game objectives.
+
+\paragraph{Harness conditions.}
+\begin{itemize}
+    \item \textbf{Minimalist} ($\mathcal{H}_{\min}$): Frame observations and button inputs only, with a generic system prompt. No sub-agents, memory, skills, or domain tools.
+    \item \textbf{PokeAgent Expert} ($\mathcal{H}_{\text{expert}}$): The human-designed harness from~\citet{karten2025pokeagent}, with hand-crafted sub-agents, knowledge base, A* pathfinding, and curated objectives.
+    \item \textbf{AutoEvolve} ($\mathcal{H}_{\text{auto}}$): Starting from $\mathcal{H}_{\min}$, the agent evolves its harness during gameplay.
+\end{itemize}
+
+\paragraph{Models.} \seth{List frontier models used: e.g., Gemini 3 flash. Specify which are used for which experiments.}
+
+\subsection{H0: Qualitative Evidence from Gemini Plays Pok\'{e}mon}
+\seth{@Joel TODO: Please fill in qualitative results from GPP. Key observations to include:}
+Before evaluating AutoEvolve quantitatively, we present qualitative evidence from the Gemini Plays Pok\'{e}mon (GPP) project~\citep{zhang2025gpp} that motivated the framework. GPP ran frontier models on Pok\'{e}mon Blue, Yellow Legacy, and Crystal over thousands of hours of livestreamed gameplay with human-in-the-loop harness iteration. Across these runs, the harness evolved from a minimal interface (screenshot + buttons) to a multi-agent system, and in later runs the model was given meta-tools to construct its own sub-agents and reusable code. Notably, this approach enabled the agent to evolve a battle sub-agent that defeated the Yellow Legacy Elite Four on hard mode, and using the same style of evolved harness, the agent completed Pok\'{e}mon Crystal.
+
+\seth{@Joel TODO: (1) \textbf{Harness evolution arc}: Blue run used human-designed Pathfinder Agent and Boulder Puzzle Strategist. Yellow Legacy run removed these and gave the model \texttt{define\_agent}, \texttt{run\_code}, and custom tool creation. The model began building its own pathfinders, reusable scripts, and battle agents. This is the manual precursor to AutoEvolve's automated evolution.}
+
+\seth{@Joel TODO: (2) \textbf{Emergent tool creation}: In the Crystal run, Gemini 3 Pro discovered the \texttt{autopress\_buttons} loophole and created a \texttt{press\_sequence} tool to enable multitasking (tool calls + button presses in one turn). This was not prompted; the model identified a limitation and engineered around it.}
+
+\seth{@Joel TODO: (3) \textbf{Emergent strategies}: Operation Zombie Phoenix (multi-stage stalling strategy against Red using Smokescreen, Leftovers, Revive loops, PP tracking). Truth-table approach to the Goldenrod Underground switch puzzle. Systematic map exploration without explicit directives.}
+
+\seth{@Joel TODO: (4) \textbf{Model comparison}: Gemini 3 Pro vs 2.5 Pro head-to-head on Crystal. 3 Pro used half the turns and 60\% fewer tokens to the same milestones. 2.5 Pro got stuck in Olivine Lighthouse for 16k turns; 3 Pro cleared it through deliberate exploration. Include milestone comparison figure if available.}
+
+\seth{@Joel TODO: (5) \textbf{Failure modes that motivate AutoEvolve}: assumptions without verification (Goldenrod puzzle), brittle tool calls, limited parallel goal pursuit. These are the kinds of behaviors that reset-free evolution can address by rewriting prompts/agents after observing failures.}
+
+\subsection{H1: Self-Evolution Outperforms Minimalist Baseline}
+
+AutoEvolve should outperform the minimalist harness, showing that self-evolved scaffolding provides real capability gains over raw model interaction.
+
+\seth{Table: Steps-to-milestone for AutoEvolve vs.\ minimalist across both games and all frontier models.}
+
+\subsection{H2: AutoEvolve Approaches Human-Designed Harness}
+
+The self-evolved harness should approach the performance of the human-engineered PokeAgent harness, despite requiring no domain expertise to construct.
+
+\seth{Table: Steps-to-milestone for AutoEvolve vs.\ PokeAgent expert harness. How close does auto get to expert?}
+
+\subsection{H3: Progressive Self-Improvement During Gameplay}
+
+The harness should measurably improve over the course of a single episode. We track performance on comparable sub-tasks (e.g., navigation efficiency, battle win rate) at different points during evolution.
+
+\seth{Figure: Evolution curve showing harness quality improving over the course of a run. Annotate with evolution events (prompt rewrites, sub-agent creation).}
+
+\subsection{H4: Generalization Across Games}
+
+AutoEvolve should show consistent improvement patterns across both Pok\'{e}mon Red and Emerald, showing that the evolutionary mechanism is not overfit to a single environment.
+
+\seth{Table or figure: Side-by-side milestone progression for Red vs.\ Emerald. Discuss qualitative differences in evolved harness structure.}
+
+\subsection{H5: Evolved Harness Enables Efficient Re-Traversal}
+
+When the environment is reset and the agent replays with its evolved harness (but no memory of specific game events), it should navigate previously encountered segments faster than on the first pass.
+
+\seth{Table: Steps-to-milestone for first run vs.\ reset run with evolved harness.}
+
+\subsection{H6: Harness Transfer via Fine-Tuning}
+
+A smaller open-source model (Qwen 3.5 9B), fine-tuned on trajectories generated by a frontier model using the evolved AutoEvolve harness, should outperform the same base model with only the minimalist harness.
+
+\paragraph{Setup.} We generate training trajectories by running AutoEvolve with a frontier model, collecting (observation, harness state, action) tuples from successful gameplay segments. We fine-tune Qwen 3.5 9B via SFT on these trajectories, then evaluate with the frozen evolved harness.
+
+\seth{Table: Qwen base + minimalist vs.\ Qwen fine-tuned + evolved harness vs.\ frontier + evolved harness.}
+
+\subsection{Ablations}
+
+We ablate key components of AutoEvolve to isolate their contributions: \seth{tentative}
+
+\begin{itemize}
+    \item \textbf{No sub-agent creation}: Evolution rewrites the system prompt and skills but cannot create new sub-agents.
+    \item \textbf{No skill memory}: Sub-agents can be created but successful routines are not recorded for reuse.
+    \item \textbf{Reset-based evolution}: Standard GEPA-style evolution with full episode resets instead of mid-episode segment-based evolution, to isolate the contribution of reset-free operation.
+\end{itemize}
+
+\seth{Table: Ablation results showing contribution of each component. Reset-free vs.\ reset-based is the most important comparison.}

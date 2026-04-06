@@ -1,0 +1,284 @@
+\documentclass[11pt]{article}
+
+
+% Title and author information
+\usepackage[preprint]{colm2025_conference} % [submission] for review, [preprint] for preprint, [final] for camera-ready
+\usepackage[utf8]{inputenc}
+\usepackage{pdfpages}
+\usepackage{amsmath}
+\usepackage{times}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\newcommand{\red}[1]{{\color{red} #1}}
+\newcommand{\ignore}[1]{{}}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
+
+
+\title{Reset-Free Reflective Prompt Evolution for VLM Agents for Long-Context RPG Speedrunning}
+\author{Tersoo Upaa Jr\\Princeton University}
+\date{}
+
+\begin{document}
+% \includepdf[pages=-]{Thesis/figures/preamble.pdf}
+
+\maketitle
+
+%NOTE TO SELF: ADD PROMPT OPTIMIZATION FIGURE HERE
+% Seth Note: isi --> ize 
+%   _
+%  (_)
+% <___>
+%  | |______
+%  | |* * * )
+%  | | * * (_________
+%  | |* * * |* *|####)
+%  | | * * *| * |   (________________
+%  | |* * * |* *|####|##############|
+%  | | * * *| * |    |              |
+%  | |* * * |* *|####|##############|
+%  | |~~~~~~| * |    |              |
+%  | |######|* *|####|##############|
+%  | |      |~~~'    |              |
+%  | |######|########|##############|
+%  | |      |        |              |
+%  | |######|########|##############|
+%  | |~~~~~~|        |              |
+%  | |      |########|##############|
+%  | |      '~~~~~~~~|              |
+%  | |               |##############|
+%  | |               '~~~~~~~~~~~~~~~
+%  | |
+%  | |
+%  | |
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{Thesis/figures/rfrpe.png}
+    \caption{\textbf{Real-Time Adaptation via Self-Reflection.} The RFRPE framework enables the agent to interact with the Pokémon Emerald environment using a policy prompt $P_i$. Every $k$ steps, the recent trajectory $\Delta T_i$ is frozen and analyzed by a Judge Module ($f_{\text{judge}}$), yielding the natural-language critique $Q_i$. An Optimizer Module ($g_{\text{optimize}}$) then synthesizes a new policy $P_{i+1}$ to update the agent's behavior in real-time, without resetting the game state.} 
+    \label{fig:rfrpe}
+\end{figure}
+\begin{abstract}
+%NOTE TO SELF: REFACTOR NAME AWAY FROM ${X_X}_X$
+Advances in large language and vision–language models (LLMs/VLMs) have supported the capacity for embodied agents to generate executable policies that problem-solve and navigate in open-ended worlds. While these models have shown impressive capabilities in structured environments, they remain largely static during deployment, with much of their performance dependent on meticulous prompt-engineering, imposing a substantial engineering burden. We explore \textbf{R}eset-\textbf{F}ree \textbf{R}eflective \textbf{P}rompt \textbf{E}volution \textbf{(RFRPE)}, a framework that enables agents to dynamically improve their performance via prompt self-optimisation during embodied tasks. We focus on the challenging domain of the \textbf{Pokémon Emerald} video game. This expansive, partially observable world requires effective long-horizon planning, strategy adaptation, and knowledge integration to progress through a structured narrative. By allowing the agent to reflect on its trajectory during gameplay and refine its policy via prompt evolution, our approach aims to mimic how humans learn from experiences with problem-solving. We motivate Pokémon Emerald as a rich setting for embodied agents, scaffold strong baselines, and seek to demonstrate that self-adaptation via prompt-evolution can achieve performance on par with static agents that are equipped with human-engineered policies. % note to self: will eventually insert a brief summary of quantitative results here (if available). If so, refactor previous sentence (seek to demonstrate --> demonstrate)
+\end{abstract}
+
+\newpage
+
+\section{Introduction}
+General-purpose language agents has become more attractive through forward progress in the reasoning and perception capabilities of LLMs and VLMs in complex virtual and physical environments \citep{zheng2024steveeye}. These autonomous agents directly leverage language models (LMs) --- fitted with extensive world knowledge and latent reasoning ability --- as central controllers for the constituent memory, planning, and action modules that define widely adopted agent-architectures \citep{wang2024survey}. The emergence of these language agents has birthed a plethora of commercial and research applications, a prominent example of which is the setting of Pokémon. The main series of open-world \textbf{Role-Playing Games (RPGs)} features numerous recent projects building agents that leverage the reasoning prowess of frontier models \citep{claude2025twitch, gpt2025crystal, zhang2025gemini}. More recently, the \textbf{PokéAgent Challenge} at NeurIPS 2025 posed an open-source competition which used Pokémon Emerald as a testbed for decision-making research. The Pokémon Emerald speed-running task exemplifies a long-horizon, partially observable RPG environment that poses significant challenges for agentic systems. Agents must navigate a complex world, gather items, battle opponents, and plan under uncertainty while progressing quickly through the game's structured narrative.
+
+Naturally, this presents a very challenging problem-setting as agent performance becomes a function of a myriad of architectural decisions made during agent scaffolding. As we observe, the interaction between the agents' structured reasoning process --- encompassing the nuances of control-loop design --- as well as the underlying language model's sophistication and learned priors has a substantial impact on downstream task performance. That is to say, the internal biases of especially large frontier models, trained on vast corpora of internet data, carry over in the assumptions they expose in their reasoning trajectories, for better or for worse \citep{song2024grace, tan2024agentsynth, zhao2024llmjudgefailures}. When correct, they can greatly improve task success rate and speed; however, erroneous assumptions which lead to ineffectual actions present a major roadblock and underscores the need for centring adaptability as a core pillar of agent construction. % (Note to self: Not sure if this transition is clunky or if discussion of learned priors takes away from the cohesion of my report... I will likey refactor this section) 
+
+Conventional language agents deployed in such environments often employ a fixed directive-prompt, imposing a static policy at execution time that, as we observe, is often invariant to the agents' game-play performance. Such rigidity limits the ability of these agents to modify their problem-solving approach to handle unforeseen edge cases or overcome incorrect conclusions without human intervention via updates to their prompt. This manual approach to prompt engineering imposes a substantial engineering burden for complex environments like \emph{Pokémon Emerald} with many edge cases, especially as the number of agents used within these systems scale. Humans, by contrast, leverage iterative self-refinement to continuously reflect on past outcomes to their approach \citep{madaan2023selfrefine}. For example, a human player might learn from a failed gym battle and decide to train their existing Pokémon further, catch additional Pokémon, or explicitly heal their party before encountering a gym leader. 
+
+This approach, \emph{learning through doing}, emphasises the importance of accumulating experience over time and adapting one's strategies accordingly. It further informs the basis for existing works which seek to improve the performance of LMs and agents alike, by sampling the outputs of these systems to improve downstream task performance \citep{madaan2023selfrefine, agrawal2025gepa, zweiger2025seal}. Notably, the authors of the \textbf{Genetic-Pareto (GEPA)} method leverage the richness and interpretability of reasoning traces for prompt optimisation. They employ a genetic algorithm and Pareto-based candidate selection to enable sample-efficient prompt optimisation.
+
+We argue that enabling similar \textbf{self-adaptation} via prompt optimisation in language agents is critical for approaching human-level adaptability in long, complex games. Crucially, our framework differs from the GEPA method as it is entirely reset-free, making no assumption on the system's access to checkpointed state. Our agent begins with an initial prompt (policy) $P_0$ that encapsulates minimal, high-level instructions (Figure \ref{fig:base_prompt}). As the agent interacts with the game, the system collects a trajectory of states and actions, then periodically performs \emph{self-reflection}, using \emph{LLM-as-a-judge} to generate rich natural-language summaries $Q_i$ detailing important discoveries, successes and failures, to rate the agent's performance. These summaries are used to iteratively refine the corresponding prompt $P_i$ — producing an updated prompt $P_{i+1}$ that incorporates the agent's learned knowledge through interactions with its environment. By iteratively updating its policy in this way, the agent effectively learns in an \emph{online} fashion without policy gradient updates to the model’s weights \citep{zweiger2025seal} and without the need to reset to checkpointed states for replay \citep{agrawal2025gepa}. Our approach contributes a form of agentic meta-prompting, where the agent’s strategy improves via natural language edits to its inner monologue and tool-use directives.
+
+The PokéAgent Challenge provides an ideal benchmark for testing RFRPE. Meaningful story progress across the game’s long-duration objectives (e.g. resource acquisition, navigation, defeating gym leaders and the Elite Four) requires long-term coherence in the agent’s plans and precise game execution, while partial observability demands adaptive planning.  In the following sections, we detail Background in the domain of Pokémon and the PokéAgent Challenge, related work in the areas of prompt-tuning, self-adaptation, and the use of LLM agents in games and embodied environments. We then discuss the motivations and methodology for exploring RFRPE and discuss our initial findings across a number of baselines.
+
+
+\section{Background and Related Work}
+
+Pokémon is a globally popular media franchise whose video games provide rich environments for AI research. Pokémon Emerald, in particular, is an expansive RPG that tasks the player with exploration, item collection, turn-based battles, and narrative progression. Naturally, the game serves as an appealing testbed for embodied agents that need to strategically plan and effectively execute actions to make meaningful game progress. The recent PokéAgent Challenge \citep{karten2025challenge} formalised the early-game of Pokémon Emerald as a benchmark. Its \textbf{Speed-running}\footnote{The act of completing a game and/or its constituent milestones as fast as possible.} \textbf{Track}, defines a sequence of 26 milestones across 7 phases (Figure \ref{fig:7_phases}) (e.g. completing the tutorial, acquiring a starter, defeating the first gym leader) to measure agents on completion percentage, speed, and efficiency. The competition track highlights the difficulty of open-world learning, providing entrants with a harness and bare bones scaffold upon which to develop and test agents, drawing from prior open-source projects that test the capabilities of frontier models on Pokémon RPGs.
+
+\subsection{LLM Agents in Pokémon Games}
+\subsubsection{Battling Agents}
+Pokémon games have become a valuable benchmark for testing the capabilities of LLMs as reasoning agents within autonomous systems. Pokémon battles alone combine several properties of interest: a vast state space (thousands of entities with intricate mechanics), partial observability, and the need for strategic, long-horizon planning \citep{karten2025challenge}. Because game states and actions are easily represented in both text and image media, prior work has directly applied LLMs to this domain.
+
+By contrast, PokéChamp \citep{karten2025pokechamp} leveraged the latent capabilities of language models into a classical game-theoretic algorithm. The framework treats the LLM as a value-generating oracle within a minimax search framework, deferring the work of player action sampling, opponent modelling, and value function estimation to Llama 3.1:8b or GPT-4o—all without additional training \citep{karten2025pokechamp}. Remarkably, with GPT-4o as the reasoning model, PokéChamp attained superior performance: it consistently defeated the base LLM agents ($76\%$ win rate) and achieved an Elo rating on the order of the top $10\%$ of human players on the \textit{Pokémon Showdown} online ladder  \citep{karten2025pokechamp}. Even when powered by a less capable 8B Llama model, PokéChamp outscored base LLM agents, highlighting the potential that intelligently designed scaffolding around language models has in greatly boosting agent performance \citep{karten2025pokechamp}. 
+
+\subsubsection{Embodied Agents}
+
+As interesting a test bed for agent experimentation as they are, Pokémon battles expose just a subset of the broader gameplay environment within the RPG titles. Since 1996, with the release of the first titles in \textit{Pokémon Red} and \textit{Green}, these games have offered an expansive setting for players to navigate open-world environments, build teams, collect resources, and battle. As one might imagine, these games also provide a rich setting for the benchmarking of language models and agentic systems, testing a meaningfully diverse suite of skills from long-context planning, memory management, and \textbf{simultaneous localization and mapping (SLAM)}.    
+
+Given the marked increase in reasoning ability of language models over the past several years, many of the same players have turned their attention to the application of language agents within Pokémon RPG titles. The most popular projects, aptly suffixing the phrase "-PlaysPokemon" to their choice line of frontier model, have captured the attention of the open-source community. Notably, these experiments have also exposed the many limitations of current models. The public Twitch stream of Claude attempting to complete Pokémon Red showed that it struggled with basic strategy, vision, and obstacle navigation \citep{holt2025claude}. Similarly, an independent project titled “Gemini Plays Pokémon” used Google’s \textbf{Gemini-2.5-pro} to play through \textit{Pokémon Blue}. His endeavour highlighted how current models lack efficient game-time reasoning, as his system reportedly took 813 hours of cumulative gameplay, with Gemini-2.5-pro often entering repetitive loops rather than coming up with new strategies, especially as the context window grew beyond 100k tokens. These issues underscore that long-horizon autonomy and strategisation are still major pain points for LLM agents. 
+
+\subsection{Agentic Prompt Engineering}
+Early efforts to make language models effective decision-makers highlighted the need for specialised prompting techniques as a means of improving reasoning and action. For instance, \textbf{Chain-of-Thought (CoT)} prompting encourages LLMs to generate step-by-step reasoning, which can improve performance on complex tasks \citep{wei2022cot}. The \textbf{ReAct} framework \citep{yao2022react} pushed this idea further and was foundational to the architecture of modern language agents, combining CoT reasoning with explicit action directives, synergising the interaction between an agent's action and reasoning steps to great success. These approaches have laid the groundwork for how researchers and engineers alike scaffold agentic systems and approach the task of prompt-tuning. Recent work has gone further, surveying patterns in \textbf{Agentic AI Prompt Engineering}, conceptually mapping patterns in generative AI prompting like "Few-Shot Prompting" and "CoT" to their agentic analogues in "episodic memory" and "Goal–Plan–Execute", respectively \citep{schneider2025}. Viewed in their totality, these works highlight the nuances in the transition from LMs that largely interface with humans and textual data to language agents that must reason over, interact with, and adapt to dynamic environments.
+
+% clunky transition
+\subsection{Self-Adaptation}
+\subsubsection{Self-Refine}
+A straightforward case of self-improvement is to have models critique and refine their own outputs, as a human might iterate over a draft paper or piece of art. The \textbf{Self-Refine} technique formalised this idea \citep{madaan2023selfrefine}. The authors prompt OpenAI's GPT-3, GPT-4, and CODEX family of models to first produce an initial solution for a task, generate a feedback comment highlighting flaws or improvements, and finally revise their solution accordingly. This iterative loop can be repeated multiple times to elicit higher-quality results without any external human feedback or reprompting. In essence, self-refine uses the LLM as its own judge to improve static predictions, motivating our application of model-internal feedback loops as a means of boosting agent performance.
+
+\subsubsection{Self-Adapting LLMs}
+A recent line of work pushes this concept of self-adaptation into latent space, proposing \textbf{Self-Adapting LLMs (SEAL)} \citep{zweiger2025seal}. SEAL is a \textbf{Reinforcement Learning (RL)}-first approach, which enables LLMs to generate their own fine-tuning data and apply policy-gradient updates to themselves (“self-edits”) with this synthetic data in a way that improves task-performance. Over time, the model’s weights evolve to incorporate new knowledge. While SEAL may yield persistent improvements, it also requires careful training to decide when and how to apply updates, so as to avoid catastrophic forgetting. In contrast, our RFRPE agent leaves the base model weights unchanged and instead adapts via prompt optimisation. This inference-time strategy is both simpler to deploy and leaves the base model completely unchanged; the agent can refactor its behaviour for the express purpose of completing a specific task in the moment and still fall back to its original policy if needed.
+
+% Note to self: may need to better underscore why prompt optimisation is an interesting area of exploration. Furthermore, I mention 'One insight from these works is that an LLM can act not just as a decision-maker, but also as a critic of its own behaviour' but I really just mean self-refine and GEPA since GEP
+
+\subsubsection{Genetic-Pareto}
+In parallel, techniques for automatic prompt optimisation have emerged to improve prompts through trial and error. A notable example is the GEPA algorithm \citep{agrawal2025gepa}, which uses genetic evolution over prompt candidates guided by natural language reflections. This method contrasts RL techniques like SEAL, highlighting the difficulties inherent in the sparse-reward setting of long-horizon task-completion as well as their sample-inefficiency, especially in agentic settings with expensive tool-calls. GEPA runs an agent multiple times, collects its reasoning traces and outcomes, and has the model analyse these traces to propose prompt edits. The candidate prompts that lead to better performance (according to a well-defined evaluation metric) are kept for the next generation. This reflective evolution was shown to outperform RL-based fine-tuning across instruction following, question-answering, claim-verification, and privacy-conscious delegation benchmarks, demonstrating the power of prompt self-optimisation. Our RFRPE framework mirrors GEPA’s philosophy of learning from the agent’s own trajectories, though we apply it \emph{online} within a single continuous game rather than an offline evolutionary loop with candidate selection.
+
+
+\subsection{LLMs-as-a-judge}
+As language agents become more capable, effectively evaluating their performance across both quantitative and qualitative metrics poses a real challenge. An insight from these works is that an LLM can act not just as a decision-maker, but also as a \emph{critic} of its own behaviour. Leveraging a model to judge its past actions can provide richer guidance than sparse numeric rewards \citep{agrawal2025gepa}. For instance, GPT-4 has been used to grade the outputs of other models for dialogue and \textbf{Question-Answering (QA)} tasks, forming an automated proxy for human evaluation \citep{zheng2023mtbench}. Though convenient, this approach has been shown to introduce several problems during evaluation, including position bias (favouring one response by virtue of order) and verbosity bias (rewarding longer answers)\citep{zheng2023mtbench, zhao2024llmjudgefailures}. These caveats highlight the need for improved alignment with human-defined goals \citep{chen2024mllmjudge, zheng2023mtbench}, potentially combining the feedback of these "judge" modules with ground-truth performance metrics to ensure an agent’s self-improvements actually track the intended objectives.
+
+\section{Methodology}
+% NOTE: need explicit mathematical formalization
+
+
+% NOTE: The following paragraph is being ignored because it is an awkward transition between the end of the related works section and the methodology, which should
+On the whole, the community is converging on a multi-pronged strategy to advance agentic AI: (1) develop better architectures and prompts for multi-step reasoning, (2) enable learning from experience (through self-feedback, on-the-fly fine-tuning, or cross-episode memory like knowledge graphs \citep{anokhin2024arigraph}), (3) integrate improved multi-modal perception and action (vision, code execution, robotics, etc., as seen in works like Voyager \citep{wang2023voyager} and Steve-Eye \citep{zheng2024steveeye}), and (4) establish robust evaluation frameworks (combining human and AI feedback to judge agent performance, as in MT-Bench \citep{zheng2023mtbench}). The contributions of this work largely centre on the first two: in this section, we introduce our basic agent scaffold as well as our method for extending our agent with the ability to learn from experience.
+
+\subsection{Baseline Agent Scaffold}
+% Note: modify this section as basic scaffold changes, flesh out for final report
+We built a modular \textbf{Model Context Protocol (MCP)} agent for Pokémon Emerald that cleanly separates high-level planning (i.e. functions for objective creation and making reads/writes to a central knowledge base) from the low-level action execution sequences necessary for movement and interaction. In this capacity, we expose several tools for the underlying VLM---with native function-calling support---to use (Figure \ref{fig:agent_schema}). The agent interacts with the game environment by leveraging the PokéAgent Speed-running Track's harness, receiving observations (e.g, raw images, structured state text derived from both the \textbf{Read-Only Memory (ROM)} as well as Porymap: a Pokémon Emerald decompilation project \citep{huderlem2025porymap}). Our agent outputs actions as tool calls made via HTTP requests to the server hosting an instance of the Pokémon Emerald game execution. Beyond the \textbf{Primary Agent Loop}, several functions like add\_knowledge() or get\_knowledge\_summary() interact with an external, persistent \textbf{Knowledge Base} that the agent can append discoveries to (e.g, defeating a gym leader, acquiring a starter). Similarly, the create\_direct\_objective() and complete\_direct\_objective() interact with the \textbf{Direct Objective System}, which defines a sequence of high-level objectives that are either autonomously created by the agent (during live execution or at the beginning of a run) or human-crafted in an offline fashion. These functions do not interact with the game-state but modify the nature of the information that the agent has access to through its prompt, at each step, by virtue of how they affect the composition of the prompt at successive steps. 
+
+% Note to self: Add detail around state-formatter, pathfinding module, Vision-only mode?
+
+% Retrospective Paper vs. COLM
+    % Retrospective is a combination of a competition/benchmark paper
+    % COLM is more for the prompt-evolution setup
+
+% Improve figure: too much text... need to emphasise our provision of structure, not explicitly providing.
+% Make sure we add some more points about our architecture. right now we have + justification: 
+    % Objectives (up front vs as-we-go)
+        % want to change this structure to diversify the set of the objectives (story (sequential), teambuilding (sequential), miscellaneous [on the fly])... can always have 3 at a time
+    
+    % Multi-Agent Scaffolding
+        % Reflecting Agent
+        % Battling Agent
+        % (Voyager) General sub-agents
+
+    % Knowledge-Base
+        % Notes for tracking progress
+
+    % Tools
+        % Map
+        % Navigate_to()
+        % Summary/Compation Tool (new)
+    
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Thesis/figures/agent_schema.png}
+    \caption{\textbf{High-level architecture of our basic agent.} The primary loop (left) composes a prompt (mid) with constituent information from the game-state, like a textual map with object and non-playable character (NPC) coordinates, a system prompt exposing the available tool definitions (right), the \textbf{Base Prompt}, which is either a human-engineered textual policy encoding agent behaviour or an agent-generated policy that evolves with prompt optimization. The current objective and the visual frame (240x160 RGB image) are also provided to the VLM, though the image data is explicitly passed at call-time.} %Note to self: Refactor this image so the visual frame isn't in the prompt section. Also, potentially change the name of the 'base prompt.'
+    \label{fig:agent_schema}
+\end{figure}
+
+\subsection{Prompt Optimization Mechanism}
+% NOTE TO SELF: \ignore{Can add this analysis in later sections. Take the simple case of defeating the second gym-leader "Brawly", in "Dewford Town.", for instance: \_\_\_ (describe) \_\_\_.}
+Even with a strongly tuned initial \textbf{Base Prompt,} a static agent can struggles with progress in Pokémon Emerald as the inability to effectively adapt can lead to repetitive looping behaviour \citep{zhang2025gemini}. This presents a challenging obstacle as making progress in these scenarios often becomes a game of chance.  We therefore implement RFRPE, our mechanism for reset-free reflective prompt evolution that empowers the agent to \textbf{learn from its trials}, improving its performance over multiple episodes by explicitly updating its policy to overcome roadblocks in its problem-solving approach. 
+
+\paragraph{Prompt Evolution Algorithm.} The agent’s game-execution proceeds in iterative cycles of regular gameplay, interupted by self-reflection. Let $P_i$ denote the \textbf{Policy Prompt} used by the agent in the $i$-th episode. At initialisation, $P_0$ contains the agent’s minimal set of instructions that encourages the "Goal-Plan-Execute" Agentic AI pattern \cite{schneider2025} and defines its role as an "expert navigator and battle strategist" (Figure \ref{fig:base_prompt}). As the agent plays the game, we append to the ongoing \textbf{trajectory} $T_{i-1}$ the contents of each \textbf{step} $S_i$—including the tool-call, agent reasoning, and the full prompt with game state, objective, and history information—producing the updated trajectory $T_i$. Every $k$ steps, we trigger a reflection phase by extracting the most recent segment of gameplay, denoted by the interval $\Delta T_i = \{S_{i-k+1}, ..., S_i\}$, along with the current prompt $P_i$.
+
+This segment is passed to a \textbf{judge module}, $f_{\text{judge}}$, which produces an evaluation summary:
+\[
+Q_i = f_{\text{judge}}(\Delta T_i,\; P_i),
+\]
+where $Q_i$ is a structured natural-language critique assessing the agent’s recent behaviour, including strengths, failures, and suggestions for improvement.
+
+We then invoke a final \textbf{optimisation module}, $g_{\text{optimise}}$, to generate the next policy prompt by incorporating the judge’s feedback:
+\[
+P_{i+1} = g_{\text{optimize}}(P_i,\; Q_i).
+\]
+% NOTE to SELF: may need to change this formulation (including some condition over which we trigger this algorithm (every k steps vs. exposing this as a tool call that only works after k steps have passed given how expensive this process is (trajectories are a lot of tokens to process... involves 3 calls (one from the base agent, one from the judge, another from the optimizer).
+This update mechanism is entirely model-driven and prompt-based, allowing for flexible redefinition of the agent’s behaviour without modifying model weights. The precise structure of $P_{i+1}$ may involve deletions, reweighting, rewriting, or extension of prior instructions, depending on the feedback and the optimiser’s design. For practical purposes, we constrain the maximum number of tokens for all $P_i$.
+
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{Thesis/figures/7_phases.png}
+    \caption{\textbf{7 phases of the PokéAgent Challenge Speedrunning Track.} These phases are broken down across the 26 constituent milestones, tracking distinct events that can be inferred from ground-truth game data like location, inventory, or cut-scene.} 
+    \label{fig:7_phases}
+\end{figure}
+
+\subsection{Evaluation Setup}
+The evaluation for our self-adapting agent is based on the speed-running track of the \textbf{PokéAgent Challenge}, which encapsulates the early-game of Pokémon Emerald as a series of 26 milestones over seven high-level phases (Figure \ref{fig:7_phases}). Our experiments are structured to answer two primary questions:
+\begin{enumerate}
+    \item How do the various design choices of our base agent (model size, input modality, available tools) affect overall success? 
+    \item Does our mechanism for prompt optimisation notably effect the agent’s performance on this long-horizon task?
+\end{enumerate}
+To this end, we conduct a set of ablation studies and measure performance along multiple metrics.
+
+% NOTE to SELF: need a FIGURE (table) detailing the different conditions/ablations we test over
+\subsubsection{Conditions and Ablations} 
+
+\paragraph{Model:} Here, we compare Gemini 2.5 Flash, Gemini 2.5 Pro, and Gemini 3 Pro to study the implications of using progressively stronger reasoning models on performance. 
+
+%NOTE to SELF: state input will likely change with transition to TOON
+\paragraph{State Input:} We evaluate \textbf{structured map vs vision-only} inputs. In the structured mode, the agent receives mapping data including its exact location, the exact locations of various objects and NPCs, as well as a textual ASCII map of its environment; in vision-only mode, it must rely solely on its image-based observation for localisation and mapping. This ablation reveals how robust our agent is to the exclusion of this privileged information. 
+
+\paragraph{Objective Autonomy:} Increasing the agent’s autonomy in setting objectives is a key step towards generalisation. In one setting, the agent is given a fixed sequence of milestones from start to completion. In another, the agent must explicitly reason over goal-setting through \textbf{autonomous objective creation} – here it must understand its accomplishments, properly identify what stage of the storyline it is at, and create the next set of objectives it must complete to make progress. This tests the agent’s ability to reason over various sources of information, such as its knowledge base, visual frame, and game state, to effectively plan without explicit guidance. 
+
+\paragraph{Reflection Frequency:} We ablate the reflection interval $k$, the number of steps between each invocation of our prompt optimisation module, to gauge the impact of varying the frequency of prompt evolution. 
+
+\paragraph{Reflection Trigger Mode:} Finally, we also compare this simple heuristic for optimization to an agent-triggered reflection mode. In this agent-triggered mode, the reflection tool is exposed as a tool call, available for the agent to call when needed. This helps us evaluate the extent to which agents can understand \textit{when} they need help, and whether on-demand reflection yields better outcomes than a fixed schedule, especially given the computational costs of reflection.
+
+\subsubsection{Metrics} For each experiment, we use three primary metrics to quantify performance:
+
+\begin{enumerate}
+    \item \textbf{Milestone Completion.} The percentage of milestones that the agent completes serves as a progress score.
+    \item \textbf{Steps per Milestone:} The number of game actions the agent takes to achieve each milestone. This serves as our primary efficiency metric.
+    \item \textbf{Wall-Clock Time.} The real elapsed time taken to reach each milestone and/or finish the run. \ignore{Using a larger model or doing frequent reflections may slow down decision-making, resulting in more real-time per milestone even if the in-game steps are optimised.} All experiments are run with a fixed game speed to ensure fair wall-clock comparisons.
+    \item \textbf{Token Usage.} We track total token usage over time as a proxy for computational overhead.
+\end{enumerate}
+
+% Note to self: will likely need to embed qualitative analysis in the discussion parts after quantitative results, which we need to flesh out via experimentation.
+
+\section{Initial Findings}
+
+We have currently tested three baseline agent configurations, comparing their step efficiency across game phases. The baselines were: \textbf{Gemini 2.5 Flash (Auto)} – using the smallest Gemini 2.5 model with autonomous objective generation; \textbf{Gemini 3 Pro (Auto)} – using the new Gemini 3 Pro model with autonomous objective generation; and \textbf{Gemini 3 Pro (Upfront)} – using Gemini 3 Pro with a fully pre-defined objective sequence derived from an expert game walkthrough. Figure~\ref{fig:baseline_data} compares the progression of milestone completion by cumulative steps for all three agents as well as the number of steps required in each phase for each baseline.
+
+As expected from the differences in reasoning capability, the Gemini 2.5 Flash agent required substantially more steps to complete each phase than the Gemini 3 Pro agents. By Phase~5, for example, the Gemini 2.5 Flash baseline had accumulated almost twice as many steps (1251) as the best performing Gemini 3.0 Pro baseline (Figure~\ref{fig:baseline_data}). This trend is clearly reflected in the per-phase breakdown. Note that the run using Gemini 2.5 Flash currently has not reached Phases~6 or~7, so these data points are absent in Figures~\ref{fig:baseline_data}.
+
+Between the two Gemini 3 Pro configurations, performance is similar through early and mid-game phases. However, by phase 6, a notable divergence emerges which holds for the rest of the execution and is exacerbated once the Gemini 3 Pro (Upfront) agent reaches "Rustboro City"  (Figure~\ref{fig:baseline_data}). This outcome was somewhat surprising, since one might expect a well-crafted upfront plan to be optimal. We hypothesise that the autonomous mode’s on-the-fly objective generation provided more context-aware and detailed guidance in this phase involving the completion of the first gym, culminating in a final battle with "Roxanne."
+
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\textwidth]{Thesis/figures/baselines.pdf}
+    
+    \caption{\textbf{Baseline comparison across three agent configurations.} Gemini 2.5 Flash (Auto) is shown in blue, Gemini 3.0 Pro (Auto) is shown in orange, and Gemini 3.0 Pro (Upfront) is shown in green. \textbf{(Left)} Milestone progression showing cumulative steps reached by each baseline across the 26 milestones in the PokéAgent Challenge Speedrunning Track. Gemini 2.5 Flash (Auto) is truncated after Petalburg Woods due to incomplete data. \textbf{(Right)} Incremental steps required to complete each of the 6 phases (Phases 2-7) for each baseline configuration. Overall, the Gemini 3.0 Pro model shows much stronger task-efficiency, with the autonomous configuration showcasing the best performance.}
+    \label{fig:baseline_data}
+\end{figure}
+\section{Discussion}
+
+Our initial findings point to several directions for continued work. First, we must finalise the agent scaffold. A major planned improvement is in how game state (especially maps and objects) is presented to the model. Currently, we supply map information as both a 2D textual ASCII grid plus structured JSON data concerning object and NPC locations, token-heavy format. We plan to adopt the \textbf{Token-Oriented Object Notation (TOON)} format to present the same map and state data in a far more compact, structured form that the VLM can more intuitively reason over. TOON will convey the necessary information with significantly fewer tokens, reducing prompt length and improving the efficiency of context usage. Additionally, we will fully flesh out the entire suite of ablations and experiments on RFRPE as specified by the methodology. Finally, we also highlight that \textbf{run-to-run variance} can complicate result interpretation. Stochastic elements in the game and in the LLM's behavior mean that identical agent settings may yield very different outcomes on different runs. We will mitigate this by conducting multiple trials for each condition and applying statistical analysis to focus on reliable trends rather than outlier runs.
+
+\newpage
+
+
+\ignore{>>> Notes: The following section will recenter this works contribution, especially in light of the 4 prongs brought up before. Our contributions in this work are mostly along (1) and (2).
+
+>>> In this section we proceed in .... moves:
+A. Detailing our scaffold, with a figure
+- The baseline scaffold we set up in the autonomous CLI agent makes several intentional design decisions in its architecture (knowledge base, tool-calling to abstract navigation, direct objective and creation system to isolate the outer loop of planning and better structure the model's behaviour)
+
+B. Detailing the prompt optimisation Schema and how it fits in with the above scaffold (refer to figure). Go into the mathematical formalisation here as a subsection.
+
+C. Defining an exhaustive set of experiments/ablations to run to gain the appropriate signal to engage in data-driven analysis of how our prompt optimisation fairs against baselines and more broadly.
+- Roughly, experiments will be conducted over:
+    - model ability (Gemini 2.5 flash, 2.5 pro, 3.0 pro)
+    - Generality (decreasing the amount of state information we provide (i.e no textual map, so the agent only relies on vision for SLAM).
+    - Pre-defined sequence of objectives (generated all at once by model vs autonomous objective creation 3 at a time)
+
+- Most importantly, we study the effect of our prompt optimisation framework in these settings!:
+    - Ablate over 'k' (# of steps before prompt optimisation)
+    - Optionally expose prompt optimisation as a tool call to put that choice back in the hands of the agent.
+    - quantitative metrics of model performance:
+        - Tentatively: based on the PokeAgent Track 2 milestones
+        - graphs that track milestone completion percentage, speed, and number of steps taken (26 milestones broken down into seven phases. Let's describe what they entail here as a figure you can refer to.
+
+     - Behavioural analysis of agent performance across different milestones and across different experiments. Crucially, also describe the differences between our best baselines and the prompt-evolution baselines and note differences in performance. Here we will refer to appendices in the appendix where we expose example trajectories across reasoning and action steps across several different experiments. This will give additional insight into the inner monologue of the agent.
+}
+
+\bibliographystyle{colm2025_conference}
+\bibliography{references}
+\newpage
+
+\appendix
+
+
+\section{Prompts}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=1\textwidth]{Thesis/figures/base_prompt.png}
+    \caption{\textbf{Example Base Prompt provided to the VLM upon initialisation.} This prompt is distinct from the fixed system prompt that persists with the VLM responsible for function-calling. The prompt is intentionally sparse, only defining the role of the agent as well as the agent's decision-making framework to be fleshed out.} 
+    \label{fig:base_prompt}
+\end{figure}
+
+\end{document}

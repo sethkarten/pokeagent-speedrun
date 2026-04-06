@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 1000 430" width="1000" height="430">
+  <defs>
+    <style>
+      .ct { font-family:'Helvetica Neue','Helvetica',Arial,sans-serif; font-weight:700; font-size:14px; letter-spacing:0.6px; text-transform:uppercase; }
+      .h  { font-family:'Helvetica Neue','Helvetica',Arial,sans-serif; font-weight:600; font-size:13px; }
+      .b  { font-family:'Helvetica Neue','Helvetica',Arial,sans-serif; font-weight:400; font-size:12px; }
+      .m  { font-family:'Monaco','Consolas',monospace; font-weight:500; font-size:12px; }
+      .p  { font-family:'Helvetica Neue','Helvetica',Arial,sans-serif; font-weight:600; font-size:11.5px; }
+      .al { font-family:'Helvetica Neue','Helvetica',Arial,sans-serif; font-weight:600; font-size:11.5px; }
+      .n  { font-family:'Helvetica Neue','Helvetica',Arial,sans-serif; font-weight:400; font-size:11.5px; font-style:italic; }
+      .lp { font-family:'Helvetica Neue','Helvetica',Arial,sans-serif; font-weight:600; font-size:12px; }
+    </style>
+    <marker id="ah" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto">
+      <polygon points="0 0,8 3.5,0 7" fill="#718096"/>
+    </marker>
+    <clipPath id="cb"><rect width="138" height="78" rx="4"/></clipPath>
+    <clipPath id="cd"><rect width="138" height="52" rx="4"/></clipPath>
+  </defs>
+
+  <rect width="1000" height="430" fill="white"/>
+
+  <!-- Column panels (per-column heights) -->
+  <rect x="38" y="40" width="160" height="270" rx="8" fill="#FBEAEB" opacity="0.45"/>
+  <rect x="224" y="40" width="274" height="256" rx="8" fill="#EDF1F8" opacity="0.45"/>
+  <rect x="524" y="40" width="148" height="362" rx="8" fill="#EFECF6" opacity="0.45"/>
+  <rect x="698" y="40" width="274" height="248" rx="8" fill="#F2F3F6" opacity="0.6"/>
+
+  <!-- Column titles -->
+  <text x="118" y="28" class="ct" fill="#C44E52" text-anchor="middle">Game Env.</text>
+  <text x="361" y="28" class="ct" fill="#4C72B0" text-anchor="middle">Agent Core</text>
+  <text x="598" y="28" class="ct" fill="#8172B3" text-anchor="middle">MCP Tools</text>
+  <text x="835" y="28" class="ct" fill="#718096" text-anchor="middle">Modules</text>
+
+
+  <!-- ===== COLUMN 1: Game Environment ===== -->
+
+  <!-- Battle screenshot -->
+  <g transform="translate(49,48)">
+    <rect width="138" height="78" rx="4" fill="#111" stroke="#E2E8F0" stroke-width="0.8"/>
+    <image href="data:image/png;base64,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" width="138" height="78" clip-path="url(#cb)" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="3" y="3" width="78" height="16" rx="2.5" fill="#2D3748" opacity="0.75"/>
+    <text x="8" y="15" class="p" fill="white">Game Frame</text>
+  </g>
+
+  <!-- Dialog screenshot -->
+  <g transform="translate(49,134)">
+    <rect width="138" height="52" rx="4" fill="#111" stroke="#E2E8F0" stroke-width="0.8"/>
+    <image href="data:image/png;base64,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" width="138" height="52" clip-path="url(#cd)" preserveAspectRatio="xMidYMid slice"/>
+    <rect x="3" y="3" width="68" height="16" rx="2.5" fill="#2D3748" opacity="0.75"/>
+    <text x="8" y="15" class="p" fill="white">Overworld</text>
+  </g>
+
+  <!-- Parsed State -->
+  <g transform="translate(49,194)">
+    <rect width="138" height="50" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="42" rx="1.5" fill="#C44E52"/>
+    <text x="10" y="16" class="h" fill="#C44E52">Parsed State</text>
+    <text x="10" y="31" class="b" fill="#2D3748">Position, map, ASCII</text>
+    <text x="10" y="44" class="b" fill="#2D3748">Party, HP, status</text>
+  </g>
+
+  <!-- Button Input -->
+  <g transform="translate(49,254)">
+    <rect width="138" height="46" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="38" rx="1.5" fill="#C44E52"/>
+    <text x="10" y="16" class="h" fill="#C44E52">Button Input</text>
+    <text x="10" y="31" class="m" fill="#2D3748">A B Start Select</text>
+    <text x="10" y="43" class="m" fill="#2D3748">Up Down Left Right</text>
+  </g>
+
+
+  <!-- ===== COLUMN 2: Agent Core ===== -->
+
+  <!-- Prompt Builder -->
+  <g transform="translate(234,48)">
+    <rect width="254" height="56" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="48" rx="1.5" fill="#4C72B0"/>
+    <text x="12" y="16" class="h" fill="#4C72B0">Prompt Builder</text>
+    <rect x="10" y="24" width="50" height="16" rx="3" fill="#4C72B0" opacity="0.08" stroke="#4C72B0" stroke-width="0.5"/>
+    <text x="35" y="35" class="p" fill="#4C72B0" text-anchor="middle">System</text>
+    <rect x="64" y="24" width="46" height="16" rx="3" fill="#C44E52" opacity="0.08" stroke="#C44E52" stroke-width="0.5"/>
+    <text x="87" y="35" class="p" fill="#C44E52" text-anchor="middle">State</text>
+    <rect x="114" y="24" width="48" height="16" rx="3" fill="#DD8452" opacity="0.08" stroke="#DD8452" stroke-width="0.5"/>
+    <text x="138" y="35" class="p" fill="#DD8452" text-anchor="middle">Goals</text>
+    <rect x="166" y="24" width="52" height="16" rx="3" fill="#718096" opacity="0.08" stroke="#718096" stroke-width="0.5"/>
+    <text x="192" y="35" class="p" fill="#718096" text-anchor="middle">History</text>
+    <rect x="222" y="24" width="32" height="16" rx="3" fill="#55A868" opacity="0.08" stroke="#55A868" stroke-width="0.5"/>
+    <text x="238" y="35" class="p" fill="#55A868" text-anchor="middle">KB</text>
+    <text x="12" y="50" class="b" fill="#718096">Combines state, context, objectives into prompt</text>
+  </g>
+
+  <!-- Arrow down -->
+  <line x1="361" y1="106" x2="361" y2="114" stroke="#718096" stroke-width="1" marker-end="url(#ah)"/>
+
+  <!-- VLM Backbone (clean inner diagram) -->
+  <g transform="translate(234,118)">
+    <rect width="254" height="64" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="56" rx="1.5" fill="#4C72B0"/>
+    <text x="12" y="16" class="h" fill="#4C72B0">Vision-Language Model</text>
+
+    <!-- Input: Screen -->
+    <rect x="10" y="26" width="44" height="28" rx="3" fill="#FBEAEB" stroke="#C44E52" stroke-width="0.6"/>
+    <rect x="15" y="30" width="34" height="14" rx="2" fill="#2D3748" opacity="0.1"/>
+    <text x="32" y="50" class="p" fill="#C44E52" text-anchor="middle">Screen</text>
+
+    <!-- Input: Text -->
+    <rect x="60" y="26" width="44" height="28" rx="3" fill="#EDF1F8" stroke="#4C72B0" stroke-width="0.6"/>
+    <text x="82" y="44" class="p" fill="#4C72B0" text-anchor="middle">Text</text>
+
+    <!-- Arrow -->
+    <line x1="108" y1="40" x2="126" y2="40" stroke="#718096" stroke-width="1" marker-end="url(#ah)"/>
+
+    <!-- VLM box (prominent) -->
+    <rect x="130" y="24" width="74" height="34" rx="6" fill="#4C72B0" opacity="0.12" stroke="#4C72B0" stroke-width="1.3"/>
+    <text x="167" y="46" class="h" fill="#4C72B0" text-anchor="middle">Any VLM</text>
+
+    <!-- Arrow -->
+    <line x1="208" y1="40" x2="224" y2="40" stroke="#718096" stroke-width="1" marker-end="url(#ah)"/>
+
+    <!-- Output -->
+    <rect x="228" y="24" width="26" height="34" rx="3" fill="#EFECF6" stroke="#8172B3" stroke-width="0.6"/>
+    <text x="241" y="38" class="p" fill="#8172B3" text-anchor="middle">Tool</text>
+    <text x="241" y="50" class="p" fill="#8172B3" text-anchor="middle">Call</text>
+  </g>
+
+  <!-- Arrow down (longer gap) -->
+  <line x1="361" y1="184" x2="361" y2="196" stroke="#718096" stroke-width="1" marker-end="url(#ah)"/>
+
+  <!-- Context Manager + Stuck Detection -->
+  <g transform="translate(234,200)">
+    <rect width="125" height="48" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="40" rx="1.5" fill="#4C72B0"/>
+    <text x="10" y="15" class="h" fill="#4C72B0">Context Manager</text>
+    <text x="10" y="29" class="b" fill="#2D3748">100K char compaction</text>
+    <text x="10" y="42" class="b" fill="#718096">Keep responses, trim state</text>
+  </g>
+  <g transform="translate(367,200)">
+    <rect width="125" height="48" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="40" rx="1.5" fill="#C44E52"/>
+    <text x="10" y="15" class="h" fill="#C44E52">Stuck Detection</text>
+    <text x="10" y="29" class="b" fill="#2D3748">Monitor recent coords</text>
+    <text x="10" y="42" class="b" fill="#718096">Auto-warn, try variance</text>
+  </g>
+
+  <!-- Agent Loop bar (prominent: higher opacity) -->
+  <g transform="translate(234,260)">
+    <rect width="254" height="24" rx="12" fill="#4C72B0" opacity="0.15" stroke="#4C72B0" stroke-width="1" stroke-opacity="0.6"/>
+    <text x="127" y="17" class="lp" fill="#4C72B0" text-anchor="middle">observe -- reason -- tool call -- execute -- repeat</text>
+  </g>
+
+
+  <!-- ===== COLUMN 3: MCP Tools ===== -->
+
+  <g transform="translate(533,48)">
+    <rect width="130" height="94" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="3" width="3" height="88" rx="1.5" fill="#8172B3"/>
+    <text x="10" y="16" class="h" fill="#8172B3">Game Control</text>
+    <rect x="8" y="22" width="111.5" height="18" rx="3" fill="#8172B3" opacity="0.07" stroke="#8172B3" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="63.0" y="36" class="m" fill="#8172B3" text-anchor="middle">press_buttons</text>
+    <rect x="8" y="44" width="96.5" height="18" rx="3" fill="#8172B3" opacity="0.07" stroke="#8172B3" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="56.0" y="58" class="m" fill="#8172B3" text-anchor="middle">navigate_to</text>
+    <rect x="8" y="66" width="116" height="18" rx="3" fill="#8172B3" opacity="0.07" stroke="#8172B3" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="66" y="80" class="m" fill="#8172B3" text-anchor="middle">get_game_state</text>
+  </g>
+
+  <g transform="translate(533,138)">
+    <rect width="130" height="94" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="3" width="3" height="88" rx="1.5" fill="#55A868"/>
+    <text x="10" y="16" class="h" fill="#55A868">Knowledge</text>
+    <rect x="8" y="22" width="111.5" height="18" rx="3" fill="#55A868" opacity="0.07" stroke="#55A868" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="63.0" y="36" class="m" fill="#55A868" text-anchor="middle">add_knowledge</text>
+    <rect x="8" y="44" width="116" height="18" rx="3" fill="#55A868" opacity="0.07" stroke="#55A868" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="66" y="58" class="m" fill="#55A868" text-anchor="middle">search_knowledge</text>
+    <rect x="8" y="66" width="96.5" height="18" rx="3" fill="#55A868" opacity="0.07" stroke="#55A868" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="56.0" y="80" class="m" fill="#55A868" text-anchor="middle">get_summary</text>
+  </g>
+
+  <g transform="translate(533,228)">
+    <rect width="130" height="116" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="3" width="3" height="110" rx="1.5" fill="#DD8452"/>
+    <text x="10" y="16" class="h" fill="#DD8452">Objectives</text>
+    <rect x="8" y="22" width="104.0" height="18" rx="3" fill="#DD8452" opacity="0.07" stroke="#DD8452" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="60.0" y="36" class="m" fill="#DD8452" text-anchor="middle">complete_obj</text>
+    <rect x="8" y="44" width="89.0" height="18" rx="3" fill="#DD8452" opacity="0.07" stroke="#DD8452" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="52.0" y="58" class="m" fill="#DD8452" text-anchor="middle">create_obj</text>
+    <rect x="8" y="66" width="66.5" height="18" rx="3" fill="#DD8452" opacity="0.07" stroke="#DD8452" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="41.0" y="80" class="m" fill="#DD8452" text-anchor="middle">reflect</text>
+    <rect x="8" y="88" width="89.0" height="18" rx="3" fill="#DD8452" opacity="0.07" stroke="#DD8452" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="52.0" y="102" class="m" fill="#DD8452" text-anchor="middle">gym_puzzle</text>
+  </g>
+
+  <g transform="translate(533,338)">
+    <rect width="130" height="50" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="3" width="3" height="44" rx="1.5" fill="#8172B3"/>
+    <text x="10" y="16" class="h" fill="#8172B3">Verify</text>
+    <rect x="8" y="22" width="116" height="18" rx="3" fill="#8172B3" opacity="0.07" stroke="#8172B3" stroke-width="0.5" stroke-opacity="0.4"/>
+    <text x="66" y="36" class="m" fill="#8172B3" text-anchor="middle">verify_completion</text>
+  </g>
+
+
+
+  <!-- ===== COLUMN 4: Supporting Modules ===== -->
+
+  <!-- Knowledge Base -->
+  <g transform="translate(708,48)">
+    <rect width="254" height="62" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="54" rx="1.5" fill="#55A868"/>
+    <text x="12" y="16" class="h" fill="#55A868">Knowledge Base</text>
+    <text x="12" y="31" class="b" fill="#2D3748">Persistent JSON, importance-weighted retrieval</text>
+    <text x="12" y="44" class="b" fill="#2D3748">Locations, NPCs, items, strategies</text>
+    <text x="12" y="57" class="b" fill="#718096">Survives across sessions</text>
+  </g>
+
+  <!-- Objective Manager -->
+  <g transform="translate(708,120)">
+    <rect width="254" height="74" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="66" rx="1.5" fill="#DD8452"/>
+    <text x="12" y="16" class="h" fill="#DD8452">Objective Manager</text>
+    <rect x="10" y="24" width="72" height="16" rx="3" fill="#DD8452" opacity="0.08" stroke="#DD8452" stroke-width="0.5"/>
+    <text x="46" y="35" class="p" fill="#DD8452" text-anchor="middle">Story</text>
+    <rect x="86" y="24" width="80" height="16" rx="3" fill="#C44E52" opacity="0.08" stroke="#C44E52" stroke-width="0.5"/>
+    <text x="126" y="35" class="p" fill="#C44E52" text-anchor="middle">Battling</text>
+    <rect x="170" y="24" width="86" height="16" rx="3" fill="#4C72B0" opacity="0.08" stroke="#4C72B0" stroke-width="0.5"/>
+    <text x="213" y="35" class="p" fill="#4C72B0" text-anchor="middle">Dynamics</text>
+    <text x="12" y="54" class="b" fill="#2D3748">Three parallel sequences for balanced progress</text>
+    <text x="12" y="67" class="b" fill="#718096">Milestones, team building, adaptive goals</text>
+  </g>
+
+  <!-- Self-Reflection -->
+  <g transform="translate(708,204)">
+    <rect width="254" height="52" rx="4" fill="white" stroke="#E2E8F0" stroke-width="0.8"/>
+    <rect x="0" y="4" width="3" height="44" rx="1.5" fill="#4C72B0"/>
+    <text x="12" y="16" class="h" fill="#4C72B0">Self-Reflection</text>
+    <text x="12" y="31" class="b" fill="#2D3748">Separate VLM analyzes stuck states</text>
+    <text x="12" y="44" class="b" fill="#718096">Compares against porymap ground truth</text>
+  </g>
+
+  <!-- Verification Agent (dashed border) -->
+  <g transform="translate(708,266)">
+    <rect width="254" height="52" rx="4" fill="white" stroke="#4C72B0" stroke-width="0.8" stroke-dasharray="4,2"/>
+    <rect x="0" y="4" width="3" height="44" rx="1.5" fill="#4C72B0"/>
+    <text x="12" y="16" class="h" fill="#4C72B0">Verification Agent</text>
+    <text x="12" y="31" class="b" fill="#2D3748">Independent VLM (no tools) validates completion</text>
+    <text x="12" y="44" class="b" fill="#718096">Prevents premature advancement</text>
+  </g>
+
+
+  <!-- ===== INTER-COLUMN ARROWS (all 1.5 stroke, rectilinear) ===== -->
+
+  <!-- Col1 -> Col2: frame + state (elbow: horizontal then up) -->
+  <path d="M 198,100 L 218,100 L 218,76 L 224,76"
+        stroke="#718096" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+  <text x="211" y="94" class="al" fill="#C44E52" text-anchor="middle">frame + state</text>
+
+  <!-- Col2 -> Col1: buttons (horizontal, left-pointing) -->
+  <line x1="224" y1="272" x2="198" y2="272" stroke="#718096" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="211" y="266" class="al" fill="#4C72B0" text-anchor="middle">buttons</text>
+
+  <!-- Col2 -> Col3: calls (horizontal at y=top+108) -->
+  <line x1="498" y1="148" x2="524" y2="148" stroke="#718096" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="511" y="142" class="al" fill="#8172B3" text-anchor="middle">calls</text>
+
+  <!-- Col3 -> Col2: results (horizontal at y=top+135, parallel) -->
+  <line x1="524" y1="175" x2="498" y2="175" stroke="#718096" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="511" y="188" class="al" fill="#8172B3" text-anchor="middle">results</text>
+
+  <!-- Col3 -> Col4: elbow connectors through vertical spine at gutter center -->
+  <!-- Game Control -> Knowledge Base -->
+  <path d="M 672,84 L 694,84 L 694,78 L 698,78"
+        stroke="#718096" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+  <text x="685" y="78" class="al" fill="#718096" text-anchor="middle">record</text>
+
+  <!-- Knowledge -> Objective Manager -->
+  <path d="M 672,170 L 694,170 L 694,154 L 698,154"
+        stroke="#718096" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+  <text x="685" y="164" class="al" fill="#718096" text-anchor="middle">update</text>
+
+  <!-- Objectives -> Self-Reflection -->
+  <path d="M 672,270 L 694,270 L 694,230 L 698,230"
+        stroke="#718096" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+  <text x="685" y="264" class="al" fill="#718096" text-anchor="middle">check</text>
+
+  <!-- Verify -> Verification Agent -->
+  <path d="M 672,360 L 694,360 L 694,292 L 698,292"
+        stroke="#718096" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+  <text x="685" y="330" class="al" fill="#718096" text-anchor="middle">confirm</text>
+
+  <!-- Feedback loop (bottom) -->
+  <path d="M 835,290
+           L 835,418
+           L 118,418
+           L 118,312"
+        stroke="#718096" stroke-width="1.3" fill="none" stroke-dasharray="6,3" marker-end="url(#ah)"/>
+  <rect x="459" y="411" width="92" height="16" rx="3" fill="white"/>
+  <text x="505" y="422" class="al" fill="#718096" text-anchor="middle">feedback loop</text>
+
+</svg>

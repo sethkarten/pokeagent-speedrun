@@ -1,0 +1,13 @@
+\section{Related Work}\label{sec:related_work}
+
+\subsection{Agentic Harnesses and Scaffolding}
+
+Agentic harnesses for coding (Claude Code~\citep{anthropic2025claudecode}, OpenHands~\citep{wang2024openhands}, OpenClaw~\citep{steinberger2025openclaw}) provide tool use, memory, and multi-agent coordination for software engineering tasks. Hermes Agent~\citep{nousresearch2026hermes} extends this to general assistant tasks with persistent memory and autonomous skill generation. All of these operate in \emph{textual} environments with structured feedback. \citet{karten2025pokeagent} showed that these same architectures achieve near-zero progress on embodied RPG tasks, even when backed by the same frontier models that succeed with domain-specific scaffolding. AutoEvolve targets this gap: a self-constructing harness for embodied environments operating from raw perceptual input.
+
+\subsection{Autonomous Agents in Games}
+
+Voyager~\citep{wang2023voyager} showed open-ended skill acquisition in Minecraft via an automatic curriculum and a growing code library, but relies on a programmatic API rather than raw perception. The PokeAgent Challenge~\citep{karten2025pokeagent} established standardized evaluation for long-horizon RPG gameplay with a hand-crafted expert harness. The Claude Plays Pok\'{e}mon~\citep{anthropic2025claudeplays} and Gemini Plays Pok\'{e}mon (GPP)~\citep{zhang2025gpp} projects demonstrated long-horizon RPG gameplay on public livestreams, with GPP progressively shifting from human-designed agents to model-created agents and tools over successive runs. AutoEvolve formalizes the self-improvement process observed in GPP into a reproducible, automated framework.
+
+\subsection{In-Context Learning and Prompt Evolution}
+
+Recent work formalizes in-context reinforcement learning (ICRL), showing LLMs can perform implicit policy improvement from in-context reward signals~\citep{song2025icrl, karten2025economist}. GEPA~\citep{agrawal2025gepa} and MIPROv2~\citep{opsahlong2024miprov2} apply prompt evolution to agentic settings but require complete episodes and environment resets between iterations. Recursive Language Models~\citep{zhang2025rlm} formalize LLMs that recursively invoke themselves over their context. AutoEvolve builds on these ideas but operates \emph{reset-free}, evolving its harness mid-episode using trajectory segments within a single continuous episode.

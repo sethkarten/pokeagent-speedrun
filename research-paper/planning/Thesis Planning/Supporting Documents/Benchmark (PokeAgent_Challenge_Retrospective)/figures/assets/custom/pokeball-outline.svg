@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Outer circle -->
+  <circle cx="128" cy="128" r="120" fill="none" stroke="#4A5568" stroke-width="6"/>
+
+  <!-- Center horizontal line -->
+  <line x1="8" y1="128" x2="92" y2="128" stroke="#4A5568" stroke-width="6"/>
+  <line x1="164" y1="128" x2="248" y2="128" stroke="#4A5568" stroke-width="6"/>
+
+  <!-- Center button outer -->
+  <circle cx="128" cy="128" r="36" fill="none" stroke="#4A5568" stroke-width="6"/>
+
+  <!-- Center button inner -->
+  <circle cx="128" cy="128" r="18" fill="none" stroke="#4A5568" stroke-width="4"/>
+</svg>

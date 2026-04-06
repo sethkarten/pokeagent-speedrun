@@ -1,0 +1,30 @@
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.nav
+*.snm
+*.vrb
+*.run.xml
+*-blx.bib
+
+# PDF output (compile on Overleaf)
+root.pdf
+
+# Editor files
+*.swp
+*.swo
+*~
+.DS_Store
+.env
+
+# AGENT-DOCS (not needed on Overleaf)
+AGENT-DOCS/

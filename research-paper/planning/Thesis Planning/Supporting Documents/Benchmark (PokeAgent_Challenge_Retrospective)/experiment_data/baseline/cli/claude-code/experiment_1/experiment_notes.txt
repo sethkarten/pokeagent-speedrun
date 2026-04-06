@@ -1,0 +1,2 @@
+experiment_group: “D”
+notes: "CLI agent metrics use substantially more tokens, this is because of context growing linearly up until compaction. The vast majority of these tokens are cheaper cached tokens."
