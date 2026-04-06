@@ -65,21 +65,4 @@ press_buttons(["UP", "UP", "RIGHT"], speed="normal", reasoning="Walking north th
 press_buttons(["WAIT"], speed="slow", reasoning="Waiting for NPC to finish moving")
 ```
 
----
-
-#### `navigate_to(x, y, variance, reason, consider_npcs, blocked_coords)`
-Automatically pathfind and move to a specific coordinate using A* algorithm.
-
-**Parameters:**
-- `x`: Target X coordinate
-- `y`: Target Y coordinate
-- `variance`: Path variance level ("none", "low", "medium", "high")
-- `reason`: Exact explanation of why you're pressing these buttons in one or two sentences.
-- `consider_npcs`: Whether to avoid NPCs (default: True)
-- `blocked_coords`: Additional coordinates to avoid, e.g., [[10, 11], [10, 12]]
-
-**Returns:** Success status, path information, buttons executed
-
-**Use this for:** Moving to specific locations efficiently. The pathfinder handles collision detection using A* navigation.
-
 
