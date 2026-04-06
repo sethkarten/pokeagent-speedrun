@@ -225,22 +225,6 @@ def start_server(args, run_id=None):
         return None
 
 
-def start_frame_server(port):
-    """Start the lightweight frame server for stream.html visualization"""
-    try:
-        frame_cmd = ["python", "-m", "server.frame_server", "--port", str(port+1)]
-        frame_process = subprocess.Popen(
-            frame_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        print(f"🖼️  Frame server started with PID {frame_process.pid}")
-        return frame_process
-    except Exception as e:
-        print(f"⚠️ Could not start frame server: {e}")
-        return None
-
-
 def start_custom_agent(agent_config, args):
     """Generic helper to start any custom benchmark agent.
 
@@ -502,8 +486,8 @@ def main():
     )
     
     server_process = None
-    frame_server_process = None
-    
+
+
     try:
         # Restore from backup if requested
         if args.backup_state:
@@ -552,9 +536,6 @@ def main():
 
             # Single-writer metrics: client should not write to cache
             os.environ["LLM_METRICS_WRITE_ENABLED"] = "false"
-            
-            # Also start frame server for web visualization
-            frame_server_process = start_frame_server(args.port)
         else:
             print("\n📋 Manual server mode - start server separately with:")
             print("   python -m server.app --port", args.port)
@@ -597,14 +578,6 @@ def main():
             except subprocess.TimeoutExpired:
                 print("   Force killing server...")
                 server_process.kill()
-        
-        if frame_server_process:
-            print("🖼️  Stopping frame server...")
-            frame_server_process.terminate()
-            try:
-                frame_server_process.wait(timeout=2)
-            except:
-                frame_server_process.kill()
         
         print("👋 Goodbye!")
 

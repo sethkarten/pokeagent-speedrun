@@ -5,8 +5,7 @@ The game server and MCP proxy run here. The design is headless: the emulator and
 ## Components
 
 - **`app.py`** — FastAPI game server. Runs the mGBA emulator, game loop, and state caching (100 ms for full state, 5 s for map data). Exposes REST endpoints: `/action`, `/state`, `/status`, `/screenshot`, `/save_state`, `/load_state`, `/checkpoint`, etc. WebSocket `/ws/frames` streams frames to the web UI. MCP tool endpoints under `/mcp/*` let external agents (e.g. Claude Code) interact with the game. **Ports**: game=8000, frame=8001, MCP=8002 (relevant for containerized CLI agent execution).
-- **`frame_server.py`** — Lightweight frame streaming for the web UI.
-- **`stream.html`** — Web UI for real-time gameplay (e.g. `http://localhost:8000/stream`).
+- **`stream.html`** — Web UI for real-time gameplay (e.g. `http://localhost:8000/stream`). Connects to `/ws/frames` on the main server for live updates (no separate frame server).
 - **`cli/pokemon_mcp_server.py`** — MCP proxy. Translates MCP tool calls (stdio) into HTTP requests to the game server. Used by `run_cli.py` for containerized CLI agents.
 
 ## Clients
