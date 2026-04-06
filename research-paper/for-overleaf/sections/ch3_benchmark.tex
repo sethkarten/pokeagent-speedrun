@@ -1,0 +1,119 @@
+% ============================================================================
+% Chapter 3: Speedrunning Benchmark
+% ============================================================================
+
+\newpage
+\section{Speedrunning Benchmark}\label{sec:benchmark}
+\tersoo{NOTE: it is important that for final submission, we properly provide a link to the state of my github repository}
+
+We introduce the \pokeagent{} Challenge Speedrunning Track, a standardized, open benchmark for evaluating long-horizon autonomous agents in the embodied virtual environment of \pokemon{} Emerald. This chapter describes the benchmark's origins as a NeurIPS 2025 competition, the details of its design that makes it a rigorous testbed for frontier AI capabilities, and the evaluation criteria we use to measure agent performance in subsequent chapters.
+
+\subsection{NeurIPS Competition Background}\label{sec:neurips_background}
+
+The \pokeagent{} Challenge was first presented as a NeurIPS 2025 competition with two tracks: \emph{Competitive Battling} and \emph{Long-Context Speedrunning}~\citep{karten2025pokeagent}. The competition ran from July through December 2025 and grew an online community of over 650 members on Discord, generating more than 150 submissions across both tracks from over 100 participating teams. 
+
+The speedrunning track, in particular, challenged participants to complete Pok\'{e}mon Emerald as quickly as possible. Of the 22 teams that submitted valid entries, 6 achieved 100\% completion across all 15 milestones in the tutorial setting. Following its conclusion, the speedrunning track has transitioned into an open benchmark, extending the evaluation scope from the first gym (Roxanne) through the third gym (Wattson) and beyond. This extension significantly increases the demands on agent coherence, planning horizon, and resource management, transforming the benchmark into a more comprehensive evaluation of long-horizon autonomous behavior. The remainder of this chapter describes the benchmark in its current extended form.
+
+\subsection{Environment Design}\label{sec:environment_design}
+
+The speedrunning environment runs Pok\'{e}mon Emerald on an mGBA emulator operating at a fixed 120 frames-per-second frame rate. Agents interact with the game through a client-server architecture, via tool-calls and receiving observations in return. The environment is partially observable: agents cannot access the full internal game state. Instead, they receive a combination of visual and structured textual observations that together form the basis for all downstream reasoning. We describe two complementary perspectives on the game state: what the \emph{agent} sees, and what \emph{we} as evaluators see. The former is necessary for formalizing the state information available to the agent, which has direct implications on performance. The latter provides observability into the agents live interactions with the game instance and transparency in validating benchmark results.
+
+\subsubsection{The World from the Perspective of the Agent}\label{sec:agent_perspective}
+
+At each discrete timestep $t$, the agent receives two complementary sources of information: a rendered visual frame and a structured text state.
+
+The \textbf{visual frame} is a $240 \times 160$ pixel screenshot of the current game screen, capturing exactly what a human player would see: the overworld map, characters, menus, dialog boxes, or the battle interface. This image is passed directly to the vision-language model as a multimodal input, serving as the primary source for spatial reasoning, visual grounding, and reading in-game text.
+
+The \textbf{structured text state} is derived from read-only memory (ROM) of the game instance and pre-processed map data from an open \pokemon{} Emerald decompliation \citep{huderlem2025porymap}. It includes: (1) player information (name, coordinates, money, badges), (2) the full Pok\'{e}mon party with species, levels, HP, status conditions, and move lists with PP, (3) the bag inventory organized by category, (4) a full ASCII character map grid of the agent's location showing walkable tiles, walls, NPCs, warps, and the player's position, (5) a movement preview indicating what lies in each cardinal direction (walkable, blocked, NPC, etc.), (6) the coordinates of warps (with destination location names), NPC, and items, and (7) the current game state (overworld, dialog, or battle). During battles, the structured state additionally includes the opponent's species, HP, type, and available actions. Importantly, no Dialog text is provided in the state text; when present, dialogue is only available through the visual frame.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{ch3/agent_perspective_draft.png}
+\caption{\textbf{Agent Observation at Each Timestep.} At each step, the agent receives both a raw visual frame (left) and a structured text state (right) derived from memory extraction and pre-parsed map data. The vision-language model processes both modalities simultaneously to ground its reasoning and action selection. \tersoo{Refine this draft figure with actual screenshot and formatted text state.}}
+\label{fig:agent_perspective}
+\end{figure}
+
+The VLM processes both modalities simultaneously. The visual frame grounds spatial awareness and captures information not available in the structured state and which would otherwise need substantial engineering effort to deduce. Menu navigation, for instance, is a crucial competency that the agent must successfuly demonstrate---the position of the cursor is provided entirely through visual cues \tersoo{note: add a figure here for reference of menu navigation in the bag}. Structured text provides precise numerical data and map topology that serve to increase observability. Our benchmark also supports a vision-only setting, though our experiments do not evaluate in this setting. This dual-modality design is a deliberate choice. We aim to provide enough structured state text information to effectively gauge the reasoning and action capabilities of frontier agents in a more natural domain while preserving visual reasoning as a necessary component for benchmark progress. Further details on state extraction and the role of porymap decompilation data appear in Appendix~\ref{sec:appendix_environment}.
+
+\subsubsection{The World from Our Perspective}\label{sec:our_perspective}
+
+Complementing the agent's observation interface is the evaluation interface designed for human observers. Inspired by the speedrunning community's emphasis on transparency and real-time verification, the interface provides a live view of four concurrent information streams: (1) the Pok\'{e}mon Emerald game screen showing the current game state, (2) agent reasoning traces appearing as logs detailing strategy and action rationale, (3) the current party composition (4) the agent's objectives, and (5) an ASCII map overview with button-action history (Figure~\ref{fig:ch3_eval_interface}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{ch3/layout.png}
+\caption{\textbf{Speedrunning Track Evaluation Interface.} The interface displays: (1) the game screen showing a trainer battle (top left), (2) agent reasoning traces with timestamped decision logs (right panel), (3) party composition with sprite previews (bottom left), (4)  objectives (bottom left), and (5) map overview with action history (bottom right). This visualization enables real-time observability into agent behavior.}
+\label{fig:ch3_eval_interface}
+\end{figure}
+
+This interface enables real-time debugging across the thousands of timesteps that speedrunning requires. Evaluators can observe not only what the agent does but also the reasoning behind each action. This level of observability is essential for the qualitative analysis discussed in Section~\ref{sec:qualitative_analysis} and for identifying the failure modes that motivate the architectural decisions in Chapters~4 and~5.
+
+\subsubsection{Tutorial}\label{sec:tutorial}
+
+The tutorial setting evaluates agents on the opening segment of Pok\'{e}mon Emerald, spanning 15 milestones from the player's starting location in Littleroot Town through defeating the first gym leader, Roxanne, in Rustboro City. Milestone completion is inferred via the ROM. Figure~\ref{fig:ch3_speedrun_route} illustrates the route and its milestones.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{ch3/speedrun_route.pdf}
+\vspace{-18mm}
+\caption{\textbf{Speedrunning Route (Early Game).} Milestones from Littleroot Town (1) to Defeating Roxanne (15), with game frames from each waypoint. The geographic overview (right) maps key locations. Although progression appears linear, the route requires substantial exploration and backtracking---agents must revisit earlier areas, navigate branching paths, and manage nonlinear dependencies between objectives. \tersoo{Note: cite https://www.speedrun.com/pkmnemerald/runs/yvpvw74y as the world record speedrun}}
+\vspace{-4mm}
+\label{fig:ch3_speedrun_route}
+\end{figure}
+
+This segment serves as a minimal competency test: it exercises the full stack of capabilities an agent must possess---visual perception, dialog processing, menu management, overworld navigation, wild and trainer battles, and basic resource management---while remaining short enough to enable rapid iteration at reasonable cost. Top human speedrunners can complete this segment in as little as 18 minutes, while the average human player required approximately 80 minutes. The best frontier models complete this segment in under three hours.
+
+The tutorial is the simplest setting that must pass reliably before testing in longer-horizon settings becomes valuable. An agent that cannot consistently navigate from Littleroot to Rustboro, manage its inventory, and defeat the first gym leader (Roxanne) has no prospect of reliably succeeding through the game's later, substantially more complex segments. By standardizing this segment as the first evaluation tier, we provide a controlled environment for isolating basic competency failures from the higher-order reasoning challenges that emerge in extended play. A detailed walkthrough of each milestone and the competencies it tests appears in Appendix~\ref{sec:appendix_tutorial_walkthrough}.
+
+\subsubsection{Long Horizon}\label{sec:long_horizon}
+
+The long-horizon setting extends the evaluation through the third gym leader, Wattson, in Mauville City. Experiments in this setting routinely exceed 12 hours of wall-clock time and require the agent to maintain coherent behavior across several thousands of reasoning steps. This extension transforms the benchmark from a focused competency test into a comprehensive evaluation of long-context autonomous behavior.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{ch3/long_horizon_route.png}
+\caption{\textbf{Long-Horizon Route (Through Gym 3).} Extended progression from Littleroot Town through Rustboro City (Gym 1: Roxanne), Dewford Town (Gym 2: Brawly), and Mauville City (Gym 3: Wattson) across a total of 16 additional objectives. After the first gym, progression becomes non-linear as interconnected storylines. The gym quest, Team Aqua encounters, and the Devon Corporation delivery create dependencies that constrain completion ordering. Note that Gym 2 and Gym 3 can be completed in any order; top human speedrunners complete Gym 3 before Gym 2 as it offers more efficient pathing.  \tersoo{NOTE: cite https://www.speedrun.com/pkmnemerald/runs/yvpvw74y as the world record mGBA speedrun}}
+\label{fig:ch3_long_horizon_route}
+\end{figure}
+
+Beyond the first gym, the game's structure shifts qualitatively. Two features distinguish the long-horizon setting from the tutorial.
+
+\paragraph{Increased non-linear progression.} After defeating Roxanne, the player must navigate interconnected storylines that block one another. The main gym quest (Roxanne $\to$ Brawly $\to$ Wattson) is interleaved with the Team Aqua/Magma narrative arc and key-item fetch quests (the Devon Corporation delivery to Steven in Granite Cave, Mr.\ Briney's ferry service). Completing one storyline often requires progress in another: the player cannot reach Dewford Town and obtain the second gym badge without first resolving the Rusturf Tunnel encounter with Team Aqua and earning Mr.\ Briney's assistance. These dependencies create a topological ordering structured around key event rather than a strict linear sequence. As the horzion over which evaluation takes place increases, the set of valid orderings expands substantially, and small routing decisions concering gym attempt order, whether to grind levels or push forward with the current state of the party, when to heal---have downstream consequences on speed, navigation time, and resource management.
+
+\paragraph{Compounding complexity.} The agent's Pok\'{e}mon team grows and evolves, requiring increasingly sophisticated resource management: choosing which Pok\'{e}mon to catch and train, which moves to teach, when to heal, and how to allocate limited funds across Pok\'{e} Balls, Potions, and other consumables. Trainer battles grow more difficult, demanding type-awareness and strategic switching. Navigation distances increase, and without careful planning, frequent backtracking and rerouting becomes expensive. The agent must reason about its own cumulative progress by recalling which areas have been explored, which items collected, and which NPCs spoken to, across a session log that now stretches into many tens or hundreds millions of tokens. This is precisely the setting where long-context coherence, precise use of persistent memory structured planning abstractions become essential. A detailed walkthrough of the extended route appears in Appendix~\ref{sec:appendix_longhorz_walkthrough}.
+
+
+\subsection{Speedrunning Evaluation Criteria}\label{sec:evaluation_criteria}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{ch3/track2_tasks.png}
+\caption{\textbf{Speedrunning Track Task Diversity.} Directed graph showing RPG subtask categories and their dependencies. Core tasks include overworld navigation, battle encounters (wild and trainer), gym puzzles, menu management, and NPC dialogue. Edges indicate how completing one task type enables or requires others---for example, navigation leads to encounters, battles yield experience for team building, and menu interactions manage resources needed for all other tasks.}
+\label{fig:ch3_task_diversity}
+\end{figure}
+
+Evaluating agent performance in an extremely open-ended RPG requires metrics that capture both efficiency and behavioral quality. We measure performance along two complementary axes: quantitative metrics that provide objective, directly comparable results, and qualitative analysis that capture a richer set of behavioral nuances that numbers alone simply cannot convey. Figure~\ref{fig:ch3_task_diversity} illustrates the diverse and interconnected subtasks that agents must navigate, motivating why a single metric is insufficient.
+
+Infrastructure details concerning the cumulative metric logging system, agent reasoning trace collection, and tool-call recording are described in detail in Appendix~\ref{sec:appendix_infrastructure}.
+
+\subsubsection{Quantitative Metrics}\label{sec:quantitative_metrics}
+
+We define four primary quantitative metrics, encompassing the most relevant axes of agent performance.
+
+\paragraph{Completion Percentage.} The most fundamental metric is milestone completion: the fraction of standardized checkpoints an agent reaches before the experiment terminates. Milestones are captured implicitly as the agent progresses through the game, providing a dependent variable that reflects cumulative capability. In the tutorial setting, this ranges from 0 (failing to leave the starting house) to 100\% (defeating Roxanne). In the long-horizon setting, milestones extend through the third gym. Completion percentage provides a coarse but robust metric of agent performance.
+
+\paragraph{Wall-Clock Time.} Among agents that achieve comporable completion results, wall-clock time serves as an important ranking metric. Unlike most game AI benchmarks that pause the emulator between actions \tersoo{cite!}, our environment runs continuously in real time reflecting the dynamic setting in which real agent systems operate. This makes wall-clock time a joint measure of decision quality and computational throughput. We nonetheless recognize that internal benchmark infrastructure related to---among other things---metric collection, client-server communication, and data persistence as well as the hardware any given experiment runs on confound this measurement. In spite of this, more efficient pipelines involving models that better balance low latency with reasoning acumen will generally perform better along this axis relative to other models.
+
+\paragraph{Cumulative Actions.} We define an \emph{action} as a completed request-response pair from the foundation model over which a given harness is constructed. Each action may involve multiple tool calls within a single step, and depending on the tool used and the game state, may trigger a multitude of button-actions. Cumulative action count measures sample efficiency: how many deliberation cycles the agent requires to reach a given milestone. Models that strike a balance between chaining together multiple tool calls within a single step while respecting real-time environment dynamics---the frames and time required to interact with items, NPCs, and location transitions---will score better on this metric. Action count is particularly informative when contrasted with wall-clock time: Deepest completed the NeurIPS competition route in just 649 actions (the fewest of any team) despite ranking 5th by time, revealing a tradeoff between inference speed and action efficiency. \tersoo{note: since i moved the results for the benchmark, its important to now reference these results wherever they appear}
+
+\paragraph{Cumulative Tokens and Cost.} We track a global view of token consumption across reasoning and tool calls, as well as the corresponding API cost. This metric captures the economic dimension of agent deployment: harnesses with effective caching strategies can consume more tokens at a lower cost, while reasoning-heavy models tend to be substantially more expensive per step. The cost metric also reflects the interaction between model choice and harness design---a harness that minimizes redundant context by compacting trajectory windows and caching repeated observations will incur lower costs even when using a more expensive frontier model.
+
+\subsubsection{Qualitative Analysis}\label{sec:qualitative_analysis}
+
+Quantitative metrics provide objective rankings but may obfuscate the behavioral mechanisms that drive performance differences. Our qualitative analysis examines agent behavior across both success and failure modes, recognizing that the various aspects of agent capability are deeply interconnected in their effect on overall performance.
+
+Take, for example, the tradeoff between model capability and harness exploitation. A weaker model may exhibit lower per-turn latency, but if it lacks the capacity for effective tool use and fails to consistently store memories, ground its actions in visual perception, or effectively plan, then its downstream performance will will suffer. Such agents frequently enter loops, repeatedly attempting the same failed action while their reasoning traces reveal confusion about why progress has stalled. Conversely, a more powerful model may be slower on a per-turn basis, but if it effectively leverages the harness's memory, planning, and perception tools, its actions tend to be less confused, leading to steadier progress and fewer catastrophic failure cases.
+
+\paragraph{Success Modes.} We descrige effective agent behavior along several dimensions: the ability to use planning abstractions for both near-term actions and longer-term route optimization; effective memory management that maintains awareness of prior progress, collected items, and explored areas; accurate visual perception that enables reliable localization and map-based reasoning; and creative problem-solving when encountering novel situations such as gym puzzles or unexpected obstacles. Successful agents often exhibit interesting emergent behaviors visible in their reasoning traces. For instance, reasoning about type advantages before a gym battle affecting the party composition, or deciding to improve the level of its party via explicit training objectives prior to attempting to defeat a gym leader so as to avoid slowing down its progress in the event of failure. 
+
+\paragraph{Failure Modes.} Failure manifests along the same dimensions. The observe that the most common and consequential failure mode, across a variety of harness designs and model families is poor visual perception: when the agent misidentifies what is shown on the game screen, misreads on-screen text, or fails to ground its reasoning in what it observes in the visual frame, the resulting errors in localization and mapping cascade through planning and action selection. A second class of failure involves inadequate use of memory and planning abstraction. Agents that fail to record or retrieve information about completed segments of the game suffer in their ability to localize their progress within the structure \pokemon{} Emerald narrative, leading to downstream degradation in objective planning. Behaviorally, this tends to manifest in re-visitation of irrelevant locations or reattempting completed segments of the game. A third, more abstract failure mode is derivative of the aforementioned failure modes. \textit{Catastrophic reasoning failure,} is the state in which a compounding sequence of small errors leads the agent into a virtually unrecoverable state. In the best case, these failures greatly slow progress and balloon computational costs; in the worst case, they completely derail a run. These qualitative observations are best obtained through live analysis of agent reasoning alongside the emulated game instance, but can also be conducted at larger scale through LLM-based approaches of processing of the agent logs and metric data that our benchmark infrastructure records.

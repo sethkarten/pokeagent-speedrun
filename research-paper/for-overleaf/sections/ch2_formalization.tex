@@ -4,11 +4,11 @@
 
 \subsection{Formalization}\label{sec:formalization}
 
-We establish the formal framework used throughout the remainder of this thesis. The definitions below are adapted from the MetaHarness formalism~\citep{karten2025pokeagent} and extended to accommodate the harness spectrum that our experiments explore.
+Before presenting our contributions in detail, we formalize the notions of \emph{embodied agent environments} and \emph{agentic harnesses}, which provide the vocabulary for describing our benchmark (Chapter~3), harness architecture (Chapter~4), and AutoEvolve algorithm (Chapter~5).
 
 \subsubsection{Embodied Agent Environments}\label{sec:formal_env}
 
-We consider an embodied agent interacting with a visual environment through a minimal interface. At each discrete timestep $t$, the agent receives a frame observation $o_t$ (a rendered image of the current game state) and a structured text state $x_t$ (derived from read-only memory and map data), then selects an action $a_t$ from a fixed set of button inputs $\mathcal{A}$. The environment is partially observable: the agent cannot access the full internal game state---such as off-screen NPC positions, hidden item locations, or opponent battle mechanics---beyond what is visually rendered or explicitly provided through the text state.
+We consider an embodied agent interacting with a visual environment through a minimal interface. At each discrete timestep $t$, the agent receives a frame observation $o_t$ (a rendered image of the current game state) and a structured text state $x_t$ (derived from read-only memory and map data), then selects an action $a_t$ from a fixed set of button inputs $\mathcal{A}$. The environment is partially observable: the agent cannot access the full internal game state encompassing a global view of the entire environment.
 
 Formally, we model the environment as a partially observable process:
 \begin{equation}\label{eq:env}
@@ -16,7 +16,7 @@ Formally, we model the environment as a partially observable process:
 \end{equation}
 where $s_t \in \mathcal{S}$ is the hidden game state, $f$ is the deterministic (up to random encounters) state transition function implemented by the game engine, and $\mathcal{E}$ is the observation function that renders the visible portion of the state. This formulation is general: any environment that exposes visual output and accepts discrete inputs fits this interface, making our framework applicable beyond Pok\'{e}mon to other visual, embodied domains.
 
-The agent maintains a trajectory $\tau_t = \{(o_1, x_1, a_1), \ldots, (o_t, x_t, a_t)\}$ recording its full interaction history. In practice, the trajectory also includes the agent's reasoning traces (chain-of-thought outputs) and tool-call records at each step, forming a rich log that serves as the substrate for both context management and evolutionary optimization.
+The agent maintains a trajectory $\tau_t = \{(o_1, x_1, a_1), \ldots, (o_t, x_t, a_t)\}$ recording its full interaction history. In practice, this trajectory also includes the agent's reasoning traces (chain-of-thought outputs) and tool-call records at each step, forming a rich log that serves as the substrate for both context management, reflection, and evolutionary optimization.
 
 \subsubsection{Agentic Harnesses}\label{sec:formal_harness}
 
@@ -29,32 +29,4 @@ An \emph{agentic harness} $\mathcal{H}$ is the scaffolding layer between a found
     \item \textbf{Tools} $\mathcal{T}$: programmatic capabilities available to the model, such as pathfinding, information lookup, or code execution.
 \end{itemize}
 
-We define a spectrum of harness configurations that characterize different levels of scaffolding:
-
-\begin{description}[leftmargin=*]
-    \item[$\mathcal{H}_{\min}$ (Minimalist):] Provides only the environment interface---frame observations and button inputs---with a generic system prompt and no subagents, memory, skills, or domain-specific tools. This represents the lower bound on scaffolding: the model must rely entirely on its pretrained knowledge and in-context reasoning.
-
-    \item[$\mathcal{H}_{\text{expert}}$ (Human-Designed):] All components are populated through manual engineering. In our setting, this is the full PokeAgent harness described in Chapter~4, with hand-crafted subagents for reflection, battle strategy, and navigation planning; a curated knowledge base; walkthrough-derived objectives; and Porymap-based~\citep{huderlem2025porymap} spatial tools.
-
-    \item[$\mathcal{H}_{\text{meta}}$ (Meta-Tool):] An intermediate approach that gives the model meta-tools for constructing its own agents and tools (e.g., \texttt{define\_agent}, \texttt{run\_code}, custom tool creation) rather than pre-building specific components. This was the approach taken in later Gemini Plays Pok\'{e}mon runs~\citep{zhang2025gpp}, where the model spontaneously constructed pathfinders, battle strategists, and reusable scripts.
-
-    \item[$\mathcal{H}_{\text{auto}}$ (Auto-Evolved):] Starts from $\mathcal{H}_{\min}$ augmented with meta-tools and adds an evolutionary optimization loop that automatically triggers harness refinement based on trajectory analysis. This is the AutoEvolve output, which evolves toward a harness that may approach---or differ qualitatively from---$\mathcal{H}_{\text{expert}}$ during a single episode.
-\end{description}
-
-The central question of Chapter~5 is whether $\mathcal{H}_{\text{auto}}$, evolved from $\mathcal{H}_{\min}$ through AutoEvolve's reset-free optimization, can approach the performance of $\mathcal{H}_{\text{expert}}$---and if so, what the resulting harness looks like compared to the human-designed version.
-
-\subsubsection{In-Context Prompt Evolution}\label{sec:formal_evolution}
-
-Prompt evolution methods treat the system prompt as a parameter optimized using trajectory outcomes as signal. Let $P_i$ denote the system prompt at evolution step $i$, and let $\Delta\tau_i = \{\tau_{t-w}, \ldots, \tau_t\}$ denote a trajectory segment of window size $w$ centered at the current timestep.
-
-In the \emph{episodic} setting (e.g., GEPA~\citep{agrawal2025gepa}), optimization proceeds across complete episodes:
-\begin{equation}\label{eq:episodic}
-    P_{i+1} = g_{\text{opt}}\!\left(P_i,\; f_{\text{judge}}(\tau^{(i)}_{\text{full}})\right),
-\end{equation}
-where $\tau^{(i)}_{\text{full}}$ is the complete trajectory from episode $i$, $f_{\text{judge}}$ produces a structured evaluation, and $g_{\text{opt}}$ synthesizes an updated prompt. Each iteration requires resetting the environment to the initial state.
-
-In the \emph{reset-free} setting that AutoEvolve adopts, evolution occurs mid-episode using trajectory segments:
-\begin{equation}\label{eq:resetfree}
-    \mathcal{H}_{i+1} = g_{\text{evolve}}\!\left(\mathcal{H}_i,\; f_{\text{judge}}(\Delta\tau_i)\right),
-\end{equation}
-where the evolution operator $g_{\text{evolve}}$ modifies the full harness $\mathcal{H}_i = (P_i, \mathcal{S}_i, \mathcal{K}_i, \mathcal{M}_i)$---not just the prompt---based on the judge's analysis of the recent trajectory segment. This formulation enables continuous adaptation without interrupting the agent's progress and generalizes episodic prompt evolution (Equation~\ref{eq:episodic}) to the case of partial trajectories and multi-component harness optimization. The detailed mechanism of $g_{\text{evolve}}$, including its four-pass structure over prompts, subagents, skills, and memory, is presented in Chapter~5.
+In Chapter~5, we define a spectrum of harness configurations ranging from a minimalist interface ($\mathcal{H}_{\min}$) to an expert harness ($\mathcal{H}_{\text{expert}}$) and formalize the in-context evolution mechanism that drives AutoEvolve's reset-free optimization over these components.

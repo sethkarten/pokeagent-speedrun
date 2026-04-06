@@ -4,6 +4,27 @@
 
 \newpage
 \section{PokeAgent Baseline Harness}\label{sec:pokeagent}
+Figure~\ref{fig:ch3_neurips_leaderboard} presents the final standings. The winning team, Heatz, used Scripted Policy Distillation (SPD): an LLM decomposes the task into subgoals and generates scripted policies for each, which are then distilled into neural networks via imitation learning and refined with reinforcement learning. The resulting agent completed the route in 40:13---nearly twice as fast as the second-place Hamburg Pok\'{e}Runners, who used a pure RL approach based on recurrent PPO with milestone-conditioned rewards. The remaining completions all used LLM harness architectures with varying levels of tool integration.
+
+A key cross-track insight from the competition is that specialist methods---RL and search---consistently outperform generalist LLM approaches. In battling, the top participants all used RL or Monte Carlo tree search rather than LLM reasoning. In speedrunning, the top two finishers used RL-based methods, with Heatz's 40:13 more than $2\times$ faster than the best pure LLM harness approach. However, LLMs played a crucial enabling role in the winning approach: the LLM provided the prior (task structure and initial behavior) while RL provided refinement (faster execution and strategy discovery). This pattern---using LLMs for high-level reasoning and RL for low-level optimization---appears broadly applicable beyond games.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{ch3/track2_progress_time.pdf}
+\caption{\textbf{NeurIPS Speedrunning Leaderboard.} Milestone progress vs.\ wall-clock time (left) and cumulative agent steps (right) for the six teams that completed all 15 milestones. Unlike most game benchmarks that pause between actions, our environment runs in real time---the game world continues while the agent reasons, making inference latency a first-class cost. This distinction reveals that Deepest (Judge's Choice) completed in the fewest steps (649) despite ranking 5th by time, highlighting the tradeoff between inference speed and action efficiency.}
+\label{fig:ch3_neurips_leaderboard}
+\end{figure}
+\subsection{Speedrunning Baselines}\label{sec:baselines}
+
+\textit{[To be written. Establishes the baseline framework for interpreting results that follow.]}
+
+\subsubsection{Human Baselines}\label{sec:human_baselines}
+
+\textit{[To be written. Human speedrun reference times: 18 min (expert), 1:22:05 (average). Upper and lower bounds for agent comparison.]}
+
+\subsubsection{Harness vs.\ Model Capability}\label{sec:harness_vs_model}
+
+\textit{[To be written. Attribution challenge: performance from model vs.\ harness. Five-dimensional characterization framework ($S$, $T$, $M$, $F$, $\Phi$) for disentangling contributions. Table comparing systems.]}
 
 \subsection{Early Development}\label{sec:early_development}
 

@@ -11,6 +11,14 @@
 
 \subsection{Methodology}\label{sec:methodology}
 
+\textit{[NOTE from Ch.~2 refactor: The following details were moved here from the Formalization and Related Work sections of Chapter~2, to be integrated into the methodology.]}
+
+\textit{[RLM connection: The trajectory window in PokeAgent functions as an RLM-style workspace---the full history of the agent's execution (state observations, prompts, reasoning traces, actions) is maintained as a structured, programmatically accessible log that subagents process and summarize for the orchestrator. This is a departure from standard agent architectures that treat history as a flat, append-only sequence. AutoEvolve's mid-episode evolution can be understood as a form of recursive self-modification: the agent analyzes its own trajectory segments and uses this analysis to rewrite its harness components (system prompt, subagents, skills, memory), which in turn shape subsequent trajectory segments. Unlike the depth-$k$ recursion that RLMs formalize, AutoEvolve operates at depth-1.]}
+
+\textit{[Harness spectrum: Define $\mathcal{H}_{\min}$ (minimalist), $\mathcal{H}_{\text{expert}}$ (human-designed), $\mathcal{H}_{\text{meta}}$ (meta-tool), $\mathcal{H}_{\text{auto}}$ (auto-evolved). Central question: whether $\mathcal{H}_{\text{auto}}$, evolved from $\mathcal{H}_{\min}$ through AutoEvolve's reset-free optimization, can approach the performance of $\mathcal{H}_{\text{expert}}$.]}
+
+\textit{[In-context prompt evolution formalism: episodic setting (Eq.~for GEPA) vs. reset-free setting (Eq.~for AutoEvolve). Four-pass structure over prompts, subagents, skills, and memory.]}
+
 \subsubsection{Algorithm}\label{sec:algorithm}
 
 \textit{[To be written. Four-pass evolutionary optimization: system prompt, subagent registry, skill library, memory store. Scheduling (warmup steps, evolution frequency). Detailed pseudocode.]}

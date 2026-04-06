@@ -1,12 +1,86 @@
 % ============================================================================
-% Chapter 7: Ancillary Sections (Headers Only)
+% Chapter 7: Ancillary Sections
 % ============================================================================
 
 \appendix
 
 \section{Environment and System Details}\label{sec:appendix_environment}
 
-\textit{[To be written. Detailed environment specifications, game engine configuration, emulator details, milestone definitions. Adapted from benchmark paper appendices.]}
+This appendix provides the technical details underlying the speedrunning benchmark described in Chapter~\ref{sec:benchmark}. We describe the emulator and infrastructure stack, the state extraction pipeline and the role of porymap decompilation data. We also provide a detailed walkthrough of both the tutorial and long-horizon evaluation settings for those less familiar with the storyline of \pokemon{} Emerald.
+
+\subsection{Emulator and Infrastructure}\label{sec:appendix_infrastructure}
+
+The benchmark runs Pok\'{e}mon Emerald on an mGBA emulator~\citep{huderlem2025porymap} operating server-side within a multiprocess architecture. A FastAPI application hosts the primary game server, exposing endpoints for agent interaction through the Model Context Protocol (MCP). The agent communicates with the server over HTTP, issuing tool calls (e.g., \texttt{get\_game\_state}, \texttt{press\_buttons}, \texttt{navigate\_to}) and receiving structured responses containing the current observation.
+
+The emulator runs at a configurable frame rate (default: 80 FPS for gameplay, reduced during heavy computation). Visual frames are captured directly from the mGBA video buffer as $240 \times 160$ pixel images---the native Game Boy Advance resolution. A lightweight frame server streams these frames to a browser-based visualization interface via WebSocket, enabling the real-time evaluation display described in Section~\ref{sec:our_perspective}.
+
+The infrastructure maintains a comprehensive cumulative metric log that records, for every agent step: wall-clock timestamps, milestone completion events, the action taken (button presses and tool calls), token counts for both input and output, API cost, and the full agent reasoning trace (chain-of-thought output). This log serves multiple purposes: it provides the raw data for collection of a wide berth of quantitative metrics beyond those defined in Section~\ref{sec:quantitative_metrics}, enables post-hoc qualitative analysis of agent behavior, and supports automated analysis pipelines where LLMs process trajectory logs to identify failure and success modes within experiments.
+
+The server architecture is designed for extensibility in harness design. New MCP tools can be registered without modifying the core game loop. This is especially important in the interest of extendability, as one can define their own custom-harness by developing new MCP tools and modifying the set of tools the agent has access to. The observation pipeline is modular: additional state channels (e.g., audio, screen regions) can be added by extending the memory reader. The entire system is open-source, enabling participants and researchers to reproduce experiments, develop custom harnesses, and contribute new evaluation scenarios.
+
+\subsection{State Extraction and Porymap Supplementation}\label{sec:appendix_state_extraction}
+
+The structured text state that agents receive (Section~\ref{sec:agent_perspective}) is assembled from two complementary data sources: real-time memory reading and pre-parsed map data from the \texttt{pokeemerald} decompilation project.
+
+\paragraph{Memory Reading.} The memory reader directly accesses GBA RAM addresses to extract game state without relying on visual parsing. Key data includes: the player's position coordinates (from the player object at \texttt{0x03005D8C}), the current map bank and number (resolved to a human-readable location name via an enumeration table), the player's Pok\'{e}mon party (6 slots of 100-byte structures starting at \texttt{0x020244EC}, each containing species, level, HP, status conditions, moves, and PP), the bag inventory (organized into items, key items, Pok\'{e} Balls, TMs, and berries), the game state register (distinguishing overworld, dialog, battle, and menu states), badge flags, and access to a number of variables like the amount of money the player has or the number of pokemon recorded in their Pok\'{e}dex. Memory reading is most important when reasoning about what game state the agent should have access to or for defining milestone completion flags from ground-truth.
+
+\paragraph{Porymap Supplementation.} Raw memory reading provides tile-level map data (metatile IDs, collision flags, elevation), but this information is difficult for an LLM to interpret without semantic context. We supplement memory-read map data with pre-parsed layouts from the \texttt{pokeemerald} decompilation project, processed through Porymap~\citep{huderlem2025porymap}. This supplementation provides simple access to several critical enrichments: NPC positions and types (trainers, shopkeepers, quest-givers), object event locations (items, hidden items, interactive objects), warp coordinates with their destination map and coordinates (enabling the agent to know where doors, stairs, and cave entrances lead), and metatile behavior annotations that classify tiles by function (walkable, surfable, climbable, etc.).
+
+The impact on agent performance is direct: without porymap data, agents must infer spatial structure purely from visual observation and trial-and-error navigation. With porymap data, the agent receives an ASCII map grid with semantically meaningful symbols (\texttt{.}~for walkable, \texttt{\#}~for walls, \texttt{D}~for doors, \texttt{N}~for NPCs, \texttt{I}~for the player) and a list of known portal coordinates with destination names. Importantly, by providing a global-view of the current map location, beyond what the agent can see in the visual frame, the inclusion of Porymap data represents a fundamental aspect of our Environment Design which keeps the process of navigation challenging, but doable. This data is also a prerequisite for the pathfinding tool we implement that serves as one of the most valuable and frequently called MCP tools in our expert harness \tersoo{NOTE: we should be consistent in when we use H-auto, H-expert, H-min vs 'expert harness' 'minimal harness etc.}.
+
+\subsection{Walkthrough: Tutorial (Littleroot to Roxanne)}\label{sec:appendix_tutorial_walkthrough}
+
+The tutorial evaluation spans 15 milestones \tersoo{NOTE: this list doesnt track the exact 15 milestones perfectly, so i removed the enumeration. Please reference the figure with the tutorial milestones}, each testing a distinct combination of agent competencies. We describe the progression and the capabilities each segment exercises, referencing the open Pok\'{e}mon Emerald walkthrough~\citep{bulbapedia2025walkthrough} as a canonical game guide.
+
+\textbf{Littleroot Town} (Start). The agent begins in a moving truck outside of their house in Littleroot Town. The specific location of the house is dependent on their selected gender, though our benchmark defaults to the male character, "Brendan" for all evaluations. The player must then walk into their bedroom, set their clock, before navigating downstairs, talking to their mother, exiting the house, and walk to the neighboring house.
+
+\textbf{Route 101 / Rescue Prof.\ Birch.} The agent encounters Professor Birch being chased by a wild Pok\'{e}mon and must select a starter Pok\'{e}mon (Treecko, Torchic, or Mudkip) from his bag. The choice of starter strongly correlated with their completion time of the first gym as Torchic is week to the rock typing of the first gym, while Treecko and Mudkip learn supereffective moves against rock types.
+
+\textbf{Oldale Town.} A brief traversal milestone through the first town, north of Littleroot town with a Pok\'{e}mon Center and shop.
+
+\textbf{Route 103 / Rival Battle.} The agent must navigate north of Oldale town, through grass that may trigger encounters with wild pokemon and battle the rival trainer. This represents the first scripted trainer battle, testing basic battle strategy against an opponent who always has a starter with a more favourable type combination against the player.
+
+\textbf{Return to Birch's Lab.} The agent must backtrack to Littleroot Town from Oldale town, through Route 101, and into Professor Birch's Lab in Littleroot town to receive the Pok\'{e}dex and Pok\'{e} Balls. 
+
+\textbf{Route 102.} The route immediately west of Oldale town chalk full of wild encounters and several mandatory trainer battles. Tests managing wild encounters while progressing.
+
+\textbf{Petalburg City / Dad's Gym.} The agent meets the player's father (Norman, the gym leader) but cannot challenge him yet. They must navigate back to Route 102, where they must help Wally catch a pokemon. This tests dialog dialogue handling and comprehension.
+
+\textbf{Route 104 (South).} Continuation westward of Petalburg city with optional trainers, items, and wild encounters.
+
+\textbf{Petalburg Woods.} A maze-like forest area with several trainers, an abundance of wild grass, and a mandatory encounter against a Team Aqua Grunt. This is the first ``dungeon'' environment testing navigation in complex terrain with a required scripted battle at a distance that makes backtracking to heal the party expensive.
+
+\textbf{Route 104 (North).} Emergence from the woods and passage through the northern section with wild grass for optional wild encounters and a number of optional and mandatory trainer battles.
+
+\textbf{Rustboro City.} Arrival at the destination city from Route 104 (North), harboring the Rustboro Gym
+
+\textbf{Rustboro Gym / Gym Trainers.} The gym contains trainers that must be defeated before challenging the leader. This tests sequential battle management, puzzle navigation through a simple maze, and resource conservation.
+
+\textbf{Defeating Roxanne.} The gym leader battle against Roxanne and her Rock-type team consisting of several Geodudes and a powerful level 15 Nosepass. This split tests strategic battle planning, especially against a more sophisticated adversary with the ability to heal their \pokemon{}. Treecko and Mudkip starters have a distinct type advantages, while Torchic requires more careful play either through the acquisition of pokemon with a more favourable type combination or through evolution of Torchic to Combusken, to learn fighting-type moves which are super-effective against Rock-types. Once the player defeats Roxanne.
+\end{enumerate}
+
+\subsection{Walkthrough: Long Horizon (Through Gym 3)}\label{sec:appendix_longhorz_walkthrough}
+
+After the tutorial, progression becomes substantially more complex. We outline the major segments through Gym~3, emphasizing the structural features that make this setting challenging for autonomous agents.
+
+\paragraph{Rustboro City $\to$ Rusturf Tunnel.} After defeating Roxanne, the agent must pursue a Team Aqua Grunt who stole the Devon Goods from the researcher earlier in Petalburg Woods. This requires navigating east to Route~116 where more wild encounters and trainers await and into Rusturf Tunnel, where the grunt is confronted and the goods recovered. This segment formally introduces the side-quest dependency pattern: certain segments of the main gym quest cannot proceed until a corresponding side-quest narrative thread is resolved.
+
+\paragraph{Devon Corporation.} The agent returns the Devon Goods to the Devon Corporation president in Rustboro City, receiving a letter to deliver to Steven Stone in Dewford Town and a package for Captain Stern in Slateport City. This fetch quest creates an additional branching dependency: the agent now has two objectives in different locations (Dewford Gym completion vs. Granite Cave navigation), and the order of completion affects routing efficiency.
+
+\paragraph{Mr.\ Briney's Cottage $\to$ Dewford Town.} The agent must travel south to Route~104 and locate Mr.\ Briney's cottage, where the old sailor agrees to ferry the player to Dewford Town. This imposes a non-trivial navigation requirement as the cottage is in a previously visited area, requiring the player to recognize the need for backtracking.
+
+\paragraph{Gym 2: Brawly (Dewford Town).} Dewford's gym features a dark room that lights up incrementally as the player defeats trainers a spatial puzzle requiring the agent to navigate partially blind terrain. Brawly's Fighting-type team tests battle strategy with different type matchups than Roxanne, and upon succesful completion, the player receives the knuckle badge. Note that the Knuckle Badge and the Dynamo badge can be completed in either order.
+
+\paragraph{Granite Cave / Steven Delivery.} The agent must explore Granite Cave to find Steven Stone and deliver the letter. This multi-floor cave requires the HM move Flash (optional but significantly helpful in navigation), introducing the HM dependency system where progress requires teaching specific moves to Pok\'{e}mon. It is important to note that this delivery gates the players ability to access Slateport City via Mr. Briney's ferry, a prerequisite for navigating to Mauville City to challenge for the third gym. 
+
+\paragraph{Sailing to Slateport City.} Mr.\ Briney ferries the agent to Slateport City, where Captain Stern must be found at the Oceanic Museum. This segment involves a second Team Aqua encounter, further advancing the interleaved narrative arc.
+
+\paragraph{Route 110 $\to$ Mauville City.} The northward route to Mauville City features the Cycling Road (requiring a Bicycle, obtained in Mauville, though not strictly necessary for split completion) and a second rival battle at the route's midpoint. The route is moderately long with multiple trainers.
+
+\paragraph{Gym 3: Wattson (Mauville City).} Wattson's gym features an electric fence puzzle where the agent must navigate a grid of switches to open the path to the gym leader. This puzzle is non-trivial and requires careful navigation to certain switches and around barrier positions that change with the activation of switches. His Electric-type team (Voltorb, Electrike, Magneton, Manectric) poses a significant challenge, especially for agents whose teams lack Ground-type coverage. This gym represents a meaningful difficulty spike and serves as the endpoint of the long-horizon evaluation.
+
+\vspace{1em}
+The progression from Gym~1 through Gym~3 illustrates how the game's complexity compounds: each segment introduces new mechanics (HMs, ferry travel, dark rooms, electric puzzles), new narrative dependencies, new resource management pressures, and a set of optional story elements that the agent must often reason about skipping in service of an efficient completion time. An agent that reaches Gym~3 has demonstrated not only the basic competencies tested in the tutorial but also the ability to maintain coherent long-term plans, manage an evolving team, and navigate a web of interconnected objectives across many hours of autonomous play. We find that success in this split is highly predictive of continued progress through even longer stretches of the game that may take multiple days of contiguous execution.
 
 \section{Example Prompts for Ablation Studies}\label{sec:appendix_prompts}
 
