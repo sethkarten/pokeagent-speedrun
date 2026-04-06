@@ -112,10 +112,18 @@ class BrowserEnv:
         from playwright.sync_api import sync_playwright
 
         pw = sync_playwright().start()
+        # WebGL2 is required by Unity 2021+ WebGL builds. Playwright's headless
+        # Chromium ships without real GPU support — it can only do WebGL1 via
+        # SwiftShader, so Unity loaders silently stall on the splash screen.
+        # The fix is to run headed against a virtual display (Xvfb), which gives
+        # us WebGL2 via ANGLE+SwiftShader on Vulkan. `run_browser.sh` wraps the
+        # whole process in `xvfb-run` and passes --headed.
         browser = pw.chromium.launch(
             headless=self.headless,
             args=[
                 "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
                 # Enable GPU acceleration for WebGL games (Unity, etc.)
                 "--enable-gpu",
                 "--enable-webgl",
