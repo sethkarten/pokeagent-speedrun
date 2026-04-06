@@ -244,32 +244,59 @@ class BrowserEnv:
                 logger.warning("focus_game failed: %s", e)
 
         def _do_screenshot() -> Image.Image:
+            """Screenshot the game canvas.
+
+            Strategy: take a full-page screenshot and clip to the iframe's
+            bounding box. This avoids stale canvas locators and never times
+            out — page.screenshot always succeeds. If we have no iframe
+            (direct game URL), screenshot the page or canvas directly.
+            """
             nonlocal canvas, game_frame
-            for attempt in range(2):
-                try:
-                    if canvas is not None:
-                        png = canvas.screenshot(type="png", timeout=10_000)
-                    elif game_frame is not None:
-                        png = page.locator(
-                            "iframe#game_drop, .game_frame iframe"
-                        ).first.screenshot(type="png", timeout=10_000)
-                    else:
-                        png = page.screenshot(type="png", timeout=10_000)
+            try:
+                if game_frame is not None:
+                    # Get the iframe's current bounding box (refreshes each call)
+                    iframe_el = page.locator("iframe#game_drop, .game_frame iframe").first
+                    box = iframe_el.bounding_box(timeout=5_000)
+                    if box and box["width"] > 0 and box["height"] > 0:
+                        png = page.screenshot(
+                            type="png",
+                            clip={
+                                "x": box["x"],
+                                "y": box["y"],
+                                "width": box["width"],
+                                "height": box["height"],
+                            },
+                            timeout=10_000,
+                        )
+                        return Image.open(io.BytesIO(png)).convert("RGB")
+                    raise RuntimeError("iframe has zero dimensions")
+                elif canvas is not None:
+                    # Direct canvas (non-iframe game)
+                    box = canvas.bounding_box(timeout=5_000)
+                    if box and box["width"] > 0 and box["height"] > 0:
+                        png = page.screenshot(
+                            type="png",
+                            clip={
+                                "x": box["x"],
+                                "y": box["y"],
+                                "width": box["width"],
+                                "height": box["height"],
+                            },
+                            timeout=10_000,
+                        )
+                        return Image.open(io.BytesIO(png)).convert("RGB")
+                    raise RuntimeError("canvas has zero dimensions")
+                else:
+                    png = page.screenshot(type="png", timeout=10_000)
                     return Image.open(io.BytesIO(png)).convert("RGB")
-                except Exception as e:
-                    logger.warning("Screenshot attempt %d failed: %s", attempt + 1, e)
-                    if attempt == 0:
-                        # Canvas locator may be stale (game iframe reloaded).
-                        # Try to re-acquire the canvas before giving up.
-                        try:
-                            if game_frame is not None:
-                                canvas = game_frame.locator("canvas").first
-                                canvas.wait_for(state="visible", timeout=5_000)
-                                logger.info("Re-acquired canvas after screenshot failure")
-                        except Exception:
-                            canvas = None
-            logger.error("Screenshot failed after retry, returning blank")
-            return Image.new("RGB", (self.width, self.height), (0, 0, 0))
+            except Exception as e:
+                logger.error("Screenshot failed: %s — falling back to full page", e)
+                try:
+                    png = page.screenshot(type="png", timeout=10_000, full_page=False)
+                    return Image.open(io.BytesIO(png)).convert("RGB")
+                except Exception as e2:
+                    logger.error("Full-page screenshot also failed: %s", e2)
+                    raise RuntimeError(f"Screenshot completely failed: {e2}") from e2
 
         def _do_page_text() -> str:
             try:
