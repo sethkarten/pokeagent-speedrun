@@ -945,8 +945,15 @@ Step {step_count}"""
                 image = PILImage.open(io.BytesIO(image_data))
 
                 if self._is_black_frame(image):
-                    logger.info("Black frame detected, waiting...")
-                    return True, "WAIT"
+                    self._consecutive_black_frames = getattr(self, "_consecutive_black_frames", 0) + 1
+                    if self._consecutive_black_frames < 3:
+                        logger.info(f"Black frame detected ({self._consecutive_black_frames}/3), waiting...")
+                        return True, "WAIT"
+                    logger.warning(
+                        f"Black frame {self._consecutive_black_frames} times — proceeding anyway"
+                    )
+                else:
+                    self._consecutive_black_frames = 0
 
                 claimed_step = self.runtime.claim_step(
                     owner="orchestrator",

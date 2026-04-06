@@ -244,17 +244,32 @@ class BrowserEnv:
                 logger.warning("focus_game failed: %s", e)
 
         def _do_screenshot() -> Image.Image:
-            try:
-                if canvas is not None:
-                    png = canvas.screenshot(type="png")
-                elif game_frame is not None:
-                    png = page.locator("iframe#game_drop, .game_frame iframe").first.screenshot(type="png")
-                else:
-                    png = page.screenshot(type="png")
-                return Image.open(io.BytesIO(png)).convert("RGB")
-            except Exception as e:
-                logger.error("Screenshot failed: %s", e)
-                return Image.new("RGB", (self.width, self.height), (0, 0, 0))
+            nonlocal canvas, game_frame
+            for attempt in range(2):
+                try:
+                    if canvas is not None:
+                        png = canvas.screenshot(type="png", timeout=10_000)
+                    elif game_frame is not None:
+                        png = page.locator(
+                            "iframe#game_drop, .game_frame iframe"
+                        ).first.screenshot(type="png", timeout=10_000)
+                    else:
+                        png = page.screenshot(type="png", timeout=10_000)
+                    return Image.open(io.BytesIO(png)).convert("RGB")
+                except Exception as e:
+                    logger.warning("Screenshot attempt %d failed: %s", attempt + 1, e)
+                    if attempt == 0:
+                        # Canvas locator may be stale (game iframe reloaded).
+                        # Try to re-acquire the canvas before giving up.
+                        try:
+                            if game_frame is not None:
+                                canvas = game_frame.locator("canvas").first
+                                canvas.wait_for(state="visible", timeout=5_000)
+                                logger.info("Re-acquired canvas after screenshot failure")
+                        except Exception:
+                            canvas = None
+            logger.error("Screenshot failed after retry, returning blank")
+            return Image.new("RGB", (self.width, self.height), (0, 0, 0))
 
         def _do_page_text() -> str:
             try:
