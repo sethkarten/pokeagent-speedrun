@@ -16,6 +16,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
+import numpy as np
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,14 @@ class BrowserEnv:
         self.virtual_time = virtual_time
         self.step_budget_ms = step_budget_ms
         self.held_keys: set[str] = set()  # tracked across steps
+
+        # Letterbox auto-crop offset. Some games (flappybird.io is the
+        # canonical case) draw their own black bars inside their canvas
+        # element. _autocrop_letterbox detects and crops them; the
+        # (left, top) crop offset is stored here so click translation
+        # can add it back to convert agent coordinates (relative to the
+        # cropped image the agent sees) into page-absolute coordinates.
+        self.crop_offset: tuple = (0, 0)
 
         # Thread communication
         self._cmd_q: queue.Queue = queue.Queue()
@@ -769,7 +778,6 @@ class BrowserEnv:
             """
             try:
                 if game_frame is not None:
-                    # Inside an iframe — query the iframe document.
                     rect = game_frame.locator("canvas").first.evaluate(
                         "el => { const r = el.getBoundingClientRect();"
                         " return {x: r.x, y: r.y, width: r.width, height: r.height}; }"
@@ -786,6 +794,68 @@ class BrowserEnv:
             except Exception as e:
                 logger.debug("_query_canvas_rect_js failed: %s", e)
             return None
+
+        def _autocrop_letterbox(img: "Image.Image") -> "Image.Image":
+            """Crop solid-color letterbox bars from the edges of a screenshot.
+
+            Some games (flappybird.io is the canonical case) render their
+            own letterbox bars *inside* the canvas — the canvas element
+            is full viewport width but the game draws ~240px of black
+            on each side and only renders the playable area in the
+            middle. The agent then sees a screenshot that's 960x576 with
+            massive black bars and routinely tries to click outside the
+            playable region because the prompt says "valid click range
+            x=0-960" but visually only ~430px in the middle is real.
+
+            We auto-detect uniform-color edge columns/rows and crop them
+            so the agent's view matches the playable area. self.width /
+            self.height are updated to the post-crop dimensions, and the
+            page-absolute click translation also subtracts the crop
+            offset so clicks at agent-coords (0,0) land on the actual
+            top-left of the playable region.
+
+            Returns the (possibly cropped) image. Sets self.crop_offset
+            to the (left, top) offset that was cropped, so click
+            translation can compensate. self.width / self.height become
+            the cropped size.
+            """
+            try:
+                arr = np.array(img.convert("RGB"))
+            except Exception:
+                self.crop_offset = (0, 0)
+                return img
+            h, w = arr.shape[0], arr.shape[1]
+            # A column/row is "letterbox" if its std is below 3 (uniform)
+            # AND its mean is below 30 (dark). The dark constraint
+            # prevents us from cropping legitimate uniform-bright UI.
+            col_std = arr.reshape(h, w, 3).std(axis=(0, 2))
+            col_mean = arr.reshape(h, w, 3).mean(axis=(0, 2))
+            col_is_letterbox = (col_std < 3) & (col_mean < 30)
+            row_std = arr.reshape(h, w, 3).std(axis=(1, 2))
+            row_mean = arr.reshape(h, w, 3).mean(axis=(1, 2))
+            row_is_letterbox = (row_std < 3) & (row_mean < 30)
+            # Find first/last non-letterbox column/row.
+            non_lb_cols = np.where(~col_is_letterbox)[0]
+            non_lb_rows = np.where(~row_is_letterbox)[0]
+            if len(non_lb_cols) == 0 or len(non_lb_rows) == 0:
+                # Entire frame is letterbox/uniform — don't crop.
+                self.crop_offset = (0, 0)
+                return img
+            left = int(non_lb_cols[0])
+            right = int(non_lb_cols[-1]) + 1
+            top = int(non_lb_rows[0])
+            bottom = int(non_lb_rows[-1]) + 1
+            # Don't crop if the bars are tiny — could be a single dark
+            # row of HUD or something. Require at least 20 px on a side
+            # before we bother.
+            if left < 20 and (w - right) < 20 and top < 20 and (h - bottom) < 20:
+                self.crop_offset = (0, 0)
+                return img
+            cropped = img.crop((left, top, right, bottom))
+            self.crop_offset = (left, top)
+            self.width = right - left
+            self.height = bottom - top
+            return cropped
 
         def _do_screenshot() -> Image.Image:
             """Screenshot the game canvas — clipped tightly to the
@@ -828,11 +898,10 @@ class BrowserEnv:
                         timeout=10_000,
                     )
                     img = Image.open(io.BytesIO(png)).convert("RGB")
-                    # Keep self.width/self.height in sync with the live
-                    # canvas size so the agent's prompt and our click
-                    # clamp logic both reflect what the game is actually
-                    # showing right now.
-                    self.width, self.height = int(rect["width"]), int(rect["height"])
+                    # Auto-crop letterbox bars the game drew inside its
+                    # own canvas. Sets self.crop_offset and updates
+                    # self.width/self.height to the cropped region.
+                    img = _autocrop_letterbox(img)
                     return img
                 except Exception as e:
                     logger.debug("JS-rect screenshot path failed: %s", e)
@@ -975,34 +1044,42 @@ class BrowserEnv:
                 logger.error("double_click_at(%d, %d) failed: %s", x, y, e)
 
         def _canvas_to_page(x: int, y: int) -> Optional[tuple]:
-            """Convert canvas-relative (x, y) to page-absolute coordinates.
+            """Convert agent-coordinates to page-absolute coordinates.
+
+            The agent's coordinates are relative to the *cropped* image
+            it sees in the screenshot. To translate to page coordinates
+            we have to:
+              1. Add the letterbox crop offset (self.crop_offset) to
+                 get back to canvas-element-relative coords.
+              2. Add the canvas-element's page origin (from JS rect or
+                 locator.bounding_box) to get page-absolute coords.
 
             Tries the JS getBoundingClientRect path first (most
             reliable for canvases that resize after load), then falls
             back to Playwright's locator.bounding_box, then to the
             iframe's bounding box. Returns None only if all three
             paths fail.
-
-            page.mouse.click/move/down/up take page-absolute
-            coordinates, so we have to add the canvas (or iframe)
-            origin to the agent's canvas-relative input.
             """
+            cx_off, cy_off = self.crop_offset
+            x_in_canvas = x + cx_off
+            y_in_canvas = y + cy_off
+
             # JS rect — most reliable.
             rect = _query_canvas_rect_js()
             if rect is not None:
-                return (rect["x"] + x, rect["y"] + y)
+                return (rect["x"] + x_in_canvas, rect["y"] + y_in_canvas)
             try:
                 if canvas is not None:
                     box = canvas.bounding_box(timeout=2_000)
                     if box:
-                        return (box["x"] + x, box["y"] + y)
+                        return (box["x"] + x_in_canvas, box["y"] + y_in_canvas)
                 if game_frame is not None:
                     iframe_el = page.locator(
                         "iframe#game_drop, .game_frame iframe"
                     ).first
                     box = iframe_el.bounding_box(timeout=2_000)
                     if box:
-                        return (box["x"] + x, box["y"] + y)
+                        return (box["x"] + x_in_canvas, box["y"] + y_in_canvas)
             except Exception as e:
                 logger.warning("_canvas_to_page(%d, %d) failed: %s", x, y, e)
             return None
