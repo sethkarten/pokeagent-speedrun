@@ -854,16 +854,30 @@ class BrowserEnv:
             return cx, cy
 
         def _do_click_at(x: int, y: int):
+            """Click at canvas-relative (x, y) using page.mouse.click.
+
+            We deliberately use page.mouse.click instead of
+            locator.click(position=...) because the locator path runs
+            an actionability check that often fails on game canvases:
+            it requires the click target to be the topmost element at
+            that pixel, but games frequently have transparent overlays
+            (HUD, ad iframes, focus rings) on top of the canvas. The
+            check then waits up to its timeout and bails out, costing
+            seconds per failed click and accomplishing nothing.
+
+            page.mouse.click dispatches the mousedown/mouseup events
+            at the absolute page coordinate without any actionability
+            wait. We translate canvas-relative -> page-absolute via
+            _canvas_to_page (which already exists for the
+            move/drag primitives).
+            """
             cx, cy = _clamp_to_canvas(x, y)
             try:
-                if canvas is not None:
-                    canvas.click(position={"x": cx, "y": cy}, timeout=3_000)
-                elif game_frame is not None:
-                    page.locator("iframe#game_drop, .game_frame iframe").first.click(
-                        position={"x": cx, "y": cy}, timeout=3_000,
-                    )
-                else:
-                    page.mouse.click(cx, cy)
+                page_xy = _canvas_to_page(cx, cy)
+                if page_xy is None:
+                    # No canvas/iframe — treat input as page-absolute.
+                    page_xy = (cx, cy)
+                page.mouse.click(page_xy[0], page_xy[1])
                 self.mouse_x, self.mouse_y = cx, cy
             except Exception as e:
                 logger.error("click_at(%d, %d) failed: %s", x, y, e)
@@ -871,14 +885,10 @@ class BrowserEnv:
         def _do_double_click_at(x: int, y: int):
             cx, cy = _clamp_to_canvas(x, y)
             try:
-                if canvas is not None:
-                    canvas.dblclick(position={"x": cx, "y": cy}, timeout=3_000)
-                elif game_frame is not None:
-                    page.locator("iframe#game_drop, .game_frame iframe").first.dblclick(
-                        position={"x": cx, "y": cy}, timeout=3_000,
-                    )
-                else:
-                    page.mouse.dblclick(cx, cy)
+                page_xy = _canvas_to_page(cx, cy)
+                if page_xy is None:
+                    page_xy = (cx, cy)
+                page.mouse.dblclick(page_xy[0], page_xy[1])
                 self.mouse_x, self.mouse_y = cx, cy
             except Exception as e:
                 logger.error("double_click_at(%d, %d) failed: %s", x, y, e)
