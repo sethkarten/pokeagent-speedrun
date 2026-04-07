@@ -4868,14 +4868,8 @@ def main():
     print(f"📺 Stream interface: http://{local_ip}:{args.port}/stream")
 
     # Initialize video recording AFTER FastAPI server starts
-    # Try Playwright WebUI recording first; fall back to frame-based recording
     if args.record:
-        pw_success = init_playwright_recording(args.port, run_id=run_id)
-        if not pw_success:
-            init_video_recording(True)
-    else:
-        # No recording requested
-        pass
+        init_video_recording(True)
     print("Available endpoints:")
     print("  /status - Server status")
     print("  /screenshot - Current screenshot")
