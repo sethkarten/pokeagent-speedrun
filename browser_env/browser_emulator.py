@@ -373,28 +373,46 @@ class BrowserEnv:
                 logger.warning("CDP session unavailable: %s", e)
                 return None
 
-        # Virtual time via injected JS shim.
+        # Virtual time via injected JS shim — passthrough state machine.
         #
         # We tried CDP Emulation.setVirtualTimePolicy first, but it's
         # unrecoverably broken in Chromium when the main thread sleeps
         # wall-clock for >1s with virtual time paused — the renderer's
         # internal clock stops responding to advance commands and
-        # virtualTimeBudgetExpired never fires again. Even with explicit
-        # event-listener waits + manual re-pause + initialVirtualTime,
-        # the next captureScreenshot hangs.
+        # virtualTimeBudgetExpired never fires again.
         #
-        # Our shim approach: inject an init script that overrides
-        # requestAnimationFrame, setTimeout, setInterval, Date.now,
-        # and performance.now, all backed by a single ``__virtualNow``
-        # value we control. ``__pause()`` stops processing callbacks;
-        # ``__advance(ms)`` runs the queue forward by ms of virtual
-        # time, firing any callbacks whose deadlines fall in the
-        # window. Stable across arbitrary wall-clock sleeps because
-        # there's no renderer-side virtual clock to drift.
+        # Then we tried a "queue everything" shim: override RAF and the
+        # timer family to push into a JS-side queue, drain only when
+        # __advance(ms) is called. That worked for itch.io games (which
+        # wrap the game in an iframe — the shim ran in the parent only
+        # and silently no-op'd) but DEADLOCKED direct-page games like
+        # flappybird.io because the game's RAF loop was captured before
+        # any rendering could happen and the canvas stayed at its
+        # uninitialized black state forever.
         #
-        # The shim is injected via page.add_init_script so it runs
-        # before any game code on every navigation, including after
-        # _check_and_recover_nav fires.
+        # This version is a state machine:
+        #
+        #   live mode (default, paused=false):
+        #     RAF and the timers run NATIVELY — full passthrough. The
+        #     game loop ticks normally on wall clock. Date.now and
+        #     performance.now also pass through. The page loads and
+        #     animates exactly as if the shim weren't there.
+        #
+        #   paused mode (after __pause()):
+        #     Newly-registered RAF/timers go into our queue instead of
+        #     native APIs. Date.now and performance.now return the
+        #     frozen virtualNow. Already-pending native callbacks (the
+        #     ones registered before pause()) still fire — that's an
+        #     unavoidable single-frame escape, fine in practice.
+        #
+        #   __advance(ms) (only meaningful while paused):
+        #     Walk the queue forward by ms of virtual time, firing any
+        #     callbacks whose deadlines fall in the window. Newly-
+        #     registered RAF/timers from those callbacks land back in
+        #     the queue. Returns to the paused snapshot at the end.
+        #
+        # Injected via page.add_init_script so it runs on every
+        # navigation, including after _check_and_recover_nav fires.
         VIRTUAL_TIME_SHIM = r"""
         (() => {
           if (window.__vtShim) return;  // idempotent
@@ -407,29 +425,39 @@ class BrowserEnv:
           const origDateNow = Date.now.bind(Date);
           const origPerfNow = performance.now.bind(performance);
 
+          // Mode flag. While false the overrides are passthroughs and
+          // the page runs exactly as if no shim were installed.
+          let paused = false;
+
+          // Virtual clock — only meaningful while paused. Snapshotted
+          // at pause() time so Date.now is frozen during the agent's
+          // VLM call. advance(ms) bumps it forward.
           let virtualNow = origDateNow();
           let virtualPerfBase = origPerfNow();
-          const realStart = origDateNow();
-          let paused = false;
-          let nextId = 1;
+          let virtualPerfNow = origPerfNow();
+
+          // Negative ids for our queue so they can never collide with
+          // native ids while in paused mode (some games store the id
+          // and pass it to clearTimeout later).
+          let nextQueueId = -1;
           // Pending timer entries: {id, deadline, cb, interval, args}
           const timers = new Map();
-          // Pending RAF callbacks
+          // Pending RAF callbacks: [{id, cb}]
           let rafQueue = [];
-          let nextRafId = 1;
-
-          function _now() { return virtualNow; }
 
           window.requestAnimationFrame = function(cb) {
-            const id = nextRafId++;
+            if (!paused) return origRAF(cb);
+            const id = nextQueueId--;
             rafQueue.push({id, cb});
             return id;
           };
           window.cancelAnimationFrame = function(id) {
+            if (id >= 0) return origCAF(id);
             rafQueue = rafQueue.filter(e => e.id !== id);
           };
           window.setTimeout = function(cb, delay, ...args) {
-            const id = nextId++;
+            if (!paused) return origST(cb, delay, ...args);
+            const id = nextQueueId--;
             timers.set(id, {
               id, cb, args,
               deadline: virtualNow + (delay || 0),
@@ -437,9 +465,13 @@ class BrowserEnv:
             });
             return id;
           };
-          window.clearTimeout = function(id) { timers.delete(id); };
+          window.clearTimeout = function(id) {
+            if (id >= 0) return origCT(id);
+            timers.delete(id);
+          };
           window.setInterval = function(cb, delay, ...args) {
-            const id = nextId++;
+            if (!paused) return origSI(cb, delay, ...args);
+            const id = nextQueueId--;
             timers.set(id, {
               id, cb, args,
               deadline: virtualNow + (delay || 0),
@@ -447,35 +479,66 @@ class BrowserEnv:
             });
             return id;
           };
-          window.clearInterval = function(id) { timers.delete(id); };
-
-          Date.now = function() { return virtualNow; };
-          performance.now = function() {
-            return virtualPerfBase + (virtualNow - realStart);
+          window.clearInterval = function(id) {
+            if (id >= 0) return origCI(id);
+            timers.delete(id);
           };
 
-          // Override Date constructor's no-arg form via prototype trick
-          // (full Date override would break too much; this is enough
-          // for game loops that compute deltas via Date.now()).
+          // Date.now and performance.now: live = native, paused =
+          // frozen. The frozen value is the snapshot taken at pause()
+          // time, advanced only by __advance(ms).
+          Date.now = function() {
+            return paused ? virtualNow : origDateNow();
+          };
+          performance.now = function() {
+            return paused ? virtualPerfNow : origPerfNow();
+          };
 
           window.__vtShim = {
-            pause() { paused = true; },
-            resume() { paused = false; },
+            pause() {
+              if (paused) return;
+              // Snapshot the wall clock so future Date.now/performance.now
+              // calls return a stable value.
+              virtualNow = origDateNow();
+              virtualPerfNow = origPerfNow();
+              paused = true;
+            },
+            resume() {
+              // Drain whatever's queued back into native APIs so the
+              // game continues without losing work, then go live.
+              const t = Array.from(timers.values());
+              timers.clear();
+              for (const e of t) {
+                const remaining = Math.max(0, e.deadline - virtualNow);
+                if (e.interval > 0) {
+                  origSI(e.cb, e.interval, ...(e.args || []));
+                } else {
+                  origST(e.cb, remaining, ...(e.args || []));
+                }
+              }
+              const q = rafQueue;
+              rafQueue = [];
+              for (const e of q) {
+                origRAF(e.cb);
+              }
+              paused = false;
+            },
             isPaused() { return paused; },
-            now() { return virtualNow; },
+            now() { return paused ? virtualNow : origDateNow(); },
             queueSizes() {
               return {raf: rafQueue.length, timers: timers.size};
             },
-            // Advance virtual time by ms. Fires any callbacks whose
-            // deadlines fall in the window. Returns the number of
+            // Advance virtual time by ms. Only meaningful while paused.
+            // Fires any queued callbacks whose deadlines fall in the
+            // window, in deadline order. Returns the number of
             // callbacks fired.
             advance(ms) {
+              if (!paused) return 0;
               const target = virtualNow + ms;
               let fired = 0;
-              const maxIter = 1000;  // safety: don't loop forever on
-                                     // setTimeout(0) chains
+              const maxIter = 5000;  // safety: setTimeout(0) chains
               for (let iter = 0; iter < maxIter; iter++) {
-                // Find earliest-deadline timer
+                // Find earliest-deadline timer.
                 let nextEntry = null;
                 for (const e of timers.values()) {
                   if (!nextEntry || e.deadline < nextEntry.deadline) {
@@ -484,6 +547,7 @@ class BrowserEnv:
                 }
                 if (nextEntry && nextEntry.deadline <= target) {
                   virtualNow = nextEntry.deadline;
+                  virtualPerfNow += (nextEntry.deadline - virtualNow);
                   if (nextEntry.interval > 0) {
                     nextEntry.deadline += nextEntry.interval;
                   } else {
@@ -497,7 +561,8 @@ class BrowserEnv:
                 break;
               }
               // Drain RAF queue (RAF callbacks all run together at
-              // the start of each "frame")
+              // the "start" of each frame in real browsers, so we fire
+              // them after timers but before final virtualNow bump).
               if (rafQueue.length > 0) {
                 const q = rafQueue;
                 rafQueue = [];
@@ -506,7 +571,9 @@ class BrowserEnv:
                   catch (err) { console.error("vtShim raf error:", err); }
                 }
               }
+              const dt = target - virtualNow;
               virtualNow = target;
+              virtualPerfNow += dt;
               return fired;
             },
           };

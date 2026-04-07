@@ -1405,8 +1405,21 @@ class BrowserGameAgent:
             return ""
 
     def _is_black_frame(self, image) -> bool:
+        """Detect a *broken* screenshot (pipeline failure), not a dim game.
+
+        A real broken frame is uniform — usually all-zero bytes from a
+        screenshot taken before the canvas had any content. A dim game
+        scene (Flappy Bird at night, a fade-to-black, a dark dungeon)
+        has high pixel variance and at least a few bright pixels even
+        when the average is low.
+
+        Heuristic: low std AND no bright pixels. Either signal alone is
+        not enough — a uniform gray loading screen has low std but the
+        mean isn't zero, and a dark game scene has bright pixels
+        (HUD, sky highlights) so max stays well above the threshold.
+        """
         arr = np.array(image)
-        return arr.mean() < 5
+        return arr.std() < 2.0 and arr.max() < 10
 
     # ------------------------------------------------------------------
     # Prompt building
