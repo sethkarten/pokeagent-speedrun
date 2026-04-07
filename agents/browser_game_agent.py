@@ -406,7 +406,185 @@ class BrowserGameAgent:
             },
         ]
 
-        # Memory / Skill / Subagent tools (from shared declarations)
+        # Memory / Skill / Subagent CRUD tools.
+        # These were previously left undeclared and worked only because Gemini
+        # hallucinated their names from training data and the unvalidated
+        # dispatcher silently routed them. Now they're declared properly so
+        # the new allow-list reject in _execute_function_call doesn't block
+        # them. Required for the autoevolve loop and for any agent that
+        # builds its own toolkit.
+        tools.append({
+            "name": "process_memory",
+            "description": (
+                "Read, add, update, or delete entries in long-term memory. "
+                "Use this to record game controls, mechanics, level info, "
+                "enemy patterns, item locations, and anything else you "
+                "discover through gameplay. The current memory tree is "
+                "shown in the LONG-TERM MEMORY OVERVIEW section of your "
+                "prompt — pick an action based on what you need to do."
+            ),
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "action": {
+                        "type_": "STRING",
+                        "enum": ["read", "add", "update", "delete"],
+                        "description": "What to do with the entries",
+                    },
+                    "entries": {
+                        "type_": "ARRAY",
+                        "items": {"type_": "OBJECT"},
+                        "description": (
+                            "Per-action shape: read=[{id}], "
+                            "add=[{path,title,content,importance,id?}], "
+                            "update=[{id,title?,content?,path?,importance?}], "
+                            "delete=[{id}]."
+                        ),
+                    },
+                    "reasoning": {
+                        "type_": "STRING",
+                        "description": "Why you are reading/writing this memory",
+                    },
+                },
+                "required": ["action", "entries", "reasoning"],
+            },
+        })
+        tools.append({
+            "name": "process_skill",
+            "description": (
+                "Read, add, update, or delete entries in the skill library. "
+                "Skills can be either text guidance or executable Python (set "
+                "the 'code' field). The current skill tree is shown in the "
+                "SKILL LIBRARY section of your prompt — entries with the "
+                "[run_skill] tag are executable and you should call them via "
+                "the run_skill tool instead of writing the same code again."
+            ),
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "action": {
+                        "type_": "STRING",
+                        "enum": ["read", "add", "update", "delete"],
+                        "description": "What to do with the entries",
+                    },
+                    "entries": {
+                        "type_": "ARRAY",
+                        "items": {"type_": "OBJECT"},
+                        "description": (
+                            "Per-action shape: read=[{id}], "
+                            "add=[{path,name,description,code?,effectiveness?,importance?,id?}], "
+                            "update=[{id,name?,description?,code?,effectiveness?,path?}], "
+                            "delete=[{id}]. Always include the 'code' field "
+                            "when adding an executable skill or run_skill will "
+                            "reject it."
+                        ),
+                    },
+                    "reasoning": {
+                        "type_": "STRING",
+                        "description": "Why you are creating/updating this skill",
+                    },
+                },
+                "required": ["action", "entries", "reasoning"],
+            },
+        })
+        tools.append({
+            "name": "process_subagent",
+            "description": (
+                "Read, add, update, or delete entries in the subagent registry. "
+                "Use this to register named multi-step routines (combat handlers, "
+                "exploration loops, UI sequences) that you can later invoke via "
+                "execute_custom_subagent. The current registry is shown in the "
+                "SUBAGENT REGISTRY section of your prompt."
+            ),
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "action": {
+                        "type_": "STRING",
+                        "enum": ["read", "add", "update", "delete"],
+                        "description": "What to do with the entries",
+                    },
+                    "entries": {
+                        "type_": "ARRAY",
+                        "items": {"type_": "OBJECT"},
+                        "description": (
+                            "Per-action shape: read=[{id}], "
+                            "add=[{path,name,description,handler_type,max_turns,available_tools,system_instructions,directive,return_condition,importance?,id?}], "
+                            "update=[{id,...}], delete=[{id}]."
+                        ),
+                    },
+                    "reasoning": {
+                        "type_": "STRING",
+                        "description": "Why you are creating/updating this subagent",
+                    },
+                },
+                "required": ["action", "entries", "reasoning"],
+            },
+        })
+        tools.append({
+            "name": "run_skill",
+            "description": (
+                "Execute a saved skill's code in a sandbox. Use this BEFORE "
+                "reaching for primitive actions if any skill in the SKILL "
+                "LIBRARY matches what you want to do. The sandbox exposes "
+                "tools['press_keys']/['mouse_click']/['double_click']/['hold_key']"
+                "/['mouse_move']/['mouse_drag']/['get_game_state']/['process_memory'] "
+                "and the args dict you pass in."
+            ),
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "skill_id": {
+                        "type_": "STRING",
+                        "description": "ID of the skill to run (from SKILL LIBRARY)",
+                    },
+                    "args": {
+                        "type_": "OBJECT",
+                        "description": (
+                            "Arguments passed to the skill code as the 'args' "
+                            "dict. Inspect the skill's description to know "
+                            "what fields it expects."
+                        ),
+                    },
+                    "reasoning": {
+                        "type_": "STRING",
+                        "description": "Why you are running this skill now",
+                    },
+                },
+                "required": ["skill_id", "reasoning"],
+            },
+        })
+        tools.append({
+            "name": "run_code",
+            "description": (
+                "Execute Python code in a read-only sandbox to inspect game "
+                "state and prototype skill code. Has access to "
+                "tools['get_game_state']() but NOT to action tools — use this "
+                "only for development/debugging. Once code works, save it as "
+                "a skill via process_skill (with the 'code' field set) and "
+                "invoke it via run_skill going forward."
+            ),
+            "parameters": {
+                "type_": "OBJECT",
+                "properties": {
+                    "code": {
+                        "type_": "STRING",
+                        "description": "Python code to execute (sets a 'result' variable)",
+                    },
+                    "args": {
+                        "type_": "OBJECT",
+                        "description": "Optional args dict passed as 'args' to the code",
+                    },
+                    "reasoning": {
+                        "type_": "STRING",
+                        "description": "Why you are running this code",
+                    },
+                },
+                "required": ["code", "reasoning"],
+            },
+        })
+
+        # Local subagent tools (from shared declarations).
         # Exclude process_trajectory_history — it runs without screenshots and
         # causes the VLM to hallucinate.  The agent already sees the screenshot
         # in its main prompt each step.
@@ -475,6 +653,22 @@ class BrowserGameAgent:
         name = function_call.name
         if allowed_tool_names and name not in allowed_tool_names:
             return json.dumps({"success": False, "error": f"Tool {name} not allowed in this context"})
+
+        # Allow-list against declared tools so the model can't hallucinate
+        # API names like "get_game_state" and have them silently succeed via
+        # the unvalidated MCP dispatch below. Without this guard, gemma4 was
+        # emitting ~0.4 get_game_state calls per step on top of the screenshot
+        # we already include in the prompt — pure waste.
+        declared_names = {t["name"] for t in (self.tools or [])}
+        if declared_names and name not in declared_names:
+            err = (
+                f"Tool '{name}' is not a declared tool. "
+                f"Available tools: {sorted(declared_names)}. "
+                f"The current screenshot is already in your prompt — you do "
+                f"not need to fetch state separately."
+            )
+            logger.warning(f"Rejected hallucinated tool call: {name}")
+            return json.dumps({"success": False, "error": err})
         args = convert_protobuf_args(function_call.args) if hasattr(function_call, "args") else {}
         return self._execute_function_call_by_name(name, args)
 
@@ -649,36 +843,66 @@ class BrowserGameAgent:
     # Subagent VLM management
     # ------------------------------------------------------------------
 
-    def _get_subagent_vlm(self, tool_subset, system_instruction="", interaction_name="subagent"):
-        cache_key = (frozenset(tool_subset) if tool_subset else frozenset(), system_instruction[:200])
-        if cache_key in self._subagent_vlm_cache:
-            self._subagent_vlm_cache.move_to_end(cache_key)
-            return self._subagent_vlm_cache[cache_key]
+    def _get_subagent_vlm(
+        self,
+        tool_names: Optional[set] = None,
+        supplemental_tools: Optional[list] = None,
+    ):
+        """Lazily create cached VLMs for subagents.
 
-        tool_decls = [t for t in self.tools if t["name"] in (tool_subset or set())]
-        vlm = VLM(
+        - Tool-less subagents (reflect/verify/summarize): cached bare VLM
+          via ``self._local_subagent_vlm``.
+        - ``execute_custom_subagent``: VLM with the requested tool subset
+          (intersected with the orchestrator's declared tools) plus any
+          ``supplemental_tools`` injected by the executor (e.g. the
+          synthetic ``return_to_orchestrator`` tool). Cached by
+          (tool_names, supplemental tool names) tuple with LRU eviction.
+
+        Mirrors PokeAgent's signature so the shared SubagentExecutor can
+        call this without branching on agent type. Previously the browser
+        agent had two clashing definitions of this method (the second one
+        silently shadowed the first via Python's late-binding) and neither
+        accepted supplemental_tools, so every execute_custom_subagent
+        call crashed with TypeError before this fix.
+        """
+        normalized = tuple(sorted(tool_names or ()))
+        supp_key = tuple(t["name"] for t in (supplemental_tools or []))
+
+        # Bare VLM for tool-less one-shot subagents
+        if not normalized and not supp_key:
+            if self._local_subagent_vlm is None:
+                self._local_subagent_vlm = VLM(
+                    backend=self.backend,
+                    model_name=self.model,
+                    tools=None,
+                )
+            return self._local_subagent_vlm
+
+        cache_key = (normalized, supp_key)
+        cached = self._subagent_vlm_cache.get(cache_key)
+        if cached is not None:
+            self._subagent_vlm_cache.move_to_end(cache_key)
+            return cached
+
+        allowed = [t for t in self.tools if t.get("name") in set(normalized)]
+        if supplemental_tools:
+            allowed.extend(supplemental_tools)
+
+        cached = VLM(
             backend=self.backend,
             model_name=self.model,
-            tools=tool_decls or None,
-            system_instruction=system_instruction or None,
+            tools=allowed or None,
+            system_instruction=self.system_instructions or None,
         )
-        self._subagent_vlm_cache[cache_key] = vlm
-        if len(self._subagent_vlm_cache) > self._VLM_CACHE_CAP:
+        self._subagent_vlm_cache[cache_key] = cached
+        self._subagent_vlm_cache.move_to_end(cache_key)
+        while len(self._subagent_vlm_cache) > self._VLM_CACHE_CAP:
             self._subagent_vlm_cache.popitem(last=False)
-        return vlm
+        return cached
 
     # ------------------------------------------------------------------
     # Local subagent handlers (called via registry dispatch)
     # ------------------------------------------------------------------
-
-    def _get_subagent_vlm(self, tool_subset=None, system_instruction="", interaction_name="subagent"):
-        """Get or create a VLM for one-step subagents (no tools needed)."""
-        if self._local_subagent_vlm is None:
-            self._local_subagent_vlm = VLM(
-                backend=self.backend,
-                model_name=self.model,
-            )
-        return self._local_subagent_vlm
 
     def _run_one_step_subagent(
         self,
@@ -873,6 +1097,84 @@ class BrowserGameAgent:
         except Exception as e:
             logger.warning(f"Trajectory save error: {e}", exc_info=True)
 
+    def _summarize_tool_call(self, name: str, args: Dict[str, Any]) -> str:
+        """One-line human-readable summary of a tool call for logging.
+
+        Goal: when a call fails, the operator should be able to see what
+        the agent was actually trying to do without grepping the prompt.
+        For execute_custom_subagent / run_skill we resolve the id to a
+        store name; for everything else we show the most informative
+        args (reasoning, x/y, keys, etc.) plus a count of any extras.
+        """
+        if not isinstance(args, dict):
+            return f"{name}({args!r})"
+
+        reasoning = args.get("reasoning") or args.get("reason") or ""
+
+        # Resolve store IDs to names so the log isn't all "sa_0008".
+        if name == "execute_custom_subagent":
+            sid = args.get("subagent_id") or args.get("id") or "?"
+            sa_name = self._lookup_subagent_name(sid)
+            label = f"{sid} ({sa_name})" if sa_name else sid
+            directive = args.get("directive") or args.get("config", {}).get("directive", "")
+            extra = f" directive={directive[:60]!r}" if directive else ""
+            r = f" — {reasoning[:80]}" if reasoning else ""
+            return f"execute_custom_subagent({label}){extra}{r}"
+
+        if name == "run_skill":
+            sid = args.get("skill_id", "?")
+            sk_name = self._lookup_skill_name(sid)
+            label = f"{sid} ({sk_name})" if sk_name else sid
+            sk_args = args.get("args", {})
+            r = f" — {reasoning[:80]}" if reasoning else ""
+            return f"run_skill({label}, args={sk_args}){r}"
+
+        # Default: show the most useful 2-3 fields
+        useful_keys = [
+            k for k in ("x", "y", "x1", "y1", "x2", "y2", "key", "keys",
+                        "duration_ms", "skill_id", "subagent_id",
+                        "action", "code")
+            if k in args
+        ][:3]
+        kv = ", ".join(
+            f"{k}={self._truncate_arg(args[k])}" for k in useful_keys
+        )
+        if reasoning:
+            kv = f"{kv}{', ' if kv else ''}reasoning={reasoning[:80]!r}"
+        if not kv:
+            # Fall back to generic dump
+            kv = ", ".join(f"{k}={self._truncate_arg(v)}"
+                           for k, v in list(args.items())[:3])
+        return f"{name}({kv})"
+
+    def _truncate_arg(self, value: Any) -> str:
+        """Compact repr of a tool arg for log lines."""
+        if isinstance(value, str):
+            return repr(value if len(value) < 60 else value[:57] + "...")
+        if isinstance(value, (list, tuple)):
+            inner = ", ".join(self._truncate_arg(v) for v in value[:5])
+            extra = f", +{len(value)-5}" if len(value) > 5 else ""
+            return f"[{inner}{extra}]"
+        if isinstance(value, dict):
+            return f"{{...{len(value)} keys}}"
+        return str(value)
+
+    def _lookup_subagent_name(self, sid: str) -> Optional[str]:
+        try:
+            from utils.stores.subagents import get_subagent_store
+            entry = get_subagent_store().get(sid)
+            return getattr(entry, "name", None) or getattr(entry, "title", None) if entry else None
+        except Exception:
+            return None
+
+    def _lookup_skill_name(self, sid: str) -> Optional[str]:
+        try:
+            from utils.stores.skills import get_skill_store
+            entry = get_skill_store().get(sid)
+            return getattr(entry, "name", None) or getattr(entry, "title", None) if entry else None
+        except Exception:
+            return None
+
     # ------------------------------------------------------------------
     # VLM response handling
     # ------------------------------------------------------------------
@@ -900,18 +1202,36 @@ class BrowserGameAgent:
             if hasattr(part, "function_call") and part.function_call:
                 fc = part.function_call
                 tool_call_count += 1
-                logger.info(f"Tool call: {fc.name} ({tool_call_count}/{max_tool_calls})")
+
+                # Pre-extract args once so we can log them on success AND
+                # failure paths without re-parsing.
+                try:
+                    fc_args = convert_protobuf_args(fc.args) if hasattr(fc, "args") else {}
+                except Exception:
+                    fc_args = {}
+
+                # Build a one-line summary of the call for the log so the
+                # operator can see what the agent was *trying* to do, not
+                # just the bare tool name. Includes reasoning if present
+                # and resolves subagent_id / skill_id to a name when we
+                # can look one up locally.
+                summary = self._summarize_tool_call(fc.name, fc_args)
+                logger.info(
+                    f"Tool call ({tool_call_count}/{max_tool_calls}): {summary}"
+                )
 
                 try:
                     result = self._execute_function_call(
                         fc, allowed_tool_names=allowed_tool_names
                     )
                 except Exception as e:
-                    logger.error(f"Tool {fc.name} failed: {e}")
+                    logger.error(
+                        f"Tool {fc.name} FAILED ({type(e).__name__}: {e}) — call: {summary}"
+                    )
                     tool_calls_made.append(
                         {
                             "name": fc.name,
-                            "args": convert_protobuf_args(fc.args) if hasattr(fc, "args") else {},
+                            "args": fc_args,
                             "result": json.dumps({"success": False, "error": str(e)}),
                         }
                     )
@@ -1023,22 +1343,19 @@ Step {step_count}"""
         max_tool_calls: int = 5,
         screenshot_b64: str = None,
         step_number: Optional[int] = None,
+        game_info: Optional[Dict[str, Any]] = None,
     ) -> tuple:
         try:
             preview_step = step_number if step_number is not None else self.runtime.peek_next_step()
 
-            # Pre-state for trajectory
+            # Pre-state for trajectory.
+            # Re-use the game_info that run() already fetched at the top of
+            # the step instead of calling get_game_state a second time —
+            # avoids ~1 redundant Playwright screenshot per step.
             run_manager = get_run_data_manager()
             pre_state = None
-            if run_manager:
-                try:
-                    gs = self.mcp_adapter.call_tool("get_game_state", {})
-                    if isinstance(gs, str):
-                        gs = json.loads(gs)
-                    if gs.get("success"):
-                        pre_state = {"game_info": gs.get("game_info", {})}
-                except Exception:
-                    pass
+            if run_manager and game_info is not None:
+                pre_state = {"game_info": game_info}
 
             tool_calls_made = []
             reasoning_text = ""
@@ -1190,15 +1507,20 @@ Step {step_count}"""
                 logger.info(f"Step {next_step}")
                 logger.info(f"{'=' * 70}")
 
-                # Fetch game state
+                # Fetch game state once per step. Both the prompt and the
+                # trajectory pre_state are derived from this single call.
                 gs_result = self._execute_function_call_by_name("get_game_state", {})
 
-                # Extract screenshot
+                # Extract screenshot + game_info from the same payload.
+                gs_data: Dict[str, Any] = {}
+                screenshot_b64 = None
+                game_info = None
                 try:
                     gs_data = json.loads(gs_result)
                     screenshot_b64 = gs_data.get("screenshot_base64")
+                    game_info = gs_data.get("game_info")
                 except Exception:
-                    screenshot_b64 = None
+                    pass
 
                 # Save screenshot for post-run analysis
                 if screenshot_b64 and self._screenshot_dir:
@@ -1209,12 +1531,15 @@ Step {step_count}"""
                     except Exception:
                         pass
 
-                # Build prompt
+                # Build prompt (uses gs_result for state_text; doesn't refetch)
                 prompt = self._build_prompt(gs_result, next_step)
 
-                # Run step
+                # Run step — pass game_info so run_step doesn't refetch
                 success, output = self.run_step(
-                    prompt, screenshot_b64=screenshot_b64, step_number=next_step
+                    prompt,
+                    screenshot_b64=screenshot_b64,
+                    step_number=next_step,
+                    game_info=game_info,
                 )
 
                 if not success:
