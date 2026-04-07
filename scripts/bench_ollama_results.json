@@ -1,0 +1,101 @@
+{
+  "host": "http://127.0.0.1:11434",
+  "num_ctx": 32768,
+  "num_predict": 5000,
+  "prompt_chars": 20703,
+  "image_bytes": 378652,
+  "vram_baseline_mib": 33,
+  "runs_per_model": 3,
+  "models": {
+    "gemma4:26b": {
+      "warmup": {
+        "ttft_s": 8.865388468839228,
+        "total_wall_s": 10.856720560695976,
+        "load_s": 3.157798033,
+        "prompt_eval_count": 6164,
+        "prompt_eval_s": 0.854301405,
+        "eval_count": 1202,
+        "eval_s": 6.35153906,
+        "response_chars": 1215
+      },
+      "runs": [
+        {
+          "ttft_s": 6.782684465870261,
+          "total_wall_s": 7.889639897737652,
+          "load_s": 0.151766632,
+          "prompt_eval_count": 6164,
+          "prompt_eval_s": 0.00812362,
+          "eval_count": 1388,
+          "eval_s": 7.330915922,
+          "response_chars": 682
+        },
+        {
+          "ttft_s": 7.581803297158331,
+          "total_wall_s": 8.772936202120036,
+          "load_s": 0.14345328,
+          "prompt_eval_count": 6164,
+          "prompt_eval_s": 0.007989081,
+          "eval_count": 1547,
+          "eval_s": 8.185462558,
+          "response_chars": 668
+        },
+        {
+          "ttft_s": 6.421816740650684,
+          "total_wall_s": 7.06232667574659,
+          "load_s": 0.141910883,
+          "prompt_eval_count": 6164,
+          "prompt_eval_s": 0.00796145,
+          "eval_count": 1211,
+          "eval_s": 6.531121878,
+          "response_chars": 336
+        }
+      ],
+      "vram_after_load_mib": 20912
+    },
+    "gemma4:31b": {
+      "warmup": {
+        "ttft_s": NaN,
+        "total_wall_s": 28.448292239103466,
+        "load_s": 5.082087546,
+        "prompt_eval_count": 6164,
+        "prompt_eval_s": 2.601734901,
+        "eval_count": 1123,
+        "eval_s": 20.275463353,
+        "response_chars": 0
+      },
+      "runs": [
+        {
+          "ttft_s": 20.1284733209759,
+          "total_wall_s": 27.668167501222342,
+          "load_s": 0.145471507,
+          "prompt_eval_count": 6164,
+          "prompt_eval_s": 0.020014407,
+          "eval_count": 1490,
+          "eval_s": 27.075591911,
+          "response_chars": 1379
+        },
+        {
+          "ttft_s": 12.334267369005829,
+          "total_wall_s": 15.055252104997635,
+          "load_s": 0.145445477,
+          "prompt_eval_count": 6164,
+          "prompt_eval_s": 0.020040797,
+          "eval_count": 801,
+          "eval_s": 14.622834763,
+          "response_chars": 452
+        },
+        {
+          "ttft_s": 13.44953512120992,
+          "total_wall_s": 20.590983802918345,
+          "load_s": 0.147665486,
+          "prompt_eval_count": 6164,
+          "prompt_eval_s": 0.020107387,
+          "eval_count": 1095,
+          "eval_s": 20.067010542,
+          "response_chars": 1253
+        }
+      ],
+      "vram_after_load_mib": 28918
+    }
+  }
+}
