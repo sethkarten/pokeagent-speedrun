@@ -830,27 +830,56 @@ class BrowserEnv:
             except Exception as e:
                 logger.error("hold_key(%s) failed: %s", key, e)
 
+        def _clamp_to_canvas(x: int, y: int) -> tuple:
+            """Clamp (x, y) into the canvas bounding box.
+
+            Playwright's locator.click(position={x, y}) does an
+            actionability check that includes "the click target is
+            inside the element box". When the position is outside the
+            element, Playwright tries to scroll it into view and waits
+            up to 30s before timing out — this happens constantly when
+            VLMs hallucinate coordinates that are slightly off-canvas
+            (e.g. clicking the page chrome under the canvas at y=784
+            for a 600-px-tall game). Each timeout costs 30s of wall
+            clock and accomplishes nothing. We clamp here so off-
+            canvas clicks land on the nearest edge instead.
+            """
+            cx = max(0, min(int(x), max(0, self.width - 1)))
+            cy = max(0, min(int(y), max(0, self.height - 1)))
+            if (cx, cy) != (int(x), int(y)):
+                logger.debug(
+                    "clamped click (%d,%d) -> (%d,%d) [canvas %dx%d]",
+                    x, y, cx, cy, self.width, self.height,
+                )
+            return cx, cy
+
         def _do_click_at(x: int, y: int):
+            cx, cy = _clamp_to_canvas(x, y)
             try:
                 if canvas is not None:
-                    canvas.click(position={"x": x, "y": y})
+                    canvas.click(position={"x": cx, "y": cy}, timeout=3_000)
                 elif game_frame is not None:
-                    page.locator("iframe#game_drop, .game_frame iframe").first.click(position={"x": x, "y": y})
+                    page.locator("iframe#game_drop, .game_frame iframe").first.click(
+                        position={"x": cx, "y": cy}, timeout=3_000,
+                    )
                 else:
-                    page.mouse.click(x, y)
-                self.mouse_x, self.mouse_y = int(x), int(y)
+                    page.mouse.click(cx, cy)
+                self.mouse_x, self.mouse_y = cx, cy
             except Exception as e:
                 logger.error("click_at(%d, %d) failed: %s", x, y, e)
 
         def _do_double_click_at(x: int, y: int):
+            cx, cy = _clamp_to_canvas(x, y)
             try:
                 if canvas is not None:
-                    canvas.dblclick(position={"x": x, "y": y})
+                    canvas.dblclick(position={"x": cx, "y": cy}, timeout=3_000)
                 elif game_frame is not None:
-                    page.locator("iframe#game_drop, .game_frame iframe").first.dblclick(position={"x": x, "y": y})
+                    page.locator("iframe#game_drop, .game_frame iframe").first.dblclick(
+                        position={"x": cx, "y": cy}, timeout=3_000,
+                    )
                 else:
-                    page.mouse.dblclick(x, y)
-                self.mouse_x, self.mouse_y = int(x), int(y)
+                    page.mouse.dblclick(cx, cy)
+                self.mouse_x, self.mouse_y = cx, cy
             except Exception as e:
                 logger.error("double_click_at(%d, %d) failed: %s", x, y, e)
 
