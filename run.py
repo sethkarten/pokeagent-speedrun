@@ -396,6 +396,15 @@ def main():
         args.enable_prompt_optimization = True
         os.environ["GAME_URL"] = args.game_url
 
+    # Any autoevolve-style scaffold needs prompt optimization enabled
+    # to actually instantiate the HarnessEvolver. Without this flag the
+    # scaffold loads correctly but `self.harness_evolver` stays None
+    # and no evolution ever fires (a previous Pokemon autoevolve smoke
+    # ran 30 steps with zero evolutions because of this).
+    if args.scaffold in ("autoevolve", "browser_autoevolve") and not args.enable_prompt_optimization:
+        args.enable_prompt_optimization = True
+        print(f"🧬 Auto-enabling --enable-prompt-optimization for scaffold={args.scaffold}")
+
     # Fix ROM default for Red (parser default is Emerald ROM)
     if args.rom == "Emerald-GBAdvance/rom.gba" and args.game == "red":
         args.rom = "PokemonRed-GBC/pokered.gbc"
