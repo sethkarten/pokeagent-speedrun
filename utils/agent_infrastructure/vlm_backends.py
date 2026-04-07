@@ -2549,7 +2549,135 @@ class GeminiBackend(VLMBackend):
             return "I encountered an error processing the request. I'll proceed with a basic action: press 'A' to continue."
 
 
-def _ollama_response_adapter(message: Dict[str, Any], usage: Dict[str, int]) -> Any:
+def _extract_text_action_calls(
+    text: str,
+    tool_schemas: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Pull tool calls out of text-format ``ACTION: name(args)`` lines.
+
+    Used as a fallback when a model emits its tool calls as prose
+    instead of structured tool_calls (most notably gemma4 with
+    PokeAgent's prompt, which trains it to write actions as text via
+    explicit examples). Each match becomes a ``{"name", "args"}``
+    dict the caller can hand to ``_openai_tool_call_part``.
+
+    When ``tool_schemas`` is provided (the OllamaBackend's
+    ``self.tools`` list), positional arguments are mapped to named
+    parameters using the schema's declared property order. Without
+    schemas we fall back to ``arg_0``, ``arg_1``, ... which most
+    dispatchers reject — schemas are strongly recommended.
+
+    Parsing strategy: locate ``ACTION:`` markers, grab the following
+    function-call-shaped substring, and parse with ``ast`` so we
+    handle real Python literals (lists, strings, kwargs) without
+    writing a brittle regex for each case. We bail silently on parse
+    failure rather than raising — the worst case is "no tool call
+    extracted from this turn", which is the same as today.
+    """
+    if not text or "ACTION:" not in text:
+        return []
+
+    import ast
+    import re as _re
+
+    # Build a {name -> [param1, param2, ...]} map from the schemas so
+    # we can translate positional arguments. Property order in our
+    # tool definitions is meaningful — it matches the prompt examples.
+    schema_param_order: Dict[str, List[str]] = {}
+    if tool_schemas:
+        for t in tool_schemas:
+            tname = t.get("name") or ""
+            params = (t.get("parameters") or {}).get("properties") or {}
+            if tname and params:
+                schema_param_order[tname] = list(params.keys())
+
+    out: List[Dict[str, Any]] = []
+    # Find every ACTION: marker followed by an identifier and "(".
+    # We then walk the string from the open-paren to its matching close-
+    # paren so we can correctly handle nested parens, quoted strings,
+    # and lists like ["A", "B"].
+    for m in _re.finditer(r"ACTION:\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(", text):
+        name = m.group(1)
+        start = m.end() - 1  # position of the opening (
+        depth = 0
+        i = start
+        in_str = False
+        str_ch = ""
+        n = len(text)
+        while i < n:
+            ch = text[i]
+            if in_str:
+                if ch == "\\" and i + 1 < n:
+                    i += 2
+                    continue
+                if ch == str_ch:
+                    in_str = False
+            else:
+                if ch in ('"', "'"):
+                    in_str = True
+                    str_ch = ch
+                elif ch == "(":
+                    depth += 1
+                elif ch == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+            i += 1
+        if depth != 0 or i >= n:
+            continue  # unbalanced — skip this match
+
+        call_src = f"{name}{text[start:i + 1]}"
+        try:
+            tree = ast.parse(call_src, mode="eval")
+        except SyntaxError:
+            continue
+        if not isinstance(tree.body, ast.Call):
+            continue
+        call = tree.body
+
+        # Extract positional and keyword arguments. We only support
+        # literal values — anything dynamic (Name, BinOp, function
+        # calls in args) gets stringified as a fallback.
+        def _to_py(node):
+            try:
+                return ast.literal_eval(node)
+            except Exception:
+                # Best-effort fallback: render the source slice.
+                try:
+                    return ast.unparse(node)
+                except Exception:
+                    return None
+
+        args_dict: Dict[str, Any] = {}
+        # Map positional args to named params via the tool schema's
+        # declared property order. Without a schema, positional args
+        # become arg_0, arg_1, ... which most dispatchers reject —
+        # but at least the kwargs path still works.
+        param_names = schema_param_order.get(name, [])
+        for idx, a in enumerate(call.args):
+            if idx < len(param_names):
+                args_dict[param_names[idx]] = _to_py(a)
+            else:
+                args_dict[f"arg_{idx}"] = _to_py(a)
+        for kw in call.keywords:
+            if kw.arg is None:
+                continue
+            args_dict[kw.arg] = _to_py(kw.value)
+
+        # Apply the same key fix-ups we use for structured tool_calls.
+        for wrong, right in _OLLAMA_ARG_KEY_FIXES.items():
+            if wrong in args_dict and right not in args_dict:
+                args_dict[right] = args_dict.pop(wrong)
+
+        out.append({"name": name, "args": args_dict})
+    return out
+
+
+def _ollama_response_adapter(
+    message: Dict[str, Any],
+    usage: Dict[str, int],
+    tool_schemas: Optional[List[Dict[str, Any]]] = None,
+) -> Any:
     """Adapt Ollama /api/chat response to a Gemini-like structure.
 
     Ollama returns ``{"message": {"role": ..., "content": ..., "tool_calls": [...]}}``.
@@ -2561,6 +2689,16 @@ def _ollama_response_adapter(message: Dict[str, Any], usage: Dict[str, int]) -> 
     ``_OLLAMA_ARG_KEY_FIXES`` so common gemma misspellings (most notably
     "reasonings" → "reasoning") don't make the agent's tool dispatch reject
     the call. We've observed gemma4:26b emit this typo in real runs.
+
+    If ``tool_calls`` is empty AND the content_text contains
+    ``ACTION: tool_name(...)`` patterns, fall back to extracting tool
+    calls from the text. This is a backward-compat shim for the
+    PokeAgent prompt which explicitly trains models to emit actions as
+    text (e.g. ``ACTION: press_buttons(["A"], reasoning="...")``).
+    Gemini follows the example as text but ALSO emits a real
+    function_call alongside; gemma4 follows the example literally and
+    emits ONLY text. Without this fallback, every gemma+PokeAgent step
+    has zero detected tool calls and the agent loops forever.
     """
     parts = []
     content_text = (message or {}).get("content", "") or ""
@@ -2590,6 +2728,14 @@ def _ollama_response_adapter(message: Dict[str, Any], usage: Dict[str, int]) -> 
         args.pop("index", None)
         parts.append(_openai_tool_call_part(name, args))
 
+    # Fallback: extract tool calls from text-format ACTION: lines if
+    # the model didn't use the tool_calls API. Only do this when the
+    # structured tool_calls list is empty — we don't want to double-
+    # execute calls that already came through the API.
+    if not parts and content_text:
+        for fc in _extract_text_action_calls(content_text, tool_schemas):
+            parts.append(_openai_tool_call_part(fc["name"], fc["args"]))
+
     if content_text:
         parts.append(_openai_text_part(content_text))
 
@@ -2618,9 +2764,12 @@ def _ollama_response_adapter(message: Dict[str, Any], usage: Dict[str, int]) -> 
 
 
 # Common gemma4 argument-key typos. Extend as we see new ones in real runs.
+# Note: do NOT alias `reason` → `reasoning` blindly. PokeAgent's
+# `navigate_to` schema legitimately uses `reason`; only the browser
+# agent uses `reasoning`. The dispatcher checks names against the
+# tool schema, so a wrong rename is worse than no rename at all.
 _OLLAMA_ARG_KEY_FIXES = {
     "reasonings": "reasoning",
-    "reason": "reasoning",
 }
 
 
@@ -2837,7 +2986,7 @@ class OllamaBackend(VLMBackend):
             token_usage = self._build_token_usage(raw)
 
             if self.tools:
-                adapter = _ollama_response_adapter(raw.get("message", {}), token_usage)
+                adapter = _ollama_response_adapter(raw.get("message", {}), token_usage, self.tools)
                 thinking_text = self._extract_thinking_from_response(adapter)
                 log_llm_interaction(
                     interaction_type=f"ollama_{module_name}",
@@ -2899,7 +3048,7 @@ class OllamaBackend(VLMBackend):
             token_usage = self._build_token_usage(raw)
 
             if self.tools:
-                adapter = _ollama_response_adapter(raw.get("message", {}), token_usage)
+                adapter = _ollama_response_adapter(raw.get("message", {}), token_usage, self.tools)
                 thinking_text = self._extract_thinking_from_response(adapter)
                 log_llm_interaction(
                     interaction_type=f"ollama_{module_name}",
