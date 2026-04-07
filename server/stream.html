@@ -1512,15 +1512,16 @@
                 const mapContainer = document.getElementById('map-visualization');
 
                 if (data.map && data.map.visual_map) {
-                    // Filter out rows that only contain numbers, minus, space, #, and N
+                    // Filter out non-map content (headers, coordinate labels, empty lines)
                     let lines = data.map.visual_map.split('\n');
                     lines = lines.filter(line => {
                         const cleanLine = line.trim();
-                        if (cleanLine === '') return false; // Skip empty lines
-
-                        // Skip rows that only contain: numbers, minus, space, #, and N
-                        const onlyBoringChars = /^[\d\-\s#N]+$/.test(cleanLine);
-                        return !onlyBoringChars;
+                        if (cleanLine === '') return false;
+                        // Strip map_stitcher header lines (e.g., "--- MAP: PETALBURG_CITY ---")
+                        if (/^---\s*MAP:/.test(cleanLine)) return false;
+                        // Strip coordinate-axis label rows (digits and whitespace only)
+                        if (/^\d[\d\s]*$/.test(cleanLine)) return false;
+                        return true;
                     });
 
                     if (lines.length > 0) {
