@@ -588,7 +588,22 @@ def setup_environment(skip_initial_state=False):
             if not game_url:
                 raise RuntimeError("GAME_URL environment variable required for browser games")
             browser_headed = os.environ.get("BROWSER_HEADED", "0") == "1"
-            env = BrowserEnv(game_url=game_url, headless=not browser_headed)
+            # Real-time game support: virtual time pause + per-step budget.
+            # Defaults to ON because it's harmless for turn-based games and
+            # essential for real-time ones (Flappy Bird, platformers, etc).
+            # Disable via BROWSER_NO_VIRTUAL_TIME=1 if a specific game
+            # breaks under the JS shim.
+            virtual_time = os.environ.get("BROWSER_NO_VIRTUAL_TIME", "0") != "1"
+            try:
+                step_budget_ms = int(os.environ.get("BROWSER_STEP_BUDGET_MS", "200"))
+            except (TypeError, ValueError):
+                step_budget_ms = 200
+            env = BrowserEnv(
+                game_url=game_url,
+                headless=not browser_headed,
+                virtual_time=virtual_time,
+                step_budget_ms=step_budget_ms,
+            )
             env.initialize()
 
             screenshot = env.get_screenshot()
@@ -2944,6 +2959,15 @@ async def mcp_get_game_state():
     # Browser games: return screenshot + page text + game info (no emulator state)
     if game_type == "browser":
         try:
+            # Freeze game time before capturing so the agent sees a static
+            # frame. The first agent decision after init also benefits
+            # from this — animation/loading frames stop pixel-popping the
+            # screenshot. No-op when virtual_time is False.
+            try:
+                if hasattr(env, "pause_virtual_time"):
+                    env.pause_virtual_time()
+            except Exception:
+                pass
             screenshot = env.get_screenshot()
             screenshot_b64 = _pil_to_base64(screenshot)
             game_info = env.get_game_info()
@@ -2957,6 +2981,9 @@ async def mcp_get_game_state():
             ch = game_info.get('canvas_height', 0)
             mx = game_info.get('mouse_x')
             my = game_info.get('mouse_y')
+            held_keys = game_info.get('held_keys', [])
+            step_budget = game_info.get('step_budget_ms', 0)
+            virtual_time_on = game_info.get('virtual_time', False)
             state_text = f"=== BROWSER GAME STATE ===\n"
             state_text += f"URL: {game_info.get('url', '')}\n"
             state_text += f"Title: {game_info.get('title', '')}\n"
@@ -2969,6 +2996,21 @@ async def mcp_get_game_state():
                 )
             else:
                 state_text += "Cursor position: unknown (no mouse_move/click yet this session)\n"
+            if held_keys:
+                state_text += (
+                    f"Currently held keys: {held_keys}  — these stay pressed "
+                    f"until you call key_up. Release with key_up if you no "
+                    f"longer want them held.\n"
+                )
+            else:
+                state_text += "Currently held keys: none\n"
+            if virtual_time_on:
+                state_text += (
+                    f"Virtual time: PAUSED (game animations frozen while you "
+                    f"think). Each action advances game time by ~{step_budget}ms; "
+                    f"use wait_ms(N) to let MORE game time pass without taking "
+                    f"another action (e.g. for animations or fall timers).\n"
+                )
             if browser_last_action:
                 la = browser_last_action
                 if la["type"] == "mouse_click":
@@ -2986,6 +3028,12 @@ async def mcp_get_game_state():
                     state_text += f"Last keys: {la['keys']}\n"
                 elif la["type"] == "hold_key":
                     state_text += f"Last hold: {la['key']} for {la['duration_ms']}ms\n"
+                elif la["type"] == "key_down":
+                    state_text += f"Last key_down: {la['key']} (still held)\n"
+                elif la["type"] == "key_up":
+                    state_text += f"Last key_up: {la['key']}\n"
+                elif la["type"] == "wait_ms":
+                    state_text += f"Last wait: {la['duration_ms']}ms of game time\n"
             if page_text:
                 state_text += f"\n--- Visible Text ---\n{page_text[:2000]}\n"
 
@@ -3417,6 +3465,7 @@ async def mcp_press_keys(request: dict):
             return {"success": False, "error": "No keys specified"}
 
         env.press_keys_sequence(keys)
+        _advance_browser_step_budget()
 
         global browser_last_action
         browser_last_action = {"type": "press_keys", "keys": keys}
@@ -3456,6 +3505,7 @@ async def mcp_mouse_click(request: dict):
         reasoning = request.get("reasoning", "")
 
         env.click_at(x, y)
+        _advance_browser_step_budget()
 
         global browser_last_action
         browser_last_action = {"type": "mouse_click", "x": x, "y": y}
@@ -3495,6 +3545,7 @@ async def mcp_double_click(request: dict):
         reasoning = request.get("reasoning", "")
 
         env.double_click_at(x, y)
+        _advance_browser_step_budget()
 
         global browser_last_action
         browser_last_action = {"type": "double_click", "x": x, "y": y}
@@ -3536,6 +3587,7 @@ async def mcp_hold_key(request: dict):
             return {"success": False, "error": "No key specified"}
 
         env.hold_key(key, duration_ms=duration_ms)
+        _advance_browser_step_budget()
 
         global browser_last_action
         browser_last_action = {"type": "hold_key", "key": key, "duration_ms": duration_ms}
@@ -3582,6 +3634,7 @@ async def mcp_mouse_move(request: dict):
         reasoning = request.get("reasoning", "")
 
         env.move_to(x, y, steps=steps)
+        _advance_browser_step_budget()
 
         global browser_last_action
         browser_last_action = {"type": "mouse_move", "x": x, "y": y}
@@ -3628,6 +3681,7 @@ async def mcp_mouse_drag(request: dict):
         reasoning = request.get("reasoning", "")
 
         env.drag_to(x1, y1, x2, y2, steps=steps, hold_ms=hold_ms)
+        _advance_browser_step_budget()
 
         global browser_last_action
         browser_last_action = {
@@ -3654,6 +3708,165 @@ async def mcp_mouse_drag(request: dict):
     except Exception as e:
         logger.error(f"mouse_drag error: {e}")
         return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/key_down")
+async def mcp_key_down(request: dict):
+    """MCP Tool: Press a key WITHOUT releasing it.
+
+    The key stays held across agent steps until a matching key_up is
+    issued (or BrowserEnv is stopped, or navigation recovery fires,
+    both of which release all held keys). Use for games where holding
+    direction keys is the natural input model — Flappy Bird, platformers
+    with continuous movement, racing games, etc.
+
+    The set of currently held keys is exposed in the agent's prompt
+    via game_info['held_keys'].
+    """
+    if game_type != "browser":
+        return {"success": False, "error": "key_down is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        key = request.get("key", "")
+        reasoning = request.get("reasoning", "")
+        if not key:
+            return {"success": False, "error": "No key specified"}
+
+        env.key_down(key)
+        _advance_browser_step_budget()
+
+        global browser_last_action
+        browser_last_action = {"type": "key_down", "key": key}
+
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "key_down": key,
+            "held_keys": env.get_game_info().get("held_keys", []),
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"key_down error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/key_up")
+async def mcp_key_up(request: dict):
+    """MCP Tool: Release a key that was previously held with key_down."""
+    if game_type != "browser":
+        return {"success": False, "error": "key_up is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        key = request.get("key", "")
+        reasoning = request.get("reasoning", "")
+        if not key:
+            return {"success": False, "error": "No key specified"}
+
+        env.key_up(key)
+        _advance_browser_step_budget()
+
+        global browser_last_action
+        browser_last_action = {"type": "key_up", "key": key}
+
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "key_up": key,
+            "held_keys": env.get_game_info().get("held_keys", []),
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"key_up error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/mcp/wait_ms")
+async def mcp_wait_ms(request: dict):
+    """MCP Tool: Let game time pass without doing anything else.
+
+    In virtual-time mode this advances the JS-shim's virtual clock by
+    duration_ms — game animations, setTimeout/setInterval/RAF callbacks
+    fire as if duration_ms of real time had passed, then everything
+    re-pauses. The agent should articulate WHY it's waiting in the
+    reasoning field (animation in progress, falling platform, enemy
+    approach window, etc).
+
+    Note: this is the ONE primitive that doesn't take a step_budget
+    advance on top, because it IS the advance. The duration is whatever
+    the agent specifies.
+    """
+    if game_type != "browser":
+        return {"success": False, "error": "wait_ms is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+    try:
+        duration_ms = int(request.get("duration_ms", 200))
+        reasoning = request.get("reasoning", "")
+        if duration_ms < 0:
+            return {"success": False, "error": "duration_ms must be >= 0"}
+        if duration_ms > 30_000:
+            return {"success": False, "error": "duration_ms capped at 30000ms"}
+
+        env.wait_ms(duration_ms)
+
+        global browser_last_action
+        browser_last_action = {"type": "wait_ms", "duration_ms": duration_ms}
+
+        screenshot = env.get_screenshot()
+        screenshot_b64 = _pil_to_base64(screenshot)
+        update_frame_cache(screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "waited_ms": duration_ms,
+            "reasoning": reasoning,
+            "screenshot_base64": screenshot_b64,
+        }
+    except Exception as e:
+        logger.error(f"wait_ms error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def _advance_browser_step_budget() -> None:
+    """After every action, advance virtual time by the configured step
+    budget so the game has a window to react before the next agent
+    decision. No-op when virtual_time is False on the BrowserEnv."""
+    try:
+        if env is None or game_type != "browser":
+            return
+        budget = getattr(env, "step_budget_ms", 0)
+        if budget and getattr(env, "virtual_time", False):
+            env.advance_virtual_time(int(budget))
+    except Exception as e:
+        logger.debug(f"step budget advance failed: {e}")
 
 
 def _pil_to_base64(img) -> str:
