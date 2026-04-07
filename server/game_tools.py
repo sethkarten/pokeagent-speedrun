@@ -497,9 +497,37 @@ def get_memory_summary_direct(min_importance=3) -> dict:
         return {"success": False, "error": str(e)}
 
 
+def _refresh_store_from_disk(store) -> None:
+    """Reload a store from disk and invalidate its tree cache.
+
+    Bandaid for a process-boundary bug: HarnessEvolver runs inside the
+    AGENT process and writes new skills/subagents directly to the agent's
+    in-memory singleton (which serializes to skills.json / subagents.json
+    on disk). The SERVER process holds a *separate* singleton that's
+    frozen at startup and doesn't observe those writes. So when the agent
+    later asks the server for the skill / subagent overview, the server
+    returns "No skills learned yet." even though there are dozens of
+    evolved entries on disk.
+
+    The proper fix is to route ALL store mutations through MCP endpoints
+    on the server (so the singletons live in only one process). Until
+    that refactor lands, every server-side overview read calls this
+    helper, which reloads from disk + clears the cached tree string.
+
+    BaseStore.load() merges (doesn't clear), so this is safe — it picks
+    up new entries without losing anything the server already has.
+    """
+    try:
+        store.load()
+        store._cached_tree = None
+    except Exception as e:
+        logger.warning(f"Failed to refresh store from disk: {e}")
+
+
 def get_memory_overview_direct() -> dict:
     """Get compact tree overview of long-term memory ([id] title grouped by path)."""
     try:
+        _refresh_store_from_disk(memory_store)
         overview = memory_store.get_tree_overview()
         return {"success": True, "overview": overview}
     except Exception as e:
@@ -623,6 +651,7 @@ def process_memory_direct(action: str, entries: list, reasoning: object) -> dict
 def get_skill_overview_direct() -> dict:
     """Get compact tree overview of the skill library ([id] name grouped by path)."""
     try:
+        _refresh_store_from_disk(skill_store)
         overview = skill_store.get_tree_overview()
         return {"success": True, "overview": overview}
     except Exception as e:
@@ -726,6 +755,7 @@ def process_skill_direct(action: str, entries: list, reasoning: object) -> dict:
 def get_subagent_overview_direct() -> dict:
     """Get compact tree overview of the subagent registry ([id] name grouped by path)."""
     try:
+        _refresh_store_from_disk(subagent_store)
         overview = subagent_store.get_tree_overview()
         return {"success": True, "overview": overview}
     except Exception as e:

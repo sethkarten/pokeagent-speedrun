@@ -197,6 +197,23 @@ class SubagentStore(BaseStore[SubagentEntry]):
             "Seeded %d built-in subagent entries", len(BUILTIN_SUBAGENT_CONFIGS)
         )
 
+    def _format_tree_leaf(self, entry: SubagentEntry) -> str:
+        """Show description so the orchestrator can pick a subagent.
+
+        Without the description, the agent only sees ``[sa_0042] window_manager``
+        in its prompt — not enough to match its current intent against the
+        subagent registry. That's why ``execute_custom_subagent`` was being
+        called zero times in early evolved-subagent runs even though dozens
+        of subagents had been built.
+        """
+        title = entry.title or entry.name
+        desc = (entry.description or "").strip().replace("\n", " ")
+        if len(desc) > 120:
+            desc = desc[:117] + "..."
+        if desc:
+            return f"[{entry.id}] {title} — {desc} [execute_custom_subagent]"
+        return f"[{entry.id}] {title} [execute_custom_subagent]"
+
     def add(self, **fields) -> str:
         _validate_char_caps(**fields)
         return super().add(**fields)

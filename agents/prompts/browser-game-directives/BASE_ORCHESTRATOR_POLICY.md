@@ -16,12 +16,30 @@ You are playing a **browser-based game** with no walkthrough or guide. Learn gam
 
 ## Acting
 
-Every step must end with at least one game action: `press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, or `mouse_drag`. You may also call planning/memory tools (`replan_objectives`, `process_memory`, `process_skill`) in the same step to update your strategy and knowledge.
+**Look at the SKILL LIBRARY and SUBAGENT REGISTRY in your prompt FIRST.**
+Each entry has an id, a name, and a short description of what it does. If
+any one of them matches what you are about to do this step, **call it
+instead of acting by hand**:
+
+- `run_skill(skill_id="<id>", args={...})` for executable skill code
+- `execute_custom_subagent(subagent_id="<id>", reasoning=...)` for multi-step routines
+
+The whole point of the autoevolve loop is to write reusable tools — if you
+keep doing things by hand instead of reaching for them, you waste both the
+work the evolver did and your own steps. Reuse first; primitives only as a
+fallback when no skill or subagent fits.
+
+Every step must end with at least one game action: a `run_skill` /
+`execute_custom_subagent` call, or a primitive (`press_keys`,
+`mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`).
+You may also call planning/memory tools (`replan_objectives`,
+`process_memory`, `process_skill`) in the same step to update strategy
+and knowledge.
 
 ## Building Your Toolkit
 
-- **If you are repeatedly pressing the same key sequences**: Build a movement/action skill using `run_code`. Test it, save it.
-- **If you encounter the same game mode multiple times** (combat, puzzles, platforming sections): Create a subagent to handle it.
+- **If you are repeatedly pressing the same key sequences**: Build a movement/action skill using `run_code`. Test it, save it via `process_skill` *with the `code` field filled in*, then **call it via `run_skill` next step**.
+- **If you encounter the same game mode multiple times** (combat, puzzles, platforming sections): Create a subagent and use `execute_custom_subagent` to delegate to it.
 - **If a skill or subagent fails**: Inspect the error with `run_code`, fix it, update it.
 
 ## Knowledge Management

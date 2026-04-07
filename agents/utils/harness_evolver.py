@@ -56,6 +56,21 @@ _COMMON_EVOLVER_TOOLS = frozenset({
     "replan_objectives",
 })
 
+def _slugify_id(raw: str) -> str:
+    """Normalize an LLM-supplied id into a stable, URL-safe slug.
+
+    The LLM is prompted to provide descriptive ids like "open_door" or
+    "battle_handler" but sometimes returns "Open Door!" or "Battle
+    Handler v2". Lowercase, strip punctuation, collapse runs of underscores,
+    cap length so the id stays usable as a tree-overview leaf.
+    """
+    import re as _re
+    s = (raw or "").strip().lower()
+    s = _re.sub(r"[^a-z0-9_\-]+", "_", s)
+    s = _re.sub(r"_+", "_", s).strip("_")
+    return s[:48] or "unnamed"
+
+
 _IS_BROWSER_GAME = os.environ.get("GAME_TYPE", "emerald").lower() == "browser"
 
 if _IS_BROWSER_GAME:
@@ -451,6 +466,7 @@ Respond with ONLY a JSON object (no markdown fences):
   "analysis": "Brief summary of what you observed",
   "create": [
     {{
+      "id": "descriptive_snake_case_id",
       "name": "string",
       "description": "string",
       "handler_type": "one_step or looping",
@@ -463,13 +479,15 @@ Respond with ONLY a JSON object (no markdown fences):
   ],
   "update": [
     {{
-      "id": "sa_XXXX",
+      "id": "existing_id",
       "system_instructions": "improved instructions",
       "directive": "improved directive"
     }}
   ],
-  "retire": ["sa_XXXX"]
+  "retire": ["existing_id"]
 }}
+
+**id MUST be a short descriptive snake_case slug** (e.g. `door_opener`, `combat_handler`, `popup_dismisser`) — NOT a generic placeholder. The id appears in every prompt and the orchestrator picks subagents by matching its current intent against ids and descriptions, so non-descriptive ids make the subagent registry unusable.
 
 Only include sections with actual recommendations. Empty arrays are fine.
 Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
@@ -499,7 +517,7 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
 
                     # BaseStore.add returns the entry ID (string), not the
                     # entry object — look up the entry afterwards.
-                    entry_id = store.add(
+                    add_kwargs = dict(
                         path=f"evolved/{spec.get('name', 'unnamed').lower().replace(' ', '_')}",
                         name=spec.get("name", "Unnamed"),
                         description=spec.get("description", ""),
@@ -512,6 +530,14 @@ Available tools the subagent can use: {sorted(_ALWAYS_AVAILABLE_TOOLS)}
                         importance=3,
                         source="evolved",
                     )
+                    # Forward LLM-supplied descriptive id if present so the
+                    # registry isn't all sa_NNNN — the LLM was previously
+                    # working around this by stuffing the auto id into the
+                    # name field (e.g. "sa_0008: UI_Parser").
+                    custom_id = spec.get("id")
+                    if isinstance(custom_id, str) and custom_id.strip():
+                        add_kwargs["id"] = _slugify_id(custom_id)
+                    entry_id = store.add(**add_kwargs)
                     entry = store.get(entry_id)
                     result["created"].append(entry_id)
                     logger.info(
@@ -653,6 +679,7 @@ Respond with ONLY a JSON object (no markdown fences):
   "analysis": "Brief summary",
   "add": [
     {{
+      "id": "descriptive_snake_case_id",
       "name": "string",
       "path": "category/subcategory",
       "description": "What the skill does",
@@ -663,13 +690,15 @@ Respond with ONLY a JSON object (no markdown fences):
   ],
   "update": [
     {{
-      "id": "skill_XXXX",
+      "id": "existing_id",
       "effectiveness": "low|medium|high",
       "description": "optional updated description",
       "code": "optional: FULL replacement Python code if improving an executable skill"
     }}
   ]
 }}
+
+**id MUST be a short descriptive snake_case slug** (e.g. `pathfind_bfs`, `dismiss_popup`, `attack_combo`) — NOT a generic placeholder. The id appears in every prompt's SKILL LIBRARY and the orchestrator picks skills by matching its current intent against ids and descriptions, so non-descriptive ids make the library unusable.
 """
 
         try:
@@ -682,7 +711,7 @@ Respond with ONLY a JSON object (no markdown fences):
 
             for spec in recommendations.get("add", []):
                 try:
-                    entry_id = store.add(
+                    add_kwargs = dict(
                         path=spec.get("path", "general"),
                         name=spec.get("name", "Unnamed Skill"),
                         description=spec.get("description", ""),
@@ -694,6 +723,10 @@ Respond with ONLY a JSON object (no markdown fences):
                         importance=spec.get("importance", 3),
                         source="evolved",
                     )
+                    custom_id = spec.get("id")
+                    if isinstance(custom_id, str) and custom_id.strip():
+                        add_kwargs["id"] = _slugify_id(custom_id)
+                    entry_id = store.add(**add_kwargs)
                     entry = store.get(entry_id)
                     has_code = bool(getattr(entry, "code", ""))
                     result["created"].append(entry_id)
@@ -771,6 +804,7 @@ Respond with ONLY a JSON object (no markdown fences):
   "analysis": "Brief summary of memory state",
   "add": [
     {{
+      "id": "descriptive_snake_case_id",
       "path": "category/subcategory",
       "title": "string",
       "content": "string",
@@ -779,12 +813,14 @@ Respond with ONLY a JSON object (no markdown fences):
   ],
   "update": [
     {{
-      "id": "mem_XXXX",
+      "id": "existing_id",
       "content": "optional updated content",
       "importance": 2
     }}
   ]
 }}
+
+**id MUST be a short descriptive snake_case slug** (e.g. `slime_attack_pattern`, `door_unlocks_at_lvl3`, `inventory_x_button`) — NOT a generic placeholder. The id appears in every prompt's MEMORY OVERVIEW and the orchestrator recalls memories by matching its current intent against ids and titles.
 """
 
         try:
@@ -797,13 +833,17 @@ Respond with ONLY a JSON object (no markdown fences):
 
             for spec in recommendations.get("add", []):
                 try:
-                    entry_id = store.add(
+                    add_kwargs = dict(
                         path=spec.get("path", "general"),
                         title=spec.get("title", "Untitled"),
                         content=spec.get("content", ""),
                         importance=spec.get("importance", 3),
                         source="evolved",
                     )
+                    custom_id = spec.get("id")
+                    if isinstance(custom_id, str) and custom_id.strip():
+                        add_kwargs["id"] = _slugify_id(custom_id)
+                    entry_id = store.add(**add_kwargs)
                     entry = store.get(entry_id)
                     result["created"].append(entry_id)
                     logger.info(

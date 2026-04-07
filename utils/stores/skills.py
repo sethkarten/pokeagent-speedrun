@@ -56,11 +56,25 @@ class SkillStore(BaseStore[SkillEntry]):
         self.load()
 
     def _format_tree_leaf(self, entry: SkillEntry) -> str:
-        """Annotate executable skills so the agent knows to call run_skill."""
+        """Annotate executable skills so the agent knows to call run_skill.
+
+        Includes a truncated description so the orchestrator can match its
+        current intent against existing skills — without this, the agent
+        sees only the skill ID + name (e.g. ``[skill_0042] window_manager``)
+        which is not enough information to choose between 50+ entries.
+        That's why ``run_skill`` was being called zero times in early runs.
+        """
         title = entry.title or entry.name
+        desc = (entry.description or "").strip().replace("\n", " ")
+        if len(desc) > 120:
+            desc = desc[:117] + "..."
         if entry.code and entry.code.strip():
-            return f"[{entry.id}] {title} (run with: run_skill)"
-        return f"[{entry.id}] {title}"
+            tag = " [run_skill]"
+        else:
+            tag = " [note-only]"
+        if desc:
+            return f"[{entry.id}] {title} — {desc}{tag}"
+        return f"[{entry.id}] {title}{tag}"
 
     def _deserialize_entry(self, entry_dict: dict) -> SkillEntry:
         entry_dict.setdefault("mutation_history", [])
