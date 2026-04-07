@@ -31,10 +31,21 @@ fallback when no skill or subagent fits.
 
 Every step must end with at least one game action: a `run_skill` /
 `execute_custom_subagent` call, or a primitive (`press_keys`,
-`mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`).
+`mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`,
+`key_down`, `key_up`, `wait_ms`).
 You may also call planning/memory tools (`replan_objectives`,
 `process_memory`, `process_skill`) in the same step to update strategy
 and knowledge.
+
+**Note on virtual time:** Game time is paused while you think. Each
+action you take advances game time by a small fixed budget (see the
+"Virtual time" line in CURRENT GAME STATE). For real-time games like
+Flappy Bird, this means: hold a key with `key_down`, take a few
+`wait_ms` steps to let the game advance, observe the new state, then
+release with `key_up` when you want the bird to fall. Use `wait_ms`
+whenever you need MORE game time to elapse than a single action gives
+you (e.g. waiting on an animation, a falling platform, an enemy
+approaching, dialogue auto-advancing).
 
 ## Building Your Toolkit
 

@@ -83,6 +83,9 @@ if _IS_BROWSER_GAME:
         "hold_key",
         "mouse_move",
         "mouse_drag",
+        "key_down",
+        "key_up",
+        "wait_ms",
     })
 else:
     _ALWAYS_AVAILABLE_TOOLS = _COMMON_EVOLVER_TOOLS | frozenset({
@@ -102,14 +105,18 @@ Skill code runs as inline Python (NOT a function definition). It has access to:
 - `tools['press_keys'](keys=['Space'], reasoning='...')` — press one or more keys in sequence
 - `tools['mouse_click'](x=480, y=300, reasoning='...')` — click the canvas at (x, y)
 - `tools['double_click'](x=50, y=200, reasoning='...')` — double-click the canvas
-- `tools['hold_key'](key='ArrowRight', duration_ms=500, reasoning='...')` — hold a key for N ms
+- `tools['hold_key'](key='ArrowRight', duration_ms=500, reasoning='...')` — hold a key for N ms (single-step)
 - `tools['mouse_move'](x=480, y=300, steps=8, reasoning='...')` — move cursor without clicking (hover, paddle-follow, mouse-look)
 - `tools['mouse_drag'](x1=100, y1=100, x2=300, y2=200, steps=12, reasoning='...')` — press, drag, release (drag-to-aim, sliders, drawing)
-- `tools['get_game_state']()` — returns dict with `screenshot_base64`, `page_text`, `game_info` (canvas dims, last action), and `success`
+- `tools['key_down'](key='ArrowRight', reasoning='...')` — press without releasing (held across steps; use for hold-to-flap, continuous run, mouse-look)
+- `tools['key_up'](key='ArrowRight', reasoning='...')` — release a previously-held key (always pair with key_down)
+- `tools['wait_ms'](duration_ms=500, reasoning='...')` — let game time pass (animations / fall timers / dialogue)
+- `tools['get_game_state']()` — returns dict with `screenshot_base64`, `page_text`, `game_info` (canvas dims, mouse_x/y, held_keys, last action), and `success`
 - `tools['process_memory'](edits=[...])` — read/write the agent's memory store
 - `args` — dict of arguments passed by the caller (e.g. `args['x']`, `args['target']`)
 - `result` — set this variable to return data
-- Libraries: `collections`, `heapq`, `numpy`/`np`, `json`, `re`, `math`, `random`, `time`
+- Libraries: `collections`, `heapq`, `numpy`/`np`, `json`, `re`, `math`, `random`, `time`, `base64`
+- Image processing: `Image`/`PIL` (Pillow), `ImageDraw`, `ImageFilter`, `cv2` (OpenCV — may be `None`), `BytesIO`, plus `decode_screenshot(b64_str)` helper that returns a PIL Image directly from `tools['get_game_state']()['screenshot_base64']`. Use these for pixel scans, template matching, and contour detection to find UI elements visually.
 
 CRITICAL: Use `tools['function_name'](...)` syntax. Do NOT call bare `press_keys()` or `mouse_click()`.
 Do NOT write `def skill_name():` — write inline code that reads `args` and sets `result`.
@@ -163,7 +170,7 @@ SKILL_PATTERNS_BLOCK = _BROWSER_SKILL_PATTERNS if _IS_BROWSER_GAME else _POKEMON
 # Example tool list shown in the subagent recommendation JSON template — must
 # match the actual tools available so the LLM emits valid recommendations.
 SUBAGENT_EXAMPLE_TOOLS = (
-    '["press_keys", "mouse_click", "double_click", "mouse_move", "mouse_drag", "get_game_state"]'
+    '["press_keys", "mouse_click", "key_down", "key_up", "wait_ms", "get_game_state"]'
     if _IS_BROWSER_GAME
     else '["press_buttons", "navigate_to", ...]'
 )
