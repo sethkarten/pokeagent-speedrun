@@ -2639,6 +2639,12 @@ class OllamaBackend(VLMBackend):
         OLLAMA_HOST            — daemon URL (default 127.0.0.1:11434)
         OLLAMA_NUM_CTX         — num_ctx override (default 32768)
         OLLAMA_NUM_PREDICT     — num_predict override (default 5000)
+        OLLAMA_NUM_BATCH       — num_batch override (default 2048; Ollama's
+                                 default of 512 is too small for the patched
+                                 1120-token gemma4 vision encoder, which sends
+                                 ~1100-token image batches that overflow the
+                                 KV cache slot allocation and crash the runner
+                                 with "could not find a kv cache slot")
         OLLAMA_REQUEST_TIMEOUT — per-call HTTP timeout in seconds (default 600)
         OLLAMA_KEEP_ALIVE      — model keep-alive duration (default 30m)
     """
@@ -2659,6 +2665,7 @@ class OllamaBackend(VLMBackend):
         self.host = host.rstrip("/")
         self.num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "32768"))
         self.num_predict = int(os.environ.get("OLLAMA_NUM_PREDICT", "5000"))
+        self.num_batch = int(os.environ.get("OLLAMA_NUM_BATCH", "2048"))
         self.timeout = float(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "600"))
         self.keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
 
@@ -2672,6 +2679,7 @@ class OllamaBackend(VLMBackend):
             f"host: {self.host}",
             f"num_ctx: {self.num_ctx}",
             f"num_predict: {self.num_predict}",
+            f"num_batch: {self.num_batch}",
         ]
         if self.tools:
             log_parts.append(f"{len(self.tools)} tools")
@@ -2781,6 +2789,7 @@ class OllamaBackend(VLMBackend):
             "options": {
                 "num_ctx": self.num_ctx,
                 "num_predict": self.num_predict,
+                "num_batch": self.num_batch,
                 "temperature": 0.7,
             },
         }
