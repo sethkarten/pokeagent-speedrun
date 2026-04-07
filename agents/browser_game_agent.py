@@ -73,6 +73,9 @@ class BrowserMCPToolAdapter:
             "hold_key": "/mcp/hold_key",
             "mouse_move": "/mcp/mouse_move",
             "mouse_drag": "/mcp/mouse_drag",
+            "key_down": "/mcp/key_down",
+            "key_up": "/mcp/key_up",
+            "wait_ms": "/mcp/wait_ms",
             # Stores (generic — work for any game type)
             "process_memory": "/mcp/process_memory",
             "get_memory_overview": "/mcp/get_memory_overview",
@@ -404,6 +407,91 @@ class BrowserGameAgent:
                     "required": ["x1", "y1", "x2", "y2", "reasoning"],
                 },
             },
+            {
+                "name": "key_down",
+                "description": (
+                    "Press a keyboard key WITHOUT releasing it. The key stays "
+                    "held across agent steps until you call key_up with the "
+                    "same key (or BrowserEnv stops / navigation recovers). "
+                    "Use for games where holding direction keys is the natural "
+                    "input model — Flappy Bird's hold-to-flap, racing games, "
+                    "platformers with continuous run, etc. The set of "
+                    "currently held keys is shown in your prompt every step."
+                ),
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "key": {
+                            "type_": "STRING",
+                            "description": "Key to hold (e.g. ArrowRight, w, Space)",
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Why you are pressing and holding this key",
+                        },
+                    },
+                    "required": ["key", "reasoning"],
+                },
+            },
+            {
+                "name": "key_up",
+                "description": (
+                    "Release a key that was previously held with key_down. "
+                    "Always release keys you no longer need — leaving them "
+                    "held will affect every subsequent step until you do."
+                ),
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "key": {
+                            "type_": "STRING",
+                            "description": "Key to release (must match a prior key_down)",
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Why you are releasing this key now",
+                        },
+                    },
+                    "required": ["key", "reasoning"],
+                },
+            },
+            {
+                "name": "wait_ms",
+                "description": (
+                    "Let game time pass without taking any other action. "
+                    "In virtual-time mode this advances the game's internal "
+                    "clock by duration_ms — animations play, timers fire, "
+                    "physics ticks, then everything re-pauses for your next "
+                    "decision. Use this when you need to wait on something "
+                    "(animation finishing, falling platform reaching the "
+                    "right spot, enemy moving into range, dialogue auto-"
+                    "advancing) WITHOUT consuming a step on a primitive "
+                    "action. The reasoning field MUST explain what you are "
+                    "waiting for."
+                ),
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "duration_ms": {
+                            "type_": "INTEGER",
+                            "description": (
+                                "How many ms of game time to let pass. Cap "
+                                "30000 (30s of game time). Typical values: "
+                                "100-500 for animations, 1000-3000 for "
+                                "longer waits like dialogue or fall timers."
+                            ),
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": (
+                                "What you are waiting for — an animation, "
+                                "an enemy approach, a fall timer, etc."
+                            ),
+                        },
+                    },
+                    "required": ["duration_ms", "reasoning"],
+                },
+            },
         ]
 
         # Memory / Skill / Subagent CRUD tools.
@@ -713,11 +801,23 @@ class BrowserGameAgent:
         for tool_name in (
             "press_keys", "mouse_click", "double_click", "hold_key",
             "mouse_move", "mouse_drag",
+            "key_down", "key_up", "wait_ms",
             "get_game_state", "process_memory",
         ):
             sandbox_tools[tool_name] = _tool_caller(tool_name)
 
-        import random, collections, math, re as _re_mod, heapq, itertools, functools
+        import random, collections, math, re as _re_mod, heapq, itertools, functools, base64 as _base64
+        from PIL import Image as _PILImage, ImageDraw as _PILImageDraw, ImageFilter as _PILImageFilter
+        try:
+            import cv2 as _cv2
+        except ImportError:
+            _cv2 = None
+        from io import BytesIO as _BytesIO
+
+        def _decode_screenshot(b64_str):
+            if not b64_str:
+                return None
+            return _PILImage.open(_BytesIO(_base64.b64decode(b64_str))).convert("RGB")
 
         sandbox_globals = {
             "__builtins__": {
@@ -742,6 +842,15 @@ class BrowserGameAgent:
             "time": time,
             "np": np,
             "numpy": np,
+            "base64": _base64,
+            # Image libs — see _execute_run_code for the same set
+            "Image": _PILImage,
+            "ImageDraw": _PILImageDraw,
+            "ImageFilter": _PILImageFilter,
+            "PIL": _PILImage,
+            "cv2": _cv2,
+            "BytesIO": _BytesIO,
+            "decode_screenshot": _decode_screenshot,
             "tools": sandbox_tools,
             "args": skill_args or {},
         }
@@ -772,11 +881,31 @@ class BrowserGameAgent:
             "get_game_state": _read_only_tool("get_game_state"),
         }
 
-        import random, collections, math, re as _re_mod, heapq, itertools, functools
+        import random, collections, math, re as _re_mod, heapq, itertools, functools, base64 as _base64
+        # Image processing libs for visual analysis. PIL and cv2 (opencv)
+        # let the agent decode the screenshot it gets from
+        # tools['get_game_state']()['screenshot_base64'] and run real
+        # vision code — pixel scans, template matching, contour
+        # detection — to find UI elements that the VLM can't always
+        # locate by eye alone.
+        from PIL import Image as _PILImage, ImageDraw as _PILImageDraw, ImageFilter as _PILImageFilter
+        try:
+            import cv2 as _cv2
+        except ImportError:
+            _cv2 = None
+        from io import BytesIO as _BytesIO
 
         captured_stdout = []
         def _print(*args, **kwargs):
             captured_stdout.append(" ".join(str(a) for a in args))
+
+        def _decode_screenshot(b64_str):
+            """Helper: decode the base64 PNG returned by get_game_state
+            into a PIL Image. Skill code can call this to avoid the
+            base64 boilerplate every time."""
+            if not b64_str:
+                return None
+            return _PILImage.open(_BytesIO(_base64.b64decode(b64_str))).convert("RGB")
 
         sandbox_globals = {
             "__builtins__": {
@@ -801,6 +930,15 @@ class BrowserGameAgent:
             "time": time,
             "np": np,
             "numpy": np,
+            "base64": _base64,
+            # Image libs for visual analysis
+            "Image": _PILImage,
+            "ImageDraw": _PILImageDraw,
+            "ImageFilter": _PILImageFilter,
+            "PIL": _PILImage,  # convenience alias
+            "cv2": _cv2,  # may be None if opencv-headless not installed
+            "BytesIO": _BytesIO,
+            "decode_screenshot": _decode_screenshot,
             "tools": sandbox_tools,
             "args": user_args or {},
         }
@@ -1291,7 +1429,20 @@ class BrowserGameAgent:
         subagent_ctx = self._get_subagent_context()
         base_prompt = self._load_base_prompt()
 
-        prompt = f"""# Current Step: {step_count}
+        # Show the agent how long the session has been running. Useful
+        # for time-aware decisions ("we've been at this 30 minutes,
+        # try a different approach") and for the playtest report.
+        elapsed_s = max(0.0, time.time() - getattr(self, "_session_start_time", time.time()))
+        if elapsed_s < 60:
+            elapsed_str = f"{elapsed_s:.0f}s"
+        elif elapsed_s < 3600:
+            elapsed_str = f"{int(elapsed_s // 60)}m {int(elapsed_s % 60)}s"
+        else:
+            h = int(elapsed_s // 3600); m = int((elapsed_s % 3600) // 60)
+            elapsed_str = f"{h}h {m}m"
+        max_steps_str = f"/{self.max_steps}" if self.max_steps else ""
+
+        prompt = f"""# Current Step: {step_count}{max_steps_str}   Session runtime: {elapsed_str}
 
 {base_prompt}
 
@@ -1381,6 +1532,14 @@ Step {step_count}"""
                 )
 
                 max_retries = 3
+                # VLM call timeout. Local Ollama with the patched
+                # 1120-token vision encoder can take ~30-60s on a cold
+                # model load (first agent step after daemon start) and
+                # ~3-10s once warm. The previous 60s cap was tight
+                # enough to fire on every cold load. 180s gives plenty
+                # of headroom for the cold path while still catching
+                # genuine hangs.
+                vlm_timeout_s = int(os.environ.get("VLM_CALL_TIMEOUT_S", "180"))
                 response = None
                 for attempt in range(max_retries):
                     try:
@@ -1388,19 +1547,18 @@ Step {step_count}"""
                         future = executor.submit(
                             self.vlm.get_query, image, prompt, interaction_name
                         )
-                        response = future.result(timeout=60)
+                        response = future.result(timeout=vlm_timeout_s)
                         break
                     except FutureTimeoutError:
-                        logger.warning(f"VLM timeout (attempt {attempt + 1}/{max_retries})")
+                        logger.warning(
+                            f"VLM timeout after {vlm_timeout_s}s "
+                            f"(attempt {attempt + 1}/{max_retries})"
+                        )
                         if attempt == max_retries - 1:
-                            if claimed_step is not None:
-                                self.runtime.release_step(claimed_step)
-                            return False, "VLM timeout"
+                            return False, f"VLM timeout after {vlm_timeout_s}s"
                     except Exception as e:
                         logger.error(f"VLM error: {e}")
                         if attempt == max_retries - 1:
-                            if claimed_step is not None:
-                                self.runtime.release_step(claimed_step)
                             return False, str(e)
                         time.sleep(2 ** attempt)
                     finally:
@@ -1458,11 +1616,6 @@ Step {step_count}"""
         except Exception as e:
             logger.error(f"run_step error: {e}")
             traceback.print_exc()
-            if claimed_step is not None:
-                try:
-                    self.runtime.release_step(claimed_step)
-                except Exception:
-                    pass
             return False, str(e)
 
     # ------------------------------------------------------------------
@@ -1495,6 +1648,7 @@ Step {step_count}"""
             logger.info(f"Screenshots will be saved to {ss_dir}")
 
         logger.info("Starting autonomous agent loop...")
+        self._session_start_time = time.time()
 
         try:
             while True:
