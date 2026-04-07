@@ -315,8 +315,8 @@ def main():
                        help="Load from a backup zip file (extracts to cache and loads checkpoint). This is the preferred convention for loading a run that doesnt start from the beginning.")
     
     # Agent configuration
-    parser.add_argument("--backend", type=str, default="gemini", 
-                       help="VLM backend (openai, gemini, openrouter, anthropic, auto)")
+    parser.add_argument("--backend", type=str, default="gemini",
+                       help="VLM backend (openai, gemini, openrouter, anthropic, ollama, auto)")
     parser.add_argument("--model-name", type=str, default="gemini-3-flash-preview", 
                        help="Model name to use")
     parser.add_argument("--scaffold", type=str, default="pokeagent",

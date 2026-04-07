@@ -2549,6 +2549,400 @@ class GeminiBackend(VLMBackend):
             return "I encountered an error processing the request. I'll proceed with a basic action: press 'A' to continue."
 
 
+def _ollama_response_adapter(message: Dict[str, Any], usage: Dict[str, int]) -> Any:
+    """Adapt Ollama /api/chat response to a Gemini-like structure.
+
+    Ollama returns ``{"message": {"role": ..., "content": ..., "tool_calls": [...]}}``.
+    The agent walks ``response.candidates[0].content.parts`` looking for
+    ``part.function_call`` (with ``.name`` and ``.args``) or ``part.text``,
+    same as the OpenAI/Anthropic adapters above.
+
+    Each tool call is normalized: argument keys go through
+    ``_OLLAMA_ARG_KEY_FIXES`` so common gemma misspellings (most notably
+    "reasonings" → "reasoning") don't make the agent's tool dispatch reject
+    the call. We've observed gemma4:26b emit this typo in real runs.
+    """
+    parts = []
+    content_text = (message or {}).get("content", "") or ""
+    tool_calls = (message or {}).get("tool_calls", []) or []
+
+    for tc in tool_calls:
+        fn = (tc or {}).get("function") or {}
+        name = fn.get("name") or ""
+        raw_args = fn.get("arguments")
+        if isinstance(raw_args, str):
+            try:
+                args = json.loads(raw_args)
+            except json.JSONDecodeError:
+                args = {}
+        elif isinstance(raw_args, dict):
+            args = dict(raw_args)
+        else:
+            args = {}
+
+        # Tolerant key fix-ups for known gemma quirks.
+        for wrong, right in _OLLAMA_ARG_KEY_FIXES.items():
+            if wrong in args and right not in args:
+                args[right] = args.pop(wrong)
+
+        # Drop the synthetic "index" field that ollama sometimes returns
+        # inside function objects (it's not part of the schema we declared).
+        args.pop("index", None)
+        parts.append(_openai_tool_call_part(name, args))
+
+    if content_text:
+        parts.append(_openai_text_part(content_text))
+
+    if not parts:
+        # Always return at least one part so callers don't crash on empty
+        # responses (e.g. when the model returns just a stop token).
+        parts.append(_openai_text_part(""))
+
+    content = type("Content", (), {"parts": parts})()
+    candidate = type("Candidate", (), {"content": content})()
+    adapter = type("ResponseAdapter", (), {"candidates": [candidate]})()
+    inp = int(usage.get("prompt_tokens", 0) or 0)
+    out = int(usage.get("completion_tokens", 0) or 0)
+    total = int(usage.get("total_tokens", 0) or (inp + out))
+    adapter.usage_metadata = type(
+        "UsageMetadata",
+        (),
+        {
+            "prompt_token_count": inp,
+            "candidates_token_count": out,
+            "total_token_count": total,
+            "cached_content_token_count": 0,
+        },
+    )()
+    return adapter
+
+
+# Common gemma4 argument-key typos. Extend as we see new ones in real runs.
+_OLLAMA_ARG_KEY_FIXES = {
+    "reasonings": "reasoning",
+    "reason": "reasoning",
+}
+
+
+class OllamaBackend(VLMBackend):
+    """Ollama backend for local Gemma 4 / other multimodal models.
+
+    Talks to a running Ollama daemon (default ``http://127.0.0.1:11434``) via
+    ``/api/chat``. Critically passes ``think: false`` on every call — without
+    this, gemma4:* dumps the entire response into a ``reasoning`` channel and
+    leaves ``content`` empty (see ollama issue #15368). It also raises
+    ``num_ctx`` to 32K and ``num_predict`` to 5000 by default to match the
+    p95 of the harness orchestrator workload (the Ollama default of 2048 ctx
+    and 128 predict silently truncates every browser-agent call at both ends).
+
+    Configurable via env vars so you don't have to plumb new constructor args:
+        OLLAMA_HOST            — daemon URL (default 127.0.0.1:11434)
+        OLLAMA_NUM_CTX         — num_ctx override (default 32768)
+        OLLAMA_NUM_PREDICT     — num_predict override (default 5000)
+        OLLAMA_REQUEST_TIMEOUT — per-call HTTP timeout in seconds (default 600)
+        OLLAMA_KEEP_ALIVE      — model keep-alive duration (default 30m)
+    """
+
+    def __init__(self, model_name: str, tools: list = None,
+                 system_instruction: str = None, **kwargs):
+        try:
+            import requests  # noqa: F401  (dependency check)
+        except ImportError:
+            raise ImportError("requests package not found. pip install requests")
+
+        self.model_name = model_name
+        self.tools = tools or []
+        self.system_instruction = system_instruction
+        host = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434").strip()
+        if not host.startswith("http"):
+            host = f"http://{host}"
+        self.host = host.rstrip("/")
+        self.num_ctx = int(os.environ.get("OLLAMA_NUM_CTX", "32768"))
+        self.num_predict = int(os.environ.get("OLLAMA_NUM_PREDICT", "5000"))
+        self.timeout = float(os.environ.get("OLLAMA_REQUEST_TIMEOUT", "600"))
+        self.keep_alive = os.environ.get("OLLAMA_KEEP_ALIVE", "30m")
+
+        if self.tools:
+            self._tools_ollama = self._convert_tools_to_ollama_format()
+        else:
+            self._tools_ollama = []
+
+        log_parts = [
+            f"Ollama backend initialized with model: {model_name}",
+            f"host: {self.host}",
+            f"num_ctx: {self.num_ctx}",
+            f"num_predict: {self.num_predict}",
+        ]
+        if self.tools:
+            log_parts.append(f"{len(self.tools)} tools")
+        if self.system_instruction:
+            log_parts.append(
+                f"system instructions ({len(self.system_instruction)} chars)"
+            )
+        logger.info(", ".join(log_parts))
+
+    def _setup_function_calling(self):
+        """Refresh tools if the agent updates them after init."""
+        self._tools_ollama = (
+            self._convert_tools_to_ollama_format() if self.tools else []
+        )
+        logger.info(
+            f"Ollama model updated with {len(self.tools) if self.tools else 0} tools"
+        )
+
+    def _convert_tools_to_ollama_format(self) -> list:
+        """Convert Gemini-style FunctionDeclarations to Ollama tool schema.
+
+        Ollama expects OpenAI-compatible ``{"type": "function", "function":
+        {"name", "description", "parameters"}}`` shape. The
+        ``parameters`` block is JSON Schema, and our existing tool decls
+        use Gemini's TYPE-prefixed format (``type_: STRING`` etc) which we
+        already convert to JSON Schema in the OpenAI backend — reuse the
+        same conversion helper to stay consistent.
+        """
+        result = []
+        for tool in self.tools:
+            params = tool.get("parameters", {}) or {}
+            properties, required = self._build_json_schema_properties(params)
+            result.append({
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool.get("description", ""),
+                    "parameters": {
+                        "type": "object",
+                        "properties": properties,
+                        "required": required,
+                    },
+                },
+            })
+        return result
+
+    def _build_json_schema_properties(self, params: dict) -> tuple:
+        """Convert Gemini-style props to JSON Schema. Mirrors OpenAIBackend."""
+        properties = {}
+        required = params.get("required", [])
+        for prop_name, prop_def in (params.get("properties", {}) or {}).items():
+            t = (prop_def or {}).get("type_", "STRING")
+            mapped = {
+                "ARRAY": "array",
+                "INTEGER": "integer",
+                "NUMBER": "number",
+                "BOOLEAN": "boolean",
+                "OBJECT": "object",
+            }.get(t, "string")
+            prop = {"type": mapped, "description": prop_def.get("description", "")}
+            if mapped == "array" and "items" in prop_def:
+                items = prop_def["items"] or {}
+                items_t = items.get("type_", "STRING") if isinstance(items, dict) else "STRING"
+                prop["items"] = {
+                    "type": {
+                        "INTEGER": "integer",
+                        "NUMBER": "number",
+                        "BOOLEAN": "boolean",
+                    }.get(items_t, "string")
+                }
+            if "enum" in prop_def:
+                prop["enum"] = prop_def["enum"]
+            properties[prop_name] = prop
+        return properties, required
+
+    def _prepare_image_base64(self, img: Union[Image.Image, np.ndarray]) -> str:
+        if hasattr(img, "convert"):
+            image = img
+        elif hasattr(img, "shape"):
+            image = Image.fromarray(img)
+        else:
+            raise ValueError(f"Unsupported image type: {type(img)}")
+        buf = BytesIO()
+        image.save(buf, format="PNG")
+        return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    def _build_messages(self, text: str, images: list[str] | None) -> list:
+        messages = []
+        if self.system_instruction:
+            messages.append({"role": "system", "content": self.system_instruction})
+        user_msg = {"role": "user", "content": text}
+        if images:
+            user_msg["images"] = images
+        messages.append(user_msg)
+        return messages
+
+    @retry_with_exponential_backoff
+    def _call_chat(self, messages: list) -> Dict[str, Any]:
+        import requests as _req
+
+        body = {
+            "model": self.model_name,
+            "messages": messages,
+            "think": False,  # Critical: see ollama issue #15368
+            "stream": False,
+            "keep_alive": self.keep_alive,
+            "options": {
+                "num_ctx": self.num_ctx,
+                "num_predict": self.num_predict,
+                "temperature": 0.7,
+            },
+        }
+        if self._tools_ollama:
+            body["tools"] = self._tools_ollama
+        resp = _req.post(
+            f"{self.host}/api/chat",
+            json=body,
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def _extract_thinking_from_response(self, adapter) -> str:
+        return _extract_thinking_from_gemini_like_response(adapter)
+
+    def _build_token_usage(self, raw: Dict[str, Any]) -> Dict[str, int]:
+        inp = int(raw.get("prompt_eval_count") or 0)
+        out = int(raw.get("eval_count") or 0)
+        return {
+            "prompt_tokens": inp,
+            "completion_tokens": out,
+            "total_tokens": inp + out,
+            "cached_tokens": 0,
+        }
+
+    def get_query(
+        self,
+        img: Union[Image.Image, np.ndarray, List[Union[Image.Image, np.ndarray]]],
+        text: str,
+        module_name: str = "Unknown",
+    ) -> Union[str, Any]:
+        start_time = time.time()
+        images_b64 = []
+        if isinstance(img, list):
+            images_b64 = [self._prepare_image_base64(i) for i in img]
+        elif img is not None:
+            images_b64 = [self._prepare_image_base64(img)]
+
+        messages = self._build_messages(text, images_b64)
+
+        try:
+            raw = self._call_chat(messages)
+            duration = time.time() - start_time
+            token_usage = self._build_token_usage(raw)
+
+            if self.tools:
+                adapter = _ollama_response_adapter(raw.get("message", {}), token_usage)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"ollama_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "ollama",
+                        "has_image": True,
+                        "token_usage": token_usage,
+                        "has_function_call": any(
+                            getattr(p, "function_call", None)
+                            for p in adapter.candidates[0].content.parts
+                        ),
+                    },
+                    model_info={"model": self.model_name, "backend": "ollama"},
+                )
+                return adapter
+            else:
+                result = raw.get("message", {}).get("content", "") or ""
+                log_llm_interaction(
+                    interaction_type=f"ollama_{module_name}",
+                    prompt=text,
+                    response=result,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "ollama",
+                        "has_image": True,
+                        "token_usage": token_usage,
+                    },
+                    model_info={"model": self.model_name, "backend": "ollama"},
+                )
+                return result
+        except Exception as e:
+            duration = time.time() - start_time
+            err_msg = str(e)
+            log_llm_error(
+                interaction_type=f"ollama_{module_name}",
+                prompt=text,
+                error=err_msg,
+                metadata={
+                    "model": self.model_name,
+                    "backend": "ollama",
+                    "duration": duration,
+                    "has_image": True,
+                },
+            )
+            logger.error(f"Ollama API error: {err_msg}")
+            raise
+
+    def get_text_query(self, text: str, module_name: str = "Unknown") -> Union[str, Any]:
+        start_time = time.time()
+        messages = self._build_messages(text, images=None)
+        try:
+            raw = self._call_chat(messages)
+            duration = time.time() - start_time
+            token_usage = self._build_token_usage(raw)
+
+            if self.tools:
+                adapter = _ollama_response_adapter(raw.get("message", {}), token_usage)
+                thinking_text = self._extract_thinking_from_response(adapter)
+                log_llm_interaction(
+                    interaction_type=f"ollama_{module_name}",
+                    prompt=text,
+                    response=thinking_text,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "ollama",
+                        "has_image": False,
+                        "token_usage": token_usage,
+                        "has_function_call": any(
+                            getattr(p, "function_call", None)
+                            for p in adapter.candidates[0].content.parts
+                        ),
+                    },
+                    model_info={"model": self.model_name, "backend": "ollama"},
+                )
+                return adapter
+            else:
+                result = raw.get("message", {}).get("content", "") or ""
+                log_llm_interaction(
+                    interaction_type=f"ollama_{module_name}",
+                    prompt=text,
+                    response=result,
+                    duration=duration,
+                    metadata={
+                        "model": self.model_name,
+                        "backend": "ollama",
+                        "has_image": False,
+                        "token_usage": token_usage,
+                    },
+                    model_info={"model": self.model_name, "backend": "ollama"},
+                )
+                return result
+        except Exception as e:
+            duration = time.time() - start_time
+            log_llm_error(
+                interaction_type=f"ollama_{module_name}",
+                prompt=text,
+                error=str(e),
+                metadata={
+                    "model": self.model_name,
+                    "backend": "ollama",
+                    "duration": duration,
+                    "has_image": False,
+                },
+            )
+            logger.error(f"Ollama API error: {e}")
+            raise
+
+
 class VLM:
     """Main VLM class that supports multiple backends"""
 
@@ -2558,6 +2952,7 @@ class VLM:
         "openrouter": OpenRouterBackend,
         "gemini": GeminiBackend,
         "vertex": VertexBackend,
+        "ollama": OllamaBackend,
     }
 
     def __init__(
@@ -2603,6 +2998,16 @@ class VLM:
     def _auto_detect_backend(self, model_name: str) -> str:
         """Auto-detect backend based on model name"""
         model_lower = model_name.lower()
+        # Local models hosted via Ollama use the "model[:tag]" form (e.g. "gemma4:26b").
+        # Catch them BEFORE the OpenRouter check below, which otherwise grabs anything
+        # containing "llama" / "qwen".
+        if (
+            model_lower.startswith("ollama/")
+            or model_lower.startswith("gemma4")
+            or model_lower.startswith("gemma3")
+            or ":" in model_lower
+        ):
+            return "ollama"
         # Native Anthropic model ids (e.g. claude-sonnet-4-5) have no slash; OpenRouter uses "anthropic/claude-..."
         if model_lower.startswith("claude-") and "/" not in model_name:
             return "anthropic"
