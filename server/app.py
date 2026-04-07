@@ -2955,10 +2955,20 @@ async def mcp_get_game_state():
             # Build a state_text similar to emulator games
             cw = game_info.get('canvas_width', 0)
             ch = game_info.get('canvas_height', 0)
+            mx = game_info.get('mouse_x')
+            my = game_info.get('mouse_y')
             state_text = f"=== BROWSER GAME STATE ===\n"
             state_text += f"URL: {game_info.get('url', '')}\n"
             state_text += f"Title: {game_info.get('title', '')}\n"
             state_text += f"Canvas: {cw}x{ch} (valid click range: x=0-{cw}, y=0-{ch})\n"
+            if mx is not None and my is not None:
+                state_text += (
+                    f"Cursor position: ({mx}, {my}) — last known canvas-relative "
+                    f"coordinates of the mouse cursor. Hover-driven UI elements "
+                    f"(tooltips, paddles, mouse-look) react to this position.\n"
+                )
+            else:
+                state_text += "Cursor position: unknown (no mouse_move/click yet this session)\n"
             if browser_last_action:
                 la = browser_last_action
                 if la["type"] == "mouse_click":

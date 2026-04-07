@@ -33,6 +33,14 @@ class BrowserEnv:
         self.height = 600
         self._initialized = False
 
+        # Last known cursor position in canvas-relative coords (x, y).
+        # None means "cursor has not been moved by the agent yet" — we
+        # don't try to read the real OS cursor because the agent's only
+        # interaction is via the dispatch primitives below. Updated by
+        # _do_click_at / _do_double_click_at / _do_move_to / _do_drag_to.
+        self.mouse_x: Optional[int] = None
+        self.mouse_y: Optional[int] = None
+
         # Thread communication
         self._cmd_q: queue.Queue = queue.Queue()
         self._thread: Optional[threading.Thread] = None
@@ -67,6 +75,8 @@ class BrowserEnv:
             "title": self._call("get_title"),
             "canvas_width": self.width,
             "canvas_height": self.height,
+            "mouse_x": self.mouse_x,
+            "mouse_y": self.mouse_y,
         }
 
     def focus_game(self) -> None:
@@ -96,6 +106,14 @@ class BrowserEnv:
         during cursor motion.
         """
         self._call("move_to", x, y, steps)
+
+    def evaluate(self, expression: str) -> Any:
+        """Evaluate a JS expression in the top-level page context.
+
+        Mainly useful for tests that need to force a navigation away from
+        the game URL to exercise the recovery path.
+        """
+        return self._call("evaluate", expression)
 
     def drag_to(
         self,
@@ -186,11 +204,15 @@ class BrowserEnv:
                 return page.locator("iframe#game_drop, .game_frame iframe").first
             return page.locator("body")
 
-        def _do_init():
-            nonlocal game_frame, canvas
+        def _setup_game_frame():
+            """Locate the iframe + canvas after a fresh page.goto.
 
-            logger.info("Navigating to %s", self.game_url)
-            page.goto(self.game_url, wait_until="domcontentloaded", timeout=60_000)
+            Extracted from _do_init so the navigation recovery path can
+            re-run the same setup without repeating itself.
+            """
+            nonlocal game_frame, canvas
+            game_frame = None
+            canvas = None
 
             if "itch.io" in self.game_url:
                 # Click "Run game" button
@@ -230,6 +252,11 @@ class BrowserEnv:
                 except Exception:
                     logger.warning("No <canvas> — will screenshot full page")
                     canvas = None
+
+        def _do_init():
+            logger.info("Navigating to %s", self.game_url)
+            page.goto(self.game_url, wait_until="domcontentloaded", timeout=60_000)
+            _setup_game_frame()
 
             # Read canvas dimensions
             if canvas is not None:
@@ -371,6 +398,7 @@ class BrowserEnv:
                     page.locator("iframe#game_drop, .game_frame iframe").first.click(position={"x": x, "y": y})
                 else:
                     page.mouse.click(x, y)
+                self.mouse_x, self.mouse_y = int(x), int(y)
             except Exception as e:
                 logger.error("click_at(%d, %d) failed: %s", x, y, e)
 
@@ -382,6 +410,7 @@ class BrowserEnv:
                     page.locator("iframe#game_drop, .game_frame iframe").first.dblclick(position={"x": x, "y": y})
                 else:
                     page.mouse.dblclick(x, y)
+                self.mouse_x, self.mouse_y = int(x), int(y)
             except Exception as e:
                 logger.error("double_click_at(%d, %d) failed: %s", x, y, e)
 
@@ -417,6 +446,7 @@ class BrowserEnv:
                     # Fall back to treating coordinates as page-absolute
                     page_xy = (x, y)
                 page.mouse.move(page_xy[0], page_xy[1], steps=max(1, int(steps)))
+                self.mouse_x, self.mouse_y = int(x), int(y)
             except Exception as e:
                 logger.error("move_to(%d, %d) failed: %s", x, y, e)
 
@@ -430,12 +460,56 @@ class BrowserEnv:
                     time.sleep(hold_ms / 1000.0)
                 page.mouse.move(end[0], end[1], steps=max(1, int(steps)))
                 page.mouse.up()
+                self.mouse_x, self.mouse_y = int(x2), int(y2)
             except Exception as e:
                 logger.error(
                     "drag_to((%d,%d)->(%d,%d)) failed: %s", x1, y1, x2, y2, e
                 )
 
         # ---- dispatch map ----
+        # Track navigation state so we can detect when the agent
+        # accidentally clicks something that takes the page off the game
+        # (e.g. an in-game Discord button, an "X" close icon, an itch.io
+        # popup link). The dispatch loop calls _check_and_recover_nav
+        # before every command so we recover proactively instead of
+        # spinning forever waiting for an iframe that's no longer there.
+        from urllib.parse import urlsplit
+
+        def _url_key(url: str) -> tuple[str, str, str]:
+            """Compare URLs by (scheme, host, path) — ignore query/fragment."""
+            try:
+                p = urlsplit(url)
+                return (p.scheme, p.netloc, p.path.rstrip("/"))
+            except Exception:
+                return ("", "", "")
+
+        game_url_key = _url_key(self.game_url)
+        nav_recoveries = {"count": 0}
+
+        def _check_and_recover_nav():
+            """If the page has navigated off the game URL, navigate back."""
+            try:
+                current = page.url or ""
+            except Exception:
+                return
+            if not current or current == "about:blank":
+                return
+            if _url_key(current) == game_url_key:
+                return
+            # Navigation away from the game detected.
+            nav_recoveries["count"] += 1
+            logger.warning(
+                "External navigation detected (#%d): %s — recovering to %s",
+                nav_recoveries["count"], current, self.game_url,
+            )
+            try:
+                page.goto(self.game_url, wait_until="domcontentloaded", timeout=60_000)
+                _setup_game_frame()
+                _do_focus()
+                logger.info("Navigation recovery complete")
+            except Exception as e:
+                logger.error("Navigation recovery failed: %s", e)
+
         dispatch = {
             "_init": lambda: _do_init(),
             "_stop": lambda: None,  # handled specially below
@@ -450,6 +524,7 @@ class BrowserEnv:
             "double_click_at": lambda x, y: _do_double_click_at(x, y),
             "move_to": lambda x, y, s: _do_move_to(x, y, s),
             "drag_to": lambda x1, y1, x2, y2, s, h: _do_drag_to(x1, y1, x2, y2, s, h),
+            "evaluate": lambda expr: page.evaluate(expr),
         }
 
         # ---- event loop ----
@@ -467,6 +542,16 @@ class BrowserEnv:
             if fn is None:
                 result_q.put(ValueError(f"Unknown method: {method}"))
                 continue
+
+            # Recover from any navigation that happened since the last
+            # command (e.g. agent accidentally clicked an external link).
+            # Skip for _init (which does its own navigation) — every other
+            # command assumes we're on the game page.
+            if method != "_init":
+                try:
+                    _check_and_recover_nav()
+                except Exception as e:
+                    logger.warning("nav check failed: %s", e)
 
             try:
                 result = fn(*args)
