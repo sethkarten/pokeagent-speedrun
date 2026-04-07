@@ -7,7 +7,9 @@ handlers on arbitrary threads, we run Playwright in a dedicated background
 thread and marshal every call through a simple request/response queue.
 """
 
+import base64
 import io
+import json
 import logging
 import queue
 import threading
@@ -26,7 +28,13 @@ class BrowserEnv:
     greenlet/thread affinity issues.
     """
 
-    def __init__(self, game_url: str, headless: bool = True):
+    def __init__(
+        self,
+        game_url: str,
+        headless: bool = True,
+        virtual_time: bool = True,
+        step_budget_ms: int = 200,
+    ):
         self.game_url = game_url
         self.headless = headless
         self.width = 800
@@ -40,6 +48,18 @@ class BrowserEnv:
         # _do_click_at / _do_double_click_at / _do_move_to / _do_drag_to.
         self.mouse_x: Optional[int] = None
         self.mouse_y: Optional[int] = None
+
+        # Real-time game support: when virtual_time=True, BrowserEnv uses
+        # Chrome DevTools Protocol Emulation.setVirtualTimePolicy to
+        # freeze game time during the agent's VLM call and advance it by
+        # ``step_budget_ms`` after each action. This makes Flappy-Bird-
+        # class real-time games tractable: the bird stops falling while
+        # the agent thinks. For turn-based games (Folder Dungeon style)
+        # the pause is harmless and animations stop pixel-popping the
+        # screenshot mid-frame.
+        self.virtual_time = virtual_time
+        self.step_budget_ms = step_budget_ms
+        self.held_keys: set[str] = set()  # tracked across steps
 
         # Thread communication
         self._cmd_q: queue.Queue = queue.Queue()
@@ -77,6 +97,9 @@ class BrowserEnv:
             "canvas_height": self.height,
             "mouse_x": self.mouse_x,
             "mouse_y": self.mouse_y,
+            "held_keys": sorted(self.held_keys),
+            "virtual_time": self.virtual_time,
+            "step_budget_ms": self.step_budget_ms,
         }
 
     def focus_game(self) -> None:
@@ -90,6 +113,37 @@ class BrowserEnv:
 
     def hold_key(self, key: str, duration_ms: int = 500) -> None:
         self._call("hold_key", key, duration_ms)
+
+    def key_down(self, key: str) -> None:
+        """Press a key WITHOUT releasing it. The key stays held across
+        agent steps until a matching key_up is issued (or the env is
+        stopped, or navigation recovery fires). The set of currently
+        held keys is exposed via get_game_info()['held_keys']."""
+        self._call("key_down", key)
+
+    def key_up(self, key: str) -> None:
+        """Release a key that was previously held with key_down."""
+        self._call("key_up", key)
+
+    def wait_ms(self, duration_ms: int) -> None:
+        """Let game time pass without taking any other action.
+
+        In virtual-time mode this advances virtual time by duration_ms.
+        In wall-clock mode this just sleeps the dispatch thread for
+        duration_ms. Useful for waiting on animations, falling
+        platforms, enemy approach windows, etc — the agent should
+        articulate WHY it's waiting in the tool's reasoning field.
+        """
+        self._call("wait_ms", duration_ms)
+
+    def pause_virtual_time(self) -> None:
+        """Freeze game virtual time (CDP). No-op if virtual_time=False."""
+        self._call("pause_virtual_time")
+
+    def advance_virtual_time(self, duration_ms: int) -> None:
+        """Advance game virtual time by ``duration_ms`` then re-pause.
+        No-op if virtual_time=False."""
+        self._call("advance_virtual_time", duration_ms)
 
     def click_at(self, x: int, y: int) -> None:
         self._call("click_at", x, y)
@@ -194,6 +248,13 @@ class BrowserEnv:
         # Internal state (only accessed from this thread)
         game_frame = None   # FrameLocator for itch.io iframe
         canvas = None       # Locator for the <canvas>
+        cdp_session = None  # Lazy CDP session for virtual time (Chromium-only)
+        # Tracks whether we've explicitly paused virtual time at least
+        # once. Init runs without virtual-time control (we want the
+        # "wait for splash screen to load" loop to actually let game
+        # time pass) and only flips to true after the first explicit
+        # pause at the end of _do_init.
+        vt_state = {"paused": False}
 
         # ---- helpers (closures over page/game_frame/canvas) ----
 
@@ -253,7 +314,277 @@ class BrowserEnv:
                     logger.warning("No <canvas> — will screenshot full page")
                     canvas = None
 
+        def _ensure_cdp_session():
+            """Lazily attach a CDP session for Emulation.* commands.
+
+            Also subscribes to ``Emulation.virtualTimeBudgetExpired`` so
+            ``_do_advance_virtual_time`` can wait synchronously for
+            advances to complete. Idempotent. Returns None if CDP isn't
+            available (non-Chromium browsers, future Playwright that
+            strips CDP, etc) — callers should treat None as "virtual
+            time disabled" and fall back to wall-clock sleeps.
+            """
+            nonlocal cdp_session
+            if cdp_session is not None:
+                return cdp_session
+            try:
+                cdp_session = ctx.new_cdp_session(page)
+                # NB: subscribe BEFORE any setVirtualTimePolicy call so
+                # we never miss the budget-expired event.
+                try:
+                    cdp_session.on(
+                        "Emulation.virtualTimeBudgetExpired",
+                        _on_virtual_time_budget_expired,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "could not subscribe to virtualTimeBudgetExpired: %s", e,
+                    )
+                return cdp_session
+            except Exception as e:
+                logger.warning("CDP session unavailable: %s", e)
+                return None
+
+        # Virtual time via injected JS shim.
+        #
+        # We tried CDP Emulation.setVirtualTimePolicy first, but it's
+        # unrecoverably broken in Chromium when the main thread sleeps
+        # wall-clock for >1s with virtual time paused — the renderer's
+        # internal clock stops responding to advance commands and
+        # virtualTimeBudgetExpired never fires again. Even with explicit
+        # event-listener waits + manual re-pause + initialVirtualTime,
+        # the next captureScreenshot hangs.
+        #
+        # Our shim approach: inject an init script that overrides
+        # requestAnimationFrame, setTimeout, setInterval, Date.now,
+        # and performance.now, all backed by a single ``__virtualNow``
+        # value we control. ``__pause()`` stops processing callbacks;
+        # ``__advance(ms)`` runs the queue forward by ms of virtual
+        # time, firing any callbacks whose deadlines fall in the
+        # window. Stable across arbitrary wall-clock sleeps because
+        # there's no renderer-side virtual clock to drift.
+        #
+        # The shim is injected via page.add_init_script so it runs
+        # before any game code on every navigation, including after
+        # _check_and_recover_nav fires.
+        VIRTUAL_TIME_SHIM = r"""
+        (() => {
+          if (window.__vtShim) return;  // idempotent
+          const origRAF = window.requestAnimationFrame.bind(window);
+          const origCAF = window.cancelAnimationFrame.bind(window);
+          const origST = window.setTimeout.bind(window);
+          const origCT = window.clearTimeout.bind(window);
+          const origSI = window.setInterval.bind(window);
+          const origCI = window.clearInterval.bind(window);
+          const origDateNow = Date.now.bind(Date);
+          const origPerfNow = performance.now.bind(performance);
+
+          let virtualNow = origDateNow();
+          let virtualPerfBase = origPerfNow();
+          const realStart = origDateNow();
+          let paused = false;
+          let nextId = 1;
+          // Pending timer entries: {id, deadline, cb, interval, args}
+          const timers = new Map();
+          // Pending RAF callbacks
+          let rafQueue = [];
+          let nextRafId = 1;
+
+          function _now() { return virtualNow; }
+
+          window.requestAnimationFrame = function(cb) {
+            const id = nextRafId++;
+            rafQueue.push({id, cb});
+            return id;
+          };
+          window.cancelAnimationFrame = function(id) {
+            rafQueue = rafQueue.filter(e => e.id !== id);
+          };
+          window.setTimeout = function(cb, delay, ...args) {
+            const id = nextId++;
+            timers.set(id, {
+              id, cb, args,
+              deadline: virtualNow + (delay || 0),
+              interval: 0,
+            });
+            return id;
+          };
+          window.clearTimeout = function(id) { timers.delete(id); };
+          window.setInterval = function(cb, delay, ...args) {
+            const id = nextId++;
+            timers.set(id, {
+              id, cb, args,
+              deadline: virtualNow + (delay || 0),
+              interval: delay || 0,
+            });
+            return id;
+          };
+          window.clearInterval = function(id) { timers.delete(id); };
+
+          Date.now = function() { return virtualNow; };
+          performance.now = function() {
+            return virtualPerfBase + (virtualNow - realStart);
+          };
+
+          // Override Date constructor's no-arg form via prototype trick
+          // (full Date override would break too much; this is enough
+          // for game loops that compute deltas via Date.now()).
+
+          window.__vtShim = {
+            pause() { paused = true; },
+            resume() { paused = false; },
+            isPaused() { return paused; },
+            now() { return virtualNow; },
+            queueSizes() {
+              return {raf: rafQueue.length, timers: timers.size};
+            },
+            // Advance virtual time by ms. Fires any callbacks whose
+            // deadlines fall in the window. Returns the number of
+            // callbacks fired.
+            advance(ms) {
+              const target = virtualNow + ms;
+              let fired = 0;
+              const maxIter = 1000;  // safety: don't loop forever on
+                                     // setTimeout(0) chains
+              for (let iter = 0; iter < maxIter; iter++) {
+                // Find earliest-deadline timer
+                let nextEntry = null;
+                for (const e of timers.values()) {
+                  if (!nextEntry || e.deadline < nextEntry.deadline) {
+                    nextEntry = e;
+                  }
+                }
+                if (nextEntry && nextEntry.deadline <= target) {
+                  virtualNow = nextEntry.deadline;
+                  if (nextEntry.interval > 0) {
+                    nextEntry.deadline += nextEntry.interval;
+                  } else {
+                    timers.delete(nextEntry.id);
+                  }
+                  try { nextEntry.cb.apply(null, nextEntry.args || []); }
+                  catch (e) { console.error("vtShim timer error:", e); }
+                  fired++;
+                  continue;
+                }
+                break;
+              }
+              // Drain RAF queue (RAF callbacks all run together at
+              // the start of each "frame")
+              if (rafQueue.length > 0) {
+                const q = rafQueue;
+                rafQueue = [];
+                for (const e of q) {
+                  try { e.cb(virtualNow); fired++; }
+                  catch (err) { console.error("vtShim raf error:", err); }
+                }
+              }
+              virtualNow = target;
+              return fired;
+            },
+          };
+        })();
+        """
+
+        def _inject_virtual_time_shim():
+            """Inject the virtual time shim into the current page.
+
+            Called from _do_init and _check_and_recover_nav. We use
+            page.add_init_script so the shim runs on every subsequent
+            navigation too — but we also evaluate it immediately on the
+            current page so it's active right now.
+            """
+            if not self.virtual_time:
+                return
+            try:
+                page.add_init_script(VIRTUAL_TIME_SHIM)
+            except Exception as e:
+                logger.debug("add_init_script(vt shim) failed: %s", e)
+            try:
+                page.evaluate(VIRTUAL_TIME_SHIM)
+            except Exception as e:
+                logger.debug("evaluate(vt shim) failed: %s", e)
+
+        def _do_pause_virtual_time():
+            """Pause game time by telling the JS shim to stop firing
+            queued callbacks. Game animations/setTimeout/setInterval
+            stop. The renderer compositor still runs (so screenshots
+            work) but no game logic executes.
+            """
+            if not self.virtual_time:
+                return
+            try:
+                page.evaluate("window.__vtShim && window.__vtShim.pause()")
+                vt_state["paused"] = True
+            except Exception as e:
+                logger.debug("pause_virtual_time failed: %s", e)
+
+        def _do_advance_virtual_time(duration_ms: int):
+            """Advance virtual time by ``duration_ms`` and fire any
+            timers/RAF callbacks whose deadlines fall in the window.
+            Stable across long wall sleeps because the shim is
+            stateful in user-space JS, not in the Chromium renderer.
+            """
+            ms = max(0, int(duration_ms))
+            if not self.virtual_time:
+                time.sleep(ms / 1000.0)
+                return
+            try:
+                fired = page.evaluate(
+                    "(ms) => window.__vtShim ? window.__vtShim.advance(ms) : 0",
+                    ms,
+                )
+                logger.debug("vt advance(%dms) fired %s callbacks", ms, fired)
+                vt_state["paused"] = True  # advance returns to paused state
+            except Exception as e:
+                logger.debug("advance_virtual_time failed: %s", e)
+                time.sleep(ms / 1000.0)
+
+        def _do_wait_ms(duration_ms: int):
+            """Let game time pass without doing anything else."""
+            _do_advance_virtual_time(duration_ms)
+
+        def _do_key_down(key: str):
+            """Press a key without releasing it. Tracks the held key in
+            self.held_keys so we can release it on stop / nav recovery."""
+            try:
+                page.keyboard.down(key)
+                self.held_keys.add(key)
+            except Exception as e:
+                logger.error("key_down(%s) failed: %s", key, e)
+
+        def _do_key_up(key: str):
+            """Release a previously-held key."""
+            try:
+                page.keyboard.up(key)
+            except Exception as e:
+                logger.error("key_up(%s) failed: %s", key, e)
+            finally:
+                self.held_keys.discard(key)
+
+        def _release_all_held_keys(reason: str = ""):
+            """Best-effort release of every key the agent has been
+            holding. Called on _stop and on navigation recovery — a
+            fresh page has no held keys, and we don't want a leaked
+            ArrowRight to make the agent's next browser session
+            mysterious."""
+            if not self.held_keys:
+                return
+            keys = list(self.held_keys)
+            logger.info("Releasing %d held keys (%s): %s",
+                        len(keys), reason or "cleanup", keys)
+            for k in keys:
+                try:
+                    page.keyboard.up(k)
+                except Exception:
+                    pass
+            self.held_keys.clear()
+
         def _do_init():
+            # Register the virtual-time shim BEFORE navigating so it
+            # runs on the very first page load (and any subsequent ones
+            # via add_init_script). The shim is harmless when
+            # virtual_time=False.
+            _inject_virtual_time_shim()
             logger.info("Navigating to %s", self.game_url)
             page.goto(self.game_url, wait_until="domcontentloaded", timeout=60_000)
             _setup_game_frame()
@@ -294,7 +625,15 @@ class BrowserEnv:
 
             # Focus
             _do_focus()
-            logger.info("BrowserEnv ready — canvas %dx%d", self.width, self.height)
+            # Freeze virtual time so the first agent decision sees a
+            # static game state. Subsequent commands re-pause
+            # implicitly (advance returns to pause, init->pause is
+            # explicit). No-op when self.virtual_time is False.
+            _do_pause_virtual_time()
+            logger.info(
+                "BrowserEnv ready — canvas %dx%d  virtual_time=%s  step_budget=%dms",
+                self.width, self.height, self.virtual_time, self.step_budget_ms,
+            )
 
         def _do_focus():
             try:
@@ -314,6 +653,12 @@ class BrowserEnv:
             bounding box. This avoids stale canvas locators and never times
             out — page.screenshot always succeeds. If we have no iframe
             (direct game URL), screenshot the page or canvas directly.
+
+            The JS-shim virtual time approach (see _do_pause_virtual_time)
+            doesn't break page.screenshot the way CDP virtual time pause
+            did, because the renderer compositor still ticks — only
+            game-side timers/RAF are gated. So the normal Playwright
+            screenshot path works even while paused.
             """
             nonlocal canvas, game_frame
             try:
@@ -502,10 +847,19 @@ class BrowserEnv:
                 "External navigation detected (#%d): %s — recovering to %s",
                 nav_recoveries["count"], current, self.game_url,
             )
+            # Drop any held-key state — the fresh page can't possibly
+            # have OS-level held keys, so let the agent re-press them
+            # explicitly if it still wants them held.
+            _release_all_held_keys(reason="nav recovery")
             try:
                 page.goto(self.game_url, wait_until="domcontentloaded", timeout=60_000)
                 _setup_game_frame()
                 _do_focus()
+                # The init-script form of the shim auto-injects on
+                # every navigation, but evaluate it explicitly too in
+                # case Chrome dropped the init script for any reason.
+                _inject_virtual_time_shim()
+                _do_pause_virtual_time()
                 logger.info("Navigation recovery complete")
             except Exception as e:
                 logger.error("Navigation recovery failed: %s", e)
@@ -525,6 +879,11 @@ class BrowserEnv:
             "move_to": lambda x, y, s: _do_move_to(x, y, s),
             "drag_to": lambda x1, y1, x2, y2, s, h: _do_drag_to(x1, y1, x2, y2, s, h),
             "evaluate": lambda expr: page.evaluate(expr),
+            "key_down": lambda k: _do_key_down(k),
+            "key_up": lambda k: _do_key_up(k),
+            "wait_ms": lambda ms: _do_wait_ms(ms),
+            "pause_virtual_time": lambda: _do_pause_virtual_time(),
+            "advance_virtual_time": lambda ms: _do_advance_virtual_time(ms),
         }
 
         # ---- event loop ----
@@ -535,6 +894,7 @@ class BrowserEnv:
                 continue
 
             if method == "_stop":
+                _release_all_held_keys(reason="stop")
                 result_q.put(None)
                 break
 
