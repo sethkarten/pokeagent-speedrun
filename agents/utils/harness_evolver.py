@@ -25,21 +25,17 @@ from agents.utils.prompt_optimizer import PromptOptimizer
 logger = logging.getLogger(__name__)
 
 # Evolution cadence — adaptive: frequent early to bootstrap the harness,
-# then backs off once capabilities stabilize. Branched per game type because
-# browser games typically run for fewer total steps and have a much smaller
-# action space, so they benefit from tighter early evolution.
-if os.environ.get("GAME_TYPE", "emerald").lower() == "browser":
-    # Browser: every 10 steps for the first 100, then every 25.
-    MIN_WARMUP_STEPS = 10
-    EARLY_PHASE_CUTOFF = 100
-    EARLY_FREQUENCY = 10
-    STABLE_FREQUENCY = 25
-else:
-    # Pokemon: every 25 steps for the first 200, then every 100.
-    MIN_WARMUP_STEPS = 25
-    EARLY_PHASE_CUTOFF = 200
-    EARLY_FREQUENCY = 25
-    STABLE_FREQUENCY = 100
+# then backs off once capabilities stabilize. Same shape across game types
+# now: every 10 steps for the first 200 (intense bootstrap), then every 25
+# steps for the rest of the run. The wider early window gives the autoevolver
+# many chances to build up the skill library and subagent registry while the
+# agent is still figuring out the game; once the toolkit stabilizes, we
+# back off to one evolution per ~25 steps to keep cost reasonable on long
+# runs without losing the ability to react to new situations.
+MIN_WARMUP_STEPS = 10
+EARLY_PHASE_CUTOFF = 200
+EARLY_FREQUENCY = 10
+STABLE_FREQUENCY = 25
 
 # Tools that exist for every scaffold (used to validate subagent tool lists)
 # Tools available in the autoevolve scaffold (no navigate_to, no walkthrough, no wiki)

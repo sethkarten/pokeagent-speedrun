@@ -684,8 +684,17 @@ class BrowserEnv:
             page.goto(self.game_url, wait_until="domcontentloaded", timeout=60_000)
             _setup_game_frame()
 
-            # Read canvas dimensions
-            if canvas is not None:
+            # Read canvas dimensions. Prefer JS getBoundingClientRect
+            # over locator.bounding_box because some games resize the
+            # canvas asynchronously during load (flappybird.io's canvas
+            # starts at full viewport then shrinks to 480x576), and
+            # Playwright sometimes caches the pre-resize layout. The JS
+            # call always reflects the current layout.
+            rect = _query_canvas_rect_js()
+            if rect is not None:
+                self.width = int(rect["width"])
+                self.height = int(rect["height"])
+            elif canvas is not None:
                 try:
                     box = canvas.bounding_box()
                     if box:
@@ -741,13 +750,61 @@ class BrowserEnv:
             except Exception as e:
                 logger.warning("focus_game failed: %s", e)
 
-        def _do_screenshot() -> Image.Image:
-            """Screenshot the game canvas.
+        def _query_canvas_rect_js() -> Optional[dict]:
+            """Get the on-screen rect of the game canvas via JavaScript.
 
-            Strategy: take a full-page screenshot and clip to the iframe's
-            bounding box. This avoids stale canvas locators and never times
-            out — page.screenshot always succeeds. If we have no iframe
-            (direct game URL), screenshot the page or canvas directly.
+            page.evaluate returns the same dict shape Playwright's
+            ``locator.bounding_box`` does ({x, y, width, height}) but is
+            substantially more reliable for canvases that get resized
+            after page load — flappybird.io is a textbook example: the
+            <canvas> starts at full viewport width then JS resizes it to
+            480x576 once the game initializes. Playwright's locator
+            sometimes caches a stale layout and reports the pre-resize
+            dimensions; the live JS getBoundingClientRect always
+            reflects current layout.
+
+            Returns None if the canvas isn't found (some non-canvas
+            games might have only a div). Returns {x, y, width, height}
+            in *page* coordinates.
+            """
+            try:
+                if game_frame is not None:
+                    # Inside an iframe — query the iframe document.
+                    rect = game_frame.locator("canvas").first.evaluate(
+                        "el => { const r = el.getBoundingClientRect();"
+                        " return {x: r.x, y: r.y, width: r.width, height: r.height}; }"
+                    )
+                else:
+                    rect = page.evaluate(
+                        "() => { const c = document.querySelector('canvas');"
+                        " if (!c) return null;"
+                        " const r = c.getBoundingClientRect();"
+                        " return {x: r.x, y: r.y, width: r.width, height: r.height}; }"
+                    )
+                if rect and rect.get("width", 0) > 0 and rect.get("height", 0) > 0:
+                    return rect
+            except Exception as e:
+                logger.debug("_query_canvas_rect_js failed: %s", e)
+            return None
+
+        def _do_screenshot() -> Image.Image:
+            """Screenshot the game canvas — clipped tightly to the
+            actual on-screen canvas rect, not the viewport.
+
+            Strategy:
+            1. Query the canvas's getBoundingClientRect via JS (more
+               reliable than locator.bounding_box for canvases that
+               resize after load — flappybird.io's canvas starts at
+               960px wide, then its JS shrinks it to 480x576).
+            2. Clip page.screenshot to that rect.
+            3. Update self.width/self.height so the agent's prompt
+               always sees the *current* canvas size, not the init-time
+               value (games can resize on orientation, fullscreen, etc).
+            4. Fall back through layered options:
+               - iframe locator bounding box (itch.io games)
+               - canvas locator bounding box (cached but try anyway)
+               - full page screenshot (last resort, will be wrong for
+                 games where the canvas is smaller than the viewport)
 
             The JS-shim virtual time approach (see _do_pause_virtual_time)
             doesn't break page.screenshot the way CDP virtual time pause
@@ -756,6 +813,30 @@ class BrowserEnv:
             screenshot path works even while paused.
             """
             nonlocal canvas, game_frame
+            # Try the JS rect path first — most reliable.
+            rect = _query_canvas_rect_js()
+            if rect is not None:
+                try:
+                    png = page.screenshot(
+                        type="png",
+                        clip={
+                            "x": rect["x"],
+                            "y": rect["y"],
+                            "width": rect["width"],
+                            "height": rect["height"],
+                        },
+                        timeout=10_000,
+                    )
+                    img = Image.open(io.BytesIO(png)).convert("RGB")
+                    # Keep self.width/self.height in sync with the live
+                    # canvas size so the agent's prompt and our click
+                    # clamp logic both reflect what the game is actually
+                    # showing right now.
+                    self.width, self.height = int(rect["width"]), int(rect["height"])
+                    return img
+                except Exception as e:
+                    logger.debug("JS-rect screenshot path failed: %s", e)
+
             try:
                 if game_frame is not None:
                     # Get the iframe's current bounding box (refreshes each call)
@@ -896,12 +977,20 @@ class BrowserEnv:
         def _canvas_to_page(x: int, y: int) -> Optional[tuple]:
             """Convert canvas-relative (x, y) to page-absolute coordinates.
 
-            Locator.click(position=...) handles the offset for us, but
-            page.mouse.move()/down()/up() take page-absolute coordinates,
-            so for the move/drag primitives we have to add the canvas
-            (or iframe) origin ourselves. Returns None if neither the
-            canvas nor the iframe has a bounding box yet.
+            Tries the JS getBoundingClientRect path first (most
+            reliable for canvases that resize after load), then falls
+            back to Playwright's locator.bounding_box, then to the
+            iframe's bounding box. Returns None only if all three
+            paths fail.
+
+            page.mouse.click/move/down/up take page-absolute
+            coordinates, so we have to add the canvas (or iframe)
+            origin to the agent's canvas-relative input.
             """
+            # JS rect — most reliable.
+            rect = _query_canvas_rect_js()
+            if rect is not None:
+                return (rect["x"] + x, rect["y"] + y)
             try:
                 if canvas is not None:
                     box = canvas.bounding_box(timeout=2_000)
