@@ -34,12 +34,25 @@ class BrowserEnv:
         headless: bool = True,
         virtual_time: bool = True,
         step_budget_ms: int = 200,
+        video_dir: Optional[str] = None,
     ):
         self.game_url = game_url
         self.headless = headless
         self.width = 800
         self.height = 600
         self._initialized = False
+
+        # Video recording (Playwright native, .webm). When ``video_dir``
+        # is set, the browser context is created with
+        # ``record_video_dir=video_dir`` and Playwright flushes a single
+        # .webm file when we close the context on stop. Recording is
+        # off by default — opt in via the constructor or
+        # BROWSER_VIDEO_DIR env var on the server side.
+        self.video_dir: Optional[str] = video_dir
+        # Set after _stop completes — the absolute path to the .webm
+        # file Playwright wrote, or None if recording was disabled or
+        # the flush failed.
+        self.video_path: Optional[str] = None
 
         # Last known cursor position in canvas-relative coords (x, y).
         # None means "cursor has not been moved by the agent yet" — we
@@ -233,7 +246,12 @@ class BrowserEnv:
                 "--ignore-gpu-blocklist",
             ],
         )
-        ctx = browser.new_context(
+        # Build context kwargs. record_video_dir is only set when video
+        # recording is requested — Playwright otherwise doesn't write
+        # any video and there's zero overhead. The recording size
+        # matches the viewport so the .webm is exactly what the agent
+        # sees through its screenshots.
+        ctx_kwargs = dict(
             viewport={"width": 960, "height": 600},
             device_scale_factor=1,  # Prevent retina 2x scaling
             ignore_https_errors=True,
@@ -243,6 +261,16 @@ class BrowserEnv:
                 "Chrome/120.0.0.0 Safari/537.36"
             ),
         )
+        if self.video_dir:
+            try:
+                import os as _os_local
+                _os_local.makedirs(self.video_dir, exist_ok=True)
+                ctx_kwargs["record_video_dir"] = self.video_dir
+                ctx_kwargs["record_video_size"] = {"width": 960, "height": 600}
+                logger.info("Video recording enabled — dir: %s", self.video_dir)
+            except Exception as e:
+                logger.warning("could not enable video recording: %s", e)
+        ctx = browser.new_context(**ctx_kwargs)
         page = ctx.new_page()
 
         # Internal state (only accessed from this thread)
@@ -895,6 +923,12 @@ class BrowserEnv:
 
             if method == "_stop":
                 _release_all_held_keys(reason="stop")
+                # Snapshot the page video reference BEFORE we close the
+                # context. Playwright finalizes the .webm during
+                # context.close(); afterwards page.video.path() returns
+                # the on-disk path. We grab the reference here, then
+                # break out and let the cleanup block below do the
+                # actual close + path resolution.
                 result_q.put(None)
                 break
 
@@ -920,7 +954,25 @@ class BrowserEnv:
                 logger.error("BrowserEnv.%s failed: %s", method, e)
                 result_q.put(e)
 
-        # Cleanup
+        # Cleanup. When video recording is enabled, we MUST close the
+        # context (not just the browser) for Playwright to flush the
+        # .webm to disk and let page.video.path() return a valid path.
+        # Browser.close() alone leaves the file truncated.
+        if self.video_dir:
+            try:
+                video = page.video
+            except Exception:
+                video = None
+            try:
+                ctx.close()
+            except Exception as e:
+                logger.warning("ctx.close() failed: %s", e)
+            try:
+                if video is not None:
+                    self.video_path = video.path()
+                    logger.info("Video recording saved: %s", self.video_path)
+            except Exception as e:
+                logger.warning("could not resolve video path: %s", e)
         try:
             browser.close()
         except Exception:

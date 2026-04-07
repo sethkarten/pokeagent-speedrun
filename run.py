@@ -159,7 +159,26 @@ def start_server(args, run_id=None):
 
     if args.record:
         server_cmd.append("--record")
-    
+        # Browser games record natively via Playwright. Point them at
+        # the per-run videos/ directory so the .webm lands next to the
+        # screenshots/ dir for the same run.
+        if args.game == "browser":
+            try:
+                from utils.data_persistence.run_data_manager import get_run_data_manager
+                rm = get_run_data_manager()
+                if rm and getattr(rm, "run_dir", None) is not None:
+                    video_dir = rm.run_dir / "end_state" / "videos"
+                else:
+                    from pathlib import Path as _P
+                    video_dir = _P("run_data") / "browser_videos"
+            except Exception:
+                from pathlib import Path as _P
+                video_dir = _P("run_data") / "browser_videos"
+            video_dir.mkdir(parents=True, exist_ok=True)
+            server_env["BROWSER_VIDEO_DIR"] = str(video_dir.resolve())
+            print(f"📹 Browser video will record to: {video_dir}")
+
+
     if args.load_checkpoint:
         # Auto-load checkpoint.state when --load-checkpoint is used
         from utils.data_persistence.run_data_manager import get_cache_path

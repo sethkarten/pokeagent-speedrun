@@ -598,11 +598,19 @@ def setup_environment(skip_initial_state=False):
                 step_budget_ms = int(os.environ.get("BROWSER_STEP_BUDGET_MS", "200"))
             except (TypeError, ValueError):
                 step_budget_ms = 200
+            # Native Playwright video recording. When BROWSER_VIDEO_DIR
+            # is set (run.py wires it from --record), Playwright records
+            # a single .webm of the entire session matching the canvas
+            # viewport. The file is flushed when the context closes on
+            # env.stop(), and BrowserEnv.video_path holds the absolute
+            # path afterwards.
+            video_dir = os.environ.get("BROWSER_VIDEO_DIR") or None
             env = BrowserEnv(
                 game_url=game_url,
                 headless=not browser_headed,
                 virtual_time=virtual_time,
                 step_budget_ms=step_budget_ms,
+                video_dir=video_dir,
             )
             env.initialize()
 
@@ -5456,8 +5464,14 @@ def main():
         current_run_dir = str(get_cache_directory())
         print(f"📁 Legacy run directory (deprecated): {current_run_dir}")
 
-    # Initialize video recording if requested
-    init_video_recording(args.record)
+    # Initialize video recording if requested. Browser games skip this
+    # path entirely — they record natively via Playwright's
+    # record_video_dir, wired in setup_environment from the
+    # BROWSER_VIDEO_DIR env var. The legacy frame-based recorder
+    # assumes a 240x160 GBA image and would just produce empty/garbage
+    # frames for the 960x600 browser canvas.
+    if args.record and game_type != "browser":
+        init_video_recording(args.record)
     print("Server mode - headless operation, display handled by client")
     if args.no_ocr:
         print("OCR dialogue detection disabled")
@@ -5532,11 +5546,23 @@ def main():
     print(f"   Network: http://{local_ip}:{args.port}")
     print(f"📺 Stream interface: http://{local_ip}:{args.port}/stream")
 
-    # Initialize video recording AFTER FastAPI server starts
-    # Try Playwright WebUI recording first; fall back to frame-based recording
+    # Initialize video recording AFTER FastAPI server starts.
+    #
+    # Browser games: BrowserEnv records natively via Playwright's
+    #   record_video_dir (set from BROWSER_VIDEO_DIR upstream in
+    #   setup_environment). Nothing to wire here — the .webm flushes
+    #   on env.stop().
+    #
+    # Pokemon games: use the legacy emulator-frame recorder. The
+    #   init_playwright_recording stub used to be called here but it
+    #   was never defined; we now go straight to init_video_recording.
     if args.record:
-        pw_success = init_playwright_recording(args.port, run_id=run_id)
-        if not pw_success:
+        if game_type == "browser":
+            print(
+                "📹 Browser video recording: Playwright native (writes "
+                "to BROWSER_VIDEO_DIR on env.stop())"
+            )
+        else:
             init_video_recording(True)
     else:
         # No recording requested

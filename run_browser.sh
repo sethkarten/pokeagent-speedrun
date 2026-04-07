@@ -17,7 +17,16 @@ echo "Watch live at http://localhost:$PORT/stream"
 BACKEND=${BACKEND:-gemini}
 MODEL=${MODEL:-gemini-3-flash-preview}
 MAX_STEPS=${MAX_STEPS:-5000}
+GAME_URL=${GAME_URL:-https://ravernt.itch.io/folder-dungeon}
+# Set RECORD=1 to capture a Playwright .webm of the entire run.
+# The video lands at run_data/run_<id>/end_state/videos/.
+RECORD_FLAG=""
+if [[ "${RECORD:-0}" == "1" ]]; then
+  RECORD_FLAG="--record"
+fi
 echo "Backend: $BACKEND   Model: $MODEL   Max steps: $MAX_STEPS"
+echo "Game URL: $GAME_URL"
+echo "Record video: ${RECORD:-0}"
 
 # WebGL2 (required by Unity 2021+) doesn't work in Playwright's headless Chromium
 # even with all the GPU flags — the headless build strips real GPU support.
@@ -31,10 +40,11 @@ fi
 xvfb-run -a -s "-screen 0 1280x800x24" \
   .venv/bin/python run.py \
     --game browser \
-    --game-url "https://ravernt.itch.io/folder-dungeon" \
+    --game-url "$GAME_URL" \
     --max-steps "$MAX_STEPS" \
     --port "$PORT" \
     --headed \
     --backend "$BACKEND" \
     --model-name "$MODEL" \
+    $RECORD_FLAG \
     2>&1 | tee "$LOG_FILE"
