@@ -466,53 +466,6 @@ def main():
         }
     )
     
-    # Get first objective info for consistent run naming
-    first_objective_id = None
-    first_objective_desc = None
-    if args.direct_objectives:
-        from agents.objectives import get_first_objective_info
-        first_objective_id, first_objective_desc = get_first_objective_info(
-            args.direct_objectives, 
-            args.direct_objectives_start
-        )
-        if first_objective_id:
-            print(f"🎯 First objective: {first_objective_id} - {first_objective_desc}")
-        else:
-            print(f"⚠️  Could not retrieve first objective from '{args.direct_objectives}' (index {args.direct_objectives_start})")
-            print(f"    Using timestamp-based run_id format instead")
-    
-    # Initialize run data manager for this run (client creates the run_id)
-    from utils.data_persistence.run_data_manager import initialize_run_data_manager
-    
-    run_manager = initialize_run_data_manager(
-        run_name=args.run_name,
-        first_objective_id=first_objective_id,
-        first_objective_desc=first_objective_desc
-    )
-    run_id = run_manager.run_id
-    print(f"📁 Run data directory: {run_manager.get_run_directory()}")
-    
-    # Generate LLM session_id for consistent logging across processes
-    from datetime import datetime
-    llm_session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.environ["LLM_SESSION_ID"] = llm_session_id
-    print(f"📝 LLM session ID: {llm_session_id}")
-    
-    # Pass run_id to server via environment variable to avoid conflicts
-    os.environ["RUN_DATA_ID"] = run_id
-    if args.run_name:
-        os.environ["RUN_NAME"] = args.run_name
-    
-    # Save metadata with command line information
-    run_manager.save_metadata(
-        command_args=vars(args),
-        sys_argv=sys.argv,
-        additional_info={
-            "entry_point": "run.py",
-            "mode": "multiprocess_client"
-        }
-    )
-    
     server_process = None
 
 

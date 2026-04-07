@@ -5564,9 +5564,6 @@ def main():
             )
         else:
             init_video_recording(True)
-    else:
-        # No recording requested
-        pass
     print("Available endpoints:")
     print("  /status - Server status")
     print("  /screenshot - Current screenshot")
