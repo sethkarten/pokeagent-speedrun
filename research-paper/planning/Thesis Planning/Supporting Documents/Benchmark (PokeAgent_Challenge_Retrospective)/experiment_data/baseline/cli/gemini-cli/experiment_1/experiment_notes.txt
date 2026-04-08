@@ -1,2 +1,0 @@
-experiment_group: “E”
-notes: "slight edits POKEAGENT.md were made to remove incorrect/redundant information for our agent. base_prompt.md for prompt optimization runs was refactored to only include factual information about the scaffold systems with little behavioural steering"
