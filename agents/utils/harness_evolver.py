@@ -59,10 +59,12 @@ class HarnessEvolver:
         run_data_manager,
         base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
         system_prompt_path: str = AUTOEVOLVE_SYSTEM_PROMPT_PATH,
+        initial_prompt_override: str | None = None,
     ):
         # Compose the existing PromptOptimizer for prompt-level evolution
         self.prompt_optimizer = PromptOptimizer(
-            vlm, run_data_manager, base_prompt_path, system_prompt_path
+            vlm, run_data_manager, base_prompt_path, system_prompt_path,
+            initial_prompt_override=initial_prompt_override,
         )
         # Reuse the text-only VLM created by the optimizer
         self.text_vlm = self.prompt_optimizer.vlm
@@ -786,6 +788,10 @@ def create_harness_evolver(
     run_data_manager,
     base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
     system_prompt_path: str = AUTOEVOLVE_SYSTEM_PROMPT_PATH,
+    initial_prompt_override: str | None = None,
 ) -> HarnessEvolver:
     """Factory function to create a HarnessEvolver instance."""
-    return HarnessEvolver(vlm, run_data_manager, base_prompt_path, system_prompt_path)
+    return HarnessEvolver(
+        vlm, run_data_manager, base_prompt_path, system_prompt_path,
+        initial_prompt_override=initial_prompt_override,
+    )

@@ -185,6 +185,8 @@ class PokeAgent:
         enable_prompt_optimization: bool = False,
         optimization_frequency: int = 10,
         scaffold: str = "pokeagent",
+        bootstrap_from: str = None,
+        bootstrap_prompt_path: str = None,
     ):
         logger.info(f"🚀 Initializing PokeAgent with backend={backend}, model={model}, server={server_url}, scaffold={scaffold}")
         self.server_url = server_url
@@ -198,6 +200,11 @@ class PokeAgent:
         self.optimization_frequency = optimization_frequency
         self.scaffold = scaffold
         self.include_builtins = scaffold not in _NO_BUILTINS_SCAFFOLDS
+
+        # Bootstrap state
+        self.bootstrap_active = bootstrap_from is not None
+        self.bootstrap_from = bootstrap_from
+        self.bootstrap_prompt_path = bootstrap_prompt_path
 
         # Conversation history for tracking and compaction
         self.conversation_history = []
@@ -260,6 +267,10 @@ class PokeAgent:
             wait_for_actions_fn=self._wait_for_actions_complete,
         )
 
+        # Load bootstrap prompt content eagerly so it's available regardless
+        # of whether prompt optimization is enabled.
+        self._bootstrap_prompt_content = self._load_bootstrap_prompt()
+
         # Initialize prompt optimizer / harness evolver if enabled
         self.prompt_optimizer = None
         self.harness_evolver = None
@@ -278,6 +289,7 @@ class PokeAgent:
                     run_data_manager=run_manager,
                     base_prompt_path=AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
                     system_prompt_path=AUTOEVOLVE_SYSTEM_PROMPT_PATH,
+                    initial_prompt_override=self._bootstrap_prompt_content,
                 )
                 self.prompt_optimizer = self.harness_evolver.prompt_optimizer
                 logger.info(f"🧬 HarnessEvolver ENABLED (frequency: every {optimization_frequency} steps)")
@@ -286,6 +298,7 @@ class PokeAgent:
                     vlm=self.vlm,
                     run_data_manager=run_manager,
                     base_prompt_path=AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
+                    initial_prompt_override=self._bootstrap_prompt_content,
                 )
                 logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
 
@@ -341,6 +354,32 @@ class PokeAgent:
 
         logger.info(f"📋 Loaded base prompt from file ({len(content)} chars)")
         return render_prompt(content)
+
+    def _load_bootstrap_prompt(self) -> Optional[str]:
+        """Read the bootstrapped evolved prompt file, if one was provided."""
+        if not self.bootstrap_prompt_path:
+            return None
+        try:
+            with open(self.bootstrap_prompt_path, "r") as f:
+                content = f.read()
+            logger.info("🧬 Loaded bootstrap prompt override (%d chars) from %s",
+                        len(content), self.bootstrap_prompt_path)
+            return render_prompt(content)
+        except OSError as exc:
+            logger.warning("Failed to read bootstrap prompt %s: %s", self.bootstrap_prompt_path, exc)
+            return None
+
+    def _load_bootstrap_addendum(self) -> str:
+        """Load the bootstrap addendum prompt that tells the agent about bootstrapped content."""
+        addendum_path = resolve_repo_path("agents/prompts/pokeagent-directives/BOOTSTRAP_ADDENDUM.md")
+        if addendum_path.exists():
+            with open(addendum_path, "r") as f:
+                return f.read()
+        return (
+            "## Bootstrapped Knowledge\n\n"
+            "This session includes skills, memories, and subagents from a previous session "
+            "under `bootstrapped/` paths. Use them freely and adapt as needed."
+        )
 
     def _create_tool_declarations(self):
         """Create Gemini function declarations for ALL MCP tools (Pokemon + Baseline) - ALL ENABLED."""
@@ -2804,11 +2843,16 @@ class PokeAgent:
         logger.info(f"   direct_objective_context: {len(direct_objective_context):,} chars")
         logger.info(f"   direct_objective_status: {len(direct_objective_status):,} chars")
 
+        # Optionally inject bootstrap addendum
+        bootstrap_section = ""
+        if self.bootstrap_active:
+            bootstrap_section = "\n" + self._load_bootstrap_addendum() + "\n"
+
         # Build complete prompt by combining base prompt with context
         prompt = f"""# Current Step: {step_count}
 
 {base_prompt}
-
+{bootstrap_section}
 ## CONTEXT FOR THIS STEP
 
 ### ACTION HISTORY (last {ACTION_HISTORY_WINDOW} steps):
@@ -3034,8 +3078,17 @@ Step {step_count}"""
         skill_context = self._get_skill_context()
         subagent_context = self._get_subagent_context()
 
+        # Prepend bootstrapped evolved prompt + addendum when available
+        bootstrap_block = ""
+        if self.bootstrap_active:
+            parts = []
+            if self._bootstrap_prompt_content:
+                parts.append(self._bootstrap_prompt_content)
+            parts.append(self._load_bootstrap_addendum())
+            bootstrap_block = "\n".join(parts) + "\n"
+
         # Build autonomous prompt
-        prompt = f"""# Step: {step_count}
+        prompt = f"""{bootstrap_block}# Step: {step_count}
 ### SHORT-TERM MEMORY (last {ACTION_HISTORY_WINDOW} steps)
 {action_history}
 {function_results_context}

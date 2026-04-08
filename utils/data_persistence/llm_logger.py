@@ -74,10 +74,12 @@ class LLMLogger:
             "_last_milestone_step": 0,
             "_last_milestone_tokens": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
             "_last_milestone_time": None,
+            "_last_milestone_actions": 0,
             # Internal tracking for objective deltas (split = since last objective)
             "_last_objective_step": 0,
             "_last_objective_tokens": {"prompt": 0, "completion": 0, "total": 0, "cached": 0},
             "_last_objective_time": None,
+            "_last_objective_actions": 0,
         }
         
         # Model pricing (per 1K tokens)
@@ -652,12 +654,15 @@ class LLMLogger:
         last_step = self.cumulative_metrics.get("_last_milestone_step", 0)
         last_tokens = self.cumulative_metrics.get("_last_milestone_tokens", {"prompt": 0, "completion": 0, "total": 0, "cached": 0})
         last_time = self.cumulative_metrics.get("_last_milestone_time")
+        last_actions = self.cumulative_metrics.get("_last_milestone_actions", 0)
         
+        cumulative_actions = self.cumulative_metrics.get("total_actions", 0)
         split_steps = cumulative_step - last_step
         split_prompt_tokens = cumulative_prompt_tokens - last_tokens.get("prompt", 0)
         split_completion_tokens = cumulative_completion_tokens - last_tokens.get("completion", 0)
         split_cached_tokens = cumulative_cached_tokens - last_tokens.get("cached", 0)
         split_total_tokens = cumulative_total_tokens - last_tokens.get("total", 0)
+        split_actions = cumulative_actions - last_actions
         
         # Calculate time elapsed for this milestone
         if last_time is not None:
@@ -676,6 +681,7 @@ class LLMLogger:
             "cumulative_completion_tokens": cumulative_completion_tokens,
             "cumulative_cached_tokens": cumulative_cached_tokens,
             "cumulative_total_tokens": cumulative_total_tokens,
+            "cumulative_actions": cumulative_actions,
             
             # Split metrics (delta for just this milestone)
             "split_steps": split_steps,
@@ -683,6 +689,7 @@ class LLMLogger:
             "split_completion_tokens": split_completion_tokens,
             "split_cached_tokens": split_cached_tokens,
             "split_total_tokens": split_total_tokens,
+            "split_actions": split_actions,
             "split_time_seconds": round(time_elapsed, 2)
         }
         
@@ -697,8 +704,9 @@ class LLMLogger:
             "total": cumulative_total_tokens
         }
         self.cumulative_metrics["_last_milestone_time"] = timestamp
+        self.cumulative_metrics["_last_milestone_actions"] = cumulative_actions
         
-        logger.info(f"📊 Milestone '{milestone_id}': {split_steps} steps, {split_total_tokens} tokens, {time_elapsed:.1f}s")
+        logger.info(f"📊 Milestone '{milestone_id}': {split_steps} steps, {split_actions} actions, {split_total_tokens} tokens, {time_elapsed:.1f}s")
         
         # Save updated metrics
         self.save_cumulative_metrics()
@@ -738,12 +746,15 @@ class LLMLogger:
             "_last_objective_tokens", {"prompt": 0, "completion": 0, "total": 0, "cached": 0}
         )
         last_time = self.cumulative_metrics.get("_last_objective_time")
+        last_actions = self.cumulative_metrics.get("_last_objective_actions", 0)
 
+        cumulative_actions = self.cumulative_metrics.get("total_actions", 0)
         split_steps = cumulative_step - last_step
         split_prompt_tokens = cumulative_prompt_tokens - last_tokens.get("prompt", 0)
         split_completion_tokens = cumulative_completion_tokens - last_tokens.get("completion", 0)
         split_cached_tokens = cumulative_cached_tokens - last_tokens.get("cached", 0)
         split_total_tokens = cumulative_total_tokens - last_tokens.get("total", 0)
+        split_actions = cumulative_actions - last_actions
 
         if last_time is not None:
             time_elapsed = timestamp - last_time
@@ -760,11 +771,13 @@ class LLMLogger:
             "cumulative_completion_tokens": cumulative_completion_tokens,
             "cumulative_cached_tokens": cumulative_cached_tokens,
             "cumulative_total_tokens": cumulative_total_tokens,
+            "cumulative_actions": cumulative_actions,
             "split_steps": split_steps,
             "split_prompt_tokens": split_prompt_tokens,
             "split_completion_tokens": split_completion_tokens,
             "split_cached_tokens": split_cached_tokens,
             "split_total_tokens": split_total_tokens,
+            "split_actions": split_actions,
             "split_time_seconds": round(time_elapsed, 2),
         }
 
@@ -780,10 +793,11 @@ class LLMLogger:
             "total": cumulative_total_tokens,
         }
         self.cumulative_metrics["_last_objective_time"] = timestamp
+        self.cumulative_metrics["_last_objective_actions"] = cumulative_actions
 
         logger.info(
             f"📊 Objective '{objective_id}' (category={category}, index={objective_index}): "
-            f"{split_steps} steps, {split_total_tokens} tokens, {time_elapsed:.1f}s"
+            f"{split_steps} steps, {split_actions} actions, {split_total_tokens} tokens, {time_elapsed:.1f}s"
         )
         self.save_cumulative_metrics()
 
@@ -900,6 +914,7 @@ class LLMLogger:
                     "total": last_milestone.get("cumulative_total_tokens", 0)
                 }
                 self.cumulative_metrics["_last_milestone_time"] = last_milestone.get("timestamp")
+                self.cumulative_metrics["_last_milestone_actions"] = last_milestone.get("cumulative_actions", 0)
 
             # Restore internal tracking from last objective if available
             if self.cumulative_metrics.get("objectives"):
@@ -912,6 +927,7 @@ class LLMLogger:
                     "total": last_obj.get("cumulative_total_tokens", 0),
                 }
                 self.cumulative_metrics["_last_objective_time"] = last_obj.get("timestamp")
+                self.cumulative_metrics["_last_objective_actions"] = last_obj.get("cumulative_actions", 0)
 
             logger.info(f"✅ Loaded cumulative metrics: {saved_metrics.get('total_llm_calls', 0)} calls, {saved_metrics.get('total_actions', 0)} actions, ${saved_metrics.get('total_cost', 0):.4f}, {saved_metrics.get('total_run_time', 0):.0f}s runtime")
             logger.info(f"   - Total tokens: {saved_metrics.get('total_tokens', 0):,}")
@@ -969,6 +985,7 @@ class LLMLogger:
             {"step": step_number, "tool_calls": cleaned_calls, "timestamp": time.time()}
         )
         self.save_cumulative_metrics()
+
 
     def save_checkpoint(self, checkpoint_file: str = None, agent_step_count: int = None):
         """Save current LLM interaction history to checkpoint file
