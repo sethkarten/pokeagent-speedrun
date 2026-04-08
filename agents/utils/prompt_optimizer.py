@@ -30,7 +30,7 @@ MIN_PROMPT_OPTIMIZATION_WARMUP_STEPS = 50
 class PromptOptimizer:
     """Optimizes agent base prompt based on trajectory analysis."""
     
-    def __init__(self, vlm, run_data_manager, base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH, system_prompt_path: str = POKEAGENT_SYSTEM_PROMPT_PATH):
+    def __init__(self, vlm, run_data_manager, base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH, system_prompt_path: str = POKEAGENT_SYSTEM_PROMPT_PATH, initial_prompt_override: Optional[str] = None):
         """
         Initialize the prompt optimizer.
         
@@ -39,6 +39,10 @@ class PromptOptimizer:
             run_data_manager: RunDataManager for accessing trajectories
             base_prompt_path: Path to base prompt file
             system_prompt_path: Path to system prompt file (contains tool definitions)
+            initial_prompt_override: If provided, use this string as the initial
+                base prompt instead of reading from *base_prompt_path*.  Used by
+                the bootstrap system to seed evolution from a previous run's
+                evolved prompt.
         """
         # Load system prompt so optimizer knows what tools the agent has access to
         # We'll include this in the optimization prompt (not as system instruction)
@@ -64,8 +68,11 @@ class PromptOptimizer:
         _base = Path(base_prompt_path)
         self.base_prompt_path = _base if _base.is_absolute() else resolve_repo_path(base_prompt_path)
 
-        # Load initial base prompt and render template placeholders
-        if self.base_prompt_path.exists():
+        # Load initial base prompt — override takes precedence over file
+        if initial_prompt_override:
+            self.current_base_prompt = initial_prompt_override
+            logger.info("PromptOptimizer: using bootstrapped prompt override (%d chars)", len(initial_prompt_override))
+        elif self.base_prompt_path.exists():
             with open(self.base_prompt_path, 'r') as f:
                 self.current_base_prompt = render_prompt(f.read())
         else:
@@ -356,7 +363,7 @@ IMPROVED BASE PROMPT:
         return self.current_base_prompt
 
 
-def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH, system_prompt_path: str = POKEAGENT_SYSTEM_PROMPT_PATH) -> PromptOptimizer:
+def create_prompt_optimizer(vlm, run_data_manager, base_prompt_path: str = AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH, system_prompt_path: str = POKEAGENT_SYSTEM_PROMPT_PATH, initial_prompt_override: Optional[str] = None) -> PromptOptimizer:
     """Factory function to create a PromptOptimizer instance."""
-    return PromptOptimizer(vlm, run_data_manager, base_prompt_path, system_prompt_path)
+    return PromptOptimizer(vlm, run_data_manager, base_prompt_path, system_prompt_path, initial_prompt_override=initial_prompt_override)
 

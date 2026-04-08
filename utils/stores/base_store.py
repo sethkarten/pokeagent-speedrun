@@ -73,6 +73,7 @@ class BaseStore(Generic[T]):
         self.entries: Dict[str, T] = {}
         self.next_id: int = 1
         self._cached_tree: Optional[str] = None
+        self._recent_access_ids: set = set()
 
     # ------------------------------------------------------------------
     # CRUD
@@ -145,6 +146,7 @@ class BaseStore(Generic[T]):
         """Look up by ID first, then fall back to name/title match."""
         entry = self.entries.get(entry_id)
         if entry is not None:
+            self._recent_access_ids.add(entry_id)
             return entry
         # Fall back: search by name or title (case-insensitive)
         lookup = entry_id.lower().strip()
@@ -152,6 +154,7 @@ class BaseStore(Generic[T]):
             name = getattr(e, "name", "") or ""
             title = getattr(e, "title", "") or ""
             if name.lower().strip() == lookup or title.lower().strip() == lookup:
+                self._recent_access_ids.add(e.id)
                 return e
         return None
 
@@ -161,6 +164,7 @@ class BaseStore(Generic[T]):
         for eid in ids[:max_count]:
             entry = self.entries.get(eid)
             if entry is not None:
+                self._recent_access_ids.add(eid)
                 results.append(entry)
         return results
 
@@ -178,8 +182,10 @@ class BaseStore(Generic[T]):
     # Tree overview
     # ------------------------------------------------------------------
 
-    def get_tree_overview(self, max_display: int = 50) -> str:
+    def get_tree_overview(self, max_display: int = 200) -> str:
         """Render a hierarchical tree of entries grouped by path.
+
+        Subtrees containing recently-accessed entries are shown first.
 
         Returns a string like::
 
@@ -213,9 +219,8 @@ class BaseStore(Generic[T]):
             segments = [s for s in path.strip("/").split("/") if s]
             if not segments:
                 segments = ["uncategorized"]
-            # Cap depth at 4 levels — flatten deeper entries into the 4th level
-            if len(segments) > 4:
-                segments = segments[:4]
+            if len(segments) > 5:
+                segments = segments[:5]
 
             node = tree
             for seg in segments:
@@ -223,29 +228,53 @@ class BaseStore(Generic[T]):
             leaves = node.setdefault("__entries__", [])
             leaves.append(self._format_tree_leaf(entry))
 
+        recent_roots = self._compute_recent_roots(display_entries)
+
         lines = [f"=== {self.store_label} OVERVIEW ==="]
-        self._render_tree(tree, lines, indent=0)
+        self._render_tree(tree, lines, indent=0, recent_roots=recent_roots)
 
         if overflow > 0:
             lines.append(f"\n(+{overflow} more entries — use process tool to inspect)")
 
+        self._recent_access_ids.clear()
         self._cached_tree = "\n".join(lines)
         return self._cached_tree
+
+    def _compute_recent_roots(self, entries: list) -> set:
+        """Return root path segments that contain recently-accessed entries."""
+        if not self._recent_access_ids:
+            return set()
+        roots: set = set()
+        for entry in entries:
+            if entry.id in self._recent_access_ids:
+                path = getattr(entry, "path", "") or "uncategorized"
+                segments = [s for s in path.strip("/").split("/") if s]
+                if segments:
+                    roots.add(segments[0])
+                else:
+                    roots.add("uncategorized")
+        return roots
 
     def _format_tree_leaf(self, entry: T) -> str:
         """Format a single entry for the tree overview. Override in subclasses."""
         title = getattr(entry, "title", "") or getattr(entry, "name", "")
         return f"[{entry.id}] {title}"
 
-    def _render_tree(self, node: dict, lines: list, indent: int) -> None:
+    def _render_tree(self, node: dict, lines: list, indent: int,
+                      recent_roots: Optional[set] = None) -> None:
         prefix = "  " * indent
-        for key in sorted(node.keys()):
-            if key == "__entries__":
-                for leaf in node[key]:
-                    lines.append(f"{prefix}- {leaf}")
-            else:
-                lines.append(f"{prefix}{key}:")
-                self._render_tree(node[key], lines, indent + 1)
+        keys = [k for k in node.keys() if k != "__entries__"]
+        if indent == 0 and recent_roots:
+            keys.sort(key=lambda k: (0 if k in recent_roots else 1, k))
+        else:
+            keys.sort()
+        # Render leaf entries first, then subtrees
+        if "__entries__" in node:
+            for leaf in node["__entries__"]:
+                lines.append(f"{prefix}- {leaf}")
+        for key in keys:
+            lines.append(f"{prefix}{key}:")
+            self._render_tree(node[key], lines, indent + 1)
 
     def _invalidate_cache(self) -> None:
         self._cached_tree = None
