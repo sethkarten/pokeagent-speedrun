@@ -2058,7 +2058,7 @@ class PokeAgent:
                         return self.vlm.get_query(image, prompt, orchestrator_interaction_name)
 
                     logger.info(f"📡 Calling VLM API with image (prompt: {len(prompt)} chars, image: {len(screenshot_b64)} bytes)")
-                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 45s...")
+                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 600s...")
 
                     max_retries = 3
                     retry_count = 0
@@ -2069,7 +2069,12 @@ class PokeAgent:
                         future = None
                         try:
                             future = executor.submit(call_vlm_with_image)
-                            response = future.result(timeout=70)  # 70 second timeout for slower models
+                            # 600s outer wall must be >= the inner SDK deadline in
+                            # vlm_backends.GeminiBackend._call_generate_content (also 600s
+                            # for pro-preview thinking models). Anything smaller would
+                            # silently truncate slow calls and leak ghost worker threads
+                            # whose responses get logged but never used by the agent.
+                            response = future.result(timeout=600)
                             vlm_duration = time.time() - vlm_call_start
                             logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
                             break
@@ -2093,7 +2098,7 @@ class PokeAgent:
                         return self.vlm.get_text_query(prompt, orchestrator_interaction_name)
 
                     logger.info(f"📡 Calling VLM API with text only (prompt: {len(prompt)} chars)")
-                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 45s...")
+                    logger.info(f"   ⏱️  Started at {time.strftime('%H:%M:%S')} - timeout set to 600s...")
 
                     max_retries = 3
                     retry_count = 0
@@ -2104,7 +2109,12 @@ class PokeAgent:
                         future = None
                         try:
                             future = executor.submit(call_vlm_with_text)
-                            response = future.result(timeout=70)  # 70 second timeout for slower models
+                            # 600s outer wall must be >= the inner SDK deadline in
+                            # vlm_backends.GeminiBackend._call_generate_content (also 600s
+                            # for pro-preview thinking models). Anything smaller would
+                            # silently truncate slow calls and leak ghost worker threads
+                            # whose responses get logged but never used by the agent.
+                            response = future.result(timeout=600)
                             vlm_duration = time.time() - vlm_call_start
                             logger.info(f"   ✅ VLM call completed in {vlm_duration:.1f}s (attempt {retry_count + 1}/{max_retries})")
                             break
