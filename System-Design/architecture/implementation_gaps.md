@@ -198,37 +198,6 @@ So the **full-map ASCII in the agent prompt includes `^`** wherever the filter a
 
 ---
 
-## 7. Legacy objective mode is still a live compatibility surface
-
-### Status
-
-**Open — deprecate completely.**
-
-### Symptoms
-
-- The orchestrator, planner hooks, and bootstrapped evolved prompts increasingly assume categorized objective management and may call `replan_objectives`.
-- `replan_objectives` hard-requires categorized mode, so runs started without categorized direct objectives can silently spend early steps issuing failing replans instead of progressing.
-- This is especially visible in bootstrapped runs, where a sanitized inherited orchestrator prompt can still reasonably choose `replan_objectives`, but the server may still be running the legacy single-objective flow.
-
-### Ground-truth files
-
-- `server/app.py` — `mcp_replan_objectives()` returns `replan_objectives requires categorized mode` outside categorized mode.
-- `run.py` — CLI still exposes `--direct-objectives-start` help text for both legacy and categorized mode.
-- `agents/PokeAgent.py` — prompt assembly and tool availability continue to support both legacy and categorized objective rendering paths.
-
-### Why This Is Still a Gap
-
-- The system has effectively standardized on categorized planning semantics for modern orchestration behaviors, but legacy objective mode is still reachable and still influences CLI defaults, prompt rendering, and runtime branching.
-- As long as both modes remain active, orchestration behavior can diverge from intent based only on launch flags rather than agent capability.
-
-### Desired End State
-
-- Fully remove legacy single-objective mode from the main run path.
-- Make categorized objectives the only supported runtime objective protocol for PokeAgent scaffolds that expose planning / replan behavior.
-- Collapse prompt, CLI, and MCP surfaces so `replan_objectives` and related planning flows cannot be invoked against an incompatible objective manager.
-
----
-
 ## Adding new items
 
 Use a short title, **symptoms**, **ground-truth files**, and **hypothesis or fix** when known. Prefer linking to architecture docs ([harness_evolver.md](harness_evolver.md), [data_persistence.md](data_persistence.md)) instead of duplicating full behavior specs.
