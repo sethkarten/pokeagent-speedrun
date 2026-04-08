@@ -3201,13 +3201,6 @@ async def mcp_press_buttons(request: dict):
         action_request = ActionRequest(buttons=actual_buttons, source=source, metadata=metadata_dict)
         await take_action(action_request)
         
-        # Track actual button presses in metrics (not text parsing!)
-        try:
-            from utils.data_persistence.llm_logger import increment_action_count
-            increment_action_count(len(actual_buttons))
-        except Exception as e:
-            logger.debug(f"Could not increment action count: {e}")
-
         logger.info(f"🎮 Queued buttons via MCP: {actual_buttons} - {reasoning}")
         response_dict = {"success": True, "buttons_queued": actual_buttons, "reasoning": reasoning}
 
@@ -4460,11 +4453,13 @@ async def sync_llm_metrics(request: Request):
             server_last_milestone_step = llm_logger.cumulative_metrics.get("_last_milestone_step")
             server_last_milestone_tokens = llm_logger.cumulative_metrics.get("_last_milestone_tokens")
             server_last_milestone_time = llm_logger.cumulative_metrics.get("_last_milestone_time")
+            server_last_milestone_actions = llm_logger.cumulative_metrics.get("_last_milestone_actions")
             # Objectives are appended only on server (complete_direct_objective); client has no copy
             server_objectives = llm_logger.cumulative_metrics.get("objectives")
             server_last_objective_step = llm_logger.cumulative_metrics.get("_last_objective_step")
             server_last_objective_tokens = llm_logger.cumulative_metrics.get("_last_objective_tokens")
             server_last_objective_time = llm_logger.cumulative_metrics.get("_last_objective_time")
+            server_last_objective_actions = llm_logger.cumulative_metrics.get("_last_objective_actions")
             # total_run_time and last_update_time are updated by server on take_action; run_cli never has them
             server_total_run_time = llm_logger.cumulative_metrics.get("total_run_time")
             server_last_update_time = llm_logger.cumulative_metrics.get("last_update_time")
@@ -4485,6 +4480,8 @@ async def sync_llm_metrics(request: Request):
                 llm_logger.cumulative_metrics["_last_milestone_tokens"] = server_last_milestone_tokens
             if server_last_milestone_time is not None:
                 llm_logger.cumulative_metrics["_last_milestone_time"] = server_last_milestone_time
+            if server_last_milestone_actions is not None:
+                llm_logger.cumulative_metrics["_last_milestone_actions"] = server_last_milestone_actions
             # Preserve objectives (only server appends on complete_direct_objective)
             if server_objectives is not None:
                 llm_logger.cumulative_metrics["objectives"] = server_objectives
@@ -4494,6 +4491,8 @@ async def sync_llm_metrics(request: Request):
                 llm_logger.cumulative_metrics["_last_objective_tokens"] = server_last_objective_tokens
             if server_last_objective_time is not None:
                 llm_logger.cumulative_metrics["_last_objective_time"] = server_last_objective_time
+            if server_last_objective_actions is not None:
+                llm_logger.cumulative_metrics["_last_objective_actions"] = server_last_objective_actions
             # Preserve gameplay time (server updates on take_action; run_cli sync would overwrite with 0)
             if server_total_run_time is not None:
                 llm_logger.cumulative_metrics["total_run_time"] = server_total_run_time
