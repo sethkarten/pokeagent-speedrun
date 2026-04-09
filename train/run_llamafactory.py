@@ -46,6 +46,11 @@ def main() -> int:
     env.setdefault("HF_HOME", "/scratch/gpfs/CHIJ/milkkarten/huggingface")
     env.setdefault("HF_HUB_OFFLINE", "1")
     env.setdefault("TRANSFORMERS_OFFLINE", "1")
+    # LF pyproject pins transformers<=5.2.0 (stale, predates gemma4
+    # support) and the runtime check raises ImportError otherwise.
+    # We need transformers 5.5.x for the gemma4 model_type, so skip
+    # LF's check. Hint comes from the error message itself.
+    env.setdefault("DISABLE_VERSION_CHECK", "1")
 
     cmd = [LF_CLI, "train", cfg_path, *extra_args]
     print(f"=== launching: {' '.join(cmd)} ===", flush=True)
