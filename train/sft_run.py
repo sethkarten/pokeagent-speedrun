@@ -278,23 +278,32 @@ def main() -> int:
     # Optimizer choice:
     #   - LoRA path: adamw_8bit. Trainable params are tiny LoRA matrices
     #     so the bnb 8bit kernel handles them fine.
-    #   - Full FT path: adamw_torch. The bnb 8bit kernel fails with
+    #   - Full FT path: adafactor. The bnb 8bit kernel fails with
     #     "invalid configuration argument at line 106 in file ops.cu"
     #     on huge param tensors (the ~670M-element embedding/lm_head).
-    #     Adafactor was an earlier attempt but its default HF Trainer
-    #     wiring (`relative_step=True`) fights an explicit low LR and
-    #     produces NaN losses. adamw_torch is the safest, well-known
-    #     option that works with bf16 forward + fp32 master weights
-    #     (kept internally by the optimizer).
-    optim_name = "adamw_torch" if args.full_ft else "adamw_8bit"
+    #     adamw_torch works but its fp32 m+v state for 8B params = 64 GB
+    #     which puts E4B full FT at the edge of the 141 GB H200 budget.
+    #     Adafactor uses row+col statistics — O(out+in) memory instead
+    #     of O(out*in) — total state ~3 GB for an 8B model. ~60 GB
+    #     total memory headroom even at max context.
+    #     Critical: HF Trainer's default adafactor wiring is
+    #     relative_step=True / scale_parameter=True which fights an
+    #     explicit learning_rate and NaNs out. We pass optim_args
+    #     to disable both so adafactor behaves as a drop-in Adam.
+    optim_name = "adafactor" if args.full_ft else "adamw_8bit"
+    optim_args = (
+        "scale_parameter=False,relative_step=False,warmup_init=False"
+        if args.full_ft else None
+    )
     # Full FT needs a much lower LR than LoRA. The default 2e-4 is
     # LoRA-tuned and would diverge full FT immediately. 5e-6 is
     # standard for full SFT of an instruction-tuned base.
     effective_lr = 5e-6 if (args.full_ft and args.lr == 2e-4) else args.lr
     if effective_lr != args.lr:
         logger.info("auto-lowering LR for full FT: %.0e -> %.0e", args.lr, effective_lr)
-    logger.info("optimizer: %s  lr: %.0e", optim_name, effective_lr)
-    sft_cfg = SFTConfig(
+    logger.info("optimizer: %s  lr: %.0e  optim_args: %s",
+                optim_name, effective_lr, optim_args)
+    sft_cfg_kwargs = dict(
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         num_train_epochs=args.epochs,
@@ -304,6 +313,11 @@ def main() -> int:
         lr_scheduler_type="cosine",
         optim=optim_name,
         weight_decay=0.001,
+    )
+    if optim_args:
+        sft_cfg_kwargs["optim_args"] = optim_args
+    sft_cfg = SFTConfig(
+        **sft_cfg_kwargs,
         logging_steps=1,
         save_strategy="steps",
         save_steps=args.save_steps,
