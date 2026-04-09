@@ -36,7 +36,8 @@ dependencies = [
     "google-generativeai>=0.3.0",
     "cffi>=1.6",
     "pytesseract>=0.3.10",
-    "torchvision>=0.23.0",
+    "torch==2.10.0",
+    "torchvision==0.25.0",
     "accelerate>=0.25.0",
     "bitsandbytes>=0.41.0",
     "beautifulsoup4>=4.14.2",
@@ -45,6 +46,22 @@ dependencies = [
     "mcp>=1.18.0",
     "pyboy==2.5.2",
     "playwright>=1.40.0",
+    # Versions tracked to the official Unsloth Gemma4 vision notebook
+    # (https://colab.research.google.com/github/unslothai/notebooks/blob/main/nb/Gemma4_(E4B)-Vision.ipynb)
+    # which pins datasets==4.3.0 + transformers==5.5.0 and uses
+    # trl<0.25 / unsloth>=2026.4.
+    "huggingface-hub>=1.5.0",
+    "peft>=0.18.0",
+    "trl>=0.18.2,<0.25.0",
+    "datasets>=4.3.0,<4.4.0",
+    "transformers>=5.5.0",
+    # No flash-attn — Gemma4 has 7 "global" text layers with head_dim
+    # 512 which flash-attn 2 doesn't support. Unsloth + xformers
+    # handles those layers via memory_efficient_attention instead.
+    "xformers>=0.0.34",
+    "liger-kernel>=0.7.0",
+    "unsloth>=2026.4.0",
+    "unsloth-zoo>=2026.4.0",
 ]
 
 [project.optional-dependencies]
@@ -61,6 +78,15 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["agent", "pokemon_env", "browser_env", "utils", "server"]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
 
 [dependency-groups]
 dev = [

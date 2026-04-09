@@ -37,6 +37,12 @@ server/agent_thinking.txt
 out.txt
 test_outputs/
 
+# SFT distillation training data + outputs (large files, staged separately)
+data/sft_dataset/
+train_runs/
+unsloth_compiled_cache/
+*.png
+
 # -----------------------------------------------------------------------------
 # Python
 # -----------------------------------------------------------------------------
