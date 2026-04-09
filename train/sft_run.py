@@ -193,15 +193,27 @@ def main() -> int:
     ap.add_argument("--max-records", type=int, default=None,
                     help="Cap dataset size (for debugging).")
     ap.add_argument("--no-4bit", action="store_true",
-                    help="Disable QLoRA (NF4 base). Likely OOMs at 8k.")
+                    help="Disable QLoRA (NF4 base). Required for bf16 LoRA "
+                         "or full FT.")
     ap.add_argument("--finetune-vision", action="store_true",
                     help="Also LoRA the vision tower.")
+    ap.add_argument("--model-id", type=str, default=MODEL_ID,
+                    help="Unsloth model ID. Choices: "
+                         "unsloth/gemma-4-E2B-it, unsloth/gemma-4-E4B-it, "
+                         "unsloth/gemma-4-26B-A4B-it, unsloth/gemma-4-31B-it.")
+    ap.add_argument("--full-ft", action="store_true",
+                    help="Full finetuning (all params trainable) instead of "
+                         "LoRA. Implies --no-4bit. Only feasible for "
+                         "smaller models on a single H200.")
     args = ap.parse_args()
+    if args.full_ft:
+        args.no_4bit = True
 
     args.output.mkdir(parents=True, exist_ok=True)
     config_path = args.output / "config.json"
     config_path.write_text(json.dumps({
-        "model_id": MODEL_ID,
+        "model_id": args.model_id,
+        "full_ft": args.full_ft,
         "shard": [str(s) for s in args.shard],
         "data_root": str(args.data_root) if args.data_root else None,
         "epochs": args.epochs,
@@ -218,30 +230,34 @@ def main() -> int:
     }, indent=2))
     logger.info("config saved to %s", config_path)
 
-    logger.info("loading %s (4bit=%s, max_seq_length=%d)",
-                MODEL_ID, not args.no_4bit, args.max_length)
+    logger.info("loading %s (4bit=%s, full_ft=%s, max_seq_length=%d)",
+                args.model_id, not args.no_4bit, args.full_ft, args.max_length)
     model, processor = FastVisionModel.from_pretrained(
-        MODEL_ID,
-        load_in_4bit=not args.no_4bit,
+        args.model_id,
+        load_in_4bit=not args.no_4bit and not args.full_ft,
+        full_finetuning=args.full_ft,
         use_gradient_checkpointing="unsloth",
         max_seq_length=args.max_length,
     )
 
-    logger.info("attaching LoRA (rank=%d, alpha=%d, dropout=%.2f)",
-                args.lora_rank, args.lora_alpha, args.lora_dropout)
-    model = FastVisionModel.get_peft_model(
-        model,
-        finetune_vision_layers=args.finetune_vision,
-        finetune_language_layers=True,
-        finetune_attention_modules=True,
-        finetune_mlp_modules=True,
-        r=args.lora_rank,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=args.lora_dropout,
-        bias="none",
-        random_state=3407,
-        target_modules="all-linear",
-    )
+    if args.full_ft:
+        logger.info("FULL FINETUNING — skipping LoRA injection")
+    else:
+        logger.info("attaching LoRA (rank=%d, alpha=%d, dropout=%.2f)",
+                    args.lora_rank, args.lora_alpha, args.lora_dropout)
+        model = FastVisionModel.get_peft_model(
+            model,
+            finetune_vision_layers=args.finetune_vision,
+            finetune_language_layers=True,
+            finetune_attention_modules=True,
+            finetune_mlp_modules=True,
+            r=args.lora_rank,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            bias="none",
+            random_state=3407,
+            target_modules="all-linear",
+        )
     FastVisionModel.for_training(model)
 
     records = load_records(
