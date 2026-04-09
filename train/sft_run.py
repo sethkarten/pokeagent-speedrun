@@ -238,11 +238,12 @@ def main() -> int:
         full_finetuning=args.full_ft,
         use_gradient_checkpointing="unsloth",
         max_seq_length=args.max_length,
-        # Full FT needs fp32 master weights for numerical stability —
-        # pure bf16 full FT NaNs out within 1-2 steps because gradients
-        # underflow and updates accumulate noise. LoRA is fine in pure
-        # bf16 because LoRA matrices and grads are small.
-        float32_mixed_precision=args.full_ft,
+        # NOTE: Unsloth's `float32_mixed_precision=True` is actually
+        # FULL fp32 (not the standard "bf16 fwd + fp32 master weights"
+        # mixed precision). It doubles VRAM. Leave it OFF; use
+        # adamw_torch for full FT — adamw_torch already keeps an
+        # internal fp32 master copy of bf16 params for the optimizer
+        # update, which is the real "mixed precision" we want.
     )
 
     if args.full_ft:
@@ -275,16 +276,17 @@ def main() -> int:
         return 1
 
     # Optimizer choice:
-    #   - LoRA path: adamw_8bit is fine; trainable params are tiny LoRA
-    #     matrices, no kernel-launch issue.
-    #   - Full FT path: adamw_8bit FAILS on H200 with "invalid configuration
-    #     argument at line 106 in file /src/csrc/ops.cu" because the bnb
-    #     8bit Adam kernel can't handle the ~670M-element embedding /
-    #     lm_head tensors. Adafactor uses row+col statistics instead of
-    #     full m+v (O(out+in) vs O(out*in)) — massively smaller memory
-    #     footprint AND avoids the bnb kernel entirely. Standard for
-    #     full FT of large models when memory is tight.
-    optim_name = "adafactor" if args.full_ft else "adamw_8bit"
+    #   - LoRA path: adamw_8bit. Trainable params are tiny LoRA matrices
+    #     so the bnb 8bit kernel handles them fine.
+    #   - Full FT path: adamw_torch. The bnb 8bit kernel fails with
+    #     "invalid configuration argument at line 106 in file ops.cu"
+    #     on huge param tensors (the ~670M-element embedding/lm_head).
+    #     Adafactor was an earlier attempt but its default HF Trainer
+    #     wiring (`relative_step=True`) fights an explicit low LR and
+    #     produces NaN losses. adamw_torch is the safest, well-known
+    #     option that works with bf16 forward + fp32 master weights
+    #     (kept internally by the optimizer).
+    optim_name = "adamw_torch" if args.full_ft else "adamw_8bit"
     # Full FT needs a much lower LR than LoRA. The default 2e-4 is
     # LoRA-tuned and would diverge full FT immediately. 5e-6 is
     # standard for full SFT of an instruction-tuned base.
