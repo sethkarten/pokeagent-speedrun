@@ -278,23 +278,15 @@ def main() -> int:
     # Optimizer choice:
     #   - LoRA path: adamw_8bit. Trainable params are tiny LoRA matrices
     #     so the bnb 8bit kernel handles them fine.
-    #   - Full FT path: adafactor. The bnb 8bit kernel fails with
-    #     "invalid configuration argument at line 106 in file ops.cu"
-    #     on huge param tensors (the ~670M-element embedding/lm_head).
-    #     adamw_torch works but its fp32 m+v state for 8B params = 64 GB
-    #     which puts E4B full FT at the edge of the 141 GB H200 budget.
-    #     Adafactor uses row+col statistics — O(out+in) memory instead
-    #     of O(out*in) — total state ~3 GB for an 8B model. ~60 GB
-    #     total memory headroom even at max context.
-    #     Critical: HF Trainer's default adafactor wiring is
-    #     relative_step=True / scale_parameter=True which fights an
-    #     explicit learning_rate and NaNs out. We pass optim_args
-    #     to disable both so adafactor behaves as a drop-in Adam.
-    optim_name = "adafactor" if args.full_ft else "adamw_8bit"
-    optim_args = (
-        "scale_parameter=False,relative_step=False,warmup_init=False"
-        if args.full_ft else None
-    )
+    #   - Full FT path: adamw_torch. Standard. The bnb 8bit kernel
+    #     fails on huge embedding/lm_head tensors so we can't use
+    #     adamw_8bit. adamw_torch keeps an internal fp32 master copy
+    #     of bf16 params for the optimizer step (~64 GB state for 8B
+    #     params), which puts E4B at ~146 GB total at 24k context —
+    #     borderline on H200's 141 GB. The smoke test will reveal
+    #     whether it fits in practice. If E4B OOMs, fall back to LoRA.
+    optim_name = "adamw_torch" if args.full_ft else "adamw_8bit"
+    optim_args = None
     # Full FT needs a much lower LR than LoRA. The default 2e-4 is
     # LoRA-tuned and would diverge full FT immediately. 5e-6 is
     # standard for full SFT of an instruction-tuned base.
