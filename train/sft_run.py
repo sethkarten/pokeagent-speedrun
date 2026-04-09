@@ -29,7 +29,22 @@ from __future__ import annotations
 # Unsloth must be imported BEFORE transformers/trl/peft so it can
 # monkey-patch them. Imports must stay at top-of-file.
 import os
-os.environ.setdefault("HF_HOME", "/mnt/storage/models/huggingface")
+
+# Auto-discover the HuggingFace cache across machines and force
+# offline mode when a cache is found. SLURM compute nodes on della
+# have no internet, so we MUST use a pre-staged cache.
+_hf_candidates = [
+    os.environ.get("HF_HOME"),
+    "/mnt/storage/models/huggingface",                   # local 5090 box
+    "/scratch/gpfs/CHIJ/milkkarten/huggingface",         # della-gpu sk9014 (CHIJ)
+    "/data1/milkkarten/.cache/huggingface",              # Cynthia / jin-gpu-3
+]
+for _c in _hf_candidates:
+    if _c and os.path.isdir(_c):
+        os.environ["HF_HOME"] = _c
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        break
 
 from unsloth import FastVisionModel  # noqa: E402  isort:skip
 
