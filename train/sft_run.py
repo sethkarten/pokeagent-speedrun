@@ -238,6 +238,11 @@ def main() -> int:
         full_finetuning=args.full_ft,
         use_gradient_checkpointing="unsloth",
         max_seq_length=args.max_length,
+        # Full FT needs fp32 master weights for numerical stability —
+        # pure bf16 full FT NaNs out within 1-2 steps because gradients
+        # underflow and updates accumulate noise. LoRA is fine in pure
+        # bf16 because LoRA matrices and grads are small.
+        float32_mixed_precision=args.full_ft,
     )
 
     if args.full_ft:
@@ -280,12 +285,18 @@ def main() -> int:
     #     footprint AND avoids the bnb kernel entirely. Standard for
     #     full FT of large models when memory is tight.
     optim_name = "adafactor" if args.full_ft else "adamw_8bit"
-    logger.info("optimizer: %s", optim_name)
+    # Full FT needs a much lower LR than LoRA. The default 2e-4 is
+    # LoRA-tuned and would diverge full FT immediately. 5e-6 is
+    # standard for full SFT of an instruction-tuned base.
+    effective_lr = 5e-6 if (args.full_ft and args.lr == 2e-4) else args.lr
+    if effective_lr != args.lr:
+        logger.info("auto-lowering LR for full FT: %.0e -> %.0e", args.lr, effective_lr)
+    logger.info("optimizer: %s  lr: %.0e", optim_name, effective_lr)
     sft_cfg = SFTConfig(
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         num_train_epochs=args.epochs,
-        learning_rate=args.lr,
+        learning_rate=effective_lr,
         warmup_ratio=0.03,
         max_grad_norm=0.3,
         lr_scheduler_type="cosine",
