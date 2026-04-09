@@ -40,9 +40,23 @@ def main() -> int:
 
     extra_args = sys.argv[2:]
 
+    # gpu-manager activates the pokeagent-speedrun venv before invoking
+    # this wrapper. That sets VIRTUAL_ENV / PYTHONPATH / PYTHONHOME
+    # which then leak into the LF CLI subprocess and break its
+    # site-packages discovery (LF venv is python 3.12 in a different
+    # path). Clear them so the LF venv's python self-discovers cleanly.
+    env = {k: v for k, v in os.environ.items()
+           if k not in ("VIRTUAL_ENV", "PYTHONPATH", "PYTHONHOME",
+                        "PYTHONNOUSERSITE")}
+    # Drop the pokeagent venv's bin from PATH and prepend the LF venv's.
+    lf_bin = f"{LF_VENV}/bin"
+    path_parts = [p for p in env.get("PATH", "").split(":")
+                  if "pokeagent-speedrun/.venv" not in p]
+    env["PATH"] = lf_bin + ":" + ":".join(path_parts)
+    env["VIRTUAL_ENV"] = LF_VENV
+
     # Compute nodes have no internet — point HF cache at the pre-staged
     # local copy and force offline mode.
-    env = os.environ.copy()
     env.setdefault("HF_HOME", "/scratch/gpfs/CHIJ/milkkarten/huggingface")
     env.setdefault("HF_HUB_OFFLINE", "1")
     env.setdefault("TRANSFORMERS_OFFLINE", "1")
