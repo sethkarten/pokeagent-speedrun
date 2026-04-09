@@ -269,6 +269,18 @@ def main() -> int:
         logger.error("no records loaded — aborting")
         return 1
 
+    # Optimizer choice:
+    #   - LoRA path: adamw_8bit is fine; trainable params are tiny LoRA
+    #     matrices, no kernel-launch issue.
+    #   - Full FT path: adamw_8bit FAILS on H200 with "invalid configuration
+    #     argument at line 106 in file /src/csrc/ops.cu" because the bnb
+    #     8bit Adam kernel can't handle the ~670M-element embedding /
+    #     lm_head tensors. Adafactor uses row+col statistics instead of
+    #     full m+v (O(out+in) vs O(out*in)) — massively smaller memory
+    #     footprint AND avoids the bnb kernel entirely. Standard for
+    #     full FT of large models when memory is tight.
+    optim_name = "adafactor" if args.full_ft else "adamw_8bit"
+    logger.info("optimizer: %s", optim_name)
     sft_cfg = SFTConfig(
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
@@ -277,7 +289,7 @@ def main() -> int:
         warmup_ratio=0.03,
         max_grad_norm=0.3,
         lr_scheduler_type="cosine",
-        optim="adamw_8bit",
+        optim=optim_name,
         weight_decay=0.001,
         logging_steps=1,
         save_strategy="steps",
