@@ -317,6 +317,10 @@ def main() -> int:
         seed=3407,
         output_dir=str(args.output),
         report_to="none",
+        # Eval loss to catch overfitting — runs every save_steps
+        eval_strategy="steps",
+        eval_steps=args.save_steps,
+        per_device_eval_batch_size=1,
         # Vision-finetuning required flags from the Unsloth notebook
         remove_unused_columns=False,
         dataset_text_field="",
@@ -324,10 +328,24 @@ def main() -> int:
         max_length=args.max_length,
     )
 
+    # Hold out 10% of records for eval loss to detect overfitting.
+    # Without this, the first round of training had no signal for when
+    # the model started memorizing (all 3 small models memorized by
+    # epoch ~0.5 with loss dropping to 0.007-0.01, no eval to flag it).
+    import random as _rng
+    _rng.seed(42)
+    _rng.shuffle(records)
+    eval_size = max(1, int(len(records) * 0.1))
+    eval_records = records[:eval_size]
+    train_records = records[eval_size:]
+    logger.info("train/eval split: %d train, %d eval (10%% holdout)",
+                len(train_records), len(eval_records))
+
     loss_log = args.output / "losses.jsonl"
     trainer = SFTTrainer(
         model=model,
-        train_dataset=records,
+        train_dataset=train_records,
+        eval_dataset=eval_records,
         processing_class=processor.tokenizer,
         data_collator=UnslothVisionDataCollator(model, processor),
         args=sft_cfg,
