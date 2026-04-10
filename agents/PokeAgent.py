@@ -728,13 +728,54 @@ class PokeAgent:
                 ),
             })
 
-        # Build a tools dict that skill code can call
+        # Build a tools dict that skill code can call.
+        #
+        # Loop-break protection: skills are arbitrary Python code that
+        # can hit infinite loops (autoevolve once generated a pacing
+        # loop that checked `state['location']` for 'battle' on Emerald,
+        # which never matches because Emerald uses `is_in_battle`
+        # instead — the loop spammed press_buttons for 143 minutes
+        # before being killed by hand).
+        #
+        # We enforce two hard limits per skill execution:
+        #   - max 200 press_buttons calls
+        #   - max 300 seconds wall-clock
+        # Either limit raises RuntimeError which propagates out of
+        # exec() and is caught by the outer try/except, returning a
+        # structured error to the orchestrator.
+        import time as _time_mod
+        skill_start_ts = _time_mod.monotonic()
+        skill_press_count = [0]  # mutable so closure can update
+        SKILL_MAX_PRESSES = 200
+        SKILL_MAX_SECONDS = 300
+
+        def _check_skill_budget():
+            elapsed = _time_mod.monotonic() - skill_start_ts
+            if elapsed > SKILL_MAX_SECONDS:
+                raise RuntimeError(
+                    f"skill_timeout: exceeded {SKILL_MAX_SECONDS}s wall-clock "
+                    f"(elapsed={elapsed:.0f}s, button_presses={skill_press_count[0]}). "
+                    f"This usually means a `while` loop never reached its exit "
+                    f"condition. Check that your loop guard checks the right "
+                    f"state field (e.g. is_in_battle, not location)."
+                )
+            if skill_press_count[0] >= SKILL_MAX_PRESSES:
+                raise RuntimeError(
+                    f"skill_press_limit: exceeded {SKILL_MAX_PRESSES} press_buttons "
+                    f"calls in a single skill (elapsed={elapsed:.0f}s). "
+                    f"This usually means a pacing/grinding loop is stuck. "
+                    f"Check that your loop guard checks the right state field "
+                    f"(e.g. is_in_battle, not location)."
+                )
+
         def _tool_caller(tool_name):
             def call(**kwargs):
+                _check_skill_budget()
                 result = self.mcp_adapter.call_tool(tool_name, kwargs)
                 # After pressing buttons, wait for the emulator to process them
                 # so subsequent get_game_state() calls return updated positions
                 if tool_name == "press_buttons":
+                    skill_press_count[0] += 1
                     self._wait_for_actions_complete()
                 return result
             return call
@@ -775,6 +816,30 @@ class PokeAgent:
         logger.info(f"Running skill {skill_id} ({entry.name}): {reasoning}")
         logger.info(f"  Skill code length: {len(code)} chars, args: {skill_args}")
 
+        # Backup hard timeout via SIGALRM. The per-tool-call check
+        # already catches infinite loops that hammer press_buttons,
+        # but a pure-Python infinite loop with no tool calls would
+        # never trigger that check. SIGALRM interrupts the running
+        # exec() at the C level so it works for any kind of loop.
+        # Only installable in the main thread; if we're not in main
+        # thread, fall back to the per-tool-call check alone.
+        import signal as _signal_mod
+        alarm_installed = False
+        prev_handler = None
+
+        def _skill_alarm_handler(signum, frame):
+            raise RuntimeError(
+                f"skill_alarm: hard wall-clock timeout after {SKILL_MAX_SECONDS}s "
+                f"(button_presses={skill_press_count[0]}). Killed by SIGALRM."
+            )
+        try:
+            prev_handler = _signal_mod.signal(_signal_mod.SIGALRM, _skill_alarm_handler)
+            _signal_mod.alarm(SKILL_MAX_SECONDS)
+            alarm_installed = True
+        except (ValueError, OSError):
+            # Not in main thread — silently rely on the per-tool check.
+            pass
+
         try:
             exec(code, sandbox_globals)  # noqa: S102
             # Check if the code defined a result
@@ -784,6 +849,11 @@ class PokeAgent:
         except Exception as e:
             logger.error(f"Skill {skill_id} execution FAILED: {e}", exc_info=True)
             return json.dumps({"success": False, "skill_id": skill_id, "error": str(e)})
+        finally:
+            if alarm_installed:
+                _signal_mod.alarm(0)
+                if prev_handler is not None:
+                    _signal_mod.signal(_signal_mod.SIGALRM, prev_handler)
 
     def _execute_evolve_harness(self, arguments: dict) -> str:
         """Trigger an on-demand evolution pass."""
@@ -817,9 +887,27 @@ class PokeAgent:
 
         logger.info(f"Running code snippet ({len(code)} chars): {reasoning}")
 
+        # Same loop-break protection as _execute_run_skill — run_code
+        # only exposes get_game_state / get_map_data (no press_buttons)
+        # so the wall-clock timeout is the relevant guard. 60s is plenty
+        # for any reasonable prototyping snippet.
+        import time as _time_mod
+        code_start_ts = _time_mod.monotonic()
+        CODE_MAX_SECONDS = 60
+
+        def _check_code_budget():
+            elapsed = _time_mod.monotonic() - code_start_ts
+            if elapsed > CODE_MAX_SECONDS:
+                raise RuntimeError(
+                    f"run_code timeout: exceeded {CODE_MAX_SECONDS}s wall-clock. "
+                    f"This usually means an infinite loop. Add a counter or "
+                    f"a clear exit condition."
+                )
+
         # Reuse the same sandbox builder as run_skill
         def _tool_caller(tool_name):
             def call(**kwargs):
+                _check_code_budget()
                 result = self.mcp_adapter.call_tool(tool_name, kwargs)
                 if tool_name == "press_buttons":
                     self._wait_for_actions_complete()
@@ -3284,6 +3372,26 @@ Step {step_count}"""
                     screenshot_b64 = game_state_data.get("screenshot_base64")
                 except:
                     screenshot_b64 = None
+
+                # Persist the per-step screenshot to disk so the SFT
+                # trajectory exporter can join it back to the matching
+                # trajectory_history.jsonl entry by step number. Without
+                # this Pokemon trajectories have prompts and tool calls
+                # but no images, which makes them useless for vision
+                # distillation. Browser games already do this in
+                # browser_game_agent — this brings PokeAgent in line.
+                if screenshot_b64:
+                    try:
+                        from utils.data_persistence.run_data_manager import get_run_data_manager
+                        _rm = get_run_data_manager()
+                        if _rm is not None:
+                            from pathlib import Path as _P
+                            _ss_dir = _P(str(_rm.get_run_directory())) / "screenshots"
+                            _ss_dir.mkdir(parents=True, exist_ok=True)
+                            _img_bytes = base64.b64decode(screenshot_b64)
+                            (_ss_dir / f"step_{next_step:05d}.png").write_bytes(_img_bytes)
+                    except Exception as _ss_err:
+                        logger.debug(f"Could not save per-step screenshot: {_ss_err}")
 
                 # Build prompt (conditional based on optimization mode)
                 if self.optimization_enabled:
