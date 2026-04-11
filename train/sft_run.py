@@ -362,6 +362,28 @@ def main() -> int:
         args.max_length, args.lora_rank,
     )
 
+    # SIGTERM handler — SLURM sends SIGTERM ~60s before hard-killing
+    # the job at the wall time limit. Without this, the final adapter
+    # never gets saved if the job is killed between checkpoints. The
+    # handler does an emergency save and exits cleanly.
+    import signal as _signal
+
+    def _sigterm_handler(signum, frame):
+        logger.warning("SIGTERM received — saving emergency checkpoint")
+        emergency_dir = args.output / "checkpoint_emergency"
+        try:
+            model.save_pretrained(emergency_dir)
+            processor.save_pretrained(emergency_dir)
+            logger.info("emergency checkpoint saved to %s", emergency_dir)
+        except Exception as e:
+            logger.error("emergency save failed: %s", e)
+        sys.exit(0)
+
+    try:
+        _signal.signal(_signal.SIGTERM, _sigterm_handler)
+    except (ValueError, OSError):
+        pass  # not in main thread
+
     torch.cuda.reset_peak_memory_stats()
     t0 = time.time()
     trainer.train()

@@ -132,7 +132,7 @@ ROLE_SUBAGENT = "subagent"
 ROLE_META = "meta"
 ROLE_UNKNOWN = "unknown"
 
-DEFAULT_INCLUDE_ROLES = (ROLE_ORCHESTRATOR, ROLE_SUBAGENT)
+DEFAULT_INCLUDE_ROLES = (ROLE_ORCHESTRATOR, ROLE_SUBAGENT, ROLE_META)
 
 
 def _classify_interaction_type(itype: str) -> str:
@@ -140,9 +140,9 @@ def _classify_interaction_type(itype: str) -> str:
     if not itype:
         return ROLE_UNKNOWN
     s = itype.lower()
-    if "orchestrator" in s:
+    if "orchestrator" in s or "autonomous_cli" in s or "cli_agent" in s:
         return ROLE_ORCHESTRATOR
-    if "harnessevolver" in s or "promptoptimizer" in s:
+    if "harnessevolver" in s or "promptoptimizer" in s or "process_trajectory" in s:
         return ROLE_META
     # Subagent naming is inconsistent — match the common patterns:
     # gemini_Custom_Combat_Handler, gemini_Custom_Pokemon_Center_Healer,
@@ -408,7 +408,13 @@ def _grounded_reasoning(text: str, pre_state: dict) -> bool:
     # Pokemon-specific grounding tokens — recognising in-game proper
     # nouns means the model is paying attention to the screen.
     pokemon_keywords = (
+        # Emerald-specific
         "birch", "mom", "may", "brendan", "treecko", "torchic", "mudkip",
+        # Red-specific
+        "oak", "blue", "gary", "charmander", "bulbasaur", "squirtle",
+        "pikachu", "brock", "misty", "surge", "pewter", "cerulean",
+        "vermilion", "pallet",
+        # Generic Pokemon
         "pokeball", "pokémon", "pokemon", "wild", "battle", "tackle",
         "potion", "trainer", "gym", "rival", "dialogue", "menu",
         "bag", "party", "map", "town", "route", "lab",
@@ -494,6 +500,47 @@ def _filter_step(
                 if moved:
                     return False, "regret_returned_to_origin"
                 break
+
+    # Directional no-op: agent pressed ONLY directional buttons but
+    # coords didn't change AND not in battle/dialog. This is
+    # wall-pressing — bad training signal. A/B/START presses that
+    # don't change coords are legitimate (NPC interaction, menus).
+    DIRECTIONAL = {"UP", "DOWN", "LEFT", "RIGHT"}
+    if tool_calls and tool_calls[0].get("name") == "press_buttons":
+        btns = (tool_calls[0].get("args") or {}).get("buttons") or []
+        if btns and all(b.upper() in DIRECTIONAL for b in btns):
+            pre_state = entry.get("pre_state") or {}
+            coords = entry.get("player_coords")
+            in_battle = pre_state.get("is_in_battle", False)
+            dialog = pre_state.get("dialog_active", False)
+            if not in_battle and not dialog and coords:
+                # Check if coords changed in the NEXT entry
+                if next_entries:
+                    next_coords = next_entries[0].get("player_coords")
+                    next_loc = next_entries[0].get("location")
+                    cur_loc = entry.get("location")
+                    if (next_coords == coords and next_loc == cur_loc):
+                        return False, "directional_noop"
+
+    # Consecutive no-op streak: if this step AND the previous N steps
+    # all have the same coords + location + not in battle/dialog,
+    # the agent is stuck. Drop after 5 consecutive static steps.
+    if len(prev_entries) >= 5:
+        coords = entry.get("player_coords")
+        loc = entry.get("location")
+        pre_state = entry.get("pre_state") or {}
+        if (coords and loc
+                and not pre_state.get("is_in_battle")
+                and not pre_state.get("dialog_active")):
+            all_same = all(
+                p.get("player_coords") == coords
+                and p.get("location") == loc
+                and not (p.get("pre_state") or {}).get("is_in_battle")
+                and not (p.get("pre_state") or {}).get("dialog_active")
+                for p in prev_entries[-5:]
+            )
+            if all_same:
+                return False, "consecutive_static_streak"
 
     # Reasoning grounding — use the *real* reasoning from tool_call
     # args, not the trajectory's top-level placeholder field.
@@ -758,6 +805,41 @@ def process_run(
 
     llm_traces = _load_llm_traces(run_dir, include_roles=include_roles)
     directive_windows = _load_directive_windows(run_dir)
+
+    # Skill audit: build a set of skills that were created (via
+    # process_skill) and then later used with a FAILED outcome. We
+    # exclude the evolver traces that CREATED those broken skills —
+    # training on them teaches the student to produce buggy code.
+    # Also exclude skills that were created but NEVER used (no signal
+    # about whether they work).
+    _skill_created_at: Dict[str, int] = {}  # skill_id → step
+    _skill_used_ok: set = set()             # skill_ids that ran successfully
+    _skill_used_fail: set = set()           # skill_ids that failed
+    for e in entries:
+        tc_list = (e.get("action") or {}).get("tool_calls") or []
+        for tc in tc_list:
+            args = tc.get("args") or {}
+            if tc.get("name") == "process_skill":
+                for ent in (args.get("entries") or []):
+                    sid = (ent.get("id") or ent.get("name") or "") if isinstance(ent, dict) else ""
+                    if sid:
+                        _skill_created_at[sid] = int(e.get("step", 0))
+            elif tc.get("name") == "run_skill":
+                sid = args.get("skill_id") or ""
+                outcome = (e.get("outcome") or {}).get("success")
+                if outcome is True:
+                    _skill_used_ok.add(sid)
+                elif outcome is False:
+                    _skill_used_fail.add(sid)
+    _bad_skill_steps: set = set()
+    for sid, step in _skill_created_at.items():
+        if sid in _skill_used_fail and sid not in _skill_used_ok:
+            _bad_skill_steps.add(step)
+            logger.info("[%s] skill audit: %s created at step %d failed on use — "
+                        "excluding evolver trace", run_dir.name, sid, step)
+    if _bad_skill_steps:
+        logger.info("[%s] skill audit: %d bad skill creation steps flagged",
+                    run_dir.name, len(_bad_skill_steps))
     stats["interactions_total"] = len(llm_traces)
 
     if teacher_filter:
@@ -826,7 +908,10 @@ def process_run(
         #     the same attack), so the loop / regret filters don't
         #     apply. Reasoning grounding only applies if a trajectory
         #     entry exists for context.
-        if role == ROLE_ORCHESTRATOR and entry:
+        # Skill audit: drop evolver traces that created broken skills
+        if role == ROLE_META and step in _bad_skill_steps:
+            keep_step, drop_reason = False, "bad_skill_creation"
+        elif role == ROLE_ORCHESTRATOR and entry:
             keep_step, drop_reason = _filter_step(
                 entry, prev_entries, next_entries,
                 image_bytes, prev_image_bytes, cfg,
