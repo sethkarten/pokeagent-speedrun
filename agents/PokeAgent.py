@@ -3303,13 +3303,57 @@ Step {step_count}"""
                     name = tool_call.get("name", "unknown")
                     args = tool_call.get("args", {})
                     result = tool_call.get("result", "")
+
                     history_lines.append(f"    - {name}")
-                    history_lines.append(f"      args: {json.dumps(args, ensure_ascii=False)}")
-                    if result != "":
+
+                    # --- Smart args formatting ---
+                    # For press_buttons: just show button list (compact)
+                    # For run_code: show reasoning but not full code
+                    # For everything else: show args up to a limit
+                    if name == "press_buttons":
+                        btns = args.get("buttons", [])
+                        history_lines.append(f"      buttons: {btns}")
+                    elif name == "run_code":
+                        history_lines.append(f"      reasoning: {(args.get('reasoning') or '')[:200]}")
+                    elif name in ("run_skill",):
+                        history_lines.append(f"      skill_id: {args.get('skill_id', '?')}")
+                        history_lines.append(f"      args: {json.dumps(args.get('args', {}), ensure_ascii=False)[:200]}")
+                    else:
+                        args_str = json.dumps(args, ensure_ascii=False)
+                        if len(args_str) > 500:
+                            args_str = args_str[:497] + "..."
+                        history_lines.append(f"      args: {args_str}")
+
+                    # --- Smart result formatting ---
+                    # Observational tools (get_game_state, get_map_data):
+                    #   EXCLUDE results — this info is already in the
+                    #   current prompt's ### CURRENT GAME STATE section.
+                    #   These are the 500 KB+ monsters that bloated the
+                    #   prompt to 3.1M chars and hit Gemini's 1M token limit.
+                    #
+                    # Action/creation tools (run_skill, process_skill,
+                    #   execute_custom_subagent, run_code, etc.):
+                    #   KEEP full results — the agent needs to see whether
+                    #   a skill succeeded/failed, what error it threw, what
+                    #   run_code printed. This is the feedback loop for
+                    #   iterating on skills. Cap at 2000 chars as a safety
+                    #   net (a skill error message is never that long).
+                    OBSERVATIONAL_TOOLS = {
+                        "get_game_state", "get_map_data",
+                        "get_skill_overview", "get_subagent_overview",
+                        "get_memory_overview",
+                    }
+                    if name in OBSERVATIONAL_TOOLS:
+                        # Don't include result — already in current state
+                        pass
+                    elif result != "":
                         try:
-                            history_lines.append(f"      result: {json.dumps(result, ensure_ascii=False)}")
+                            result_str = json.dumps(result, ensure_ascii=False)
                         except TypeError:
-                            history_lines.append(f"      result: {str(result)}")
+                            result_str = str(result)
+                        if len(result_str) > 2000:
+                            result_str = result_str[:1997] + "..."
+                        history_lines.append(f"      result: {result_str}")
             history_lines.append("")
 
         return "\n".join(history_lines).strip()
