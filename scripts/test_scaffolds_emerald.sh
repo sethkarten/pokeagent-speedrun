@@ -5,7 +5,7 @@
 uv run python run.py --backend gemini --model-name gemini-3.1-pro-preview \
   --backup-state Emerald-GBAdvance/auto-evolve_init.zip \
   --port 8778 --agent-auto --scaffold autoevolve \
-  --enable-prompt-optimization --optimization-frequency 50 \
+  --enable-prompt-optimization --optimization-window-length 50 \
   --direct-objectives autonomous_objective_creation \
   --direct-objectives-start 6 --record --run-name ae_autoevolve
 

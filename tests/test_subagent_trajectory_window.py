@@ -114,6 +114,7 @@ def test_format_trajectory_window_without_post_state():
 
 
 def test_format_trajectory_window_with_legacy_post_state():
+    """post_state is ignored even if present in legacy data."""
     entries = [
         {
             "step": 1,
@@ -125,8 +126,8 @@ def test_format_trajectory_window_with_legacy_post_state():
         }
     ]
     text = format_trajectory_window(entries)
-    assert "->" in text
-    assert "Petalburg City" in text
+    assert "Route 101" in text
+    assert "->" not in text
 
 
 def test_format_trajectory_window_with_objective_context():

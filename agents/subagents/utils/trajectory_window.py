@@ -218,15 +218,7 @@ def format_trajectory_window(trajectories: List[Dict[str, Any]]) -> str:
         else:
             coords_str = _format_coords(pre_state)
 
-        # Legacy compat: if post_state exists, show transition; otherwise just show location
-        post_state = entry.get("post_state")
-        if post_state:
-            loc_info = (
-                f"{location} {coords_str} -> "
-                f"{post_state.get('location', 'Unknown')} {_format_coords(post_state)}"
-            )
-        else:
-            loc_info = f"{location} {coords_str}"
+        loc_info = f"{location} {coords_str}"
 
         obj_context = entry.get("objective_context")
         obj_str = f" | Obj: {obj_context}" if obj_context else ""

@@ -194,16 +194,19 @@ class RunDataManager:
                       reasoning: str,
                       action: Dict[str, Any],
                       pre_state: Dict[str, Any],
-                      post_state: Optional[Dict[str, Any]] = None,
                       outcome: Optional[Dict[str, Any]] = None,
                       llm_prompt: Optional[str] = None,
                       llm_trace_ref: Optional[str] = None,
-                      objective_context: Optional[str] = None):
+                      objective_context: Optional[str] = None,
+                      **kwargs):
         """Log a system-level trajectory entry.
 
-        New schema (v2): ``post_state`` is no longer written. Location and
-        player_coords are promoted from pre_state to top-level fields.
-        ``objective_context`` captures the active objective IDs.
+        Location and player_coords are promoted from pre_state to
+        top-level fields.  ``objective_context`` captures the active
+        objective IDs.
+
+        ``post_state`` is deprecated and ignored (accepted via **kwargs
+        for backwards compatibility with older callers).
 
         Trajectory JSONL schema (current):
             Required:
@@ -219,8 +222,8 @@ class RunDataManager:
                 - objective_context
                 - llm_prompt
                 - llm_trace_ref
-            Legacy compatibility:
-                - post_state may exist in older runs
+            Legacy:
+                - post_state may exist in older run files but is not written
         """
         trajectory_entry: Dict[str, Any] = {
             "step": step,

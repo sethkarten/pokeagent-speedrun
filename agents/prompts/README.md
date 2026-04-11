@@ -18,6 +18,6 @@ Prompt and instruction files used by the agent and server:
 
 - **`run.py`** — Does not pass `system_instructions_file`; uses scaffold-based automatic selection (see `agents/PokeAgent.py`).
 
-- **`python -m agents.PokeAgent`** — Omit `--system-instructions` for the same automatic behavior. Pass `--system-instructions path` to override. Use `--enable-prompt-optimization` and `--optimization-frequency` to match `run.py` flags.
+- **`python -m agents.PokeAgent`** — Omit `--system-instructions` for the same automatic behavior. Pass `--system-instructions path` to override. Use `--enable-prompt-optimization` and `--optimization-window-length` to match `run.py` flags.
 
 All code that loads these files should use paths relative to the repository root (for example `agents/prompts/pokeagent-directives/POKEAGENT.md`) or resolve them from the repo root with `agents.prompts.paths.resolve_repo_path`.

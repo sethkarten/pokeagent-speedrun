@@ -5,7 +5,7 @@
 uv run python run.py --game red --backend gemini --model-name gemini-3.1-pro-preview \
   --port 2778 --agent-auto --scaffold autoevolve \
   --backup-state PokemonRed-GBC/red_init.zip \
-  --enable-prompt-optimization --optimization-frequency 50 \
+  --enable-prompt-optimization --optimization-window-length 50 \
   --direct-objectives autonomous_objective_creation \
   --direct-objectives-start 4 --run-name ae_autoevolve
 

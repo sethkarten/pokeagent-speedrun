@@ -100,27 +100,17 @@ class PromptOptimizer:
 - Complete objectives when done
 """
     
-    def should_optimize(self, current_step: int, optimization_frequency: int = 10) -> bool:
-        """
-        Check if optimization should run at this step.
-        
-        Args:
-            current_step: Current agent step number
-            optimization_frequency: How often to run optimization
-        
-        Returns:
-            True if optimization should run.
+    def should_optimize(self, current_step: int, optimization_window_length: int = 50) -> bool:
+        """Check if optimization should run at this step.
 
-        Warmup note:
-            Prompt optimization now uses the same warmup floor as harness
-            evolution (50 steps) so standalone prompt optimization and
-            harness-driven optimization follow consistent cadence semantics.
+        Uses the same adaptive schedule as HarnessEvolver: every 25 steps
+        during the first 200 steps, then every 100 steps afterwards.
+        ``optimization_window_length`` is accepted for API compat but ignored.
         """
-        return (
-            current_step >= MIN_PROMPT_OPTIMIZATION_WARMUP_STEPS
-            and current_step > 0
-            and current_step % optimization_frequency == 0
-        )
+        if current_step < MIN_PROMPT_OPTIMIZATION_WARMUP_STEPS or current_step <= 0:
+            return False
+        effective_freq = 25 if current_step <= 200 else 100
+        return current_step % effective_freq == 0
     
     def get_recent_trajectories(self, num_steps: int = 10) -> List[Dict[str, Any]]:
         """
@@ -257,23 +247,25 @@ IMPROVED BASE PROMPT:
             return self.current_base_prompt
     
     def _format_trajectories_for_analysis(self, trajectories: List[Dict[str, Any]]) -> str:
-        """Format trajectories into readable text for LLM analysis."""
+        """Format trajectories into readable text for LLM analysis.
+
+        Uses the *next* step's ``pre_state`` as the effective post-state for
+        movement heuristics, since ``post_state`` is no longer recorded.
+        """
         formatted = []
-        
+
         for i, traj in enumerate(trajectories, 1):
             step_text = f"\n### Step {traj.get('step', i)}\n"
             step_text += f"**Reasoning:** {traj.get('reasoning', 'N/A')}\n"
-            
+
             # Format action (can be dict or string)
             action = traj.get('action', 'N/A')
             if isinstance(action, dict):
-                # Extract tool call names from action dict
                 tool_calls = action.get('tool_calls', [])
                 if tool_calls:
                     action_names = [tc.get('name', 'unknown') for tc in tool_calls]
                     action_str = ', '.join(action_names)
                     step_text += f"**Action:** {action_str}\n"
-                    # Include tool args and results for non-trivial calls
                     for tc in tool_calls:
                         tc_name = tc.get('name', '')
                         tc_args = tc.get('args', {})
@@ -288,46 +280,42 @@ IMPROVED BASE PROMPT:
                     step_text += f"**Action:** {action.get('type', 'N/A')}\n"
             else:
                 step_text += f"**Action:** {action}\n"
-            
-            # Include relevant state info
+
             pre_state = traj.get('pre_state', {})
-            post_state = traj.get('post_state', {})
-            
+
             if pre_state:
-                step_text += f"**Pre-State:** Location: {pre_state.get('location', 'Unknown')}, "
+                step_text += f"**State:** Location: {pre_state.get('location', 'Unknown')}, "
                 step_text += f"Coords: {pre_state.get('player_coords', 'Unknown')}, "
                 step_text += f"Context: {pre_state.get('context', 'Unknown')}\n"
-            
-            if post_state:
-                step_text += f"**Post-State:** Location: {post_state.get('location', 'Unknown')}, "
-                step_text += f"Coords: {post_state.get('player_coords', 'Unknown')}\n"
-            
-            # Check for issues (movement attempted but coordinates unchanged)
-            if pre_state.get('player_coords') == post_state.get('player_coords'):
-                # Extract action names for checking
+
+            # Infer post-step coords from the next trajectory's pre_state
+            next_coords = None
+            if i < len(trajectories):
+                next_coords = trajectories[i].get('pre_state', {}).get('player_coords')
+
+            pre_coords = pre_state.get('player_coords')
+            if pre_coords is not None and next_coords is not None and pre_coords == next_coords:
                 action_names = []
                 if isinstance(action, dict):
-                    tool_calls = action.get('tool_calls', [])
-                    action_names = [tc.get('name', '').lower() for tc in tool_calls]
+                    action_names = [tc.get('name', '').lower() for tc in action.get('tool_calls', [])]
                 elif isinstance(action, str):
                     action_names = [action.lower()]
-                
-                # Check if movement was attempted
+
                 movement_attempted = (
                     'navigate_to' in action_names or
-                    any(btn in action_names for btn in ['press_buttons']) or
-                    (isinstance(action, str) and any(btn in action.upper() for btn in ['UP', 'DOWN', 'LEFT', 'RIGHT']))
+                    'press_buttons' in action_names or
+                    (isinstance(action, str) and any(d in action.upper() for d in ['UP', 'DOWN', 'LEFT', 'RIGHT']))
                 )
-                
+
                 if movement_attempted:
                     step_text += "⚠️ **Issue:** Movement attempted but coordinates unchanged (possibly blocked)\n"
-            
-            # Check for repeated locations
-            if i > 1 and pre_state.get('player_coords') == trajectories[i-2].get('pre_state', {}).get('player_coords'):
+
+            # Check for repeated locations (uses only pre_state)
+            if i > 1 and pre_coords == trajectories[i-2].get('pre_state', {}).get('player_coords'):
                 step_text += "⚠️ **Pattern:** Same location as 2 steps ago (possible loop)\n"
-            
+
             formatted.append(step_text)
-        
+
         return "\n".join(formatted)
     
     def _save_optimized_prompt(self, prompt: str, end_step: int, start_step: int):

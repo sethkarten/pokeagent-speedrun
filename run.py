@@ -269,7 +269,8 @@ def start_custom_agent(agent_config, args):
     # Add prompt optimization if specified in config
     if agent_config.get('supports_prompt_optimization', False):
         agent_kwargs["enable_prompt_optimization"] = args.enable_prompt_optimization if hasattr(args, 'enable_prompt_optimization') else False
-        agent_kwargs["optimization_frequency"] = args.optimization_frequency if hasattr(args, 'optimization_frequency') else 10
+        window_len = getattr(args, "optimization_frequency_deprecated", None) or args.optimization_window_length
+        agent_kwargs["optimization_window_length"] = window_len
 
     # Pass scaffold name to PokeAgent so it can select tool set and prompt
     if agent_config.get("class") == "PokeAgent":
@@ -345,8 +346,12 @@ def main():
                        help="Optional name to append to run directory (e.g., 'test_run' -> 'run_20251129_191503_test_run')")
     parser.add_argument("--enable-prompt-optimization", action="store_true",
                        help="Enable reflective prompt optimization based on trajectory analysis")
-    parser.add_argument("--optimization-frequency", type=int, default=10,
-                       help="How often to run prompt optimization (default: every 10 steps)")
+    parser.add_argument("--optimization-window-length", type=int, default=50,
+                       dest="optimization_window_length",
+                       help="Number of recent trajectory steps to use for evolution analysis (default: 50)")
+    parser.add_argument("--optimization-frequency", type=int, default=None,
+                       dest="optimization_frequency_deprecated",
+                       help="Deprecated: use --optimization-window-length instead")
     parser.add_argument("--allow-walkthrough", action="store_true",
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",

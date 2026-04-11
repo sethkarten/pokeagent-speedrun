@@ -183,7 +183,7 @@ class PokeAgent:
         max_context_chars: int = 100000,
         target_context_chars: int = 50000,
         enable_prompt_optimization: bool = False,
-        optimization_frequency: int = 10,
+        optimization_window_length: int = 50,
         scaffold: str = "pokeagent",
         bootstrap_from: str = None,
         bootstrap_prompt_path: str = None,
@@ -197,7 +197,7 @@ class PokeAgent:
         self.max_context_chars = max_context_chars
         self.target_context_chars = target_context_chars
         self.optimization_enabled = enable_prompt_optimization
-        self.optimization_frequency = optimization_frequency
+        self.optimization_window_length = optimization_window_length
         self.scaffold = scaffold
         self.include_builtins = scaffold not in _NO_BUILTINS_SCAFFOLDS
 
@@ -292,7 +292,7 @@ class PokeAgent:
                     initial_prompt_override=self._bootstrap_prompt_content,
                 )
                 self.prompt_optimizer = self.harness_evolver.prompt_optimizer
-                logger.info(f"🧬 HarnessEvolver ENABLED (frequency: every {optimization_frequency} steps)")
+                logger.info(f"🧬 HarnessEvolver ENABLED (trajectory window: {optimization_window_length} steps)")
             else:
                 self.prompt_optimizer = create_prompt_optimizer(
                     vlm=self.vlm,
@@ -300,7 +300,7 @@ class PokeAgent:
                     base_prompt_path=AUTOEVOLVE_BASE_ORCHESTRATOR_POLICY_PATH,
                     initial_prompt_override=self._bootstrap_prompt_content,
                 )
-                logger.info(f"🔄 Prompt optimization ENABLED (frequency: every {optimization_frequency} steps)")
+                logger.info(f"🔄 Prompt optimization ENABLED (trajectory window: {optimization_window_length} steps)")
 
     def _load_system_instructions(self, filename: str) -> str:
         """Load system instructions from file."""
@@ -2348,24 +2348,24 @@ class PokeAgent:
                 # Check if harness evolution or prompt optimization should run
                 if self.optimization_enabled:
                     if self.harness_evolver:
-                        if self.harness_evolver.should_evolve(active_step, self.optimization_frequency):
+                        if self.harness_evolver.should_evolve(active_step, self.optimization_window_length):
                             logger.info(f"🧬 Triggering harness evolution at step {active_step}")
                             try:
                                 results = self.harness_evolver.evolve(
                                     current_step=active_step,
-                                    num_trajectory_steps=self.optimization_frequency,
+                                    num_trajectory_steps=self.optimization_window_length,
                                 )
                                 logger.info(f"✅ Harness evolved at step {active_step}: {results}")
                                 self._inject_evolution_summary(results)
                             except Exception as e:
                                 logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
                     elif self.prompt_optimizer:
-                        if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
+                        if self.prompt_optimizer.should_optimize(active_step, self.optimization_window_length):
                             logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
                             try:
                                 new_base_prompt = self.prompt_optimizer.optimize_prompt(
                                     current_step=active_step,
-                                    num_trajectory_steps=self.optimization_frequency
+                                    num_trajectory_steps=self.optimization_window_length
                                 )
                                 logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
                             except Exception as e:
@@ -2409,24 +2409,24 @@ class PokeAgent:
                 # Check if harness evolution or prompt optimization should run
                 if self.optimization_enabled:
                     if self.harness_evolver:
-                        if self.harness_evolver.should_evolve(active_step, self.optimization_frequency):
+                        if self.harness_evolver.should_evolve(active_step, self.optimization_window_length):
                             logger.info(f"🧬 Triggering harness evolution at step {active_step}")
                             try:
                                 results = self.harness_evolver.evolve(
                                     current_step=active_step,
-                                    num_trajectory_steps=self.optimization_frequency,
+                                    num_trajectory_steps=self.optimization_window_length,
                                 )
                                 logger.info(f"✅ Harness evolved at step {active_step}: {results}")
                                 self._inject_evolution_summary(results)
                             except Exception as e:
                                 logger.error(f"❌ Harness evolution failed: {e}", exc_info=True)
                     elif self.prompt_optimizer:
-                        if self.prompt_optimizer.should_optimize(active_step, self.optimization_frequency):
+                        if self.prompt_optimizer.should_optimize(active_step, self.optimization_window_length):
                             logger.info(f"🔄 Triggering prompt optimization at step {active_step}")
                             try:
                                 new_base_prompt = self.prompt_optimizer.optimize_prompt(
                                     current_step=active_step,
-                                    num_trajectory_steps=self.optimization_frequency
+                                    num_trajectory_steps=self.optimization_window_length
                                 )
                                 logger.info(f"✅ Base prompt optimized (new length: {len(new_base_prompt)} chars)")
                             except Exception as e:
@@ -3235,7 +3235,6 @@ Step {step_count}"""
                 reasoning=reasoning,
                 action=action,
                 pre_state=pre_state,
-                post_state={},
                 outcome=outcome,
                 llm_prompt=prompt,
             )
@@ -3597,10 +3596,11 @@ def main():
         ),
     )
     parser.add_argument(
-        "--optimization-frequency",
+        "--optimization-window-length",
         type=int,
-        default=10,
-        help="Run prompt optimization every N steps when optimization is enabled.",
+        default=50,
+        dest="optimization_window_length",
+        help="Number of recent trajectory steps to use for evolution analysis (default: 50).",
     )
     parser.add_argument(
         "--backend",
@@ -3617,7 +3617,7 @@ def main():
         "backend": args.backend,
         "max_steps": args.max_steps,
         "enable_prompt_optimization": args.enable_prompt_optimization,
-        "optimization_frequency": args.optimization_frequency,
+        "optimization_window_length": args.optimization_window_length,
     }
     if args.system_instructions is not None:
         agent_kwargs["system_instructions_file"] = args.system_instructions

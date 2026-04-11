@@ -286,7 +286,7 @@ python run.py --scaffold pokeagent --agent-auto
 | `--clear-knowledge-base`                 | Clear `knowledge_base.json` before starting.                                                                                                             |
 | `--run-name TEXT`                        | Optional suffix for the run directory name.                                                                                                              |
 | `--enable-prompt-optimization`           | Enable reflective prompt optimization from trajectory analysis.                                                                                          |
-| `--optimization-frequency INT`           | Steps between prompt optimization runs (default: 10).                                                                                                    |
+| `--optimization-window-length INT`       | Number of recent trajectory steps used for evolution analysis (default: 50).                                                                              |
 | `--allow-walkthrough`                    | Enable `get_walkthrough` tool (vision_only scaffold).                                                                                                    |
 | `--allow-slam`                           | Enable SLAM / map building (vision_only scaffold).                                                                                                       |
 
