@@ -1,34 +1,14 @@
-# Implementation Gaps
-
-## System Design / Architecture
-
-### Map Rendering Parity Gap (UI vs LLM/Movement Preview)
-
-- **Status:** Open
-- **Impact:** The web UI `MAP & ACTIONS` panel can display a map that diverges from the final post-filtered porymap view used by movement preview and LLM context.
-
-### Current Behavior
-
-- Movement preview reads porymap-aware data and correctly reflects NPC markers (`N`) and blocking in many cases.
-- UI map rendering (`visual_map`) is still influenced by multiple source paths and cache behavior in `/state`.
-- Because map rendering and movement preview are not yet guaranteed to share one canonical post-filtered map artifact at all times, stale or mismatched visuals can still occur.
-
-### Why This Is Still a Gap
-
-- The system still has multiple map producers (SLAM map, memory-reader visual map, map stitcher map, porymap final map).
-- Cache reuse and source-priority logic can preserve a previous visual map source longer than intended.
-- UI display filtering logic can further transform what is shown in the panel.
-
-### Desired End State
-
-- A single canonical map artifact per `/state` response (post-reconciliation + post-flag-filter + post-marker-stamping).
-- Both UI map panel and movement preview consume that exact artifact, with no alternative render source unless explicitly requested.
-
 # Implementation gaps & known issues
 
 Living list of **behavior that diverges from intent** or is easy to misread. **Code is authoritative**; update this file when fixing or confirming a gap.
 
 Profiling input: system-design-profiler review of `utils/stores/*`, `agents/utils/harness_evolver.py`.
+
+## Map rendering parity (UI vs LLM / movement preview)
+
+- **Status:** Open — UI `MAP & ACTIONS` can diverge from the post-filtered porymap view used for movement preview and LLM context.
+- **Current behavior:** Movement preview is porymap-aware; `visual_map` in `/state` still merges multiple producers (SLAM, memory reader, stitcher, porymap) with cache reuse, so stale or mismatched panels are possible.
+- **Desired end state:** One canonical map artifact per `/state`; UI panel and movement preview both consume it.
 
 ---
 
@@ -192,12 +172,8 @@ So the **full-map ASCII in the agent prompt includes `^`** wherever the filter a
 
 ### Recommended direction
 
-- Split per-step data into an append-only JSONL file; keep only aggregates and milestone/objective entries in `cumulative_metrics.json`.
-- Update the reconciliation script (`System-Design/personal_notes/reconciling_cumulative_metrics.md`) and `/sync_llm_metrics` endpoint accordingly.
-- This is a standalone refactor — scope separately from feature work.
-
----
+- Append-only JSONL for per-step rows; keep aggregates (and milestones/objectives) in `cumulative_metrics.json`; align `reconciling_cumulative_metrics.md` and `/sync_llm_metrics`. Scope as its own refactor.
 
 ## Adding new items
 
-Use a short title, **symptoms**, **ground-truth files**, and **hypothesis or fix** when known. Prefer linking to architecture docs ([harness_evolver.md](harness_evolver.md), [data_persistence.md](data_persistence.md)) instead of duplicating full behavior specs.
+Title, **symptoms**, **ground-truth files**, optional fix. Link [harness_evolver.md](harness_evolver.md), [data_persistence.md](data_persistence.md) instead of duplicating specs.
