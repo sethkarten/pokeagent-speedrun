@@ -185,6 +185,9 @@ class PokeAgent:
         enable_prompt_optimization: bool = False,
         optimization_frequency: int = 10,
         scaffold: str = "pokeagent",
+        adapter_path: str = None,
+        base_model_id: str = None,
+        device_index: int = 1,
     ):
         logger.info(f"🚀 Initializing PokeAgent with backend={backend}, model={model}, server={server_url}, scaffold={scaffold}")
         self.server_url = server_url
@@ -233,11 +236,19 @@ class PokeAgent:
         # Initialize VLM for ALL backends (unified interface)
         # Create tool declarations for function calling
         self.tools = self._create_tool_declarations()
+        vlm_kwargs = {}
+        if adapter_path:
+            vlm_kwargs["adapter_path"] = adapter_path
+        if base_model_id:
+            vlm_kwargs["base_model_id"] = base_model_id
+        vlm_kwargs["device_index"] = device_index
+
         self.vlm = VLM(
             backend=self.backend,
             model_name=self.model,
             tools=self.tools,
-            system_instruction=self.system_instructions
+            system_instruction=self.system_instructions,
+            **vlm_kwargs,
         )
         logger.info(f"✅ VLM initialized with {self.backend} backend using model: {self.model}")
         logger.info(f"✅ {len(self.tools)} tools available")

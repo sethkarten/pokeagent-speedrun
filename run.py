@@ -284,6 +284,14 @@ def start_custom_agent(agent_config, args):
     if agent_config.get('use_backend', False):
         agent_kwargs["backend"] = args.backend
 
+    # Pass adapter args for unsloth backend
+    if getattr(args, "adapter_path", None):
+        agent_kwargs["adapter_path"] = args.adapter_path
+    if getattr(args, "base_model_id", None):
+        agent_kwargs["base_model_id"] = args.base_model_id
+    if getattr(args, "device_index", None) is not None:
+        agent_kwargs["device_index"] = args.device_index
+
     # Add allow_walkthrough if specified in config
     if agent_config.get('supports_walkthrough', False):
         agent_kwargs["allow_walkthrough"] = args.allow_walkthrough if hasattr(args, 'allow_walkthrough') else False
@@ -335,9 +343,15 @@ def main():
     
     # Agent configuration
     parser.add_argument("--backend", type=str, default="gemini",
-                       help="VLM backend (openai, gemini, openrouter, anthropic, ollama, auto)")
-    parser.add_argument("--model-name", type=str, default="gemini-3-flash-preview", 
+                       help="VLM backend (openai, gemini, openrouter, anthropic, ollama, unsloth, auto)")
+    parser.add_argument("--model-name", type=str, default="gemini-3-flash-preview",
                        help="Model name to use")
+    parser.add_argument("--adapter-path", type=str, default=None,
+                       help="Path to trained LoRA adapter for unsloth backend")
+    parser.add_argument("--base-model-id", type=str, default=None,
+                       help="Unsloth base model ID (e.g. unsloth/gemma-4-E4B-it)")
+    parser.add_argument("--device-index", type=int, default=1,
+                       help="CUDA device index for local model (default: 1, keeps GPU 0 free)")
     parser.add_argument("--scaffold", type=str, default="pokeagent",
                        choices=SUPPORTED_SCAFFOLDS,
                        help="Agent scaffold: pokeagent (default)/autonomous_cli, or vision_only")

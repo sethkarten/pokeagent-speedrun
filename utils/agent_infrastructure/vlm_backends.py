@@ -2252,17 +2252,29 @@ class GeminiBackend(VLMBackend):
         """Calls the generate_content method with exponential backoff for rate limits.
 
         Handles 429 rate limit errors with exponential backoff.
-        Uses 180 second timeout for slow preview models like gemini-3-pro-preview.
-        """
+        Uses generous timeouts because Pokemon trajectories pack ~12-18K
+        input tokens + a screenshot per call, which can push gemini-3-pro
+        into the 5-10 minute range during peak load. We've observed
+        sporadic 504 "Deadline expired" errors at the previous 180s
+        ceiling — bumping to 600s eliminates them at the cost of a
+        slower failure mode when the API is genuinely down.
 
-        # Use longer timeout for preview models which are much slower
-        # Flash models respond in <30s normally; pro/preview models may be slower
-        if "3-pro" in self.model_name:
-            timeout = 180
+        Configurable via env var ``GEMINI_REQUEST_TIMEOUT`` (seconds).
+        """
+        env_override = os.environ.get("GEMINI_REQUEST_TIMEOUT")
+        if env_override:
+            try:
+                timeout = float(env_override)
+            except ValueError:
+                timeout = 600
+        elif "3-pro" in self.model_name or "3.1-pro" in self.model_name:
+            # 10 minutes — handles the worst case for Pokemon's heavy
+            # prompt + image queries against gemini-3-pro / 3.1-pro.
+            timeout = 600
         elif "preview" in self.model_name:
-            timeout = 90
+            timeout = 300
         else:
-            timeout = 60
+            timeout = 120
 
         max_retries = 5
         base_delay = 2  # Start with 2 second delay
@@ -2286,22 +2298,70 @@ class GeminiBackend(VLMBackend):
             except Exception as e:
                 error_str = str(e).lower()
 
-                # Check if it's a rate limit error (429 or quota exceeded)
-                if "429" in error_str or "quota" in error_str or "rate" in error_str:
+                # Classify the error to decide whether to retry.
+                #
+                # Three categories of transient failures we want to
+                # retry:
+                #   1. Rate limits (429 / quota / "rate") — exponential backoff
+                #   2. Deadlines / timeouts (504 / deadline exceeded / timeout)
+                #      — short backoff. The Pokemon prompts (~17K input
+                #      tokens + an image) routinely push gemini-3-pro
+                #      into the 5-10 minute range during peak load and
+                #      occasionally hit the SDK / API deadline.
+                #   3. Server errors (500 / 502 / 503 / "internal" /
+                #      "unavailable") — short backoff. Google's API has
+                #      sporadic 503s during failovers.
+                is_rate_limit = (
+                    "429" in error_str
+                    or "quota" in error_str
+                    or "rate" in error_str
+                )
+                is_deadline = (
+                    "504" in error_str
+                    or "deadline" in error_str
+                    or "timeout" in error_str
+                    or "deadline_exceeded" in error_str
+                )
+                is_server_error = (
+                    "500" in error_str
+                    or "502" in error_str
+                    or "503" in error_str
+                    or "internal" in error_str
+                    or "unavailable" in error_str
+                    or "service_unavailable" in error_str
+                )
+
+                if is_rate_limit or is_deadline or is_server_error:
                     if attempt < max_retries - 1:
-                        # Exponential backoff: 2s, 4s, 8s, 16s, 32s
-                        delay = base_delay * (2**attempt) + random.uniform(0, 1)
+                        # Rate limit gets longer backoff because the
+                        # API explicitly told us to slow down. Deadline
+                        # / 5xx get a shorter backoff because the next
+                        # try might just succeed.
+                        if is_rate_limit:
+                            delay = base_delay * (2**attempt) + random.uniform(0, 1)
+                            kind = "rate limit"
+                        elif is_deadline:
+                            delay = 5.0 * (attempt + 1) + random.uniform(0, 2)
+                            kind = "504/deadline"
+                        else:
+                            delay = 3.0 * (attempt + 1) + random.uniform(0, 1)
+                            kind = "5xx server error"
                         logger.warning(
-                            f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})..."
+                            f"{kind} hit ({type(e).__name__}: {str(e)[:120]}), "
+                            f"retrying in {delay:.1f}s "
+                            f"(attempt {attempt + 1}/{max_retries})..."
                         )
                         time.sleep(delay)
                         continue
                     else:
-                        logger.error(f"Rate limit exceeded after {max_retries} retries")
+                        logger.error(
+                            f"Gemini call failed after {max_retries} retries: {e}"
+                        )
                         raise
                 else:
-                    # Not a rate limit error, raise immediately
-                    logger.error(f"Error in generate_content: {e}")
+                    # Genuinely unexpected error — raise immediately so
+                    # we don't mask real bugs.
+                    logger.error(f"Error in generate_content (non-retryable): {e}")
                     raise
 
         raise Exception("Max retries exceeded")
@@ -3101,6 +3161,177 @@ class OllamaBackend(VLMBackend):
             raise
 
 
+class UnslothBackend(VLMBackend):
+    """In-process Unsloth/Gemma4 LoRA adapter backend for local inference.
+
+    Loads a trained LoRA adapter via FastVisionModel.from_pretrained()
+    and runs model.generate() directly on a local GPU. Parses the
+    student's text output into tool calls via _extract_text_action_calls()
+    (the same parser the Ollama backend uses for gemma4's text-format
+    ACTION: lines).
+
+    Usage::
+
+        vlm = VLM(
+            model_name="e4b_emerald_v3",
+            backend="unsloth",
+            tools=tools,
+            system_instruction=system_prompt,
+            adapter_path="adapters/e4b_emerald_v3",
+            base_model_id="unsloth/gemma-4-E4B-it",
+            device_index=1,
+        )
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        tools: list = None,
+        system_instruction: str = None,
+        adapter_path: str = None,
+        base_model_id: str = "unsloth/gemma-4-E4B-it",
+        device_index: int = 1,
+        max_seq_length: int = 8192,
+        load_in_4bit: bool = True,
+        **kwargs,
+    ):
+        import os as _os
+        _os.environ.setdefault("HF_HOME", "/mnt/storage/models/huggingface")
+        import torch
+        from unsloth import FastVisionModel
+
+        self.model_name = model_name
+        self.tools = tools or []
+        self.system_instruction = system_instruction
+        self._tool_schemas = tools or []
+
+        model_path = adapter_path or base_model_id
+        logger.info(
+            "UnslothBackend: loading %s on cuda:%d (4bit=%s, max_seq=%d)",
+            model_path, device_index, load_in_4bit, max_seq_length,
+        )
+
+        _os.environ["CUDA_VISIBLE_DEVICES"] = str(device_index)
+        self.model, self.processor = FastVisionModel.from_pretrained(
+            model_path,
+            load_in_4bit=load_in_4bit,
+            use_gradient_checkpointing=False,
+            max_seq_length=max_seq_length,
+        )
+        FastVisionModel.for_inference(self.model)
+        self.device = self.model.device
+        logger.info("UnslothBackend: model loaded on %s", self.device)
+
+    def _generate(self, messages, module_name="Unknown"):
+        """Build inputs from messages, run generate, return decoded text + usage."""
+        import torch, time
+
+        inputs = self.processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+        ).to(self.device)
+
+        input_len = inputs["input_ids"].shape[1]
+        t0 = time.time()
+        with torch.no_grad():
+            out = self.model.generate(
+                **inputs,
+                max_new_tokens=5000,
+                temperature=0.7,
+                top_p=0.95,
+                do_sample=True,
+                use_cache=True,
+            )
+        duration = time.time() - t0
+        new_tokens = out[0, input_len:]
+        output_len = len(new_tokens)
+        text = self.processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
+
+        usage = {
+            "prompt_tokens": input_len,
+            "completion_tokens": output_len,
+            "total_tokens": input_len + output_len,
+        }
+        return text, usage, duration
+
+    def _build_adapter(self, text, usage, duration, module_name, has_image):
+        """Convert raw text into the Gemini-like adapter object the agent expects."""
+        parts = []
+        # Parse ACTION: tool_name(args) patterns from the student's text
+        for fc in _extract_text_action_calls(text, self._tool_schemas):
+            parts.append(_openai_tool_call_part(fc["name"], fc["args"]))
+
+        if text:
+            parts.append(_openai_text_part(text))
+        if not parts:
+            parts.append(_openai_text_part(""))
+
+        content = type("Content", (), {"parts": parts})()
+        candidate = type("Candidate", (), {"content": content})()
+        adapter = type("ResponseAdapter", (), {"candidates": [candidate]})()
+        inp = int(usage.get("prompt_tokens", 0))
+        out = int(usage.get("completion_tokens", 0))
+        adapter.usage_metadata = type(
+            "UsageMetadata", (), {
+                "prompt_token_count": inp,
+                "candidates_token_count": out,
+                "total_token_count": inp + out,
+                "cached_content_token_count": 0,
+            },
+        )()
+
+        from utils.data_persistence.llm_logger import log_llm_interaction
+        log_llm_interaction(
+            interaction_type=f"unsloth_{module_name}",
+            prompt=text[:500],  # compact log
+            response=text,
+            metadata={
+                "model": self.model_name,
+                "backend": "unsloth",
+                "duration": duration,
+                "has_image": has_image,
+                "token_usage": usage,
+            },
+            model_info={"model": self.model_name, "backend": "unsloth"},
+        )
+        return adapter
+
+    def get_query(self, img, text, module_name="Unknown"):
+        """Vision query: screenshot + text prompt → tool calls."""
+        from PIL import Image
+        if not isinstance(img, Image.Image):
+            import io
+            img = Image.open(io.BytesIO(img)).convert("RGB")
+
+        messages = [{"role": "user", "content": [
+            {"type": "image", "image": img},
+            {"type": "text", "text": text},
+        ]}]
+
+        response_text, usage, duration = self._generate(messages, module_name)
+        logger.info(
+            "[%s] UnslothBackend: %d→%d tokens in %.1fs",
+            module_name, usage["prompt_tokens"], usage["completion_tokens"], duration,
+        )
+        return self._build_adapter(response_text, usage, duration, module_name, True)
+
+    def get_text_query(self, text, module_name="Unknown"):
+        """Text-only query (no image)."""
+        messages = [{"role": "user", "content": [
+            {"type": "text", "text": text},
+        ]}]
+
+        response_text, usage, duration = self._generate(messages, module_name)
+        logger.info(
+            "[%s] UnslothBackend (text): %d→%d tokens in %.1fs",
+            module_name, usage["prompt_tokens"], usage["completion_tokens"], duration,
+        )
+        return self._build_adapter(response_text, usage, duration, module_name, False)
+
+
 class VLM:
     """Main VLM class that supports multiple backends"""
 
@@ -3111,6 +3342,7 @@ class VLM:
         "gemini": GeminiBackend,
         "vertex": VertexBackend,
         "ollama": OllamaBackend,
+        "unsloth": UnslothBackend,
     }
 
     def __init__(
