@@ -16,7 +16,19 @@ import os
 import torch
 import time
 
-os.environ.setdefault("HF_HOME", "/data1/milkkarten/.cache/huggingface")
+# Auto-discover HF cache across machines (della/local/Cynthia)
+_hf_candidates = [
+    os.environ.get("HF_HOME"),
+    "/mnt/storage/models/huggingface",
+    "/scratch/gpfs/CHIJ/milkkarten/huggingface",
+    "/data1/milkkarten/.cache/huggingface",
+]
+for _c in _hf_candidates:
+    if _c and os.path.isdir(_c):
+        os.environ["HF_HOME"] = _c
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        break
 
 def main():
     ap = argparse.ArgumentParser()
