@@ -159,8 +159,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger("grpo_offline")
 
-MODEL_ID = "google/gemma-4-26B-A4B-it"
-UNSLOTH_MODEL_ID = "unsloth/gemma-4-26B-A4B-it"
+MODEL_ID = "unsloth/gemma-4-26B-A4B-it"
 
 
 # ---------------------------------------------------------------------------
@@ -255,8 +254,7 @@ def main() -> int:
     ap.add_argument("--data-root", type=Path, default=None,
                     help="Prefix prepended to each record's image_path.")
     ap.add_argument("--output", type=Path, default=Path("train_runs/grpo_v1"))
-    ap.add_argument("--model-id", type=str,
-                    default=UNSLOTH_MODEL_ID if _USE_UNSLOTH else MODEL_ID)
+    ap.add_argument("--model-id", type=str, default=MODEL_ID)
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--batch-size", type=int, default=1)
     ap.add_argument("--grad-accum", type=int, default=4)
