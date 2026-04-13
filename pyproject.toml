@@ -62,6 +62,8 @@ dependencies = [
     "liger-kernel>=0.7.0",
     "unsloth>=2026.4.0",
     "unsloth-zoo>=2026.4.0",
+    "matplotlib>=3.10.8",
+    "setuptools>=75.0",
 ]
 
 [project.optional-dependencies]
