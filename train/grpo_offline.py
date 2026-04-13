@@ -287,7 +287,16 @@ def main() -> int:
         max_seq_length=args.max_prompt_length + args.max_completion_length,
     )
     FastVisionModel.for_training(model)
-    PatchFastRL("grpo", FastVisionModel)
+
+    # PatchFastRL patches TRL trainers with Unsloth's compiled versions.
+    # These break under DDP because the compiled compute_loss does
+    # `model.config` which fails on DistributedDataParallel wrappers.
+    # Only patch for single-GPU runs.
+    if torch.cuda.device_count() <= 1:
+        PatchFastRL("grpo", FastVisionModel)
+    else:
+        logger.info("multi-GPU detected (%d) — skipping PatchFastRL (DDP incompatible)",
+                     torch.cuda.device_count())
 
     # -- Load dataset --
     dataset = load_grpo_dataset(
