@@ -38,38 +38,32 @@ def main():
     ap.add_argument("--device", default="cpu", help="Device to load on (cpu or cuda:N)")
     args = ap.parse_args()
 
-    from transformers import AutoModelForImageTextToText, AutoProcessor
-    from peft import PeftModel
+    # Use Unsloth's loader — raw PeftModel.from_pretrained fails because
+    # Gemma4 has ClippableLinear wrappers in the audio tower that PEFT
+    # can't inject LoRA into. Unsloth handles this automatically.
+    from unsloth import FastVisionModel
 
-    print(f"Loading base model {args.base} on {args.device}...")
+    print(f"Loading adapter {args.adapter} via Unsloth...")
     t0 = time.time()
 
-    load_kwargs = {"torch_dtype": torch.bfloat16}
-    if args.device == "cpu":
-        load_kwargs["device_map"] = "cpu"
-    else:
-        load_kwargs["device_map"] = {"": args.device}
+    model, processor = FastVisionModel.from_pretrained(
+        args.adapter,
+        load_in_4bit=False,    # bf16 for clean merge
+        use_gradient_checkpointing=False,
+        max_seq_length=8192,
+    )
+    print(f"Model + adapter loaded in {time.time()-t0:.0f}s")
 
-    model = AutoModelForImageTextToText.from_pretrained(args.base, **load_kwargs)
-    print(f"Base model loaded in {time.time()-t0:.0f}s")
-
-    print(f"Loading adapter from {args.adapter}...")
-    model = PeftModel.from_pretrained(model, args.adapter)
-    print(f"Adapter loaded")
-
+    # Merge LoRA weights into base and save as a standard HF model
     print("Merging LoRA into base weights...")
     t1 = time.time()
-    model = model.merge_and_unload()
-    print(f"Merged in {time.time()-t1:.0f}s")
-
-    print(f"Saving merged model to {args.output}...")
-    os.makedirs(args.output, exist_ok=True)
-    model.save_pretrained(args.output, safe_serialization=True)
-
-    # Also save processor/tokenizer
-    print("Saving processor...")
-    processor = AutoProcessor.from_pretrained(args.base)
-    processor.save_pretrained(args.output)
+    model.save_pretrained_merged(
+        args.output,
+        processor,
+        save_method="merged_16bit",
+    )
+    print(f"Merged and saved in {time.time()-t1:.0f}s")
+    print(f"Output: {args.output}")
 
     print(f"Done! Merged model at {args.output}")
     total_size = sum(
