@@ -130,6 +130,14 @@ sys.modules["weave"].EvaluationLogger = type(  # type: ignore[attr-defined]
 # ---------------------------------------------------------------------------
 _IS_DDP = os.environ.get("LOCAL_RANK") is not None
 
+# For DDP: pin each process to its assigned GPU BEFORE any torch/unsloth
+# import touches CUDA. Otherwise FastVisionModel with device_map='auto'
+# spreads the model across all visible GPUs and the 4 DDP processes
+# collide on GPU 0 → OOM.
+if _IS_DDP:
+    _local_rank = os.environ["LOCAL_RANK"]
+    os.environ["CUDA_VISIBLE_DEVICES"] = _local_rank
+
 from unsloth import FastVisionModel, PatchFastRL  # noqa: E402  isort:skip
 
 import argparse  # noqa: E402
