@@ -124,36 +124,21 @@ sys.modules["weave"].EvaluationLogger = type(  # type: ignore[attr-defined]
 # Unsloth must be imported BEFORE transformers/trl/peft.
 # ---------------------------------------------------------------------------
 # Unsloth is always needed (Gemma4 has ClippableLinear that stock PEFT
-# can't handle). But Unsloth's compiled GRPOTrainer crashes under DDP
-# (model.config on DistributedDataParallel wrapper).
-#
-# Fix: save the original TRL GRPOTrainer before Unsloth patches it,
-# then restore it for DDP runs.
+# can't handle). Use Unsloth's compiled GRPOTrainer for both single-GPU
+# and DDP. For DDP: monkey-patch DistributedDataParallel to expose
+# model.config and other attrs the compiled trainer needs.
 # ---------------------------------------------------------------------------
 _IS_DDP = os.environ.get("LOCAL_RANK") is not None
 
-# Import the ORIGINAL GRPOTrainer BEFORE Unsloth patches it.
-# TRL uses lazy imports, so we force-load the module first.
-from trl.trainer.grpo_config import GRPOConfig  # noqa: E402  isort:skip
-from trl.trainer.grpo_trainer import GRPOTrainer as _OriginalGRPOTrainer  # noqa: E402  isort:skip
-
-# NOW import Unsloth (which will monkey-patch TRL trainers)
 from unsloth import FastVisionModel, PatchFastRL  # noqa: E402  isort:skip
 
 import argparse  # noqa: E402
 
-import torch  # noqa: E402
+import torch  # noqa: E402, F401
 from datasets import Dataset  # noqa: E402
 from PIL import Image  # noqa: E402
 from transformers.trainer_callback import TrainerCallback  # noqa: E402
-
-# For DDP: restore original GRPOTrainer (Unsloth's version crashes)
-if _IS_DDP:
-    from trl import trainer as _trl_trainer  # noqa: E402
-    _trl_trainer.grpo_trainer.GRPOTrainer = _OriginalGRPOTrainer
-    GRPOTrainer = _OriginalGRPOTrainer
-else:
-    from trl import GRPOTrainer  # noqa: E402
+from trl import GRPOConfig, GRPOTrainer  # noqa: E402
 
 from train.reward_functions import (  # noqa: E402
     action_similarity_reward,
@@ -309,13 +294,23 @@ def main() -> int:
         max_seq_length=args.max_prompt_length + args.max_completion_length,
     )
     FastVisionModel.for_training(model)
-    if not _IS_DDP:
-        PatchFastRL("grpo", FastVisionModel)
-    else:
-        # Stock TRL GRPOTrainer accesses model.warnings_issued which
-        # doesn't propagate through PeftModel. Set it explicitly.
-        if not hasattr(model, "warnings_issued"):
-            model.warnings_issued = {"estimate_tokens": True}
+    # Always use Unsloth's compiled trainer (stock TRL has vision
+    # compatibility issues with Unsloth-loaded Gemma4 models).
+    # For DDP: Unsloth's compiled GRPOTrainer does model.config which
+    # fails on DistributedDataParallel. Monkey-patch DDP to expose it.
+    PatchFastRL("grpo", FastVisionModel)
+    if _IS_DDP:
+        import torch.nn.parallel
+
+        _orig_ddp_getattr = torch.nn.parallel.DistributedDataParallel.__getattr__
+
+        def _ddp_getattr_with_config(self, name):
+            if name in ("config", "warnings_issued", "generation_config",
+                        "can_generate", "get_base_model"):
+                return getattr(self.module, name)
+            return _orig_ddp_getattr(self, name)
+
+        torch.nn.parallel.DistributedDataParallel.__getattr__ = _ddp_getattr_with_config
 
     # -- Load dataset --
     dataset = load_grpo_dataset(
