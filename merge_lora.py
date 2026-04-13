@@ -54,15 +54,19 @@ def main():
     )
     print(f"Model + adapter loaded in {time.time()-t0:.0f}s")
 
-    # Merge LoRA weights into base and save as a standard HF model
+    # Merge LoRA weights into base
     print("Merging LoRA into base weights...")
     t1 = time.time()
-    model.save_pretrained_merged(
-        args.output,
-        processor,
-        save_method="merged_16bit",
-    )
-    print(f"Merged and saved in {time.time()-t1:.0f}s")
+    # Unsloth's save_pretrained_merged silently fails on offline nodes
+    # (tries to fetch tokenizer from HF). Use PEFT's merge_and_unload
+    # + standard HF save_pretrained instead.
+    model = model.merge_and_unload()
+    print(f"Merged in {time.time()-t1:.0f}s")
+
+    print(f"Saving merged model to {args.output}...")
+    os.makedirs(args.output, exist_ok=True)
+    model.save_pretrained(args.output, safe_serialization=True)
+    processor.save_pretrained(args.output)
     print(f"Output: {args.output}")
 
     print(f"Done! Merged model at {args.output}")
