@@ -123,15 +123,28 @@ sys.modules["weave"].EvaluationLogger = type(  # type: ignore[attr-defined]
 # Now safe to import Unsloth / TRL / reward functions.
 # Unsloth must be imported BEFORE transformers/trl/peft.
 # ---------------------------------------------------------------------------
-from unsloth import FastVisionModel, PatchFastRL  # noqa: E402  isort:skip  # must be first
+# Unsloth patches TRL trainers at import time. For multi-GPU DDP,
+# Unsloth's compiled GRPOTrainer crashes (model.config on DDP wrapper).
+# Detect DDP via LOCAL_RANK and skip Unsloth entirely in that case.
+_USE_UNSLOTH = os.environ.get("LOCAL_RANK") is None
+
+if _USE_UNSLOTH:
+    from unsloth import FastVisionModel, PatchFastRL  # noqa: E402  isort:skip
+else:
+    PatchFastRL = None  # noqa: E402
 
 import argparse  # noqa: E402
 
 import torch  # noqa: E402
 from datasets import Dataset  # noqa: E402
 from PIL import Image  # noqa: E402
+from transformers import AutoProcessor  # noqa: E402
 from transformers.trainer_callback import TrainerCallback  # noqa: E402
 from trl import GRPOConfig, GRPOTrainer  # noqa: E402
+
+if not _USE_UNSLOTH:
+    from peft import PeftModel  # noqa: E402
+    from transformers import AutoModelForImageTextToText  # noqa: E402
 
 from train.reward_functions import (  # noqa: E402
     action_similarity_reward,
@@ -146,7 +159,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("grpo_offline")
 
-MODEL_ID = "unsloth/gemma-4-26B-A4B-it"
+MODEL_ID = "google/gemma-4-26B-A4B-it"
+UNSLOTH_MODEL_ID = "unsloth/gemma-4-26B-A4B-it"
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +255,8 @@ def main() -> int:
     ap.add_argument("--data-root", type=Path, default=None,
                     help="Prefix prepended to each record's image_path.")
     ap.add_argument("--output", type=Path, default=Path("train_runs/grpo_v1"))
-    ap.add_argument("--model-id", type=str, default=MODEL_ID)
+    ap.add_argument("--model-id", type=str,
+                    default=UNSLOTH_MODEL_ID if _USE_UNSLOTH else MODEL_ID)
     ap.add_argument("--epochs", type=int, default=2)
     ap.add_argument("--batch-size", type=int, default=1)
     ap.add_argument("--grad-accum", type=int, default=4)
@@ -278,25 +293,26 @@ def main() -> int:
 
     # -- Load model with SFT adapter --
     logger.info(
-        "loading %s + adapter %s (4bit=%s)",
-        args.model_id, args.adapter, args.load_4bit,
+        "loading adapter %s (unsloth=%s, 4bit=%s)",
+        args.adapter, _USE_UNSLOTH, args.load_4bit,
     )
-    model, processor = FastVisionModel.from_pretrained(
-        str(args.adapter),
-        load_in_4bit=args.load_4bit,
-        max_seq_length=args.max_prompt_length + args.max_completion_length,
-    )
-    FastVisionModel.for_training(model)
-
-    # PatchFastRL patches TRL trainers with Unsloth's compiled versions.
-    # These break under DDP because the compiled compute_loss does
-    # `model.config` which fails on DistributedDataParallel wrappers.
-    # Only patch for single-GPU runs.
-    if torch.cuda.device_count() <= 1:
+    if _USE_UNSLOTH:
+        model, processor = FastVisionModel.from_pretrained(
+            str(args.adapter),
+            load_in_4bit=args.load_4bit,
+            max_seq_length=args.max_prompt_length + args.max_completion_length,
+        )
+        FastVisionModel.for_training(model)
         PatchFastRL("grpo", FastVisionModel)
     else:
-        logger.info("multi-GPU detected (%d) — skipping PatchFastRL (DDP incompatible)",
-                     torch.cuda.device_count())
+        # DDP path: load with stock transformers + peft (no Unsloth)
+        model_id = args.model_id
+        processor = AutoProcessor.from_pretrained(model_id)
+        model = AutoModelForImageTextToText.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16,
+        )
+        model = PeftModel.from_pretrained(model, str(args.adapter))
+        model.train()
 
     # -- Load dataset --
     dataset = load_grpo_dataset(
