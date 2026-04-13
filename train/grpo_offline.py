@@ -311,6 +311,11 @@ def main() -> int:
     FastVisionModel.for_training(model)
     if not _IS_DDP:
         PatchFastRL("grpo", FastVisionModel)
+    else:
+        # Stock TRL GRPOTrainer accesses model.warnings_issued which
+        # doesn't propagate through PeftModel. Set it explicitly.
+        if not hasattr(model, "warnings_issued"):
+            model.warnings_issued = {"estimate_tokens": True}
 
     # -- Load dataset --
     dataset = load_grpo_dataset(
