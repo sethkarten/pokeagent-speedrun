@@ -7,10 +7,15 @@ detects available GPUs and re-execs via accelerate.
 Usage (GPU manager submits this with gpu_count=2):
     python train/grpo_multigpu.py [all grpo_offline.py args...]
 """
+import os
 import subprocess
 import sys
 
-import torch
+# Reduce CUDA memory fragmentation for GRPO's variable-length prompts.
+# Must be set before any CUDA import (including torch).
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+import torch  # noqa: E402
 
 
 def main() -> int:

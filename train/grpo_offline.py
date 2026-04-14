@@ -42,8 +42,10 @@ from pathlib import Path
 # GRPO batches can have very different lengths (our prompts range 4K-18K
 # tokens), so the default allocator fragments and OOMs on otherwise
 # feasible batches. expandable_segments lets CUDA grow/shrink segments.
+# NOTE: the error message says "PYTORCH_ALLOC_CONF" but the real env
+# var PyTorch reads is "PYTORCH_CUDA_ALLOC_CONF".
 os.environ.setdefault(
-    "PYTORCH_ALLOC_CONF", "expandable_segments:True"
+    "PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True"
 )
 
 # ---------------------------------------------------------------------------
