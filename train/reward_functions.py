@@ -20,14 +20,26 @@ from typing import Any
 # Same regex as vlm_backends.py:2642
 _BRACKET_RE = re.compile(r"\[([A-Za-z_][A-Za-z0-9_]*)\]\s*")
 _CALLING_RE = re.compile(r"(?:Calling|Tool:)\s*([a-zA-Z_]\w*)")
+# Gemma4 function-call format from SFT: "call:tool_name args:{...}"
+_CALL_COLON_RE = re.compile(r"^\s*call:([a-zA-Z_]\w*)", re.MULTILINE)
 
 
 def _extract_tool_name(text: str) -> str | None:
-    """Return the first tool name found in *text*, or None."""
+    """Return the first tool name found in *text*, or None.
+
+    Supports all formats produced by the SFT model:
+    - ``[tool_name] ANALYZE: ...`` (bracket format, majority)
+    - ``Calling tool_name(args)`` (prose format)
+    - ``Tool: name`` (prose format)
+    - ``call:tool_name args:{...}`` (Gemma4 function-call format)
+    """
     m = _BRACKET_RE.search(text)
     if m:
         return m.group(1)
     m = _CALLING_RE.search(text)
+    if m:
+        return m.group(1)
+    m = _CALL_COLON_RE.search(text)
     if m:
         return m.group(1)
     return None

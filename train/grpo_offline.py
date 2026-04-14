@@ -344,7 +344,11 @@ def main() -> int:
         num_generations=args.num_generations,
         max_completion_length=args.max_completion_length,
         max_prompt_length=args.max_prompt_length,
-        temperature=0.7,
+        # Lower temp keeps GRPO generations closer to SFT distribution.
+        # At temp=0.7 the SFT model produced out-of-distribution outputs
+        # (different tool-call format than training data), causing reward
+        # functions to miss valid completions.
+        temperature=0.3,
         top_p=0.95,
         beta=0.0,
         loss_type="dapo",
