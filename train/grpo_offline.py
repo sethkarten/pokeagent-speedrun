@@ -38,6 +38,14 @@ import time
 import types
 from pathlib import Path
 
+# Reduce CUDA memory fragmentation for GRPO's variable-length prompts.
+# GRPO batches can have very different lengths (our prompts range 4K-18K
+# tokens), so the default allocator fragments and OOMs on otherwise
+# feasible batches. expandable_segments lets CUDA grow/shrink segments.
+os.environ.setdefault(
+    "PYTORCH_ALLOC_CONF", "expandable_segments:True"
+)
+
 # ---------------------------------------------------------------------------
 # HF cache auto-discovery — must run before any HF import.
 # ---------------------------------------------------------------------------
