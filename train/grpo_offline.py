@@ -344,12 +344,13 @@ def main() -> int:
         num_generations=args.num_generations,
         max_completion_length=args.max_completion_length,
         max_prompt_length=args.max_prompt_length,
-        # Lower temp keeps GRPO generations closer to SFT distribution.
-        # At temp=0.7 the SFT model produced out-of-distribution outputs
-        # (different tool-call format than training data), causing reward
-        # functions to miss valid completions.
-        temperature=0.3,
-        top_p=0.95,
+        # Temperature tradeoff for GRPO:
+        # - Too low (0.3): all num_gen samples identical → reward_std=0 →
+        #   zero advantage → no gradient. Observed empirically.
+        # - Too high (0.7): generations drift from SFT distribution.
+        # 0.5 with top_p=0.9 keeps diversity while staying reasonable.
+        temperature=0.5,
+        top_p=0.9,
         beta=0.0,
         loss_type="dapo",
         scale_rewards="group",
