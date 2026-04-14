@@ -350,6 +350,10 @@ def main() -> int:
         loss_type="dapo",
         scale_rewards="group",
         mask_truncated_completions=True,
+        # Use Liger fused linear+CE loss to avoid materializing the full
+        # logits tensor (vocab 262144 x seq_len x fp32 = ~35 GB at our
+        # sizes, which caused deterministic OOM on Red at step 10).
+        use_liger_loss=True,
         reward_weights=[2.0, 1.5, 1.0, 0.5],
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
