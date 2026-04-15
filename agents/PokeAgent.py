@@ -42,7 +42,6 @@ from agents.subagents import (
     allowed_battler_tool_names,
     build_battler_prompt,
     build_gym_puzzle_prompt,
-    build_local_subagent_tool_declarations,
     build_red_puzzle_prompt,
     build_reflect_prompt,
     build_summarize_prompt,
@@ -76,12 +75,17 @@ from agents.prompts.paths import (
     AUTOEVOLVE_SYSTEM_PROMPT_PATH,
     POKEAGENT_PROMPT_PATH,
     SIMPLE_PROMPT_PATH,
+    SIMPLEST_PROMPT_PATH,
     render_prompt,
     resolve_repo_path,
 )
 
-# Scaffolds that start with an empty subagent registry (no built-in subagents)
-_NO_BUILTINS_SCAFFOLDS = {"simple", "simplest", "autoevolve"}
+# Scaffolds that start with an empty subagent registry (no built-in subagents).
+# NOTE: "simplest" is intentionally absent — it is handled as a distinct tier
+# with only press_buttons + process_memory.
+_NO_BUILTINS_SCAFFOLDS = {"simple", "autoevolve"}
+_SIMPLEST_SCAFFOLD = "simplest"
+from agents.tools.registry import build_tools_for_scaffold
 from utils.json_utils import convert_protobuf_value, convert_protobuf_args, normalize_replan_edits
 
 # Configure logging
@@ -199,7 +203,7 @@ class PokeAgent:
         self.optimization_enabled = enable_prompt_optimization
         self.optimization_window_length = optimization_window_length
         self.scaffold = scaffold
-        self.include_builtins = scaffold not in _NO_BUILTINS_SCAFFOLDS
+        self.include_builtins = scaffold not in _NO_BUILTINS_SCAFFOLDS and scaffold != _SIMPLEST_SCAFFOLD
 
         # Bootstrap state
         self.bootstrap_active = bootstrap_from is not None
@@ -226,6 +230,8 @@ class PokeAgent:
         if system_instructions_file is None:
             if self.scaffold == "autoevolve":
                 system_instructions_file = AUTOEVOLVE_SYSTEM_PROMPT_PATH
+            elif self.scaffold == _SIMPLEST_SCAFFOLD:
+                system_instructions_file = SIMPLEST_PROMPT_PATH
             elif self.scaffold in _NO_BUILTINS_SCAFFOLDS:
                 system_instructions_file = SIMPLE_PROMPT_PATH
             else:
@@ -382,320 +388,8 @@ class PokeAgent:
         )
 
     def _create_tool_declarations(self):
-        """Create Gemini function declarations for ALL MCP tools (Pokemon + Baseline) - ALL ENABLED."""
-
-        # Use Gemini's declaration format with proper types
-        _gt = os.environ.get("GAME_TYPE", "emerald").lower()
-        if _gt == "red":
-            _btn_desc = "Press Game Boy buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, WAIT (Game Boy has no L/R shoulder buttons). Use WAIT to observe without pressing any button."
-        else:
-            _btn_desc = "Press Game Boy Advance buttons to interact with the game. Available buttons: A, B, START, SELECT, UP, DOWN, LEFT, RIGHT, L, R, WAIT. Use WAIT to observe without pressing any button."
-
-        tools = [
-            # ============================================================
-            # POKEMON MCP TOOLS
-            # ============================================================
-
-            # Game Control Tools
-            {
-                "name": "press_buttons",
-                "description": _btn_desc,
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "buttons": {
-                            "type_": "ARRAY",
-                            "items": {"type_": "STRING"},
-                            "description": "List of buttons to press (e.g., ['A'], ['UP'])"
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [game screen, location, objective, situation]' and 'PLAN: [action, reason, expected result]'. Example: 'ANALYZE: Dialogue box visible. Location: Route 101 (5,8). Objective: Talk to Prof Birch. Situation: Birch asking for help. PLAN: Action: Press A. Reason: Advance dialogue. Expected: Dialogue continues or battle starts.'"
-                        }
-                    },
-                    "required": ["buttons", "reasoning"]
-                }
-            },
-            {
-                "name": "complete_direct_objective",
-                "description": "Complete the current direct objective and advance to the next one. In CATEGORIZED mode, you must specify which category objective to complete (story, battling, or dynamics). In LEGACY mode, category is ignored.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current state, objective requirements, completion evidence]' and 'PLAN: [confirm completion, next objective]'. Example: 'ANALYZE: Objective was to reach Route 101. Current location shows Route 101 at (15,5). Evidence: Game text shows \"Route 101\". PLAN: Objective complete, marking as done. Next: Talk to Prof Birch.'"
-                        },
-                        "category": {
-                            "type_": "STRING",
-                            "enum": ["story", "battling", "dynamics"],
-                            "description": "Which category objective to complete (required in CATEGORIZED mode). 'story' for narrative objectives, 'battling' for team objectives, 'dynamics' for agent-created objectives."
-                        }
-                    },
-                    "required": ["reasoning"]
-                }
-            },
-            # Long-Term Memory Tool (unified CRUD)
-            {
-                "name": "process_memory",
-                "description": "Manage long-term memory. The LONG-TERM MEMORY OVERVIEW in your prompt shows all entry IDs. Use 'read' to get full details, 'add' to create, 'update' to modify, 'delete' to remove.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "action": {
-                            "type_": "STRING",
-                            "enum": ["read", "add", "update", "delete"],
-                            "description": "The action to perform on memory entries."
-                        },
-                        "entries": {
-                            "type_": "ARRAY",
-                            "items": {
-                                "type_": "OBJECT",
-                                "properties": {
-                                    "id": {"type_": "STRING", "description": "Entry ID or name (required for read/update/delete). For add, optionally specify a descriptive ID (e.g. 'route_101_map'). You can look up entries by ID or title."},
-                                    "path": {"type_": "STRING", "description": "Category path, e.g. 'navigation/routes'. Defaults to 'uncategorized'."},
-                                    "title": {"type_": "STRING", "description": "Short descriptive title (required for add)."},
-                                    "content": {"type_": "STRING", "description": "Detailed content text (required for add)."},
-                                    "importance": {"type_": "INTEGER", "description": "1-5 importance rating (default 3)."},
-                                    "location": {"type_": "STRING", "description": "Game location this memory relates to."},
-                                },
-                            },
-                            "description": "For read: [{id}]. For add: [{path, title, content}] — title AND content required. For update: [{id, ...fields}]. For delete: [{id}]."
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "Required. Brief justification for this memory operation (what you are trying to learn or change and why).",
-                        },
-                    },
-                    "required": ["action", "entries", "reasoning"]
-                }
-            },
-            # Skill Library Tool (unified CRUD)
-            {
-                "name": "process_skill",
-                "description": "Manage the skill library. The SKILL LIBRARY section in your prompt shows all skill IDs. Use 'read' to get full details, 'add' to create, 'update' to modify, 'delete' to remove.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "action": {
-                            "type_": "STRING",
-                            "enum": ["read", "add", "update", "delete"],
-                            "description": "The action to perform on skill entries."
-                        },
-                        "entries": {
-                            "type_": "ARRAY",
-                            "items": {
-                                "type_": "OBJECT",
-                                "properties": {
-                                    "id": {"type_": "STRING", "description": "Entry ID (required for read/update/delete). For add, optionally specify a descriptive ID (e.g. 'move_to_coords'). You can look up entries by ID or name."},
-                                    "name": {"type_": "STRING", "description": "Skill name (required for add)."},
-                                    "description": {"type_": "STRING", "description": "What the skill does and when to use it (required for add)."},
-                                    "path": {"type_": "STRING", "description": "Category path, e.g. 'battle/type_matchups'. Defaults to 'general'."},
-                                    "effectiveness": {"type_": "STRING", "description": "'low', 'medium', or 'high'."},
-                                    "code": {"type_": "STRING", "description": "Optional executable Python code for the skill. The code receives a `tools` dict with callable functions (e.g. tools['press_buttons'](buttons=[...], reasoning=...), tools['get_game_state']()). Return value is sent back to you."},
-                                },
-                            },
-                            "description": "For read: [{id}]. For add: [{name, description}] — both required; optionally include 'code' for executable skills. For update: [{id, ...fields}]. For delete: [{id}]."
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "Required. Brief justification for this skill operation (what strategy you are recording or updating and why).",
-                        },
-                    },
-                    "required": ["action", "entries", "reasoning"]
-                }
-            },
-            {
-                "name": "run_skill",
-                "description": "Execute a skill's code. The skill must have a 'code' field containing Python. The code runs in a sandbox with access to game tools via a `tools` dict (e.g. tools['press_buttons'](buttons=['A'], reasoning='...'), tools['get_game_state']()). Use this for executable skills like custom pathfinding or battle routines.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "skill_id": {
-                            "type_": "STRING",
-                            "description": "ID of the skill to execute (e.g. 'skill_0001')"
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "Why you are running this skill now"
-                        },
-                        "args": {
-                            "type_": "OBJECT",
-                            "description": "REQUIRED for executable skills. Key-value arguments passed to the skill code. Example for move_to_coords: {\"x\": 5, \"y\": 12}. Check the skill's description for what args it expects.",
-                            "properties": {
-                                "x": {"type_": "INTEGER", "description": "Target X coordinate (for navigation skills)"},
-                                "y": {"type_": "INTEGER", "description": "Target Y coordinate (for navigation skills)"}
-                            }
-                        }
-                    },
-                    "required": ["skill_id", "reasoning", "args"]
-                }
-            },
-            {
-                "name": "run_code",
-                "description": "Execute arbitrary Python code in the game sandbox. Use this to prototype, debug, and test code BEFORE saving it as a skill. The code has access to the same `tools` dict as run_skill (press_buttons, get_game_state, etc.) plus `args`. Set `result` to return data. Use this to: inspect get_game_state() output, test map parsing, prototype pathfinding, debug skill code. Stdout from print() is captured.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "code": {
-                            "type_": "STRING",
-                            "description": "Python code to execute. Has access to: tools['press_buttons'](), tools['get_game_state'](), args, random, collections, heapq, numpy/np, json, re, math. Set 'result' variable to return data."
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "What you are testing or prototyping"
-                        },
-                        "args": {
-                            "type_": "OBJECT",
-                            "description": "Optional arguments passed as the `args` dict",
-                            "properties": {}
-                        }
-                    },
-                    "required": ["code", "reasoning"]
-                }
-            },
-            {
-                "name": "process_subagent",
-                "description": "Manage the subagent registry. The SUBAGENT REGISTRY section in your prompt shows all subagent IDs. Use 'read' to get full config, 'add' to create, 'update' to modify, 'delete' to remove (built-ins cannot be deleted).",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "action": {
-                            "type_": "STRING",
-                            "enum": ["read", "add", "update", "delete"],
-                            "description": "The action to perform on subagent entries."
-                        },
-                        "entries": {
-                            "type_": "ARRAY",
-                            "items": {
-                                "type_": "OBJECT",
-                                "properties": {
-                                    "id": {"type_": "STRING", "description": "Entry ID or name (required for read/update/delete). For add, optionally specify a descriptive ID (e.g. 'battle_handler'). You can look up entries by ID or name."},
-                                    "name": {"type_": "STRING", "description": "Subagent name (required for add)."},
-                                    "description": {"type_": "STRING", "description": "What the subagent does (required for add)."},
-                                    "system_instructions": {"type_": "STRING", "description": "System prompt for the subagent (max 12000 chars)."},
-                                    "directive": {"type_": "STRING", "description": "Per-invocation directive (max 12000 chars)."},
-                                    "handler_type": {"type_": "STRING", "description": "'one_step' or 'looping' (default 'looping')."},
-                                    "max_turns": {"type_": "INTEGER", "description": "Max turns for looping subagents (default 25)."},
-                                    "return_condition": {"type_": "STRING", "description": "When the subagent should return control."},
-                                },
-                            },
-                            "description": "For read: [{id}]. For add: [{name, description, system_instructions?, directive?}] — name AND description required. For update: [{id, ...fields}]. For delete: [{id}]."
-                        },
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "Required. Brief justification for this subagent operation.",
-                        },
-                    },
-                    "required": ["action", "entries", "reasoning"]
-                }
-            },
-        ]
-
-        # get_progress_summary: H_expert only. autoevolve/simple agents already get
-        # objectives, memory, and skill overviews in their prompt each step.
-        if self.scaffold not in _NO_BUILTINS_SCAFFOLDS:
-            tools.append({
-                "name": "get_progress_summary",
-                "description": (
-                    "Get progress: milestones, current location/coords, direct-objective status, completed objectives "
-                    "history, memory tree overview, and run directory. Call with no arguments."
-                ),
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {},
-                    "required": []
-                }
-            })
-
-        # H_expert-only tools: pathfinding, walkthrough, wiki lookup
-        # H_min/H_auto agents must navigate with press_buttons and learn through gameplay
-        if self.scaffold not in _NO_BUILTINS_SCAFFOLDS:
-            tools.extend([
-                {
-                    "name": "navigate_to",
-                    "description": "Automatically navigate to specific coordinates using A* pathfinding. IMPORTANT: Always specify the variance parameter. If you get blocked repeatedly at the same position, increase variance to 'medium', 'high', or 'extreme' to explore alternative paths.",
-                    "parameters": {
-                        "type_": "OBJECT",
-                        "properties": {
-                            "x": {"type_": "INTEGER", "description": "Target X coordinate"},
-                            "y": {"type_": "INTEGER", "description": "Target Y coordinate"},
-                            "variance": {
-                                "type_": "STRING",
-                                "description": "REQUIRED. Path variance level: 'none' (optimal path, use first), 'low' (1-step variation), 'medium' (3-step variation, use if blocked), 'high' (5-step variation, use if very stuck), 'extreme' (8-step variation, use as last resort). Default: 'none'",
-                                "enum": ["none", "low", "medium", "high", "extreme"]
-                            },
-                            "reason": {
-                                "type_": "STRING",
-                                "description": "REQUIRED FORMAT: Must include 'ANALYZE: [current location, objective, destination details]' and 'PLAN: [why navigating here, what to do when arrive]'. Example: 'ANALYZE: Currently at Littleroot (8,10). Objective: Meet Prof Birch. Destination: Route 101 entrance at (15,5). PLAN: Navigate to encounter Birch being attacked. Will save him to progress story.'"
-                            },
-                            "consider_npcs": {
-                                "type_": "BOOLEAN",
-                                "description": "Whether to treat NPCs as obstacles during pathfinding. Set to true to avoid NPCs (recommended for most navigation). Set to false only if NPCs are wandering/moving and you want to ignore them."
-                            }
-                        },
-                        "required": ["x", "y", "variance", "reason", "consider_npcs"]
-                    }
-                },
-                {
-                    "name": "get_walkthrough",
-                    "description": "Get official Emerald walkthrough (Parts 1-21). Part 1: Littleroot, Part 6: Roxanne, Part 21: Elite Four.",
-                    "parameters": {
-                        "type_": "OBJECT",
-                        "properties": {
-                            "part": {
-                                "type_": "INTEGER",
-                                "description": "Walkthrough part 1-21"
-                            }
-                        },
-                        "required": ["part"]
-                    }
-                },
-                {
-                    "name": "lookup_pokemon_info",
-                    "description": "Look up Pokemon information from Bulbapedia (stats, moves, evolution, locations).",
-                    "parameters": {
-                        "type_": "OBJECT",
-                        "properties": {
-                            "topic": {
-                                "type_": "STRING",
-                                "description": "Pokemon name or topic to look up"
-                            },
-                            "source": {
-                                "type_": "STRING",
-                                "description": "Wiki source (default: bulbapedia)"
-                            }
-                        },
-                        "required": ["topic"]
-                    }
-                },
-            ])
-
-        tools.extend(build_local_subagent_tool_declarations(include_builtins=self.include_builtins))
-
-        if self.scaffold in _NO_BUILTINS_SCAFFOLDS:
-            tools.append(REPLAN_OBJECTIVES_TOOL_DECLARATION)
-
-        if self.scaffold == "autoevolve":
-            tools.append({
-                "name": "evolve_harness",
-                "description": "Trigger an evolution pass NOW to improve skills, subagents, and memory based on recent performance. Use this when you notice a skill or subagent is underperforming and needs improvement, rather than waiting for the automatic evolution cycle.",
-                "parameters": {
-                    "type_": "OBJECT",
-                    "properties": {
-                        "reasoning": {
-                            "type_": "STRING",
-                            "description": "What needs improvement and why (e.g., 'navigate_to skill gets stuck 80% of the time, needs obstacle avoidance')"
-                        },
-                        "num_steps": {
-                            "type_": "INTEGER",
-                            "description": "Number of recent trajectory steps to analyze (default 50)"
-                        }
-                    },
-                    "required": ["reasoning"]
-                }
-            })
-
+        """Build Gemini-compatible tool declarations from the centralized registry."""
+        tools = build_tools_for_scaffold(self.scaffold)
         logger.info(f"✅ Created {len(tools)} tool declarations (scaffold={self.scaffold})")
         return tools
 
@@ -2667,6 +2361,22 @@ class PokeAgent:
             logger.warning(f"Failed to fetch subagent overview for prompt: {e}")
             return "No subagents registered yet."
 
+    def _gather_store_context(self) -> dict:
+        """Fetch memory, skill, and subagent overviews, gated by scaffold.
+
+        For the ``simplest`` scaffold, skill and subagent MCP calls are
+        skipped entirely (those tools are not available) to save latency
+        and tokens.
+        """
+        ctx = {"memory": self._get_memory_context()}
+        if self.scaffold == _SIMPLEST_SCAFFOLD:
+            ctx["skills"] = ""
+            ctx["subagents"] = ""
+        else:
+            ctx["skills"] = self._get_skill_context()
+            ctx["subagents"] = self._get_subagent_context()
+        return ctx
+
     def _build_optimized_prompt(self, game_state_result: str, step_count: int) -> str:
         """Build optimized prompt by combining base_prompt.md with current game context.
         
@@ -2834,9 +2544,10 @@ class PokeAgent:
         # Get function results from previous step
         function_results_context = self._get_function_results_context()
 
-        memory_context = self._get_memory_context()
-        skill_context = self._get_skill_context()
-        subagent_context = self._get_subagent_context()
+        store_ctx = self._gather_store_context()
+        memory_context = store_ctx["memory"]
+        skill_context = store_ctx["skills"]
+        subagent_context = store_ctx["subagents"]
 
         # Load base prompt (strategic guidance - can be optimized)
         base_prompt = self._load_base_prompt()
@@ -2944,149 +2655,133 @@ Step {step_count}"""
         if is_title_sequence:
             state_text = self._strip_map_info(state_text)
 
-        # Check if we're in categorized mode
-        objectives_mode = game_state_data.get("objectives_mode", "legacy")
-        logger.info(f"🎯 Objectives mode: {objectives_mode}")
+        is_simplest = self.scaffold == _SIMPLEST_SCAFFOLD
 
-        if objectives_mode == "categorized":
-            # NEW: Handle 3-category objectives
-            categorized_objs = game_state_data.get("categorized_objectives", {})
-            story_obj = categorized_objs.get("story")
-            battling_group = categorized_objs.get("battling_group", [])
-            dynamics_obj = categorized_objs.get("dynamics")
-            recommended_battling = categorized_objs.get("recommended_battling_objectives", [])
-            categorized_status = game_state_data.get("categorized_status", {})
+        # --- Objectives (skipped entirely for simplest) ---
+        direct_objective = ""
+        direct_objective_status = ""
+        direct_objective_context = ""
 
-            # DEBUG: Log what we received
-            logger.info(f"📊 Categorized objectives received:")
-            logger.info(f"   - story_obj: {'Yes' if story_obj else 'None'}")
-            logger.info(f"   - battling_group: {len(battling_group)} objectives")
-            logger.info(f"   - dynamics_obj: {'Yes' if dynamics_obj else 'None'}")
-            logger.info(f"   - recommended: {len(recommended_battling)} IDs")
-            logger.info(f"   - categorized_status: {'Yes' if categorized_status else 'No (missing from get_game_state)'}")
+        if not is_simplest:
+            objectives_mode = game_state_data.get("objectives_mode", "legacy")
+            logger.info(f"🎯 Objectives mode: {objectives_mode}")
 
-            # Format single objective
-            def format_objective(obj_dict, category_emoji, category_name):
-                if not obj_dict:
-                    return f"{category_emoji} {category_name.upper()} OBJECTIVE: None"
+            if objectives_mode == "categorized":
+                categorized_objs = game_state_data.get("categorized_objectives", {})
+                story_obj = categorized_objs.get("story")
+                battling_group = categorized_objs.get("battling_group", [])
+                dynamics_obj = categorized_objs.get("dynamics")
+                recommended_battling = categorized_objs.get("recommended_battling_objectives", [])
+                categorized_status = game_state_data.get("categorized_status", {})
 
-                obj_id = obj_dict.get("id", "")
-                desc = obj_dict.get("description", "")
-                action_type = obj_dict.get("action_type", "")
-                target_location = obj_dict.get("target_location")
-                target_coords = obj_dict.get("target_coords")
-                hint = obj_dict.get("navigation_hint", "")
-                completion_condition = obj_dict.get("completion_condition", "")
+                logger.info(f"📊 Categorized objectives received:")
+                logger.info(f"   - story_obj: {'Yes' if story_obj else 'None'}")
+                logger.info(f"   - battling_group: {len(battling_group)} objectives")
+                logger.info(f"   - dynamics_obj: {'Yes' if dynamics_obj else 'None'}")
+                logger.info(f"   - recommended: {len(recommended_battling)} IDs")
+                logger.info(f"   - categorized_status: {'Yes' if categorized_status else 'No (missing from get_game_state)'}")
 
-                formatted = f"{category_emoji} {category_name.upper()} OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
-                if action_type:
-                    formatted += f"\n  Action Type: {action_type}"
-                if target_location:
-                    formatted += f"\n  Target Location: {target_location}"
-                if target_coords:
-                    formatted += f"\n  Target Coordinates: {target_coords}"
-                if hint:
-                    formatted += f"\n  Navigation Hint: {hint}"
-                if completion_condition:
-                    formatted += f"\n  Completion Condition: {completion_condition}"
-                return formatted
-
-            # Format battling objectives group
-            def format_battling_group(group_list):
-                if not group_list:
-                    return "⚔️  BATTLING OBJECTIVES: None"
-
-                formatted = f"⚔️  BATTLING OBJECTIVES ({len(group_list)} in current group):"
-                for i, obj_dict in enumerate(group_list, 1):
+                def format_objective(obj_dict, category_emoji, category_name):
+                    if not obj_dict:
+                        return f"{category_emoji} {category_name.upper()} OBJECTIVE: None"
                     obj_id = obj_dict.get("id", "")
                     desc = obj_dict.get("description", "")
-                    formatted += f"\n  [{i}] {obj_id}: {desc}"
+                    action_type = obj_dict.get("action_type", "")
+                    target_location = obj_dict.get("target_location")
+                    target_coords = obj_dict.get("target_coords")
+                    hint = obj_dict.get("navigation_hint", "")
+                    completion_condition = obj_dict.get("completion_condition", "")
+                    formatted = f"{category_emoji} {category_name.upper()} OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+                    if action_type:
+                        formatted += f"\n  Action Type: {action_type}"
+                    if target_location:
+                        formatted += f"\n  Target Location: {target_location}"
+                    if target_coords:
+                        formatted += f"\n  Target Coordinates: {target_coords}"
+                    if hint:
+                        formatted += f"\n  Navigation Hint: {hint}"
+                    if completion_condition:
+                        formatted += f"\n  Completion Condition: {completion_condition}"
+                    return formatted
 
-                    # Add details for first objective only to keep prompt concise
-                    if i == 1:
-                        target_location = obj_dict.get("target_location")
-                        hint = obj_dict.get("navigation_hint", "")
-                        if target_location:
-                            formatted += f"\n      Target Location: {target_location}"
-                        if hint:
-                            formatted += f"\n      Hint: {hint}"
+                def format_battling_group(group_list):
+                    if not group_list:
+                        return "⚔️  BATTLING OBJECTIVES: None"
+                    formatted = f"⚔️  BATTLING OBJECTIVES ({len(group_list)} in current group):"
+                    for i, obj_dict in enumerate(group_list, 1):
+                        obj_id = obj_dict.get("id", "")
+                        desc = obj_dict.get("description", "")
+                        formatted += f"\n  [{i}] {obj_id}: {desc}"
+                        if i == 1:
+                            target_location = obj_dict.get("target_location")
+                            hint = obj_dict.get("navigation_hint", "")
+                            if target_location:
+                                formatted += f"\n      Target Location: {target_location}"
+                            if hint:
+                                formatted += f"\n      Hint: {hint}"
+                    formatted += "\n\n  💡 TIP: Complete these in any order. Use complete_direct_objective(category=\"battling\") for each."
+                    return formatted
 
-                formatted += "\n\n  💡 TIP: Complete these in any order. Use complete_direct_objective(category=\"battling\") for each."
-                return formatted
+                recommended_text = ""
+                if recommended_battling:
+                    recommended_text = f"\n\n💡 RECOMMENDED PREPARATION:\n  Complete these battling objectives before the story objective:\n  → {', '.join(recommended_battling)}"
 
-            # Format recommended battling objectives if they exist
-            recommended_text = ""
-            if recommended_battling:
-                recommended_text = f"\n\n💡 RECOMMENDED PREPARATION:\n  Complete these battling objectives before the story objective:\n  → {', '.join(recommended_battling)}"
-
-            direct_objective = f"""{format_objective(story_obj, "📖", "story")}{recommended_text}
+                direct_objective = f"""{format_objective(story_obj, "📖", "story")}{recommended_text}
 
 {format_battling_group(battling_group)}
 
 {format_objective(dynamics_obj, "🎯", "dynamics")}"""
 
-            # Format categorized status
-            if categorized_status:
-                story_status = categorized_status.get("story", {})
-                battling_status = categorized_status.get("battling", {})
-                dynamics_status = categorized_status.get("dynamics", {})
-
-                direct_objective_status = f"""📊 PROGRESS (3 Categories):
+                if categorized_status:
+                    story_status = categorized_status.get("story", {})
+                    battling_status = categorized_status.get("battling", {})
+                    dynamics_status = categorized_status.get("dynamics", {})
+                    direct_objective_status = f"""📊 PROGRESS (3 Categories):
   📖 Story: {story_status.get('current_index', 0) + 1}/{story_status.get('total', 0)} ({story_status.get('completed', 0)} completed)
   ⚔️  Battling: {battling_status.get('current_index', 0) + 1}/{battling_status.get('total', 0)} ({battling_status.get('completed', 0)} completed)
   🎯 Dynamics: {dynamics_status.get('current_index', 0) + 1}/{dynamics_status.get('total', 0)} ({dynamics_status.get('completed', 0)} completed)"""
-                logger.info(f"📊 PROGRESS (3 Categories) in prompt: Story {story_status.get('current_index', 0) + 1}/{story_status.get('total', 0)}, Battling {battling_status.get('current_index', 0) + 1}/{battling_status.get('total', 0)}, Dynamics {dynamics_status.get('current_index', 0) + 1}/{dynamics_status.get('total', 0)}")
+                    logger.info(f"📊 PROGRESS (3 Categories) in prompt: Story {story_status.get('current_index', 0) + 1}/{story_status.get('total', 0)}, Battling {battling_status.get('current_index', 0) + 1}/{battling_status.get('total', 0)}, Dynamics {dynamics_status.get('current_index', 0) + 1}/{dynamics_status.get('total', 0)}")
+
             else:
-                direct_objective_status = ""
+                direct_objective = game_state_data.get("direct_objective", "")
+                direct_objective_status = game_state_data.get("direct_objective_status", "")
+                direct_objective_context = game_state_data.get("direct_objective_context", "")
 
-            direct_objective_context = ""  # No context needed in categorized mode
+                if isinstance(direct_objective, dict):
+                    obj_id = direct_objective.get("id", "")
+                    desc = direct_objective.get("description", "")
+                    action_type = direct_objective.get("action_type", "")
+                    target_location = direct_objective.get("target_location")
+                    target_coords = direct_objective.get("target_coords")
+                    hint = direct_objective.get("navigation_hint", "")
+                    completion_condition = direct_objective.get("completion_condition", "")
+                    formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
+                    if action_type:
+                        formatted_obj += f"\n  Action Type: {action_type}"
+                    if target_location:
+                        formatted_obj += f"\n  Target Location: {target_location}"
+                    if target_coords:
+                        formatted_obj += f"\n  Target Coordinates: {target_coords}"
+                    if hint:
+                        formatted_obj += f"\n  Navigation Hint: {hint}"
+                    if completion_condition:
+                        formatted_obj += f"\n  Completion Condition: {completion_condition}"
+                    direct_objective = formatted_obj
 
-        else:
-            # LEGACY: Single objective mode (backward compatible)
-            direct_objective = game_state_data.get("direct_objective", "")
-            direct_objective_status = game_state_data.get("direct_objective_status", "")
-            direct_objective_context = game_state_data.get("direct_objective_context", "")
+                if isinstance(direct_objective_status, dict):
+                    seq = direct_objective_status.get("sequence_name", "")
+                    total = direct_objective_status.get("total_objectives", 0)
+                    current_idx = direct_objective_status.get("current_index", 0)
+                    completed = direct_objective_status.get("completed_count", 0)
+                    direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
 
-            # Format direct objective nicely if it's a dict - show ALL fields
-            if isinstance(direct_objective, dict):
-                obj_id = direct_objective.get("id", "")
-                desc = direct_objective.get("description", "")
-                action_type = direct_objective.get("action_type", "")
-                target_location = direct_objective.get("target_location")
-                target_coords = direct_objective.get("target_coords")
-                hint = direct_objective.get("navigation_hint", "")
-                completion_condition = direct_objective.get("completion_condition", "")
-
-                formatted_obj = f"🎯 CURRENT OBJECTIVE:\n  ID: {obj_id}\n  Description: {desc}"
-                if action_type:
-                    formatted_obj += f"\n  Action Type: {action_type}"
-                if target_location:
-                    formatted_obj += f"\n  Target Location: {target_location}"
-                if target_coords:
-                    formatted_obj += f"\n  Target Coordinates: {target_coords}"
-                if hint:
-                    formatted_obj += f"\n  Navigation Hint: {hint}"
-                if completion_condition:
-                    formatted_obj += f"\n  Completion Condition: {completion_condition}"
-                direct_objective = formatted_obj
-
-            # Format status nicely if it's a dict
-            if isinstance(direct_objective_status, dict):
-                seq = direct_objective_status.get("sequence_name", "")
-                total = direct_objective_status.get("total_objectives", 0)
-                current_idx = direct_objective_status.get("current_index", 0)
-                completed = direct_objective_status.get("completed_count", 0)
-                direct_objective_status = f"📊 PROGRESS: Objective {current_idx + 1}/{total} in sequence '{seq}' ({completed} completed)"
-
-        # Build action history summary
+        # --- Common context ---
         action_history = self._format_action_history()
-
-        # Get function results from previous step
         function_results_context = self._get_function_results_context()
-
-        memory_context = self._get_memory_context()
-        skill_context = self._get_skill_context()
-        subagent_context = self._get_subagent_context()
+        store_ctx = self._gather_store_context()
+        memory_context = store_ctx["memory"]
+        skill_context = store_ctx["skills"]
+        subagent_context = store_ctx["subagents"]
 
         # Prepend bootstrapped evolved prompt + addendum when available
         bootstrap_block = ""
@@ -3097,8 +2792,19 @@ Step {step_count}"""
             parts.append(self._load_bootstrap_addendum())
             bootstrap_block = "\n".join(parts) + "\n"
 
-        # Build autonomous prompt
-        prompt = f"""{bootstrap_block}# Step: {step_count}
+        # --- Assemble prompt (simplest gets a minimal layout) ---
+        if is_simplest:
+            prompt = f"""{bootstrap_block}# Step: {step_count}
+### SHORT-TERM MEMORY (last {ACTION_HISTORY_WINDOW} steps)
+{action_history}
+{function_results_context}
+### STATE
+{state_text}
+### LONG-TERM MEMORY OVERVIEW
+{memory_context}
+"""
+        else:
+            prompt = f"""{bootstrap_block}# Step: {step_count}
 ### SHORT-TERM MEMORY (last {ACTION_HISTORY_WINDOW} steps)
 {action_history}
 {function_results_context}

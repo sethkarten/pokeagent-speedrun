@@ -145,6 +145,11 @@ class LLMLogger:
             "gemini-3-flash": {"prompt": 0.0005, "completion": 0.003, "cached_prompt": 0.00005},     # $0.50/$3/$0.05 per 1M (gemini-3-flash-preview)
             "gemini-3-flash-preview": {"prompt": 0.0005, "completion": 0.003, "cached_prompt": 0.00005},
 
+            # Gemini 3.1
+            "gemini-3.1-pro-preview": {"prompt": 0.002, "completion": 0.012, "cached_prompt": 0.0002},  # $2/$12/$0.20 per 1M (<=200k)
+            "gemini-3.1-pro-preview-customtools": {"prompt": 0.002, "completion": 0.012, "cached_prompt": 0.0002},
+            "gemini-3.1-flash-lite-preview": {"prompt": 0.00025, "completion": 0.0015, "cached_prompt": 0.000025},  # $0.25/$1.50/$0.025 per 1M
+
             "default": {"prompt": 0.001, "completion": 0.002}  # Default pricing
         }
         

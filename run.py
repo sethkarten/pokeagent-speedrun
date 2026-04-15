@@ -38,10 +38,12 @@ CUSTOM_AGENT_CONFIGS = {
         "use_backend": True,
         "supports_prompt_optimization": False,
     },
-    "simplest": {  # Legacy alias for simple
+    "simplest": {
         "name": "PokeAgent",
         "details": [
-            "Legacy alias for 'simple' scaffold",
+            "Bare-minimum scaffold (only press_buttons + process_memory)",
+            "No direct objectives, no skills, no subagents, no code execution",
+            "Designed for ablation study of minimal tool access",
         ],
         "module": "agents.PokeAgent",
         "class": "PokeAgent",
@@ -90,7 +92,7 @@ CUSTOM_AGENT_CONFIGS = {
 SCAFFOLD_DESCRIPTIONS = {
     "pokeagent": "PokeAgent (VLM benchmark agent with tool scaffolding)",
     "simple": "PokeAgent-Simple (H_min: no built-in subagents, direct replan, empty registry)",
-    "simplest": "PokeAgent-Simple (legacy alias for 'simple')",
+    "simplest": "PokeAgent-Simplest (bare minimum: press_buttons + process_memory only)",
     "autoevolve": "AutoEvolve (H_auto: H_min + reset-free evolutionary optimization)",
     "autonomous_cli": "PokeAgent (legacy alias)",
     "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",

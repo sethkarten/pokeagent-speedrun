@@ -44,9 +44,15 @@ _simple_prompts = {
     "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/SIMPLE.md",
 }
 
+_simplest_prompts = {
+    "red": f"{PROMPTS_ROOT}/pokeagent-directives/SIMPLEST_RED.md",
+    "emerald": f"{PROMPTS_ROOT}/pokeagent-directives/SIMPLEST.md",
+}
+
 POKEAGENT_PROMPT_PATH = _default_system_prompts[game_type]
 POKEAGENT_SYSTEM_PROMPT_PATH = _optimization_enabled_prompts[game_type]
 SIMPLE_PROMPT_PATH = _simple_prompts[game_type]
+SIMPLEST_PROMPT_PATH = _simplest_prompts[game_type]
 
 # ---------------------------------------------------------------------------
 # Templated files: single file with {game_name}, rendered at load time

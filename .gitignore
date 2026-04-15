@@ -175,3 +175,6 @@ celerybeat.pid
 
 # TEMP
 research-paper/
+thesis/
+paper-data/
+bootstrap/
