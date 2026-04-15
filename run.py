@@ -38,10 +38,12 @@ CUSTOM_AGENT_CONFIGS = {
         "use_backend": True,
         "supports_prompt_optimization": False,
     },
-    "simplest": {  # Legacy alias for simple
+    "simplest": {
         "name": "PokeAgent",
         "details": [
-            "Legacy alias for 'simple' scaffold",
+            "Bare-minimum scaffold (only press_buttons + process_memory)",
+            "No direct objectives, no skills, no subagents, no code execution",
+            "Designed for ablation study of minimal tool access",
         ],
         "module": "agents.PokeAgent",
         "class": "PokeAgent",
@@ -90,7 +92,7 @@ CUSTOM_AGENT_CONFIGS = {
 SCAFFOLD_DESCRIPTIONS = {
     "pokeagent": "PokeAgent (VLM benchmark agent with tool scaffolding)",
     "simple": "PokeAgent-Simple (H_min: no built-in subagents, direct replan, empty registry)",
-    "simplest": "PokeAgent-Simple (legacy alias for 'simple')",
+    "simplest": "PokeAgent-Simplest (bare minimum: press_buttons + process_memory only)",
     "autoevolve": "AutoEvolve (H_auto: H_min + reset-free evolutionary optimization)",
     "autonomous_cli": "PokeAgent (legacy alias)",
     "vision_only": "Vision-Only Agent (no map info, no pathfinding, button sequences)",
@@ -220,7 +222,19 @@ def start_custom_agent(agent_config, args):
     print("=" * 60)
     print("✅ Server is running")
     print(f"🤖 Starting {agent_config['name']}...")
-    for detail in agent_config.get('details', []):
+    detail_lines = list(agent_config.get('details', []))
+    if getattr(args, "bootstrap_from", None) and agent_config.get("class") == "PokeAgent":
+        detail_lines = [
+            detail.replace(
+                "Empty subagent registry (agent must create its own)",
+                "Registry bootstrapped from prior run under `bootstrapped/` paths",
+            ).replace(
+                "No built-in subagent tools; empty registry (agent creates its own)",
+                "No built-in subagent tools; registry bootstrapped from prior run under `bootstrapped/` paths",
+            )
+            for detail in detail_lines
+        ]
+    for detail in detail_lines:
         print(f"   {detail}")
     print("")
 
@@ -257,11 +271,15 @@ def start_custom_agent(agent_config, args):
     # Add prompt optimization if specified in config
     if agent_config.get('supports_prompt_optimization', False):
         agent_kwargs["enable_prompt_optimization"] = args.enable_prompt_optimization if hasattr(args, 'enable_prompt_optimization') else False
-        agent_kwargs["optimization_frequency"] = args.optimization_frequency if hasattr(args, 'optimization_frequency') else 10
+        window_len = getattr(args, "optimization_frequency_deprecated", None) or args.optimization_window_length
+        agent_kwargs["optimization_window_length"] = window_len
 
     # Pass scaffold name to PokeAgent so it can select tool set and prompt
     if agent_config.get("class") == "PokeAgent":
         agent_kwargs["scaffold"] = args.scaffold
+        if getattr(args, "bootstrap_from", None):
+            agent_kwargs["bootstrap_from"] = args.bootstrap_from
+            agent_kwargs["bootstrap_prompt_path"] = getattr(args, "bootstrap_prompt_path", None)
 
     agent = agent_class(**agent_kwargs)
     print("✅ Agent created", flush=True)
@@ -288,6 +306,10 @@ def main():
                        help="Load from checkpoint files")
     parser.add_argument("--backup-state", type=str,
                        help="Load from a backup zip file (extracts to cache and loads checkpoint). This is the preferred convention for loading a run that doesnt start from the beginning.")
+    parser.add_argument("--bootstrap-from", type=str, default=None,
+                       help="Directory with learned artifacts to bootstrap from "
+                            "(memory.json, skills.json, subagents.json, "
+                            "EVOLVED_ORCHESTRATOR_POLICY.md or steps_*.md)")
     
     # Agent configuration
     parser.add_argument("--backend", type=str, default="gemini", 
@@ -326,8 +348,12 @@ def main():
                        help="Optional name to append to run directory (e.g., 'test_run' -> 'run_20251129_191503_test_run')")
     parser.add_argument("--enable-prompt-optimization", action="store_true",
                        help="Enable reflective prompt optimization based on trajectory analysis")
-    parser.add_argument("--optimization-frequency", type=int, default=10,
-                       help="How often to run prompt optimization (default: every 10 steps)")
+    parser.add_argument("--optimization-window-length", type=int, default=50,
+                       dest="optimization_window_length",
+                       help="Number of recent trajectory steps to use for evolution analysis (default: 50)")
+    parser.add_argument("--optimization-frequency", type=int, default=None,
+                       dest="optimization_frequency_deprecated",
+                       help="Deprecated: use --optimization-window-length instead")
     parser.add_argument("--allow-walkthrough", action="store_true",
                        help="Enable get_walkthrough tool for vision_only agent")
     parser.add_argument("--allow-slam", action="store_true",
@@ -435,6 +461,25 @@ def main():
             if not cleared:
                 print(f"ℹ️  Memory file does not exist yet: {memory_file}")
         
+        # Bootstrap stores from a previous run if requested
+        if args.bootstrap_from:
+            from utils.stores.bootstrap import bootstrap_stores
+            from utils.data_persistence.run_data_manager import get_cache_directory
+
+            print(f"\n🧬 Bootstrapping stores from: {args.bootstrap_from}")
+            bs_result = bootstrap_stores(
+                source_dir=args.bootstrap_from,
+                target_cache_dir=str(get_cache_directory()),
+                prompt_backend=args.backend,
+                prompt_model_name=args.model_name,
+            )
+            args.bootstrap_prompt_path = bs_result.get("prompt_path")
+            os.environ["BOOTSTRAP_ACTIVE"] = "1"
+            print(f"   Bootstrapped: {bs_result['skills']} skills, "
+                  f"{bs_result['memory']} memories, {bs_result['subagents']} subagents")
+            if args.bootstrap_prompt_path:
+                print(f"   Evolved prompt: {args.bootstrap_prompt_path}")
+
         # Auto-start server if requested
         if args.agent_auto or args.manual or args.scaffold in SERVER_MANAGED_SCAFFOLDS:
             print("\n📡 Starting server process...")

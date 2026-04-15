@@ -756,7 +756,17 @@ class VisionOnlyAgent:
                         return self.vlm.get_query(image, prompt, "VisionOnlyAgent")
 
                     # Use VLM with image
-                    timeout = 180 if 'preview' in self.model or '3-pro' in self.model else 60
+                    # Outer wall must be >= the inner SDK deadline in
+                    # vlm_backends.GeminiBackend._call_generate_content (600s for
+                    # pro-preview, 300s for other preview, 60s default). Anything
+                    # smaller silently truncates slow calls and leaks ghost worker
+                    # threads whose responses get logged but never used.
+                    if '3-pro' in self.model or 'pro-preview' in self.model:
+                        timeout = 600
+                    elif 'preview' in self.model:
+                        timeout = 300
+                    else:
+                        timeout = 60
                     logger.info(f"📡 Calling VLM API with image (timeout: {timeout}s)")
 
                     # Retry loop for timeouts
@@ -787,7 +797,17 @@ class VisionOnlyAgent:
                         return self.vlm.get_text_query(prompt, "VisionOnlyAgent")
 
                     # Use VLM with text only
-                    timeout = 180 if 'preview' in self.model or '3-pro' in self.model else 60
+                    # Outer wall must be >= the inner SDK deadline in
+                    # vlm_backends.GeminiBackend._call_generate_content (600s for
+                    # pro-preview, 300s for other preview, 60s default). Anything
+                    # smaller silently truncates slow calls and leaks ghost worker
+                    # threads whose responses get logged but never used.
+                    if '3-pro' in self.model or 'pro-preview' in self.model:
+                        timeout = 600
+                    elif 'preview' in self.model:
+                        timeout = 300
+                    else:
+                        timeout = 60
                     logger.info(f"📡 Calling VLM API with text only (timeout: {timeout}s)")
 
                     # Retry loop for timeouts

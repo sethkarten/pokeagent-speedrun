@@ -1,6 +1,6 @@
 # External MCP Agents Architecture (Containerized)
 
-This document describes the architecture for running external CLI agents (**Claude Code** and **Gemini CLI**) in secure, containerized environments to play Pokemon Emerald via MCP (Model Context Protocol).
+This document describes the architecture for running external CLI agents (**Claude Code** and **Gemini CLI**) in secure, containerized environments to play **Pokémon Emerald or Pokémon Red** via MCP (Model Context Protocol). Game title is selected with **`run_cli.py --game red|emerald`** (passed through to the game server and **`GAME_TYPE`** for prompt resolution on the host).
 
 ## Overview
 
@@ -24,9 +24,9 @@ Runs the game infrastructure and orchestration.
     *   Monitors the game state for termination conditions (e.g. badge count).
     *   Uses polymorphic calls: `backend.build_launch_cmd()`, `backend.log_cli_interaction()`, `backend.get_resume_session_id()`, `backend.run_login()`.
 
-2.  **Game Server (`server/app.py`)**: Runs the mGBA emulator with HTTP endpoints.
+2.  **Game Server (`server/app.py`)**: Runs the in-process emulator (**mGBA + `EmeraldEmulator`** for Emerald, **PyBoy + `RedEmulator`** for Red) with HTTP endpoints.
 
-3.  **MCP SSE Server (`server/cli/pokemon_mcp_server.py`)**: Exposes 3 core tools (`get_game_state`, `press_buttons`, `navigate_to`) via SSE transport, reachable from containers via `host.docker.internal`.
+3.  **MCP SSE Server (`server/cli/pokemon_mcp_server.py`)**: Exposes **two** registered tools (`get_game_state`, `press_buttons`) via SSE transport, reachable from containers via `host.docker.internal`. (`navigate_to` is not registered for MCP; see [client_server.md](client_server.md) MCP proxy section.)
 
 ### Container Environments
 
@@ -105,7 +105,7 @@ sequenceDiagram
     MCP-->>Agent: Connection Established
     
     loop Agent Loop
-        Agent->>MCP: Call Tool (get_game_state / press_buttons / navigate_to)
+        Agent->>MCP: Call Tool (get_game_state / press_buttons)
         MCP->>GS: Proxy HTTP request
         GS-->>MCP: Result
         MCP-->>Agent: Tool Result
@@ -124,7 +124,7 @@ Directories are bind-mounted from the Host for persistence:
 | Claude  | `~/.claude` | `.pokeagent_cache/{run_id}/claude_memory` | Project history, JSONL logs, credentials |
 | Gemini  | `~/.gemini` | `.pokeagent_cache/{run_id}/gemini_memory` | Session history (tmp/workspace/chats/), settings.json |
 | Hermes  | `~/.hermes` | `.pokeagent_cache/{run_id}/hermes_memory` | sessions/, usage_events.jsonl, config.yaml, state.db |
-| Both    | `/workspace` | `run_data/{run_id}/agent_scratch_space` | Agent working files, directives |
+| All backends | `/workspace` | `run_data/{run_id}/agent_scratch_space` | Agent working files, directives |
 
 ### Session Persistence for Backup Restore
 
