@@ -165,6 +165,7 @@ def start_server(args, run_id=None):
     
     if args.direct_objectives:
         server_cmd.extend(["--direct-objectives", args.direct_objectives])
+        server_env["HAS_DIRECT_OBJECTIVES"] = "1"
         if args.direct_objectives_start > 0:
             server_cmd.extend(["--direct-objectives-start", str(args.direct_objectives_start)])
         if args.direct_objectives_battling_start > 0:
