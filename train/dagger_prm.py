@@ -32,12 +32,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
 import glob
 import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -72,6 +74,100 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger("dagger_prm")
+
+
+# ── SOCKS5 tunnel: compute node → login node → internet ─────────────
+# Della compute nodes have no external DNS/HTTP. We open an ssh -D tunnel
+# back to the login node, which has internet, and route Gemini API calls
+# (judge + teacher) through it via HTTPS_PROXY.
+
+_SOCKS_PROC: subprocess.Popen | None = None
+
+
+def _port_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return True
+        except OSError:
+            return False
+
+
+def _pick_port() -> int:
+    for p in range(18890, 18990):
+        if _port_free(p):
+            return p
+    raise RuntimeError("no free local port for SOCKS tunnel")
+
+
+def start_socks_tunnel(login_host: str) -> int | None:
+    """Start `ssh -N -D 127.0.0.1:PORT login_host` and export HTTPS_PROXY.
+
+    Returns the port if the tunnel came up, or None if it failed. Caller
+    should log the result; downstream code reads HTTPS_PROXY from env.
+    """
+    global _SOCKS_PROC
+    port = _pick_port()
+    cmd = [
+        "ssh", "-N",
+        "-D", f"127.0.0.1:{port}",
+        "-o", "StrictHostKeyChecking=accept-new",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "ExitOnForwardFailure=yes",
+        "-o", "ServerAliveInterval=30",
+        "-o", "BatchMode=yes",
+        login_host,
+    ]
+    logger.info("starting SOCKS tunnel: %s", " ".join(cmd))
+    try:
+        _SOCKS_PROC = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        logger.warning("ssh binary not found; proceeding without SOCKS")
+        return None
+
+    # Wait up to 15s for the port to accept connections
+    deadline = time.time() + 15
+    while time.time() < deadline:
+        if _SOCKS_PROC.poll() is not None:
+            err = _SOCKS_PROC.stderr.read().decode() if _SOCKS_PROC.stderr else ""
+            logger.warning("ssh tunnel exited early: %s", err[:800])
+            return None
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            try:
+                s.connect(("127.0.0.1", port))
+                proxy = f"socks5h://127.0.0.1:{port}"
+                os.environ["HTTPS_PROXY"] = proxy
+                os.environ["HTTP_PROXY"] = proxy
+                # localhost traffic (local server) must NOT go through the tunnel
+                os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1")
+                logger.info("SOCKS tunnel up on port %d, HTTPS_PROXY=%s", port, proxy)
+                atexit.register(_stop_socks_tunnel)
+                return port
+            except OSError:
+                time.sleep(0.5)
+    logger.warning("SOCKS tunnel did not come up within 15s")
+    _stop_socks_tunnel()
+    return None
+
+
+def _stop_socks_tunnel():
+    global _SOCKS_PROC
+    if _SOCKS_PROC is None:
+        return
+    try:
+        _SOCKS_PROC.terminate()
+        _SOCKS_PROC.wait(timeout=5)
+    except Exception:
+        try:
+            _SOCKS_PROC.kill()
+        except Exception:
+            pass
+    _SOCKS_PROC = None
 
 
 # ── Phase 1: Rollout via the real harness ───────────────────────────
@@ -479,11 +575,28 @@ def main() -> int:
                     help="Cap teacher API calls per iteration (None = unlimited).")
     ap.add_argument("--sft-epochs", type=int, default=1)
     ap.add_argument("--lora-rank", type=int, default=256)
+    ap.add_argument("--socks-login-host", type=str, default=None,
+                    help="Hostname of the SSH login node to tunnel through "
+                         "for Gemini API access (e.g. della-gpu.princeton.edu). "
+                         "Required on della compute which has no external net.")
     args = ap.parse_args()
 
     args.output.mkdir(parents=True, exist_ok=True)
     data_root = str(args.data_root or REPO_ROOT)
     current_adapter = str(args.adapter)
+
+    # Start SOCKS tunnel up-front so judge + teacher can reach Gemini.
+    # Safe to run unconditionally; on hosts with direct internet the
+    # proxy just adds a hop.
+    if args.socks_login_host:
+        start_socks_tunnel(args.socks_login_host)
+    elif os.environ.get("HTTPS_PROXY"):
+        logger.info("HTTPS_PROXY already set to %s; skipping tunnel",
+                    os.environ["HTTPS_PROXY"])
+    else:
+        logger.warning("no --socks-login-host set and no HTTPS_PROXY in env; "
+                       "Gemini API calls will fail on compute nodes with no "
+                       "external DNS")
 
     for iteration in range(args.iterations):
         logger.info("======== ITERATION %d/%d ========",
