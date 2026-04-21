@@ -46,6 +46,23 @@ from pathlib import Path
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1")
 
+# HF cache auto-discovery + offline mode. Della compute nodes have no
+# internet, so Unsloth's `model_info()` hub check DNS-fails during tokenizer
+# load unless HF_HUB_OFFLINE=1 is set. Mirrors sft_run.py's boot logic.
+_hf_candidates = [
+    os.environ.get("HF_HOME"),
+    "/scratch/gpfs/CHIJ/milkkarten/huggingface",
+    "/mnt/storage/models/huggingface",
+    "/data1/milkkarten/.cache/huggingface",
+]
+for _c in _hf_candidates:
+    if _c and os.path.isdir(_c):
+        os.environ["HF_HOME"] = _c
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+        break
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -87,6 +104,17 @@ def run_rollout_harness(
 
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = str(device_index)
+    # Force HF offline in the child so Unsloth's tokenizer hub check DNS-fails
+    # cleanly into a local cache lookup. Without these the rollout dies at
+    # "Unsloth: The tokenizer is weirdly not loaded?".
+    for k, v in (
+        ("HF_HUB_OFFLINE", "1"),
+        ("TRANSFORMERS_OFFLINE", "1"),
+        ("HF_DATASETS_OFFLINE", "1"),
+    ):
+        env.setdefault(k, v)
+    if "HF_HOME" in os.environ:
+        env["HF_HOME"] = os.environ["HF_HOME"]
 
     result = subprocess.run(
         cmd, cwd=str(REPO_ROOT), env=env,
