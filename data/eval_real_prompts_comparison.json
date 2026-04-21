@@ -1,0 +1,1550 @@
+{
+  "gemma4:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "ROUTE 104 MR BRINEYS HOUSE ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 1.0,
+        "tok_s": 217.13390254859894,
+        "elapsed": 8.098421096801758,
+        "response_preview": "Action executed: navigate_to_coords   TOOLS:     - navigate_to_coords       args: {\"x\": 11, \"y\": 9, \"reasoning\": \"Navigate to Dewford Town, where the Pokemon Center is located, to complete the healing"
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 215.13161577005147,
+        "elapsed": 6.857437372207642,
+        "response_preview": "The sequence of actions successfully navigated you from Granite Cave B1F to the area leading to the B2F warp, positioning you at coordinates (20, 16).  You have successfully executed the calculated pa"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6,
+        "degenerate": 1.0,
+        "tok_s": 256.6268468768301,
+        "elapsed": 7.4131011962890625,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - navigate_to_coords       args: {\"x\": 16.0, \"y\": 45.0, \"reasoning\": \"ANALYZE: Location: Rustboro City Mart (3, 7). Objective: Catch a Flying or Bug type Po"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 236.545731633305,
+        "elapsed": 6.239275932312012,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - press_buttons       args: {\"buttons\": [\"LEFT\", \"LEFT\", \"LEFT\", \"LEFT\", \"LEFT\"], \"reasoning\": \"ANALYZE: We are at (11, 5) on Route 102. Our objective is to"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 212.61602930771198,
+        "elapsed": 8.55001950263977,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - press_buttons       args: {\"buttons\": [\"UP\", \"UP\", \"UP\", \"LEFT\", \"LEFT\", \"LEFT\", \"UP\", \"UP\", \"UP\"], \"reasoning\": \"ANALYZE: [current objective: Heal at the"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.16666666666666666,
+        "degenerate": 1.0,
+        "tok_s": 242.6599458281739,
+        "elapsed": 6.8055479526519775,
+        "response_preview": "Action executed: execute_custom_subagent   TOOLS:     - execute_custom_subagent       args: {\"reasoning\": \"ANALYZE: [game screen, location, objective, situation] The immediate goal is to traverse Rout"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6,
+        "degenerate": 1.0,
+        "tok_s": 216.8617981275347,
+        "elapsed": 6.461085796356201,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - press_buttons       args: {\"buttons\": [\"UP\", \"UP\", \"UP\", \"UP\", \"UP\"], \"reasoning\": \"ANALYZE: Location: Rustboro City (15, 48). Objective: Reach the Pokemo"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 251.0984373451657,
+        "elapsed": 6.830277442932129,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - press_buttons       args: {\"buttons\": [\"DOWN\", \"DOWN\", \"DOWN\", \"DOWN\", \"DOWN\"], \"reasoning\": \"ANALYZE: The objective is to return to Professor Birch's lab"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "ROUTE 104",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 233.525253344404,
+        "elapsed": 7.510065078735352,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.4,
+        "degenerate": 1.0,
+        "tok_s": 244.94566435405045,
+        "elapsed": 9.197576522827148,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - battle_spam_move_slot       args: {\"move_slot\": 4, \"move_name\": \"WATER_GUN\", \"count\": 10}       reasoning: \"Executing the critical strategy: Spam the most"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 1.0,
+        "tok_s": 239.16386511188793,
+        "elapsed": 8.33539628982544,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - talk_to_npc       args: {\"npc_name\": \"Dock\", \"reasoning\": \"ANALYZE: We have successfully navigated to Slateport City. The next step in the plan is to visi"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.25,
+        "degenerate": 1.0,
+        "tok_s": 228.01460006231358,
+        "elapsed": 7.265238285064697,
+        "response_preview": "Action executed: execute_custom_subagent   TOOLS:     - execute_custom_subagent       args: {\"subagent_id\": \"npc_event_manager\", \"reasoning\": \"ANALYZE: [game screen: Player at (10, 4) facing May at (1"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 1.0,
+        "tok_s": 232.5176082513008,
+        "elapsed": 7.384341239929199,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - press_buttons       args: {\"buttons\": [\"FIGHT\"], \"reasoning\": \"ANALYZE: The player is currently in a battle against the wild Wurmple. The objective is to "
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 1.0,
+        "tok_s": 233.27854209618255,
+        "elapsed": 8.165127992630005,
+        "response_preview": "Action executed: press_buttons   TOOLS:     - press_buttons       args: {\"buttons\": [\"UP\", \"UP\", \"UP\", \"UP\", \"RIGHT\", \"RIGHT\", \"RIGHT\", \"RIGHT\", \"RIGHT\", \"RIGHT\", \"RIGHT\", \"RIGHT\"], \"reasoning\": \"ANAL"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 1.0,
+        "tok_s": 236.30155135624207,
+        "elapsed": 7.62019681930542,
+        "response_preview": "Action executed: execute_custom_subagent   TOOLS:     - route_navigator       args: {\"route_id\": \"102\", \"target_location\": \"Petalburg City\", \"direction\": \"West\", \"reasoning\": \"ANALYZE: [game screen: P"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 1.0,
+        "tok_s": 237.41939327480247,
+        "elapsed": 9.05567717552185,
+        "response_preview": "Action executed: execute_custom_subagent   TOOLS:     - execute_custom_subagent       args: {\"config\": {\"system_instructions\": \"You are a switch-training combat assistant in Pokemon Emerald. Your job "
+      }
+    }
+  ],
+  "gemma4-emerald:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "ROUTE 104 MR BRINEYS HOUSE ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 217.39055205472647,
+        "elapsed": 9.405977725982666,
+        "response_preview": "# \ud83d\udcdd Summary of Strategic Guidance  This document provides critical debugging information and a manual navigation plan for catching Mr. Briney on Route 104.  ## \ud83d\udea8 CRITICAL DEBUGGING FINDINGS  1.  **Nav"
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 0.0,
+        "tok_s": 205.7176251494107,
+        "elapsed": 8.42453670501709,
+        "response_preview": "```json {   \"action_type\": \"press_buttons\",   \"buttons_queued\": [     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",     \"LEFT\",   "
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.4,
+        "degenerate": 0.0,
+        "tok_s": 255.18312914747784,
+        "elapsed": 8.506268978118896,
+        "response_preview": "# \ud83e\udde9 Subagent Registry  This registry lists all currently registered subagents, categorized by their primary operational context.  ## \u2694\ufe0f Combat & Battle Management These subagents are designed to handl"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.5,
+        "degenerate": 0.0,
+        "tok_s": 235.40069913920325,
+        "elapsed": 6.2956297397613525,
+        "response_preview": "```json {   \"tool_name\": \"navigate_to_coords\",   \"params\": {     \"x\": 10,     \"y\": 13,     \"reasoning\": \"The objective is to travel west on Route 102 to Petalburg City. The path is mostly clear, but t"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 1.0,
+        "tok_s": 223.13137149758006,
+        "elapsed": 6.184171438217163,
+        "response_preview": "Action executed: move_down   TOOLS:     - move_to_coords       args: {\"x\": 12, \"y\": 10, \"reasoning\": \"Moving to the southern exit of the museum to enter Slateport City and begin the journey north as c"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.5,
+        "degenerate": 0.0,
+        "tok_s": 237.39221303739026,
+        "elapsed": 5.826340436935425,
+        "response_preview": "Action executed: press_buttons Result: {   \"success\": true,   \"buttons_queued\": [     \"DOWN\",     \"DOWN\",     \"LEFT\",     \"A\"   ],   \"reasoning\": \"ANALYZE: [game screen: Player at (4, 5) in the Pretty"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6,
+        "degenerate": 0.0,
+        "tok_s": 223.7828762433369,
+        "elapsed": 10.624454736709595,
+        "response_preview": "## \ud83d\udcdd Summary  This is a detailed log of the agent's journey through the Pokemon Emerald storyline, focusing on its navigation, healing, and objective management in Rustboro City.  ### \ud83d\uddfa\ufe0f The Journey t"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.5,
+        "degenerate": 0.0,
+        "tok_s": 248.59128528081095,
+        "elapsed": 8.795771360397339,
+        "response_preview": "This text is a narrative summary of the player's journey through the Pokemon Emerald world, focusing on their navigation, encounters, and eventual return to their roots in Oldale Town.  ### \ud83d\udcdd Summary "
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "ROUTE 104",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.25,
+        "degenerate": 0.0,
+        "tok_s": 232.7651151413702,
+        "elapsed": 10.427286863327026,
+        "response_preview": "Action executed: press_buttons Reasoning: The 'route_navigator' subagent hit its turn limit (10 turns) while trying to find a path to the woods. I will now manually execute a much longer pathfinding o"
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 246.88327839272762,
+        "elapsed": 5.637995719909668,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 239.47248157581845,
+        "elapsed": 5.6778833866119385,
+        "response_preview": "The executed action sequence was:  1.  **Marshtomp's Move Selection:** Marshtomp selected **MUD_SHOT** (Mud Shot) against Marill. 2.  **Marshtomp's Move Selection:** Marshtomp then selected **MUD_SLAP"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 235.65611560784268,
+        "elapsed": 8.70084810256958,
+        "response_preview": "```json {   \"reasoning\": \"The previous long-distance BFS failed due to a time limit. I am now executing a segmented navigation plan: 1. Move East 10 times to (11, 0). 2. Move South 10 times to (21, 10"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 0.0,
+        "tok_s": 240.20769952270993,
+        "elapsed": 5.563119173049927,
+        "response_preview": "{   \"reasoning\": \"The Wurmple is a Level 3 bug Pokemon. Mudkip is Level 7 and has 23/25 HP. Mud Slap is a very weak move (PP 10), but it is the safest option as it guarantees no counter-attack from th"
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 216.3145056924051,
+        "elapsed": 10.735697507858276,
+        "response_preview": "```json {   \"name\": \"Pokemon_Battle_Engine\",   \"description\": \"A robust, self-contained subagent designed to win Pokemon battles efficiently. It handles the full battle lifecycle: move selection, item"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 231.7581586730339,
+        "elapsed": 7.921793460845947,
+        "response_preview": "PLAN: 1.  **Manual Westward Burst**: The pathfinding skill `move_to_coords_v2` failed twice, indicating a significant navigation issue on this route. I will manually press LEFT 10 times to move the pl"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 244.8969192335923,
+        "elapsed": 8.030948162078857,
+        "response_preview": "This text is a summary of the rivalry between Nincada and Roxanne in the Rustboro City Pokemon world.  ### \ud83d\udcdd Summary  The story centers on Nincada, a boy who started as a timid trainer but became a fo"
+      }
+    }
+  ],
+  "gemma4:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "ROUTE 104 MR BRINEYS HOUSE ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 0.0,
+        "hallucination": 1.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 1.0,
+        "tok_s": 186.26465160560699,
+        "elapsed": 12.42758822441101,
+        "response_preview": "**THINKING:** ANALYZE: Location: Mr. Briney's House. Objective: Sail to Dewford Town. Situation: I have successfully positioned myself in Mr. Briney's path and pressed 'A' repeatedly to advance the di"
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 179.05034459606426,
+        "elapsed": 9.90493631362915,
+        "response_preview": "```json {   \"tool_name\": \"run_code\",   \"args\": {     \"reasoning\": \"I have successfully navigated through the dark areas of Granite Cave B1F and am now at (20, 16). My objective is to reach the warp po"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6,
+        "degenerate": 1.0,
+        "tok_s": 187.22834288371976,
+        "elapsed": 8.046692132949829,
+        "response_preview": "**THINKING:** ANALYZE: Location: Rustboro City Mart (3, 7). Objective: Prepare for Rival battle by catching a Flying/Bug type Pokemon. Situation: I am currently inside the Poke Mart, which is a buildi"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 184.34966269367996,
+        "elapsed": 6.8735997676849365,
+        "response_preview": "**ANALYSIS:** We are at (11, 5) on Route 102. Our long-term objective is to reach Petalburg City. The path west is clear at our current Y level. We must continue moving west until we reach the boundar"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.25,
+        "degenerate": 0.0,
+        "tok_s": 183.4045957783205,
+        "elapsed": 9.576460361480713,
+        "response_preview": "```json {   \"tool_name\": \"move_to_coords_defensive\",   \"args\": {     \"target_coords\": [       6,       0     ],     \"reasoning\": \"ANALYZE: [game screen: Oceanic Museum 2F. Location: (12, 6). Objective"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 1.0,
+        "tok_s": 185.00053265217582,
+        "elapsed": 7.451053619384766,
+        "response_preview": "**THINKING**: ANALYZE: [game screen: Player at (4, 5) inside the Pretty Petal Flower Shop. Objective: Reach Rustboro City.] Situation: I have successfully obtained the Wailmer Pail. The next step is t"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.4,
+        "degenerate": 0.0,
+        "tok_s": 168.45214556864758,
+        "elapsed": 8.254557609558105,
+        "response_preview": "**ANALYSIS:** 1.  **Objective Status:** The primary objective is to reach and heal at the Pokemon Center in Rustboro City. 2.  **Current Location:** I am at (14, 44) in Rustboro City. 3.  **Target Loc"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 184.3350681267999,
+        "elapsed": 7.340676784515381,
+        "response_preview": "**Strategic Analysis:** 1.  **Objective Status:** The objective \"Return to Professor Birch's lab in Littleroot Town\" is active. 2.  **Current Location:** We are at (10, 14) on Route 103, which is at t"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "ROUTE 104",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 183.67264607978356,
+        "elapsed": 8.698479652404785,
+        "response_preview": "**THINKING:** ANALYZE: [game screen: Battle initialization on Route 104. Objective: Reach Petalburg Woods.] Situation: I have successfully cleared the dialogue and transitioned into a battle sequence."
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6,
+        "degenerate": 0.0,
+        "tok_s": 186.73791445464667,
+        "elapsed": 8.672428131103516,
+        "response_preview": "The battle has finally been initiated! Mudkip is fully healed and ready to face Gym Leader Roxanne. The immediate priority is to execute the combat plan using the lag-aware menu strategy to spam **WAT"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.25,
+        "degenerate": 0.0,
+        "tok_s": 192.20865984643663,
+        "elapsed": 7.728957891464233,
+        "response_preview": "**[Objective Update]** The objective \"Head north from Route 109 beach to enter Slateport City\" is complete. We have successfully traversed the beach and are now in the city proper.  **[Action Plan]** "
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.5,
+        "degenerate": 1.0,
+        "tok_s": 188.46713159528707,
+        "elapsed": 12.290964365005493,
+        "response_preview": "**THINKING:** ANALYZE: [game screen, location, objective, situation] The player has successfully navigated to (11, 3), placing them adjacent to May at (10, 3). The objective is to initiate the convers"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 180.73295364482118,
+        "elapsed": 6.80417275428772,
+        "response_preview": "**THINKING:** ANALYZE: The previous action triggered a wild encounter, and the game is now in battle mode. Mudkip is Level 7 with 23/25 HP. The primary objective is to grind Mudkip to Level 8. The `co"
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 0.0,
+        "tok_s": 190.0909282802253,
+        "elapsed": 8.092947483062744,
+        "response_preview": "```json {   \"action\": \"press_buttons\",   \"args\": {     \"buttons\": [       \"RIGHT\",       \"RIGHT\",       \"RIGHT\",       \"UP\",       \"UP\",       \"UP\",       \"UP\",       \"UP\",       \"UP\",       \"UP\",    "
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 0.0,
+        "tok_s": 185.44161459341822,
+        "elapsed": 7.244680166244507,
+        "response_preview": "```json {   \"tool_name\": \"run_skill\",   \"args\": {     \"skill_id\": \"move_to_coords_v2\",     \"args\": {       \"x\": 5.0,       \"y\": 10.0     },     \"reasoning\": \"ANALYZE: [game screen: Player at (19, 10) "
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 191.13341499633884,
+        "elapsed": 6.465087413787842,
+        "response_preview": "[] [] "
+      }
+    }
+  ],
+  "gemma4-emerald:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "ROUTE 104 MR BRINEYS HOUSE ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 0.0,
+        "tok_s": 193.61677538471153,
+        "elapsed": 5.523530721664429,
+        "response_preview": "ANALYZE: Location: Mr. Briney's House. Objective: Talk to Mr. Briney to set sail for Dewford Town. Situation: He is continuing his story about his boat, \"The Wanderer.\" I need to keep pressing 'A' to "
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 183.61851059058202,
+        "elapsed": 5.001149415969849,
+        "response_preview": "ANALYZE: The wild Pokemon battle has started. The intro text is displayed. Objective: Catch the wild Pokemon. Situation: Need to advance the text to reach the main battle menu. PLAN: Action: Press A t"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 184.8826798731229,
+        "elapsed": 6.119719743728638,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 181.57311970281646,
+        "elapsed": 5.097959280014038,
+        "response_preview": "ANALYZE: We are at (11, 5) on Route 102. The path continues west, but we are approaching a large group of tall trees (a forest/woodland) that are blocking our direct path. We need to find a gap in the"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 174.97618348962385,
+        "elapsed": 5.945640802383423,
+        "response_preview": "ANALYZE: [game screen: Battle vs Team Aqua Grunt. Location: Oceanic Museum 2F. Objective: Deliver Devon Goods to Capt. Stern.] Situation: The scripted battle has ended. The screen is showing the \"End "
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.0,
+        "hallucination": 1.0,
+        "reasoning_similarity": 0.16666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 174.92242072254234,
+        "elapsed": 5.036365270614624,
+        "response_preview": "ANALYZE: [game screen: Dialogue box visible with red triangle. Location: Pretty Petal Flower Shop (4, 5). Situation: NPC is talking about the shop's goods.] PLAN: [action: Press A and B alternately 10"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 166.11849592691104,
+        "elapsed": 5.7300214767456055,
+        "response_preview": "ANALYZE: Location: Rustboro City (14, 44). Objective: Reach the Pokemon Center at (16, 38). Situation: We are on the main path heading North. The Pokemart is to our right (X=16). We need to walk past "
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 180.14414411969105,
+        "elapsed": 4.866767406463623,
+        "response_preview": "ANALYZE: The player is at (10, 14) on Route 103, heading south back to Oldale Town. The path is clear. We need to keep moving south until we hit the map boundary for Oldale Town. PLAN: Action: Press D"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "ROUTE 104",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 188.47638568350467,
+        "elapsed": 12.713728427886963,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 189.11140032536815,
+        "elapsed": 6.378359079360962,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.75,
+        "degenerate": 0.0,
+        "tok_s": 192.11899904919136,
+        "elapsed": 5.258570432662964,
+        "response_preview": "ANALYZE: The `combat_handler` subagent hit its turn limit (25 turns) and returned while the battle was still in the reward/experience screen. The battle is over, and we are back in the overworld on Ro"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 184.71665111457648,
+        "elapsed": 4.916100263595581,
+        "response_preview": "ANALYZE: [game screen: Player at (11, 3) facing May at (10, 3). Objective: Talk to May. Situation: May is facing RIGHT according to map data. The player needs to move to her side to talk.] PLAN: [acti"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 177.91358979527413,
+        "elapsed": 5.006330251693726,
+        "response_preview": "ANALYZE: The battle ended. Mudkip is Level 7 with 23/25 HP (having healed via a Potion during the previous battle). HP is well above the safety threshold. The objective is to grind to Level 8. We are "
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 188.5068774241405,
+        "elapsed": 5.7446839809417725,
+        "response_preview": "ANALYZE: [game screen: Player at (8, 30) in Petalburg Woods. Objective: Reach Rustboro City.] Situation: Continuing the calculated path to the exit (14, 4) after the subagent hit its safety cap. The p"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.5,
+        "degenerate": 0.0,
+        "tok_s": 179.4669654920955,
+        "elapsed": 5.174046516418457,
+        "response_preview": "ANALYZE: [game screen: Overworld at Route 102 (16, 12). Objective: Reach Petalburg City. Situation: Just cleared the encounter zone manually. Pathfinding failed to find a route north. Need to manually"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 189.98542713218956,
+        "elapsed": 4.636871814727783,
+        "response_preview": "ANALYZE: Location: Route 116. Objective: Switch-train Nincada. Situation: Need to trigger another wild encounter to continue leveling up Nincada. Pacing UP and DOWN in the tall grass. PLAN: Action: Al"
+      }
+    }
+  ],
+  "gemma4:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "ROUTE 104 MR BRINEYS HOUSE ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 159.27993109324217,
+        "elapsed": 16.06720495223999,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 1.0,
+        "tok_s": 160.48536179409442,
+        "elapsed": 15.90442419052124,
+        "response_preview": "ANALYZE: Location: Granite Cave B1F. Objective: Deliver letter to Steven. Situation: Standing at (20, 16). I have completed the first 14 steps of the calculated path. The remaining path is: RIGHT, DOW"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.2,
+        "degenerate": 0.0,
+        "tok_s": 169.2274318549203,
+        "elapsed": 14.089274168014526,
+        "response_preview": "To prepare for the rematch with Rival May, I will take advantage of being inside the Rustboro City Mart to restock on Potions. This will help ensure Marshtomp can survive longer if I cannot immediatel"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 161.3492788208826,
+        "elapsed": 10.29296612739563,
+        "response_preview": "THINKING: ANALYZE: We are at (11, 5) on Route 102. The path West at our current Y level is clear. Objective: Continue west to Petalburg City. PLAN: Press LEFT x5. Reason: Move west along the path towa"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.5,
+        "degenerate": 0.0,
+        "tok_s": 156.3729255246577,
+        "elapsed": 15.815236330032349,
+        "response_preview": "```json {   \"action\": \"move_to_coords_defensive\",   \"args\": {     \"target_coords\": [6, 1]   },   \"reasoning\": \"ANALYZE: [game screen: Oceanic Museum 2F. Location: (12, 6). Objective: Heal at the Slate"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.0,
+        "hallucination": 1.0,
+        "reasoning_similarity": 0.16666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 170.168404703727,
+        "elapsed": 8.911607027053833,
+        "response_preview": "```json {   \"action\": \"press_buttons\",   \"args\": {     \"buttons\": [       \"A\",       \"B\",       \"A\",       \"B\",       \"A\",       \"B\",       \"A\",       \"B\",       \"A\",       \"B\"     ],     \"reasoning\":"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 155.67329477629778,
+        "elapsed": 11.91643738746643,
+        "response_preview": "```json {   \"action\": \"press_buttons\",   \"args\": {     \"buttons\": [       \"UP\",       \"UP\",       \"UP\",       \"UP\",       \"UP\",       \"UP\",       \"RIGHT\",       \"RIGHT\"     ],     \"reasoning\": \"ANALYZ"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 1.0,
+        "tok_s": 167.10610011831838,
+        "elapsed": 10.55483341217041,
+        "response_preview": "press_buttons   args: {\"buttons\": [\"DOWN\", \"DOWN\", \"DOWN\", \"DOWN\", \"DOWN\"], \"reasoning\": \"ANALYZE: The player is at (10, 14) on Route 103, heading south towards Oldale Town. The objective is to return"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "ROUTE 104",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 156.66365062860143,
+        "elapsed": 8.556487798690796,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6,
+        "degenerate": 0.0,
+        "tok_s": 163.00842938744202,
+        "elapsed": 9.011061906814575,
+        "response_preview": "To advance the pre-battle dialogue and initiate the battle with Gym Leader Roxanne, I will continue pressing `[\"A\"]`. Once the battle interface appears, I will deploy the `combat_handler` subagent, en"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 169.53929929943342,
+        "elapsed": 15.137237787246704,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 161.04645631267314,
+        "elapsed": 12.575354814529419,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 166.41304032393788,
+        "elapsed": 14.646145820617676,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 168.02423297173118,
+        "elapsed": 8.247419118881226,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.8333333333333334,
+        "degenerate": 0.0,
+        "tok_s": 165.68117990657197,
+        "elapsed": 8.399126768112183,
+        "response_preview": "```json {   \"action\": \"execute_custom_subagent\",   \"action_input\": {     \"subagent_id\": \"battle_engine\",     \"reasoning\": \"ANALYZE: [game screen: Wild battle vs Poochyena Lv. 5. Location: Route 102. O"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "degenerate": 0.0,
+        "tok_s": 169.19584988168214,
+        "elapsed": 13.008699655532837,
+        "response_preview": "```json {   \"action\": \"run_skill\",   \"action_input\": {     \"skill_name\": \"switch_training_battle\",     \"args\": {}   },   \"reasoning\": \"A wild battle has started. To continue switch-training Nincada, I"
+      }
+    }
+  ],
+  "gemma4-emerald:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "ROUTE 104 MR BRINEYS HOUSE ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 171.2076758322847,
+        "elapsed": 7.087707996368408,
+        "response_preview": "[complete_direct_objective] ANALYZE: The objective was to sail to Dewford Town. The game state shows the player is currently in Dewford Town (location: DEWFORD TOWN, coordinates: 11, 9). Evidence: The"
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 161.66508721643288,
+        "elapsed": 7.07996392250061,
+        "response_preview": "[press_buttons] ANALYZE: The POKEMON menu is open and the party swap is complete. Marshtomp is now in Slot 1 (the large box on the left). Objective: Deliver the letter to Steven in Granite Cave B2F/B3"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6,
+        "degenerate": 0.0,
+        "tok_s": 155.08887402166212,
+        "elapsed": 6.7592504024505615,
+        "response_preview": "[execute_custom_subagent] ANALYZE: The agent is currently in the Pokemon Center (3, 7). The objective is to catch a Flying or Bug type Pokemon on Route 116 or Route 104. The previous attempt to use th"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 161.56070487651232,
+        "elapsed": 6.243324279785156,
+        "response_preview": "[press_buttons] ANALYZE: The player is at (11, 5) on Route 102. The path west is clear at this Y level. Objective: Continue west to Petalburg City. PLAN: Action: Press LEFT x5. Reason: Move west along"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 0.0,
+        "hallucination": 1.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 168.19883320584415,
+        "elapsed": 7.871263265609741,
+        "response_preview": "[press_buttons] ANALYZE: [game screen: Dialogue box \"It's a great thing to be able to do this.\" visible. Location: Oceanic Museum 2F (12, 6). Objective: Deliver Devon Goods.] Situation: Dialogue with "
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 0.0,
+        "hallucination": 1.0,
+        "reasoning_similarity": 0.16666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 174.61924750985784,
+        "elapsed": 6.559207916259766,
+        "response_preview": "[press_buttons] ANALYZE: [game screen: Dialogue box visible with red triangle. Location: Pretty Petal Flower Shop (4, 5). Situation: NPC is explaining berry growth.] PLAN: [action: Press A and B alter"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 161.51165149999431,
+        "elapsed": 7.090080976486206,
+        "response_preview": "[press_buttons] ANALYZE: The player is at (14, 44) in Rustboro City. The objective is to reach the Pokemon Center at (16, 38). The path directly north is blocked by the wall of the Mart at (15, 45). W"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 170.06551458585213,
+        "elapsed": 6.47953200340271,
+        "response_preview": "[press_buttons] ANALYZE: The player is at (10, 14) on Route 103, heading south to Oldale Town. There is a one-way ledge below us at Y=12. We need to jump DOWN over it to continue south. PLAN: Action: "
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "ROUTE 104",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 156.94524290336773,
+        "elapsed": 6.55178427696228,
+        "response_preview": "[run_skill] Move to Coordinates (A*)"
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.4,
+        "degenerate": 0.0,
+        "tok_s": 172.43610422387235,
+        "elapsed": 6.451947212219238,
+        "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City Gym (5, 3). Objective: Defeat Gym Leader Roxanne. Situation: The text state indicates I am in front of Roxanne at (5, 3), despite the screenshot showin"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.75,
+        "degenerate": 0.0,
+        "tok_s": 171.00464719069336,
+        "elapsed": 6.462242841720581,
+        "response_preview": "[execute_custom_subagent] ANALYZE: The battle is still in the 'Choose a POKEMON' menu. The previous subagent hit its safety cap. I will manually select Nincada (slot 2) to continue switch-training Mar"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 103",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.25,
+        "degenerate": 0.0,
+        "tok_s": 149.3117942453934,
+        "elapsed": 6.0237767696380615,
+        "response_preview": "[press_buttons] ANALYZE: [game screen: Player at (11, 3) on Route 103. Objective: Talk to May at (10, 3). Situation: May is facing RIGHT, so (11, 3) is directly in front of her.] PLAN: [action: press_"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "degenerate": 0.0,
+        "tok_s": 160.123820319028,
+        "elapsed": 5.97532844543457,
+        "response_preview": "[press_buttons] ANALYZE: The battle against the wild Poochyena has started. The main battle menu is visible with the cursor on 'BAG'. Mudkip is at 23/25 HP. The objective is to defeat this Poochyena f"
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.0,
+        "degenerate": 0.0,
+        "tok_s": 152.3385595203427,
+        "elapsed": 6.313670873641968,
+        "response_preview": "[run_skill] Move to Coordinates (BFS) \u2014 Short-range movement utility using A* logic. Best for precise positioning within a small area. [run_skill]"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 0.5,
+        "degenerate": 0.0,
+        "tok_s": 170.7105576253387,
+        "elapsed": 6.158775806427002,
+        "response_preview": "[press_buttons] ANALYZE: [game screen: Player at (19, 10) on Route 102. Objective: Reach Petalburg City. Situation: Just moved east to clear a battle zone. There is a ledge at Y=12 blocking further ea"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 1.0,
+        "actionable": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "reasoning_similarity": 1.0,
+        "degenerate": 0.0,
+        "tok_s": 168.86735359611245,
+        "elapsed": 6.089331150054932,
+        "response_preview": "[execute_custom_subagent] A wild battle has started on Route 116. I am executing the switch-training combat subagent to handle the battle: switching Nincada out for Marshtomp, and then defeating the o"
+      }
+    }
+  ]
+}

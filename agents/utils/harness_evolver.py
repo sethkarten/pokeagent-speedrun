@@ -75,6 +75,7 @@ if _IS_BROWSER_GAME:
     _ALWAYS_AVAILABLE_TOOLS = _COMMON_EVOLVER_TOOLS | frozenset({
         "press_keys",
         "mouse_click",
+        "click_element",
         "double_click",
         "hold_key",
         "mouse_move",
@@ -100,6 +101,7 @@ _BROWSER_SKILL_API_BLOCK = """## Skill Code API (MUST follow this exactly)
 Skill code runs as inline Python (NOT a function definition). It has access to:
 - `tools['press_keys'](keys=['Space'], reasoning='...')` — press one or more keys in sequence
 - `tools['mouse_click'](x=480, y=300, reasoning='...')` — click the canvas at (x, y)
+- `tools['click_element'](description='the START button', reasoning='...')` — click an element by name (vision-model-assisted, much more accurate than guessing pixels). Returns None if MolmoWeb couldn't locate the element.
 - `tools['double_click'](x=50, y=200, reasoning='...')` — double-click the canvas
 - `tools['hold_key'](key='ArrowRight', duration_ms=500, reasoning='...')` — hold a key for N ms (single-step)
 - `tools['mouse_move'](x=480, y=300, steps=8, reasoning='...')` — move cursor without clicking (hover, paddle-follow, mouse-look)

@@ -1,0 +1,3500 @@
+{
+  "gemma4:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 175.41903892736707,
+        "elapsed": 11.402786016464233
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 151.9997714707186,
+        "elapsed": 7.374070644378662
+      },
+      "response_preview": "---\n"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 164.02186250737054,
+        "elapsed": 6.180849075317383
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 146.68299675864012,
+        "elapsed": 7.298060178756714
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 144.87726720752215,
+        "elapsed": 7.645118236541748
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 135.56055519945875,
+        "elapsed": 8.146469831466675
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 128.962046842647,
+        "elapsed": 9.605157852172852
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 122.72759196719147,
+        "elapsed": 10.085684776306152
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 136.78454201117992,
+        "elapsed": 8.047171592712402
+      },
+      "response_preview": "ANALYZE: We are at (15, 12) in Petalburg City. The Gym door is located at (15, 8). The path directly North is clear. PLAN: Action: Press UP x4. Reason: Move North to reach the Gym entrance. Expected: Player moves to (15, 8) and enters the G"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 154.0163152177996,
+        "elapsed": 7.4392547607421875
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 158.63956661611257,
+        "elapsed": 7.359427452087402
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 151.72473194235235,
+        "elapsed": 8.208487510681152
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 165.20630792235,
+        "elapsed": 7.226381301879883
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - press_buttons\n      args: {\"buttons\": [\"A\", \"B\", \"A\", \"B\"], \"reasoning\": \"ANALYZE: [game screen: Wild battle vs Poochyena Lv 12. Text \\\"It's sup\\\" (super effective) is visible. Zubat Lv 15 has 3"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 157.6141654164877,
+        "elapsed": 7.1266608238220215
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 170.94161326003282,
+        "elapsed": 6.415877819061279
+      },
+      "response_preview": "ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: A wild Nincada has appeared, and I have already advanced the intro text. The main battle menu (FIGHT, BAG, POKEMON, RUN) is now visible. PLAN: Press DOWN and A"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 174.63665102144105,
+        "elapsed": 5.51172661781311
+      },
+      "response_preview": "```json\n{\n  \"action\": \"execute_custom_subagent\",\n  \"args\": {\n    \"reasoning\": \"ANALYZE: The battle with Casey has just been initiated. The pre-battle dialogue has been cleared, and we are now entering the battle screen. OBJECTIVE: Defeat Ca"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 176.58700698578755,
+        "elapsed": 3.879141092300415
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 156.15349158571286,
+        "elapsed": 7.275491237640381
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 161.79647541218085,
+        "elapsed": 6.269715785980225
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 144.04043276164802,
+        "elapsed": 11.693015813827515
+      },
+      "response_preview": ""
+    }
+  ],
+  "gemma4:31b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 22.012114823820966,
+        "elapsed": 31.278414249420166
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"A\"\n    ],\n    \"reasoning\": \"ANALYZE: Location: Rustboro City Mart. Objective: Restock supplies. Situation: The cashier has said \\\"Welcome!\\\". I need to advance the d"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 20.522288676240702,
+        "elapsed": 30.68162727355957
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"DOWN\"\n    ],\n    \"reasoning\": \"ANALYZE: [game screen: Dewford Pokemon Center 1F. Location: (7, 8). Objective: defeat_brawly_gym.] Situation: Party is fully healed. I"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 19.3719095417368,
+        "elapsed": 34.403852462768555
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\"\n    ],\n    \"reasoning\": \"ANALYZE: I am inside the Oldale Town Pokemon Center at (7, 8). To heal my Pokemon, I nee"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 20.199665125422406,
+        "elapsed": 35.167484760284424
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": ["
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 19.802226803752394,
+        "elapsed": 35.33702254295349
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 21.597533435639793,
+        "elapsed": 33.88535189628601
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 8.977837724054977,
+        "elapsed": 70.27346611022949
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 9.629634431880396,
+        "elapsed": 67.90392088890076
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 21.886459213638474,
+        "elapsed": 20.80486488342285
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\"\n    ],\n    \"reasoning\": \"ANALYZE: We are at (15, 12) in Petalburg City. The Gym door is located at (15, 8). PLAN: Action: Pre"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 19.13742393045505,
+        "elapsed": 37.433802127838135
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 19.248616357857124,
+        "elapsed": 38.2733051776886
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 18.677053792039654,
+        "elapsed": 41.66719031333923
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 12.136594575313458,
+        "elapsed": 54.031145334243774
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.7,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 9.253884057296451,
+        "elapsed": 66.7063364982605
+      },
+      "response_preview": "```json\n{\n  \"action\": \"run_skill\",\n  \"args\": {\n    \"args\": {\n      \"move_slot\": 4\n    },\n    \"skill_id\": \"battle_select_move_and_mash"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 15.739496101233073,
+        "elapsed": 41.90488910675049
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"DOWN\",\n      \"A\"\n    ],\n    \"reasoning\": \"ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: A wild Nincada has appeared, and the main "
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 20.946723184073917,
+        "elapsed": 21.61655902862549
+      },
+      "response_preview": "```json\n{\n  \"action\": \"execute_custom_subagent\",\n  \"args\": {\n    \"reasoning\": \"ANALYZE: We have entered a trainer battle with Casey on Route 102. Mudkip is at full health and ready to fight. The battle is currently in the initialization pha"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 22.057403492987785,
+        "elapsed": 19.17622399330139
+      },
+      "response_preview": "```json\n{\n  \"action\": \"execute_custom_subagent\",\n  \"args\": {\n    \"subagent_id\": \"combat_handler\",\n    \"reasoning\": \"ANALYZE: The pre-battle dialogue has finished and the game state now explicitly shows '=== BATTLE MODE ==='. I am in a battl"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 20.310414331684377,
+        "elapsed": 36.497769832611084
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 20.96801609751257,
+        "elapsed": 32.70450282096863
+      },
+      "response_preview": "```json\n{\n  \"action\": \"execute_custom_subagent\",\n  \"args\": {\n    \"reasoning\": \"A wild Wurmple has appeared while pacing in the tall grass. Although Mudkip's HP is low (13/25), I am already in the battle and must resolve it before I can navi"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 19.956264246489685,
+        "elapsed": 27.08294916152954
+      },
+      "response_preview": "```json\n{\n  \"action\": \"execute\",\n  \"action_input\": {\n    \"tool\": \"battle_engine\",\n    \"arguments\": {\n      \"command\": \"attack\",\n      \"target\": \"enemy\"\n    }\n  },\n  \"thought\": \"I have entered a battle. I need to resolve this encounter to co"
+    }
+  ],
+  "gemma4:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 197.97596373437628,
+        "elapsed": 15.34879207611084
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 186.5999933843585,
+        "elapsed": 5.038003921508789
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"DOWN\"\n    ],\n    \"reasoning\": \"ANALYZE: [game screen: Dewford Town Pokemon Center 1F. Location: (7, 8). Objective: defeat_brawly_gym.] Situation: Healing is complete"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 187.04353953351284,
+        "elapsed": 3.9318687915802
+      },
+      "response_preview": "**THINKING:**\n1.  **Analyze Current State:** I have successfully entered the Oldale Town Pokemon Center (357). My current objective is to heal Mudkip and then head west to Route 102.\n2.  **Immediate Goal:** Heal the Pok\u00e9mon.\n3.  **Action Pl"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 192.63245620167294,
+        "elapsed": 4.7640910148620605
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\",\n      \"UP\"\n    ],\n    \"reasoning\": \"ANALYZE: [game screen: Playe"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 196.17032017393592,
+        "elapsed": 4.628878355026245
+      },
+      "response_preview": "**Thought Process:**\n1.  **Analyze Objective:** The current objective is `get_hm01_cut`: Interact with the NPC (Cutter) inside the house to obtain HM01 (Cut).\n2.  **Analyze Location:** I am"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 191.570806178672,
+        "elapsed": 4.814164638519287
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 189.0942211084238,
+        "elapsed": 5.31582498550415
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 175.40572138162744,
+        "elapsed": 5.737954378128052
+      },
+      "response_preview": "**THINKING:** ANALYZE: Location: Granite Cave 1F ALT. Objective: Find Steven and deliver the letter. Situation: I am at (35, 8). The map shows a warp point leading to Steven's room at (5, 11). PLAN: Action: Use `navigate_to_coords` to move "
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 195.0595341180294,
+        "elapsed": 4.072629690170288
+      },
+      "response_preview": "**ANALYSIS:**\nWe have successfully healed our team at the Petalburg City Pokemon Center. The next critical story objective is to visit the Petalburg Gym and speak to my father, Norman.\nMy current position is (15, 12). The Gym entrance is lo"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 181.59013910301545,
+        "elapsed": 5.039525747299194
+      },
+      "response_preview": "**THINKING:** ANALYZE: Location: Slateport City Oceanic Museum 1F. Objective: Enter the museum and pay the fee. Situation: I have successfully navigated to the first floor of the museum. The immediate goal is to find the reception counter a"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 191.27865317098883,
+        "elapsed": 5.06488561630249
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.583333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 175.08981211394047,
+        "elapsed": 5.760019302368164
+      },
+      "response_preview": "**THINKING:** ANALYZE: Location: Granite Cave 1F. Objective: Find Steven and deliver Mr. Stone's Letter. Situation: I am currently at (31, 7). The ladder to the basement is located at (35, 3). I need to move right and up to reach the ladder"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.7,
+        "hallucination": 0.0,
+        "tok_s": 190.83010592165172,
+        "elapsed": 5.0993971824646
+      },
+      "response_preview": "**THINKING:** ANALYZE: [game screen: Wild battle vs Poochyena Lv 12. Main battle menu visible. Zubat Lv 15 at 37/39 HP.] SITUATION: The wild battle is ongoing, and the objective is to continue grinding EXP for Zubat. The previous step clear"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 180.63597778088425,
+        "elapsed": 5.129127025604248
+      },
+      "response_preview": "**ANALYSIS**: [game screen: Oceanic Museum 2F. Location"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 192.56558387090257,
+        "elapsed": 4.669189453125
+      },
+      "response_preview": "**THINKING:** ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: Nincada is facing a wild Nincada and the main battle menu is open. PLAN: Action: Press DOWN, A and wait. Reason: This is TURN 1 of the switch pro"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 196.55514564833035,
+        "elapsed": 4.295591831207275
+      },
+      "response_preview": "**THINKING:** ANALYZE: We are currently in a trainer battle with a Youngster on Route 102. The objective is to defeat the opponent's Pokemon to gain experience and money. The battle is active (phase_211). PLAN: Action: Execute the `combat_h"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 194.46066017622715,
+        "elapsed": 4.3395304679870605
+      },
+      "response_preview": "**THINKING:** ANALYZE: Location: Rustboro City (16, 49). Objective: Defeat the Rival (May). Situation: The dialogue is nearing its conclusion, and the battle is imminent. I need to press 'A' one last time to clear the final lines of dialogu"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 189.10571141568263,
+        "elapsed": 5.06119441986084
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 186.80307282925952,
+        "elapsed": 4.582164764404297
+      },
+      "response_preview": "**THINKING:** ANALYZE: The player is currently in a wild Pok\u00e9mon battle. The objective is to grind Mudkip to Level 8. Mudkip is currently Level 7 with 13/25 HP. The immediate priority is to defeat the wild Pok\u00e9mon using the `combat_handler`"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 174.37425363148705,
+        "elapsed": 6.989703178405762
+      },
+      "response_preview": "*Executing movement command.*\n\nThe path ahead is clear. I continue walking forward, maintaining a steady pace, my focus fixed on the distant objective. The environment is quiet, the sounds of nature providing a rhythmic backdrop to my journ"
+    }
+  ],
+  "gemma4:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 254.1063013759546,
+        "elapsed": 8.373722076416016
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - run_skill\n      args: {\"skill_id\": \"exit_building\", \"args\": {}}\n      result: \"{\\n  \\\"success\\\": true, \\\"skill_id\\\": \\\"exit_building\\\","
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 228.10788381968274,
+        "elapsed": 4.091003894805908
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 226.9681138587742,
+        "elapsed": 3.6854889392852783
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - navigate_to"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 248.42486216146523,
+        "elapsed": 3.7041075229644775
+      },
+      "response_preview": "Action executed: execute_custom_subagent\n  TOOLS:\n    - execute_custom_subagent\n      args: {\"reasoning\": \"AN"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 250.81201029467897,
+        "elapsed": 3.5417308807373047
+      },
+      "response_preview": "Action executed: run_skill\n  TOOLS:\n    - talk_to_npc\n      args: {\"direction\": \"UP\", \"reasoning\": \"The current objective is to interact with the Cutter to obtain HM01 (Cut). Since we are inside the house, we need to face the NPC and intera"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 237.39509082049028,
+        "elapsed": 3.8583223819732666
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 231.4061451720558,
+        "elapsed": 4.263965845108032
+      },
+      "response_preview": "Based on the strategic guidance and the current game state, the immediate objective"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 195.6399750811071,
+        "elapsed": 4.827712774276733
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 249.04824886196465,
+        "elapsed": 3.6503446102142334
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - press_buttons\n      args: {\"buttons\": [\"DOWN\", \"DOWN\", \"DOWN\", \"DOWN\"], \"reasoning\": \"ANALYZE: We are at (15, 12) in Petalburg City"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 214.72483841290136,
+        "elapsed": 4.139954090118408
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 238.16855433736606,
+        "elapsed": 4.0394206047058105
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 198.25346119701672,
+        "elapsed": 4.800717115402222
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 236.9617936591193,
+        "elapsed": 4.060841083526611
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 210.8375201183159,
+        "elapsed": 4.242696762084961
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 251.14679549866796,
+        "elapsed": 3.628977060317993
+      },
+      "response_preview": "Action"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 251.43055163114946,
+        "elapsed": 3.285470962524414
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - press_buttons\n      args: {\"buttons\": [\"LEFT\", \"LEFT\", \"LEFT\", \"LEFT\", \"LEFT\"], \"reasoning\": \"ANALYZE: We have just completed a trainer battle on Route 102 and need to continue moving West towar"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 245.8977749868247,
+        "elapsed": 3.1833465099334717
+      },
+      "response_preview": "Action executed: execute_custom_subagent\n  TOOLS:\n    - execute_custom_subagent\n      args: {\"reasoning\": \"The Rival battle has just begun. I need to use the combat handler to defeat the Rival and proceed with the main objective of finding "
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 231.6926836968123,
+        "elapsed": 4.072966575622559
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 224.9122709919316,
+        "elapsed": 3.745974063873291
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - press_buttons\n      args: {\"buttons\": [\"LEFT\", \"RIGHT\", \"LEFT\", \"RIGHT\", \"LEFT\"], \"reasoning\": \""
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0.205580493168228,
+        "elapsed": 4.864274740219116
+      },
+      "response_preview": ""
+    }
+  ],
+  "gemma4-emerald:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 175.95562480785753,
+        "elapsed": 9.093117713928223
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City Mart. Objective: Restock supplies. Situation: The shop menu is open, but the cursor is currently on 'SELL'. I need to move the cursor to 'BUY' to purchase Potions and Paralyze Heals. PLAN: Ac"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.875,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 159.09936690967785,
+        "elapsed": 4.463251113891602
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Dewford Pokemon Center 1F. Location: (7, 8). Objective: defeat_brawly_gym.] Situation: Inside the Pokemon Center. Nurse Joy is at (7, 2). Counter is at (7, 3). PLAN: [action: Move UP 4 times. Reason: R"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 166.84878829867944,
+        "elapsed": 3.2775959968566895
+      },
+      "response_preview": "[press_buttons] ANALYZE: We are at (7, 8) in the Pokemon Center. The nurse is at (7, 2). We need to heal our Mudkip. PLAN: Action: Press UP x5. Reason: Move towards the nurse to initiate healing. Expected: Player moves to (7, 3)."
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 170.9473397973368,
+        "elapsed": 4.154691696166992
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Player at (2, 8) in Petalburg Woods. North path blocked by trees at Y=7. Objective: Reach Rustboro City.] Situation: The path to the exit (14, 4) requires bypassing the tree line. Manual movement is re"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.875,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 175.4680812291652,
+        "elapsed": 3.89250111579895
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City (16, 39). Objective: Enter the Cutter's house to get HM01 Cut. Situation: The Cutter's house is directly left of the Pokemon Center, with its door at (9, 38). PLAN: Action: Press LEFT x7, the"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 174.27533429564647,
+        "elapsed": 4.122435808181763
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave B1F. Objective: Navigate to the next ladder (28, 21). Situation: I am at (6, 15) in the dark, but I can use the ASCII map to pathfind. PLAN: Action: Move RIGHT 2, DOWN 6, RIGHT 1. Reason: Foll"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.833333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 168.9508196338443,
+        "elapsed": 5.0553297996521
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Slateport Mart (3,7). Player is facing the clerk at (2,3). Objective: Sell TMs to buy 10 Potions.] SITUATION: The previous attempt to move UP to (3,3) failed because (3,4) was blocked by a sign. The cl"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 154.1384266102865,
+        "elapsed": 5.375509023666382
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave 1F. Objective: Enter the ladder to the basement. Situation: I am at (35, 8). The path UP is blocked by a rock wall. I need to navigate around it to reach the ladder at (35, 3). PLAN: Action: P"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 175.33999129782143,
+        "elapsed": 6.205898761749268
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 162.82101305378163,
+        "elapsed": 4.0409581661224365
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Slateport City (30, 26). Objective: Enter Oceanic Museum. Situation: We are standing right in front of the museum door. PLAN: Action: Press UP 3 times. Reason: Step into the museum building. Expected: Tran"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.833333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 157.11129886958733,
+        "elapsed": 4.818746328353882
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Battle with Brawly. Marshtomp vs Makuhita. Text: 'Foe MAKUHITA used POUND!'] Location: Dewford Gym (4,4). Objective: defeat_brawly_gym. Situation: Makuhita is at roughly 40-50% HP. The battle menu is a"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.833333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 155.24319019723836,
+        "elapsed": 5.135108232498169
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave 1F. Objective: Switch train Nincada. Situation: A wild battle against Makuhita has started. The intro text is visible. PLAN: Action: Press A 3 times. Reason: Advance the intro text to reach th"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 157.62765107524476,
+        "elapsed": 4.79234766960144
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Wild battle vs Poochyena Lv 12. Main battle menu visible. Zubat Lv 15 at 37/39 HP.] SITUATION: Continuing the Zubat grind. Poochyena is at low HP. Leech Life is super effective. OBJECTIVE: Defeat Pooch"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 156.64633993854414,
+        "elapsed": 4.441399812698364
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Wild battle against Lv. 15 Carvanha. Location: Route 110. Objective: Deliver Devon Goods.] Situation: The battle has just started. I need to advance through the intro text to reach the main battle menu"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 176.27612219034498,
+        "elapsed": 3.9640913009643555
+      },
+      "response_preview": "[execute_custom_subagent] ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: Nincada has been safely switched out, and Marshtomp is now in battle facing a wild Nincada. The switch is complete. PLAN: Action: Exe"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 180.1906882002153,
+        "elapsed": 3.458723306655884
+      },
+      "response_preview": "[execute_custom_subagent] ANALYZE: The player has encountered a wild Pokemon (looks like a Poochyena) on Route 102. The battle transition is complete and the main battle menu is visible. Location: Route 102. Objective: Defeat the wild Pokem"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 180.4690162340964,
+        "elapsed": 3.201009511947632
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City (16, 49). Objective: Defeat the Rival. Situation: The battle with the Rival has just started. The intro text is being displayed. PLAN: Action: Press A x4. Reason: Advance the intro text to re"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 158.5455235251115,
+        "elapsed": 4.5231688022613525
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Wild battle vs Zubat (Lv. 9). Location: Granite Cave B1F (6, 13). Objective: deliver_letter_to_steven.] Situation: Zubat is in the 'used a POKE BALL' state. I need to clear the dialogue to see if the c"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 165.27877553360815,
+        "elapsed": 3.347716808319092
+      },
+      "response_preview": "[execute_custom_subagent] A wild battle has started against a Wurmple while pacing in the tall grass. Mudkip is Level 7 with 13/25 HP, which is above the 12 HP threshold. Launching the combat_handler subagent to automate the battle and gain"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 145.9286584117126,
+        "elapsed": 8.403754472732544
+      },
+      "response_preview": "[press_buttons]\n\u25b6 ANALYZE GAME STATE: Location: ROUTE 116 (11, 8). Objective: Reach Rustboro City. Situation: Player is in a grassy area, moving north towards a path. No enemies visible. PLAN: Action: Move UP 5 times. Reason: Move towards t"
+    }
+  ],
+  "gemma4-emerald:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 197.79134683849836,
+        "elapsed": 6.486523389816284
+      },
+      "response_preview": "ANALYZE: Location: Rustboro City Mart. Objective: Restock supplies. Situation: The shop menu is open, and the cursor is on \"BUY\". PLAN: Action: Press A to select \"BUY\", then DOWN to scroll to \"POTIONS\", and A to select them. Reason: Purchas"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.875,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 182.53387428085117,
+        "elapsed": 3.6426398754119873
+      },
+      "response_preview": "ANALYZE: [game screen: Dewford Pokemon Center 1F. Location: (7, 8). Objective: Exit the building.] Situation: Healing is complete. The exit is at the bottom center (Y=9). The agent is currently at (7, 8). PLAN: [action: Move DOWN to Y=9, th"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 187.358054702734,
+        "elapsed": 2.5982840061187744
+      },
+      "response_preview": "ANALYZE: The player is at (7, 8) inside the Pokemon Center. The nurse is at (7, 2) and the counter is at (7, 3). We need to interact with the nurse to heal. PLAN: Action: Press UP x2, A. Reason: Move to the counter and initiate the healing "
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 190.56865938937116,
+        "elapsed": 3.4153482913970947
+      },
+      "response_preview": "ANALYZE: [game screen: Player at (2, 8) on Route 104, just exited Petalburg Woods. Pretty Petal Flower Shop is to the left.] Situation: Need to visit the shop for the Wailmer Pail. The shop is at (5, 17). The current position is slightly ab"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 194.0208468508856,
+        "elapsed": 2.8431246280670166
+      },
+      "response_preview": "ANALYZE: Location: Rustboro City Cutters House (5, 8). Objective: Talk to the NPC about HM01. Situation: The NPC is standing near the entrance, facing the player. I need to get closer to him to talk to him. PLAN: Action: Press LEFT x2, then"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.875,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 194.16764869072875,
+        "elapsed": 3.046786069869995
+      },
+      "response_preview": "ANALYZE: Location: Granite Cave B1F. Objective: Navigate to the next ladder (28, 21). Situation: I am at (6, 15) and the path is clear to the right. PLAN: Action: Press RIGHT 10 times, then DOWN 1 time. Reason: Follow the path to the right "
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 189.37515246527383,
+        "elapsed": 4.7229673862457275
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 176.0654821553971,
+        "elapsed": 4.227068662643433
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 196.02932603910375,
+        "elapsed": 2.6739351749420166
+      },
+      "response_preview": "ANALYZE: We are at (15, 12) in Petalburg City. The Gym door is at (15, 8). We need to walk north to reach it. PLAN: Action: Press UP x4. Reason: Move north towards the Gym entrance. Expected: Player moves to (15, 12)."
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 182.29668723491795,
+        "elapsed": 3.9315218925476074
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.583333,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 191.59199223693565,
+        "elapsed": 3.401238441467285
+      },
+      "response_preview": "ANALYZE: [game screen: Battle with Brawly. Marshtomp vs Makuhita. Text: 'Foe MAKUHITA...'. Location: Dewford Gym (4,4). Objective: defeat_brawly_gym.] Situation: Mud Shot animation is playing. The text is advancing through the final stages "
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 175.37567642349055,
+        "elapsed": 4.554224729537964
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 190.70104589640576,
+        "elapsed": 3.7302680015563965
+      },
+      "response_preview": "ANALYZE: [game screen: Wild battle vs Poochyena Lv 12. Main battle menu visible. Zubat Lv 15 at 37/39 HP.] SITUATION: Continuing the Zubat grind. Poochyena is at low HP. Leech Life is super effective. OBJECTIVE: Defeat Poochyena. PLAN: Acti"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 180.8507890610928,
+        "elapsed": 3.0670158863067627
+      },
+      "response_preview": "ANALYZE: [game screen: Battle start with Team Aqua. Location: Oceanic Museum 2F. Objective: Deliver Devon Goods to Capt. Stern.] Situation: The scripted battle with Team Aqua has begun. The first grunt is speaking. PLAN: [action: Press A 5 "
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 1.0,
+        "tok_s": 196.12833328491723,
+        "elapsed": 2.78439998626709
+      },
+      "response_preview": "ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: Nincada is facing a wild Whismur and the main battle menu is open. PLAN: Action: Press DOWN, A and wait. Reason: This is TURN 1 of the switch procedure to open"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 200.2796185413528,
+        "elapsed": 2.7764484882354736
+      },
+      "response_preview": "ANALYZE: The battle has started with a trainer on Route 102. The opponent is a trainer with a Pokemon that is currently unknown. The battle screen is in the initialization phase. Objective: Win the battle. Situation: Need to wait for the op"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 196.15477655458923,
+        "elapsed": 3.417044162750244
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 185.70370094047274,
+        "elapsed": 4.9430153369903564
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 182.79179844039405,
+        "elapsed": 3.0143754482269287
+      },
+      "response_preview": "ANALYZE: The battle ended. Mudkip is Level 7 with 13/25 HP, which is >= 12 HP. The objective is to grind to Level 8. We are in the tall grass at (14, 4) on Route 101.\nPLAN: Action: Press LEFT, RIGHT, LEFT, RIGHT, LEFT to pace back and forth"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 174.32766938792366,
+        "elapsed": 6.6493449211120605
+      },
+      "response_preview": ""
+    }
+  ],
+  "gemma4-emerald:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 232.1567532046653,
+        "elapsed": 6.571409225463867
+      },
+      "response_preview": "```json\n{\n  \"tool_name\": \"execute_custom_subagent\",\n  \"subagent_id\": \"shop_transaction_handler\",\n  \"instructions\": \"1. Select the items you wish to purchase from the list. 2. Confirm the quantities. 3. Click the 'PAY' button. 4. Wait for th"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 227.35308651697238,
+        "elapsed": 4.110528945922852
+      },
+      "response_preview": "# \ud83d\uddfa\ufe0f Dewford Pokemon Center Map Analysis\n\nThis analysis provides a structured overview of the Dewford Pokemon Center map, focusing on spatial relationships, key NPCs, and map topology.\n\n## \ud83d\udccb 1. Map Metadata\n\n| Field | Value | Notes |\n| :---"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 226.8587154541647,
+        "elapsed": 3.694669008255005
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - press_buttons\n      args: {\"buttons\": [\"A\", \"D\", \"A\", \"A\", \"A\", \"A\"], \"reasoning\": \"ANALYZE: We are in the Poke Ball selection menu. We want to throw a Poke Ball at the Wurmple. The first Poke B"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 247.75608583294937,
+        "elapsed": 3.7175939083099365
+      },
+      "response_preview": "### PLAN\n\n1.  **Navigate to Route 105**: Use the `route_navigator` subagent to navigate from Route 104 to Route 105. This is a long route, and the subagent is designed to handle it efficiently.\n2.  **Navigate to Route 106**: Continue naviga"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 250.11681334500133,
+        "elapsed": 3.643829345703125
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 240.72311265537965,
+        "elapsed": 3.441868543624878
+      },
+      "response_preview": "LEFT, UP, UP, UP, UP, UP, RIGHT, RIGHT, RIGHT, DOWN, DOWN, LEFT, UP, RIGHT, RIGHT, DOWN, DOWN, RIGHT, UP, RIGHT, DOWN, RIGHT, UP, RIGHT, DOWN"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 231.25012273024396,
+        "elapsed": 4.282853841781616
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 198.6254371027696,
+        "elapsed": 4.770360946655273
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 252.10840698134697,
+        "elapsed": 3.6120879650115967
+      },
+      "response_preview": "## \ud83d\udcdd Summary of the Game Journey\n\nThis summary captures the key events, milestones, and current status of the player's journey through Pokemon Emerald.\n\n### \ud83d\uddfa\ufe0f Current Status\nThe player has successfully navigated the early routes, defeated "
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 214.12624961632716,
+        "elapsed": 4.143884181976318
+      },
+      "response_preview": "### \ud83c\udfaf Objective: Enter the Oceanic Museum and find Capt. Stern.\n\n### \ud83d\udcdd Action Plan:\n1.  **Interact with Grunts:** Stand in front of the grunts and press `A` repeatedly to initiate dialogue. This will either clear the line of NPCs or cause t"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.333333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 237.52182116334373,
+        "elapsed": 4.0476884841918945
+      },
+      "response_preview": "```python\n# The provided text is a very long, unpunctuated block of text, likely a verbatim transcript of a long speech or event. \n# The most effective way to handle this is to treat it as a single string and perform simple cleanup \n# (remo"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 196.56433250074312,
+        "elapsed": 4.838726758956909
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 234.08864300207668,
+        "elapsed": 4.122293949127197
+      },
+      "response_preview": "## \ud83d\udcdd Agent Performance Review & Improvement Plan\n\n"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 210.6969961239547,
+        "elapsed": 4.24332070350647
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 251.59407359170632,
+        "elapsed": 3.1408722400665283
+      },
+      "response_preview": "{\n  \"reasoning\": \"ANALYZE: The current state is the start of the battle. Nincada is out and Marshtomp is in slot 2. The objective is to switch Nincada out for Marshtomp and then train Marshtomp. The switch must happen on the opponent's turn"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 257.68840871339233,
+        "elapsed": 2.791062116622925
+      },
+      "response_preview": "```json\n{\n  \"tool_name\": \"pokemon_catcher\",\n  \"params\": {\n    \"target_pokemon\": \"rock_type\",\n    \"pokemon_type\": \"water\"\n  }\n}\n```"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 244.25953967606648,
+        "elapsed": 3.4704532623291016
+      },
+      "response_preview": "## \u2694\ufe0f Marshtomp vs May (The Rival) \u2014 Battle Strategy\n\nMarshtomp is an excellent choice for the Rival because its high Attack and Defense stats, combined with the Steel typing, allow it to resist May"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 232.09153613667553,
+        "elapsed": 4.074981451034546
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 225.83036841767378,
+        "elapsed": 3.723484516143799
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0.20501710991600872,
+        "elapsed": 4.877641677856445
+      },
+      "response_preview": ""
+    }
+  ],
+  "gemma4-emerald-grpo:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.457909187572476,
+        "elapsed": 18.114917993545532
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.190352201461792
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.721777193444744,
+        "elapsed": 17.099273443222046
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.23810167554731,
+        "elapsed": 21.527127981185913
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.303354963971465,
+        "elapsed": 21.33903455734253
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.78716216216216,
+        "elapsed": 14.088895320892334
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.3762166500091553
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03728318214416504
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.28115333858051,
+        "elapsed": 18.201757669448853
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.154086112976074
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.032996416091918945
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03197455406188965
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.032707929611206055
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.0294339656829834
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.28197014393165,
+        "elapsed": 18.184592962265015
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.84814879231142,
+        "elapsed": 19.81480097770691
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.85029812419634,
+        "elapsed": 19.713263988494873
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.1365063190460205
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.58311469917837,
+        "elapsed": 17.303403615951538
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.8709778785705566
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    }
+  ],
+  "gemma4-emerald:31b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.83651598035596,
+        "elapsed": 9.649142503738403
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City Mart. Objective: Restock supplies. Situation: I am standing in front of the cashier, but the shop dialogue hasn't appeared yet. PLAN: Action: Press A. Reason: Initiate the shop dialogue to op"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.4092509746551514
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.90782202497582,
+        "elapsed": 9.013310194015503
+      },
+      "response_preview": "[press_buttons] ANALYZE: We are in the Bag menu, specifically the Poke Balls pocket. The cursor is hovering over our Poke Balls. We want to use a Poke Ball. PLAN: Action: Press A to select the Poke Ball, then A again to confirm 'USE', and q"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.24232723256301,
+        "elapsed": 13.837208271026611
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Player at (2, 8) in Petalburg Woods. Objective: Reach Rustboro City.] Situation: Just finished a battle. Previous subagent hit safety cap. Following Engineer's Protocol for manual movement. PLAN: [acti"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.375,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 53.264423584010125,
+        "elapsed": 14.068523168563843
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Cutter's House (5, 8). Objective: Talk to the Cutter to get HM01 Cut. Situation: The Cutter is sitting at (7, 5). I can reach him by walking UP 3 times and RIGHT 1 time to (6, 5). PLAN: Action: Press UP x3"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.21817002899473,
+        "elapsed": 13.854716539382935
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave B1F. Objective: Switch train Nincada. Situation: Marshtomp just used Tackle. The attack animation and text are playing. PLAN: Action: Press A 4 times. Reason: Advance the text to get back to t"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.464601755142212
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03652667999267578
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 53.39056488977782,
+        "elapsed": 10.377284526824951
+      },
+      "response_preview": "[press_buttons] ANALYZE: We are at (15, 12) in Petalburg City. The Pokemon Center door is at (20, 16). PLAN: Action: Press UP x3, LEFT x2. Reason: Move north to be level with the door, then west to step up to it. Expected: Player moves to ("
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.283601760864258
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.036260128021240234
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03525042533874512
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03426551818847656
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03295636177062988
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.22724383248322,
+        "elapsed": 10.448756456375122
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: A wild Poochyena appeared, and the intro animations/text are playing. PLAN: Action: Press A twice and wait. Reason: To advance the text ('Wild "
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 53.25034599724326,
+        "elapsed": 19.699642419815063
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 53.119797281573625,
+        "elapsed": 19.644906520843506
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.1405422687530518
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.77415270427849,
+        "elapsed": 17.18976092338562
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.820279359817505
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    }
+  ],
+  "_aggregate": {
+    "overall": {
+      "gemma4:26b": {
+        "tool_format": 0.0,
+        "grounding": 0.15,
+        "action_relevance": 0.15,
+        "reasoning_similarity": 0.15,
+        "hallucination": 0.05,
+        "degenerate": 0.0,
+        "actionable": 0.2,
+        "tok_s": 153.9196215517
+      },
+      "gemma4:31b": {
+        "tool_format": 0.0,
+        "grounding": 0.3875,
+        "action_relevance": 0.51,
+        "reasoning_similarity": 0.45,
+        "hallucination": 0.05,
+        "degenerate": 0.0,
+        "actionable": 0.55,
+        "tok_s": 18.121577997156503
+      },
+      "gemma4:e4b": {
+        "tool_format": 0.0,
+        "grounding": 0.5354166499999999,
+        "action_relevance": 0.375,
+        "reasoning_similarity": 0.26,
+        "hallucination": 0.3,
+        "degenerate": 0.0,
+        "actionable": 0.55,
+        "tok_s": 188.24208357384896
+      },
+      "gemma4:e2b": {
+        "tool_format": 0.0,
+        "grounding": 0.28125,
+        "action_relevance": 0.15,
+        "reasoning_similarity": 0.1,
+        "hallucination": 0.05,
+        "degenerate": 0.05,
+        "actionable": 0.4,
+        "tok_s": 221.30702282347238
+      },
+      "gemma4-emerald:26b": {
+        "tool_format": 0.95,
+        "grounding": 0.72499995,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.35,
+        "hallucination": 0.55,
+        "degenerate": 0.05,
+        "actionable": 0.95,
+        "tok_s": 165.85810250549002
+      },
+      "gemma4-emerald:e4b": {
+        "tool_format": 0.0,
+        "grounding": 0.51666665,
+        "action_relevance": 0.35,
+        "reasoning_similarity": 0.275,
+        "hallucination": 0.3,
+        "degenerate": 0.1,
+        "actionable": 0.4,
+        "tok_s": 188.2056239707668
+      },
+      "gemma4-emerald:e2b": {
+        "tool_format": 0.0,
+        "grounding": 0.32916665,
+        "action_relevance": 0.075,
+        "reasoning_similarity": 0.05,
+        "hallucination": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.2,
+        "tok_s": 220.58077599376847
+      },
+      "gemma4-emerald-grpo:26b": {
+        "tool_format": 0.0,
+        "grounding": 0.4,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 26.26764951404482
+      },
+      "gemma4-emerald:31b": {
+        "tool_format": 0.35,
+        "grounding": 0.45,
+        "action_relevance": 0.25,
+        "reasoning_similarity": 0.05,
+        "hallucination": 0.5,
+        "degenerate": 0.1,
+        "actionable": 0.35,
+        "tok_s": 26.661568177812796
+      }
+    },
+    "by_state_type": {
+      "overworld": {
+        "gemma4:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.15,
+          "action_relevance": 0.1,
+          "reasoning_similarity": 0.1,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.1,
+          "tok_s": 146.10519881098952
+        },
+        "gemma4:31b": {
+          "tool_format": 0.0,
+          "grounding": 0.4,
+          "action_relevance": 0.45,
+          "reasoning_similarity": 0.35,
+          "hallucination": 0.1,
+          "degenerate": 0.0,
+          "actionable": 0.5,
+          "tok_s": 18.313709370664196
+        },
+        "gemma4:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.5625,
+          "action_relevance": 0.35,
+          "reasoning_similarity": 0.2,
+          "hallucination": 0.3,
+          "degenerate": 0.0,
+          "actionable": 0.4,
+          "tok_s": 189.31426949176245
+        },
+        "gemma4:e2b": {
+          "tool_format": 0.0,
+          "grounding": 0.3625,
+          "action_relevance": 0.2,
+          "reasoning_similarity": 0.1,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.5,
+          "tok_s": 233.66334698590754
+        },
+        "gemma4-emerald:26b": {
+          "tool_format": 0.9,
+          "grounding": 0.7458332999999999,
+          "action_relevance": 0.4,
+          "reasoning_similarity": 0.2,
+          "hallucination": 0.5,
+          "degenerate": 0.1,
+          "actionable": 0.9,
+          "tok_s": 168.38447859340968
+        },
+        "gemma4-emerald:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.575,
+          "action_relevance": 0.25,
+          "reasoning_similarity": 0.25,
+          "hallucination": 0.3,
+          "degenerate": 0.0,
+          "actionable": 0.6,
+          "tok_s": 189.02070786477617
+        },
+        "gemma4-emerald:e2b": {
+          "tool_format": 0.0,
+          "grounding": 0.475,
+          "action_relevance": 0.15,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.3,
+          "degenerate": 0.0,
+          "actionable": 0.3,
+          "tok_s": 232.10747834398202
+        },
+        "gemma4-emerald-grpo:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.55,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.0,
+          "tok_s": 31.47894585212786
+        },
+        "gemma4-emerald:31b": {
+          "tool_format": 0.6,
+          "grounding": 0.575,
+          "action_relevance": 0.4166666666666667,
+          "reasoning_similarity": 0.08333333333333333,
+          "hallucination": 0.6666666666666666,
+          "degenerate": 0.1,
+          "actionable": 0.6,
+          "tok_s": 32.08598237406774
+        }
+      },
+      "battle": {
+        "gemma4:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.15,
+          "action_relevance": 0.2,
+          "reasoning_similarity": 0.2,
+          "hallucination": 0.1,
+          "degenerate": 0.0,
+          "actionable": 0.3,
+          "tok_s": 161.73404429241057
+        },
+        "gemma4:31b": {
+          "tool_format": 0.0,
+          "grounding": 0.375,
+          "action_relevance": 0.5700000000000001,
+          "reasoning_similarity": 0.55,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.6,
+          "tok_s": 17.929446623648808
+        },
+        "gemma4:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.5083333,
+          "action_relevance": 0.4,
+          "reasoning_similarity": 0.32,
+          "hallucination": 0.3,
+          "degenerate": 0.0,
+          "actionable": 0.7,
+          "tok_s": 187.16989765593547
+        },
+        "gemma4:e2b": {
+          "tool_format": 0.0,
+          "grounding": 0.2,
+          "action_relevance": 0.1,
+          "reasoning_similarity": 0.1,
+          "hallucination": 0.1,
+          "degenerate": 0.1,
+          "actionable": 0.3,
+          "tok_s": 208.95069866103722
+        },
+        "gemma4-emerald:26b": {
+          "tool_format": 1.0,
+          "grounding": 0.7041666,
+          "action_relevance": 0.6,
+          "reasoning_similarity": 0.5,
+          "hallucination": 0.6,
+          "degenerate": 0.0,
+          "actionable": 1.0,
+          "tok_s": 163.33172641757034
+        },
+        "gemma4-emerald:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.45833329999999994,
+          "action_relevance": 0.45,
+          "reasoning_similarity": 0.3,
+          "hallucination": 0.3,
+          "degenerate": 0.2,
+          "actionable": 0.2,
+          "tok_s": 187.39054007675745
+        },
+        "gemma4-emerald:e2b": {
+          "tool_format": 0.0,
+          "grounding": 0.1833333,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.1,
+          "hallucination": 0.2,
+          "degenerate": 0.0,
+          "actionable": 0.1,
+          "tok_s": 209.0540736435549
+        },
+        "gemma4-emerald-grpo:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.25,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.0,
+          "tok_s": 21.056353175961778
+        },
+        "gemma4-emerald:31b": {
+          "tool_format": 0.1,
+          "grounding": 0.325,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.25,
+          "degenerate": 0.1,
+          "actionable": 0.1,
+          "tok_s": 21.23715398155786
+        }
+      }
+    }
+  },
+  "_meta": {
+    "game": "emerald",
+    "dataset": "emerald_v3",
+    "n_samples": 20,
+    "inputs": [
+      "data/eval_emerald_paper_v1.json",
+      "data/eval_emerald_ls.json"
+    ],
+    "models": [
+      "gemma4:26b",
+      "gemma4:31b",
+      "gemma4:e4b",
+      "gemma4:e2b",
+      "gemma4-emerald:26b",
+      "gemma4-emerald:31b",
+      "gemma4-emerald:e4b",
+      "gemma4-emerald:e2b",
+      "gemma4-emerald-grpo:26b"
+    ]
+  }
+}

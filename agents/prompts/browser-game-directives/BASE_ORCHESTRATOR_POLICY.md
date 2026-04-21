@@ -31,11 +31,20 @@ fallback when no skill or subagent fits.
 
 Every step must end with at least one game action: a `run_skill` /
 `execute_custom_subagent` call, or a primitive (`press_keys`,
-`mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`,
-`key_down`, `key_up`, `wait_ms`).
+`mouse_click`, `click_element`, `double_click`, `hold_key`,
+`mouse_move`, `mouse_drag`, `key_down`, `key_up`, `wait_ms`).
 You may also call planning/memory tools (`replan_objectives`,
 `process_memory`, `process_skill`) in the same step to update strategy
 and knowledge.
+
+**Click strategy.** Prefer `click_element(description=...)` over raw
+`mouse_click(x, y)` whenever you can describe the target by name. The
+former uses a vision model (MolmoWeb-8B) to find the element's pixel
+coordinates for you and is dramatically more accurate than guessing.
+Fall back to `mouse_click` only when (a) the click target has no clear
+visual name, (b) you already know the exact coordinates from a prior
+step, or (c) `click_element` returned `success: false` and you've
+already tried rewording the description.
 
 **Note on virtual time:** Game time is paused while you think. Each
 action you take advances game time by a small fixed budget (see the

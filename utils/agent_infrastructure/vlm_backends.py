@@ -2609,6 +2609,130 @@ class GeminiBackend(VLMBackend):
             return "I encountered an error processing the request. I'll proceed with a basic action: press 'A' to continue."
 
 
+def _extract_bracket_tool_calls(
+    text: str,
+    tool_schemas: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, Any]]:
+    """Parse ``[tool_name] ANALYZE: ... PLAN: ...`` format from SFT-trained models.
+
+    The fine-tuned model outputs tool calls as:
+        [press_buttons] ANALYZE: ... PLAN: Action: Press A, DOWN, A. ...
+        [run_skill] ANALYZE: ... PLAN: ... skill_id: "fight_pokemon" ...
+
+    We detect the [tool_name] marker, then build arguments depending on the tool:
+    - press_buttons: extract button names from the PLAN text
+    - Other tools: extract key=value pairs or pass the full plan text
+    """
+    import re as _re
+
+    if not text:
+        return []
+
+    # Build name set from schemas for validation
+    known_tools: set = set()
+    if tool_schemas:
+        for t in tool_schemas:
+            n = t.get("name")
+            if n:
+                known_tools.add(n)
+
+    out: List[Dict[str, Any]] = []
+
+    # Match [tool_name] at start of text or after newline/whitespace
+    for m in _re.finditer(r"\[([A-Za-z_][A-Za-z0-9_]*)\]\s*", text):
+        name = m.group(1)
+        if known_tools and name not in known_tools:
+            continue
+
+        # Extract the text after the bracket tag until the next bracket tag or end
+        rest_start = m.end()
+        next_bracket = _re.search(r"\n\s*\[([A-Za-z_])", text[rest_start:])
+        rest = text[rest_start:rest_start + next_bracket.start()] if next_bracket else text[rest_start:]
+
+        args: Dict[str, Any] = {}
+
+        if name == "press_buttons":
+            # Extract buttons from PLAN text. Look for patterns like:
+            # "Press A", "buttons: [\"A\", \"DOWN\"]", "A, DOWN, A"
+            buttons = []
+
+            # Try JSON-like list first: ["A", "DOWN", "A"]
+            list_match = _re.search(r'\[(["\'][^]]+)\]', rest)
+            if list_match:
+                try:
+                    import ast as _ast
+                    buttons = _ast.literal_eval(list_match.group(0))
+                except Exception:
+                    pass
+
+            # Fallback: extract button names from "Press X" / "Action: X" patterns
+            if not buttons:
+                btn_names = {"A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT", "L", "R"}
+                # Look for comma/space separated button names in the PLAN section
+                plan_match = _re.search(r'(?:PLAN|Action|buttons?)[:\s]+(.+?)(?:\.|$)', rest, _re.IGNORECASE)
+                if plan_match:
+                    plan_text = plan_match.group(1)
+                    for word in _re.split(r'[,\s]+', plan_text):
+                        w = word.strip().strip('"\'').upper()
+                        if w in btn_names:
+                            buttons.append(w)
+
+            # Last resort: find any button names in the whole text
+            if not buttons:
+                btn_names = {"A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT"}
+                for word in _re.split(r'[,\s]+', rest):
+                    w = word.strip().strip('"\'').upper()
+                    if w in btn_names and len(w) > 1:  # skip single chars except A/B
+                        buttons.append(w)
+                # Check for single A/B presses explicitly
+                if not buttons and _re.search(r'\bPress\s+A\b', rest, _re.IGNORECASE):
+                    buttons = ["A"]
+                elif not buttons and _re.search(r'\bPress\s+B\b', rest, _re.IGNORECASE):
+                    buttons = ["B"]
+
+            if not buttons:
+                buttons = ["A"]  # Safe default: pressing A advances dialogue
+
+            args = {"buttons": buttons}
+
+        elif name == "run_skill":
+            # Extract skill_id and optional args
+            skill_match = _re.search(r'skill_id[:\s]*["\']?([a-zA-Z_][a-zA-Z0-9_]*)', rest)
+            if skill_match:
+                args["skill_id"] = skill_match.group(1)
+            else:
+                args["skill_id"] = "navigate"  # fallback
+            # Extract args dict if present
+            args_match = _re.search(r'args[:\s]*(\{[^}]+\})', rest)
+            if args_match:
+                try:
+                    import ast as _ast
+                    args["args"] = _ast.literal_eval(args_match.group(1))
+                except Exception:
+                    pass
+
+        elif name == "replan_objectives":
+            # Extract new objectives text
+            obj_match = _re.search(r'(?:objectives?|plan)[:\s]*(.+?)(?:\n|$)', rest, _re.IGNORECASE)
+            if obj_match:
+                args["reasoning"] = obj_match.group(1).strip()
+
+        else:
+            # Generic: pass the PLAN section as the first parameter
+            if tool_schemas:
+                for t in tool_schemas:
+                    if t.get("name") == name:
+                        params = list((t.get("parameters") or {}).get("properties", {}).keys())
+                        if params:
+                            plan_match = _re.search(r'PLAN[:\s]*(.+)', rest, _re.DOTALL)
+                            args[params[0]] = plan_match.group(1).strip() if plan_match else rest.strip()
+                        break
+
+        out.append({"name": name, "args": args})
+
+    return out
+
+
 def _extract_text_action_calls(
     text: str,
     tool_schemas: Optional[List[Dict[str, Any]]] = None,
@@ -2634,11 +2758,18 @@ def _extract_text_action_calls(
     failure rather than raising — the worst case is "no tool call
     extracted from this turn", which is the same as today.
     """
-    if not text or "ACTION:" not in text:
-        return []
-
     import ast
     import re as _re
+
+    # --- Bracket-format parsing: [tool_name] ANALYZE: ... PLAN: ... ---
+    # Fine-tuned models (SFT on PokeAgent traces) emit this format instead
+    # of ACTION: name(args). Parse it first; fall through to ACTION: if empty.
+    bracket_calls = _extract_bracket_tool_calls(text, tool_schemas)
+    if bracket_calls:
+        return bracket_calls
+
+    if "ACTION:" not in text:
+        return []
 
     # Build a {name -> [param1, param2, ...]} map from the schemas so
     # we can translate positional arguments. Property order in our
@@ -3198,6 +3329,11 @@ class UnslothBackend(VLMBackend):
         import os as _os
         _os.environ.setdefault("HF_HOME", "/mnt/storage/models/huggingface")
         import torch
+        try:
+            import unsloth.models.loader_utils as _lu
+            _lu._get_new_mapper = lambda: ({}, {}, {})
+        except Exception:
+            pass
         from unsloth import FastVisionModel
 
         self.model_name = model_name
@@ -3319,7 +3455,12 @@ class UnslothBackend(VLMBackend):
         return self._build_adapter(response_text, usage, duration, module_name, True)
 
     def get_text_query(self, text, module_name="Unknown"):
-        """Text-only query (no image)."""
+        """Text-only query (no image).
+
+        When self.tools is empty, return the decoded string directly to match
+        Gemini/Vertex contract — harness evolver and prompt optimizer construct
+        tool-less VLMs and call .strip() on the result.
+        """
         messages = [{"role": "user", "content": [
             {"type": "text", "text": text},
         ]}]
@@ -3329,6 +3470,22 @@ class UnslothBackend(VLMBackend):
             "[%s] UnslothBackend (text): %d→%d tokens in %.1fs",
             module_name, usage["prompt_tokens"], usage["completion_tokens"], duration,
         )
+        if not self._tool_schemas:
+            from utils.data_persistence.llm_logger import log_llm_interaction
+            log_llm_interaction(
+                interaction_type=f"unsloth_{module_name}",
+                prompt=text[:500],
+                response=response_text,
+                metadata={
+                    "model": self.model_name,
+                    "backend": "unsloth",
+                    "duration": duration,
+                    "has_image": False,
+                    "token_usage": usage,
+                },
+                model_info={"model": self.model_name, "backend": "unsloth"},
+            )
+            return response_text
         return self._build_adapter(response_text, usage, duration, module_name, False)
 
 

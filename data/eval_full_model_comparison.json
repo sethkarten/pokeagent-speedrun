@@ -1,0 +1,1512 @@
+{
+  "gemma4:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 179.07643782475046,
+        "elapsed": 10.168048620223999,
+        "response_preview": "[press_buttons] ANALYZE: The player is currently standing in the middle of the Oceanic Museum 2F in Slateport City. There are several fossil exhibits on display, a computer terminal, and an NPC located in the bottom right corner of the screen.  PLAN:"
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.16666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 179.51508868546392,
+        "elapsed": 9.560377836227417,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot shows a trainer character in a grassy area, likely a route in Pok\u00e9mon Emerald. There are trees on both sides, a cleared path (possibly using Cut), and a small machine (possibly a PC or a specific NPC's device) "
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 177.94859028221305,
+        "elapsed": 8.984512090682983,
+        "response_preview": "[press_buttons] ANALYZE: The player character is currently in Littleroot Town, standing in front of a house and a small grey object (likely a mailbox). There are NPCs nearby and some flora (flowers and trees) in the area. The game is in the overworld"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 178.6306113209035,
+        "elapsed": 8.568852424621582,
+        "response_preview": "press_buttons ANALYZE: The player character is located in the middle-bottom of the screen in the Cutter's House in Rustboro City. An NPC is sitting at a table in the upper-right area of the room. There are potted plants to the left and a large rug in"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.2857142857142857,
+        "hallucination": 0.0,
+        "tok_s": 179.27418733993144,
+        "elapsed": 8.591920375823975,
+        "response_preview": "[analyze] I see the character Ness standing in the overworld of Rustboro City. The environment features paved paths, street lamps, railings, and some electronic terminals. There are no NPCs or immediate interactable objects visible in the character's"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 178.76109159817045,
+        "elapsed": 9.022471189498901,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot shows the player character (with brown hair) and an NPC (with white hair) in Petalburg Woods. The player is currently in a clearing surrounded by trees and bushes. There are no immediate combat encounters or it"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 178.77592156527692,
+        "elapsed": 5.986339569091797,
+        "response_preview": "[press_buttons] ANALYZE: The player has just entered the Oldale Town Pok\u00e9mon Center. A dialogue box from Nurse Joy is currently on screen, greeting the player. The player is in the overworld state. PLAN: Press the 'A' button to dismiss the dialogue b"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 1F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 176.15241254226532,
+        "elapsed": 9.785783767700195,
+        "response_preview": "[press_buttons] ANALYZE: The player character, Brendan, is standing in the middle of the living room in his house in Littleroot Town. There is an NPC sitting at the dining table to the bottom left, and a staircase leading to the second floor is visib"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "ROUTE 107",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 179.51603502353248,
+        "elapsed": 9.504580736160278,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 179.44283271581318,
+        "elapsed": 8.727744579315186,
+        "response_preview": "press_buttons ANALYZE: The player character, Brendan, is standing in the middle of the second floor of his house in Littleroot Town. The room contains various items including a desk with a computer, a clock, a trash can, a shelf, a bed, and a rug. Th"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 179.22876204967787,
+        "elapsed": 9.18463397026062,
+        "response_preview": "[press_buttons] ANALYZE: A battle has just started in Rusturf Tunnel Alt. The player has sent out Marshtomp to face a level 11 Poochyena. The text box \"Go! MARSHTOMP!\" is currently displayed, indicating the transition into the battle.  PLAN: Press th"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 180.2018376812215,
+        "elapsed": 6.93157696723938,
+        "response_preview": "[press_buttons] ANALYZE: A battle encounter is starting on Route 106 against Fisherman Elliot. The player has 2 Pok\u00e9mon remaining, and the opponent has 3. The text box indicates the battle is about to begin. PLAN: Press the 'A' button to proceed past"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 180.6892585968941,
+        "elapsed": 7.48757004737854,
+        "response_preview": "[process_memory] ANALYZE: The screenshot shows a battle in progress in Granite Cave 1F Alt. The opponent is a Sandshrew. However, the player's current Pok\u00e9mon, its HP, and its available moves are not visible in this view. PLAN: I need to inspect the "
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 180.0474770889027,
+        "elapsed": 7.648211479187012,
+        "response_preview": "press_buttons ANALYZE: A wild battle has just started in Petalburg Woods. A Geodude is visible on the left. The text box is currently empty, likely waiting for the initial battle message to be acknowledged. I don't have information about my Pok\u00e9mon o"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 180.69933527033277,
+        "elapsed": 6.433681964874268,
+        "response_preview": "press_buttons ANALYZE: A battle encounter has just started with a Team Aqua Grunt. The text box indicates the challenge. The player's party has 2 Pok\u00e9mon left, and the opponent has 1. PLAN: Press the 'A' button to accept the battle and proceed to the"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 180.90941136895356,
+        "elapsed": 9.39683485031128,
+        "response_preview": "press_buttons ANALYZE: The player's Wurmple is level 3, while the opponent's Mudkip is level 9. The level difference is too large to win this battle effectively, and attempting to fight will likely result in the loss of Wurmple. PLAN: Select the \"RUN"
+      }
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 180.62229784018874,
+        "elapsed": 9.459953546524048,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 180.65439604933954,
+        "elapsed": 9.472381591796875,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 163.08135444445017,
+        "elapsed": 7.747727632522583,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot shows a Pok\u00e9mon battle in progress in Rustboro City Gym. The player's Mudkip (Level 15) has just landed a \"super effective\" attack on the opponent's Nosepass (Level 15). Mudkip's current HP is 29/43. The battle"
+      }
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 180.52821418141733,
+        "elapsed": 9.441572666168213,
+        "response_preview": ""
+      }
+    }
+  ],
+  "gemma4-emerald:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 180.604159097059,
+        "elapsed": 5.574405908584595,
+        "response_preview": "[press_buttons] ANALYZE: Player is at (19, 19) in the Oceanic Museum 2F. There is an NPC at (19, 20) facing UP. PLAN: Press UP to interact with the NPC. Expected: Dialogue starts."
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 177.43994675597844,
+        "elapsed": 10.597585201263428,
+        "response_preview": " world_map  === DIRECTIVE: === Navigate to the Pokemon Center in Rustboro City. The Pokemon Center is located at (19, 19). Use the map data to find the path. Avoid the building at (17, 18) which blocks the direct path from the left. If you cannot fin"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 179.1809371290533,
+        "elapsed": 4.668935775756836,
+        "response_preview": "[press_buttons] ANALYZE: Player is standing in front of Prof. Birch's house in Littleroot Town. Objective is to talk to Prof. Birch to receive the Pokedex and Pokeballs. PLAN: Press A multiple times to interact with the Professor and advance the dial"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 176.5277529059981,
+        "elapsed": 9.65805697441101,
+        "response_preview": "    ### ANALYZE:     - **Current Location:** Rustboro City, specifically the Cutters House (1F).     - **Objective:** Obtain the HM05 Flash from the Cutters House.     - **Situation:** I am currently inside the building. I need to talk to the Cutters"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.7142857142857143,
+        "hallucination": 0.0,
+        "tok_s": 180.5158926744077,
+        "elapsed": 4.148891925811768,
+        "response_preview": "[press_buttons] ANALYZE: Player is standing in Rustboro City, currently at (16, 19). The objective is to head to the Pokemon Center at (16, 36). PLAN: Action: Press DOWN x10. Reason: Move south along the main path towards the Pokemon Center. Expected"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.8,
+        "hallucination": 0.0,
+        "tok_s": 178.9137847311006,
+        "elapsed": 11.297897815704346,
+        "response_preview": "          ******** MIND MAP RESULTS QUERY LOG (turn 12) ********  \ud83d\udccb RESULTS FROM PREVIOUS TURN: \u25b6\ufe0f Executed run_skill   \u2705 run_skill returned: {'success': True, 'skill_id': 'navigate_to_coords', 'result': {'status': 'success', 'steps_executed': 16, 'r"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.75,
+        "hallucination": 0.0,
+        "tok_s": 180.4276606111824,
+        "elapsed": 4.1000213623046875,
+        "response_preview": "[press_buttons] ANALYZE: Player is standing in front of the Pokemon Center counter. Nurse Joy is visible. Objective is to heal Pokemon. Situation: Need to interact with Nurse Joy to start the healing process. PLAN: Press A multiple times to talk to N"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 1F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 177.36406446804068,
+        "elapsed": 4.752029657363892,
+        "response_preview": "[press_buttons] ANALYZE: Player is at (12, 9) in Brendan's house. Objective is to head north to Route 102. There is a wall at y=8 blocking direct north movement. PLAN: Press LEFT, UP, UP, RIGHT, UP, UP, UP to navigate around the wall and head north t"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "ROUTE 107",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 179.01291209959504,
+        "elapsed": 4.259952545166016,
+        "response_preview": "[press_buttons] ANALYZE: Player is in the middle of the ocean on Route 107. There is a boat nearby. Objective is to reach Slateport City. Situation: Need to get to the boat to cross the water. PLAN: Action: Press DOWN x3, RIGHT x3, UP x3. Reason: Mov"
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.4,
+        "hallucination": 0.0,
+        "tok_s": 181.37275378510023,
+        "elapsed": 4.204765558242798,
+        "response_preview": "[press_buttons] ANALYZE: Player is standing in the middle of the room. Objective is to head south to exit the house. PLAN: Press DOWN repeatedly to move south towards the exit."
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 180.2732104472241,
+        "elapsed": 4.223618030548096,
+        "response_preview": "[press_buttons] ANALYZE: The screen shows the move selection menu for Marshtomp in a battle against a Lv 11 Poochyena. The cursor is currently on 'TACKLE'. PLAN: Press RIGHT, DOWN, and A to select and use 'MUD SHOT', which is super effective against "
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 179.7414830874095,
+        "elapsed": 4.505047082901001,
+        "response_preview": "[press_buttons] ANALYZE: Battle menu visible. Cursor is on FIGHT. Marshtomp (Lv. 19) vs Geodude (Lv. 12). Objective: Defeat Geodude. Situation: Marshtomp is a strong counter. PLAN: Press A to enter FIGHT, DOWN to select Mud Shot (Slot 2), A to confir"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 181.37770413414202,
+        "elapsed": 3.959275960922241,
+        "response_preview": "[press_buttons] ANALYZE: The battle is in the initialization phase. The screen shows 'Wild POOCHYENA appeared!'. PLAN: Press A to advance the text and enter the battle menu."
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 181.92775070652118,
+        "elapsed": 4.291526794433594,
+        "response_preview": "[press_buttons] ANALYZE: The screen is black, which usually indicates a Pokemon is being caught or a battle transition is happening. However, the previous state was 'battle' and the screenshot shows a Nosepass. PLAN: Press A multiple times to advance"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 181.7661868774918,
+        "elapsed": 4.006659507751465,
+        "response_preview": "[press_buttons] ANALYZE: Battle menu visible. Cursor is on FIGHT. Location: Oceanic Museum 2F. Objective: Defeat Team Aqua Grunt. Situation: Marshtomp vs Poochyena. PLAN: Press A to select FIGHT. Expected: Move selection menu opens."
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 180.31445194069113,
+        "elapsed": 4.451121807098389,
+        "response_preview": "[press_buttons] ANALYZE: The battle menu is open with the cursor on FIGHT. Mudkip has 25/29 HP. The opponent is a Lv 3 Wurmple. PLAN: Press A to select FIGHT, then A to select the first move (Tackle), and A to confirm. This will allow Mudkip to attac"
+      }
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 180.27676485191964,
+        "elapsed": 4.523007869720459,
+        "response_preview": "## PLAN: ANALYZE: The screen shows a battle against a wild Poochyena. The current active Pokemon is Marshtomp, which is Lv. 15. The move menu is open with 'TACKLE' selected. The cursor is currently on 'TACKLE'. PLAN: Action: Press A. Reason: Select '"
+      }
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 181.98906252216045,
+        "elapsed": 4.340442419052124,
+        "response_preview": "[press_buttons] ANALYZE: Battle screen visible. Location: Route 116. Objective: Catch Zubat. Situation: Wild Taillow appeared. PLAN: Action: Press A. Reason: Advance the battle intro text to reach the command menu. Expected: Command menu (FIGHT/BAG/P"
+      }
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 156.6240426864419,
+        "elapsed": 4.393834352493286,
+        "response_preview": "[press_buttons] ANALYZE: Battle screen. Mudkip used Tackle. The text says \"It's super effective!\". PLAN: Press A twice to advance the text and see the results of the attack."
+      }
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 180.59998328826265,
+        "elapsed": 4.566267490386963,
+        "response_preview": "[press_buttons] ANALYZE: The battle is in the 'It doesn't affect...' phase, meaning a move was used but was ineffective. Location: Route 110. Objective: Defeat the wild Gulpin. Situation: Zubat is currently at full HP (39/39) and is the active Pokemo"
+      }
+    }
+  ],
+  "gemma4:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 200.44675350524471,
+        "elapsed": 10.60985779762268,
+        "response_preview": "[tool_name] ANALYZE: The player character is in the Slateport City Oceanic Museum 2F. The area contains several exhibits, including two platforms with pairs of objects and a large model of a ship. To the right, there is a counter or information desk."
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.16666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 198.61832393524497,
+        "elapsed": 7.2000720500946045,
+        "response_preview": "[tool_name] ANALYZE: The image shows the player character in an overworld environment, likely a garden or field, characterized by green grass, bushes, and paths. There are several structures visible (small, rectangular buildings/points of interest). "
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 199.02560309879252,
+        "elapsed": 7.208129405975342,
+        "response_preview": "[tool_name] ANALYZE: The player is in the overworld of LITTLEROOT TOWN. Several NPCs are visible. The game state is stable, and there are no immediate signs of conflict or blockage. The primary action available in the overworld is typically interacti"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 200.1237891592456,
+        "elapsed": 10.84550929069519,
+        "response_preview": "[tool_name] press_buttons ANALYZE: The player is in the overworld, specifically the Cutters House. There are two NPCs visible. The player character is positioned in the center-bottom area. I should attempt to move or interact with the NPCs to advance"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.2857142857142857,
+        "hallucination": 0.0,
+        "tok_s": 199.31880362156954,
+        "elapsed": 7.223196506500244,
+        "response_preview": "[tool_name] ANALYZE: The player is in the overworld of Rustboro City, positioned in a town square. To the right, there is a structure that appears to be a service point or shop (indicated by the icons). The path continues generally to the right and s"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 199.2639207853827,
+        "elapsed": 7.039456367492676,
+        "response_preview": "replan_objectives ANALYZE: I am in Petalburg Woods. The environment is dense with bushes and paths. There are two visible characters (one in the upper center, one in the lower center). I need to determine the next step to progress through the woods. "
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 199.78186926000663,
+        "elapsed": 10.168678283691406,
+        "response_preview": "[tool_name] press_buttons ANALYZE: The player is in the Oldale Town Pok\u00e9mon Center. The character has just received a greeting from the staff. The primary function of this location is healing Pok\u00e9mon. I should interact with the main healing facility "
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 1F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 200.93819191558677,
+        "elapsed": 7.934471845626831,
+        "response_preview": "[tool_name] ANALYZE: The screenshot shows the interior of a house in Littleroot Town, specifically identified as Brendan's House 1F. There are at least two NPCs visible. One NPC is standing in the center-right area of the room, and another is seated "
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "ROUTE 107",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 199.40893042914726,
+        "elapsed": 11.567047357559204,
+        "response_preview": "[tool_name] replan_objectives ANALYZE: The player is in the overworld on Route 107. The environment is characterized by blue water, large landmasses, and a central boat/vessel. There are multiple characters visible, suggesting exploration or travel i"
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 200.56006134961868,
+        "elapsed": 10.592093467712402,
+        "response_preview": "[tool_name] ANALYZE: The screenshot shows the player character inside a house (Brendan's House, 2F). The room is furnished with a bed, dresser, and clock. There is a large, empty blue/gray rectangular area on the floor. The character is standing in t"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 197.5427951451683,
+        "elapsed": 8.71660852432251,
+        "response_preview": "[tool_name] ANALYZE: The player is engaged in a Pok\u00e9mon battle in the RUSTURF TUNNEL ALT. The player's Pok\u00e9mon is Poochyena (Lv 11), and the selected move is MARSHTOMP. The battle is currently in the execution phase following the move selection. I ne"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 200.0886695791131,
+        "elapsed": 10.627790927886963,
+        "response_preview": "[tool_name] press_buttons ANALYZE: The game state indicates we are in a battle on ROUTE 106. However, the visible action is a dialogue interaction with an NPC named \"Fisherman Elliot,\" who states he \"would like to bat.\" This suggests the immediate ob"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.0,
+        "tok_s": 199.48748467625543,
+        "elapsed": 7.916388034820557,
+        "response_preview": "TOOL_NAME: process_memory ANALYZE: The game state indicates a battle is in progress in Granite Cave 1F Alt. The opponent is a wild Pok\u00e9mon, which appears to be a Rock/Ground type. I need to assess the opponent's strength and my party's type advantage"
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 202.09720422687832,
+        "elapsed": 10.646711111068726,
+        "response_preview": "[tool_name] ANALYZE: The game state is 'battle' in Petalburg Woods. I see my trainer and an opponent Pok\u00e9mon. The battle is active, but I lack crucial information such as my Pok\u00e9mon's species/moveset, the opponent's species/moveset, or the current HP"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 197.72171442700142,
+        "elapsed": 8.170038938522339,
+        "response_preview": "[tool_name] press_buttons ANALYZE: The game state is a battle in the SLATEPORT CITY OCEANIC MUSEUM 2F. The opponent, \"TEAM AQUA GRUNT,\" has challenged the player to battle. The player needs to select a Pok\u00e9mon and issue a command to start the fight. "
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 201.16225667373163,
+        "elapsed": 9.184012651443481,
+        "response_preview": "[tool_name] press_buttons ANALYZE: The player's Pok\u00e9mon is Mudkip (Level 9) and the opponent is Wurmple (Level 3). Mudkip is significantly stronger than the opponent. The goal is to defeat the opponent efficiently. The available actions are FIGHT, BA"
+      }
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 201.02546042609436,
+        "elapsed": 8.915846824645996,
+        "response_preview": "[tool_name] replan_objectives ANALYZE: The game state indicates I am in a battle on ROUTE 102. The screenshot shows the standard Pok\u00e9mon battle interface, but lacks specific details regarding the current HP, moves, or the opponent's immediate action."
+      }
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.75,
+        "hallucination": 0.0,
+        "tok_s": 201.88521335791688,
+        "elapsed": 8.998948335647583,
+        "response_preview": "[tool_name] press_buttons ANALYZE: The screenshot shows that a wild Pok\u00e9mon, TAILLOW, has appeared, initiating a battle. The game state confirms we are in a battle context. I need to select an action to begin the fight. PLAN: I will press the button "
+      }
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 201.15178611340818,
+        "elapsed": 9.517224311828613,
+        "response_preview": "[tool_name] run_skill ANALYZE: The player is currently engaged in a battle in the Rustboro City Gym against a Pok\u00e9mon named Mudkip. The previous attacks were successful, resulting in \"It's super effective!\" messages, indicating that Nosepass's moves "
+      }
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 199.4688970418539,
+        "elapsed": 10.753328323364258,
+        "response_preview": "[tool_name] replan_objectives ANALYZE: The player is engaged in a battle on Route 110. The player's Pok\u00e9mon, Gulpin (Lvl 12), is facing the opponent's Pok\u00e9mon, Zubat (Lvl 15). The last move executed by Gulpin failed, as indicated by the message \"It d"
+      }
+    }
+  ],
+  "gemma4-emerald:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 199.1371031572139,
+        "elapsed": 5.284351587295532,
+        "response_preview": "{\"button\": \"A\", \"count\": 1}"
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 198.51333409643175,
+        "elapsed": 5.3154473304748535,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "hallucination": 0.0,
+        "tok_s": 198.8127363888637,
+        "elapsed": 3.6771647930145264,
+        "response_preview": "Tool: None ANALYZE: The screenshot shows the overworld of Littleroot Town. The game state is 'overworld' and there is no specific task given. PLAN: Since there is no task, I will just observe the environment. I will wait for a prompt or instructions "
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 198.5527762826314,
+        "elapsed": 5.211516618728638,
+        "response_preview": "TOOL: press_buttons ANALYZE: I am inside the Cutters House. There is a person sitting on a stool to my right. I need to get closer to them so I can talk to them about getting a haircut. PLAN: I will walk up to the person and slightly to the right to "
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.2857142857142857,
+        "hallucination": 0.0,
+        "tok_s": 198.8443164284885,
+        "elapsed": 4.092840909957886,
+        "response_preview": "ANALYZE: I am in the overworld of Rustboro City. The street is empty in front of me. There are buildings on both sides. PLAN: I will move forward to see what is around the corner. TOOL: press_buttons ACTION: press_buttons INPUT: {\"buttons\": [\"down\", "
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.2,
+        "hallucination": 0.0,
+        "tok_s": 199.21231993551706,
+        "elapsed": 3.737373113632202,
+        "response_preview": "Tool: press_buttons ANALYZE: The game state is overworld, location is Petalburg Woods. I am in a clearing with several trainers and people around me. PLAN: Action: Press 'right' repeatedly. Reason: To continue exploring the woods and move deeper into"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 198.32184919114388,
+        "elapsed": 5.304499626159668,
+        "response_preview": "Tool: press_buttons ANALYZE: The dialogue from the receptionist is still active (\"Please, come in, come in.\"). I need to let it finish so I can receive the healing. PLAN: I will press 'A' five times to advance the dialogue and receive the healing."
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 1F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 199.90427635553752,
+        "elapsed": 3.9869513511657715,
+        "response_preview": "tool_name: press_buttons ANALYZE: I am in the house with Mom at the sink. I need to approach her to talk to her about my plans. PLAN: I will press the 'down' and 'right' buttons to walk towards her, then 'right' and 'up' to stand near her, and finall"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "ROUTE 107",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 198.3525291391369,
+        "elapsed": 7.071300983428955,
+        "response_preview": "Tool: wait Reason: Wait for the game state to change or for the game to transition to a new area. The current context is overworld with no immediate action required."
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.2,
+        "hallucination": 0.0,
+        "tok_s": 199.3569652728696,
+        "elapsed": 4.900712013244629,
+        "response_preview": "tool_name: press_buttons ANALYZE: The screenshot shows two people (a boy and a girl) standing by the window on the second floor of Brendan's house. They are looking out the window. I am standing near the desk. I will interact with them to see if ther"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 197.43303742264595,
+        "elapsed": 5.351172924041748,
+        "response_preview": "tool_name: press_buttons ANALYZE: The screenshot shows a battle screen. The opponent is a wild Pokemon. My Pokemon is Poochyena (Lv 11). The battle menu is visible with FIGHT selected. Poochyena's HP is around 50%. PLAN: Action: Press A. Reason: To s"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 199.3731105634304,
+        "elapsed": 4.094601154327393,
+        "response_preview": "I need the screenshot and the current game state (who is battling whom, what Pokemon are out, etc.) to act as a battle subagent. Please provide the full context."
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.75,
+        "hallucination": 0.0,
+        "tok_s": 200.45729379104108,
+        "elapsed": 5.4903528690338135,
+        "response_preview": "Tool: press_buttons Input: ['A', 'A', 'A', 'A', 'A', 'A'] Analysis: The battle menu is open. The cursor is on 'FIGHT'. I will select the first available move (likely Tackle or Scratch) by pressing 'A' repeatedly to select and confirm the move. Plan: "
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 201.1451171243314,
+        "elapsed": 4.974831581115723,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 198.90041546136928,
+        "elapsed": 6.345782041549683,
+        "response_preview": "[tool_name] press_buttons ANALYZE: The game state is 'battle' at the Oceanic Museum 2F. The screenshot shows the main battle menu. The opponent is a Skitty. My Pokemon is Togepi. The options are FIGHT, BAG, POKEMON, and RUN. PLAN: I will press 'A' to"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "hallucination": 0.0,
+        "tok_s": 200.5314210597129,
+        "elapsed": 8.244199514389038,
+        "response_preview": "ANALYZE: The battle turn menu is visible. The opponent is a red/brown Pokemon (Nincada). My Pokemon is a blue/white Pokemon (Whismur). The options are FIGHT, BAG, POKEMON, RUN. PLAN: I will select FIGHT to use one of Whismur's moves against Nincada. "
+      }
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 198.9981696121099,
+        "elapsed": 5.902587175369263,
+        "response_preview": "tool_name: press_buttons ANALYZE: The game is still scrolling battle text (\"A wild POKEMON appeared!\"). The text is still coming in. PLAN: Action: Press 'a' repeatedly. Reason: To ensure the text is fully visible and the battle menu appears so I can "
+      }
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 200.30537383505404,
+        "elapsed": 8.547565221786499,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 201.2707107671243,
+        "elapsed": 5.934666156768799,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 198.84358138263218,
+        "elapsed": 5.079246282577515,
+        "response_preview": "[tool_name]press_buttons ANALYZE: The battle state is active and it is ZUBAT's turn. The opponent is a Mix. The top-left button is the main attack. PLAN: I will press the top-left button to execute Zubat's main attack."
+      }
+    }
+  ],
+  "gemma4-emerald:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.288771867752075,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.2687842845916748,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.2779231071472168,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.2926530838012695,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.5353894233703613,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.2771992683410645,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.0328598022460938,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 1F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.517129898071289,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "ROUTE 107",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.018475294113159,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.5223443508148193,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.025874614715576,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.5350220203399658,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.036830186843872,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.5307097434997559,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.0382273197174072,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.5133247375488281,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.0388083457946777,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.5246758460998535,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 2.0015549659729004,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 0,
+        "elapsed": 1.5368828773498535,
+        "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://127.0.0.1:11434/api/generate"
+      }
+    }
+  ]
+}

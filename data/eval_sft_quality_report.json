@@ -1,0 +1,646 @@
+{
+  "gemma4:26b": [
+    {
+      "example_idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY GYM",
+      "step": 738,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 186.32406713395287,
+        "elapsed": 9.656570672988892,
+        "response_preview": ""
+      }
+    },
+    {
+      "example_idx": 1,
+      "state_type": "overworld",
+      "location": "RUSTURF TUNNEL ALT",
+      "step": 1365,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 179.9114855533217,
+        "elapsed": 9.162801265716553,
+        "response_preview": ""
+      }
+    },
+    {
+      "example_idx": 2,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN",
+      "step": 2949,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 195.87146781872622,
+        "elapsed": 8.686142206192017,
+        "response_preview": ""
+      }
+    },
+    {
+      "example_idx": 3,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "step": 435,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.4,
+        "length_ratio": 1.275229357798165,
+        "tok_s": 194.8864932959641,
+        "elapsed": 7.195920705795288,
+        "response_preview": "press_buttons\n\nANALYZE: The player character is standing in Petalburg City, directly in front of a building that features a Pok\u00e9 Ball icon and \"P.C.\" text, which likely houses a PC terminal or is a ke"
+      }
+    },
+    {
+      "example_idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY DEVON CORP 2F",
+      "step": 1554,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 1.1687344913151365,
+        "tok_s": 187.4558945911508,
+        "elapsed": 7.34382700920105,
+        "response_preview": "press_buttons\n\nANALYZE: The player is currently standing in the middle of a room in Devon Corp 2F, Rustboro City. There are several NPCs working at computer terminals and a whiteboard with drawings on"
+      }
+    },
+    {
+      "example_idx": 5,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "step": 387,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.25,
+        "length_ratio": 1.1111111111111112,
+        "tok_s": 195.1395608510218,
+        "elapsed": 6.567198038101196,
+        "response_preview": "press_buttons\n\nANALYZE: The player is currently in the overworld on Route 102. The character is standing in a grassy area surrounded by trees and bushes. There are no visible NPCs or items in the imme"
+      }
+    },
+    {
+      "example_idx": 6,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "step": 4281,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.8,
+        "length_ratio": 1.2838709677419355,
+        "tok_s": 176.80262755075483,
+        "elapsed": 7.290128946304321,
+        "response_preview": "press_buttons\n\nANALYZE: The screenshot shows a text box in the Dewford Town Pokemon Center displaying the message \"We hope to see you again!\". This message typically appears after a player has finishe"
+      }
+    },
+    {
+      "example_idx": 7,
+      "state_type": "overworld",
+      "location": "Map_18_0A",
+      "step": 2814,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.6953781512605042,
+        "tok_s": 195.71995927081198,
+        "elapsed": 6.163450002670288,
+        "response_preview": "press_buttons\n\nANALYZE: The game is currently in a dialogue state, with a text box displaying a message from Steven: \"Okay, thank you.\" The player character is standing in an overworld area, likely a "
+      }
+    },
+    {
+      "example_idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY GYM",
+      "step": 481,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 1.1622641509433962,
+        "tok_s": 176.61274908021977,
+        "elapsed": 6.538076877593994,
+        "response_preview": "press_buttons\n\nANALYZE: The player is currently in a dialogue box in the Petalburg City Gym, receiving instructions to head to Rustboro City. The dialogue box is blocking further movement or interacti"
+      }
+    },
+    {
+      "example_idx": 9,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN",
+      "step": 328,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 190.6635389027462,
+        "elapsed": 9.201140880584717,
+        "response_preview": ""
+      }
+    },
+    {
+      "example_idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "step": 1941,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 0.8036951501154734,
+        "tok_s": 194.11153666573352,
+        "elapsed": 8.680840969085693,
+        "response_preview": "press_buttons\n\nANALYZE: The screenshot shows the start of a Pok\u00e9mon battle encounter on Route 106 against an NPC named Fisherman Elliot. The battle menu is not yet visible on the screen.\n\nPLAN: I will"
+      }
+    },
+    {
+      "example_idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "step": 4443,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 194.3496821847263,
+        "elapsed": 8.78818392753601,
+        "response_preview": ""
+      }
+    },
+    {
+      "example_idx": 12,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "step": 759,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 195.3287664226755,
+        "elapsed": 8.736961126327515,
+        "response_preview": ""
+      }
+    },
+    {
+      "example_idx": 13,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "step": 1357,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 194.18751577840317,
+        "elapsed": 8.84665060043335,
+        "response_preview": ""
+      }
+    },
+    {
+      "example_idx": 14,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "step": 1189,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 1.0217917675544794,
+        "tok_s": 195.50218720139745,
+        "elapsed": 6.715270042419434,
+        "response_preview": "press_buttons\n\nANALYZE: The screenshot shows a Pok\u00e9mon battle in progress in Rusturf Tunnel. The player has just sent out Marshtomp to face a level 11 Poochyena. The next step in the battle sequence i"
+      }
+    },
+    {
+      "example_idx": 15,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "step": 4201,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.25,
+        "length_ratio": 1.053191489361702,
+        "tok_s": 185.36456601966128,
+        "elapsed": 6.689337253570557,
+        "response_preview": "press_buttons\n\nANALYZE: A wild level 6 female Makuhita has appeared, and a battle has commenced. The game is currently at the start of the battle sequence, and the player needs to make a decision on w"
+      }
+    },
+    {
+      "example_idx": 16,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B2F ALT",
+      "step": 2699,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.25,
+        "length_ratio": 0.7254509018036072,
+        "tok_s": 195.5523985800868,
+        "elapsed": 8.4609215259552,
+        "response_preview": "press_buttons\n\nANALYZE: Marshtomp is at low health (27/59) in a battle against a level 10 Zubat. While Marshtomp is higher level, its low HP makes the battle risky. I need to check if there are any he"
+      }
+    },
+    {
+      "example_idx": 17,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "step": 2925,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 1.2186046511627906,
+        "tok_s": 195.04696472605164,
+        "elapsed": 7.794677972793579,
+        "response_preview": "[press_buttons] ANALYZE: The current screen is the \"POK\u00c9MON INFO\" screen, which is an overlay on the active battle screen. The screenshot shows the details of a Marshtomp, including its level, type, a"
+      }
+    },
+    {
+      "example_idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "step": 3674,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 0.9977924944812362,
+        "tok_s": 176.37634232109122,
+        "elapsed": 7.398993968963623,
+        "response_preview": "press_buttons\n\nANALYZE: The screenshot shows a Pok\u00e9mon battle in progress on Route 110. The player's Pok\u00e9mon, a Level 13 Minun, is facing off against a Level 13 Zubat. The player's turn is active, and"
+      }
+    },
+    {
+      "example_idx": 19,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "step": 3211,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 0.8028673835125448,
+        "tok_s": 193.29797033248445,
+        "elapsed": 8.092808246612549,
+        "response_preview": "press_buttons\n\nANALYZE: The screenshot shows a Pok\u00e9mon battle in progress. The player has just sent out Marshtomp (Level 21) to face an opponent's Carvanha (Level 15). The battle menu is not yet visib"
+      }
+    }
+  ],
+  "gemma4-emerald:26b": [
+    {
+      "example_idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY GYM",
+      "step": 738,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "length_ratio": 8.379746835443038,
+        "tok_s": 190.94785444492788,
+        "elapsed": 9.724969863891602,
+        "response_preview": " world\n### GAME STATE:\nRECENT ACTION HISTORY:\n(Shows last 10 actions with start \u2192 end positions)\n  1. A     @ ( 11, 13)\n  2. A     @ ( 11, 13)\n  3. A     @ ( 11, 13)\n  4. A     @ ( 11, 13)\n  5. A     "
+      }
+    },
+    {
+      "example_idx": 1,
+      "state_type": "overworld",
+      "location": "RUSTURF TUNNEL ALT",
+      "step": 1365,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.7401574803149606,
+        "tok_s": 178.24208811889574,
+        "elapsed": 4.308648347854614,
+        "response_preview": "[press_buttons]\nANALYZE: The player is currently in the Rusturf Tunnel. The objective is to reach Rustboro City, which requires exiting the tunnel to the south. The current ASCII map shows a path sout"
+      }
+    },
+    {
+      "example_idx": 2,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN",
+      "step": 2949,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "length_ratio": 0.7289915966386554,
+        "tok_s": 175.6811014783428,
+        "elapsed": 4.469423770904541,
+        "response_preview": "press_buttons\nANALYZE: The player is currently in a dialogue with a Devon Researcher in Dewford Town. The dialogue box is active, saying 'If you want to catch a Pokemon, you have to catch it in the wi"
+      }
+    },
+    {
+      "example_idx": 3,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "step": 435,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.8,
+        "length_ratio": 1.3914373088685015,
+        "tok_s": 196.30962185355102,
+        "elapsed": 4.715237855911255,
+        "response_preview": "press_buttons\nANALYZE: The player is currently standing in Petalburg City, directly in front of the Pokemon Center. The objective is to head north to find the Gym Leader, but the path straight up is b"
+      }
+    },
+    {
+      "example_idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY DEVON CORP 2F",
+      "step": 1554,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 9.535980148883375,
+        "tok_s": 192.18696917598763,
+        "elapsed": 9.643041372299194,
+        "response_preview": "press_buttons\n=================\nTOOLS AVAILABLE:\n-------------\n=== GAME CONTROL TOOLS ===\nmove_to_coords_bfs\n  - Args: x, y, target_x, target_y, max_steps, return_to_start_coords, prefer_warp_doors\n  "
+      }
+    },
+    {
+      "example_idx": 5,
+      "state_type": "overworld",
+      "location": "ROUTE 102",
+      "step": 387,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 10.184281842818429,
+        "tok_s": 195.05439815349274,
+        "elapsed": 9.523058652877808,
+        "response_preview": "Respond to the prompt with the complete `run_code` tool call. The tool's code runs in the same Python environment as the agent, so it has access to all variables and functions available to the agent. "
+      }
+    },
+    {
+      "example_idx": 6,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "step": 4281,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.6,
+        "length_ratio": 0.6150537634408603,
+        "tok_s": 177.9437330017921,
+        "elapsed": 4.593691110610962,
+        "response_preview": "press_buttons\n<channel|>ANALYZE: The game is currently in a dialogue box with Nurse Joy saying \"We hope to see you again!\". The player is standing in front of the Pokemon Center counter.\n\nPLAN: Press "
+      }
+    },
+    {
+      "example_idx": 7,
+      "state_type": "overworld",
+      "location": "Map_18_0A",
+      "step": 2814,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.8277310924369747,
+        "tok_s": 195.91055078952158,
+        "elapsed": 4.85413384437561,
+        "response_preview": "[press_buttons] ANALYZE: The game is currently in a dialogue box with Steven saying \"Okay, thank you.\" Location is Slateport City (Map 18). Objective is to head north to Route 110. Situation: Dialogue"
+      }
+    },
+    {
+      "example_idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY GYM",
+      "step": 481,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 1.9622641509433962,
+        "tok_s": 174.56639778816663,
+        "elapsed": 4.647458076477051,
+        "response_preview": "[press_buttons] ANALYZE: The player is currently inside the Petalburg City Gym, standing directly in front of the Gym Leader (Norman). The text box at the bottom says \"Head for RUSTBORO CITY beyond th"
+      }
+    },
+    {
+      "example_idx": 9,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN",
+      "step": 328,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "length_ratio": 0.5553235908141962,
+        "tok_s": 178.50154203019622,
+        "elapsed": 4.606455326080322,
+        "response_preview": "press_buttons\nANALYZE: The player is currently in Oldale Town, standing near the Pokemon Center. The objective is to head north to Route 103 to find the Rival. The path straight north is clear.\nPLAN: "
+      }
+    },
+    {
+      "example_idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "step": 1941,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "length_ratio": 5.468822170900693,
+        "tok_s": 176.43261111100915,
+        "elapsed": 7.417236804962158,
+        "response_preview": "## Current State: Battle Initialization\n\n**Analysis:**\nThe game is currently in the initialization phase of a battle against a wild Taillow. The screen is black with white text reading 'Wild TAILLOW a"
+      }
+    },
+    {
+      "example_idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 109",
+      "step": 4443,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 0.9040767386091128,
+        "tok_s": 175.55212315894312,
+        "elapsed": 4.577719688415527,
+        "response_preview": "press_buttons\n<channel|>ANALYZE: The screenshot shows a battle against a Sailor trainer on Route 109. The battle menu is open with the cursor on FIGHT. Marshtomp is at 23/57 HP. Nincada is at 14/25 HP"
+      }
+    },
+    {
+      "example_idx": 12,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "step": 759,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 8.401273885350319,
+        "tok_s": 176.42925230742873,
+        "elapsed": 6.282438278198242,
+        "response_preview": "RESPOND\nTOOLS:\n  run_skill:\n    args:\n      args: {}\n      skill_id: \"battle_grind_attack\"\n    reasoning: \"ANALYZE: The player is in a battle against a wild Pokemon (looks like a Geodude). The objecti"
+      }
+    },
+    {
+      "example_idx": 13,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "step": 1357,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 2.109090909090909,
+        "tok_s": 174.8721898700561,
+        "elapsed": 4.714075326919556,
+        "response_preview": "[press_buttons] ANALYZE: The game is in a battle against a wild Pokemon (looks like a Geodude). The text box is currently empty, which usually means the game is waiting for a command to be processed o"
+      }
+    },
+    {
+      "example_idx": 14,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "step": 1189,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 0.7941888619854721,
+        "tok_s": 193.41541185874306,
+        "elapsed": 4.628169298171997,
+        "response_preview": "[press_buttons] ANALYZE: The game is currently in the Pokemon party menu, attempting to switch Marshtomp into the battle against a wild Poochyena. The text 'Go! MARSHTOMP!' is visible at the bottom. P"
+      }
+    },
+    {
+      "example_idx": 15,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "step": 4201,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 0.6196808510638298,
+        "tok_s": 176.97774256313986,
+        "elapsed": 4.348172187805176,
+        "response_preview": "press_buttons\nANALYZE: The battle is in the initialization phase. The text 'Wild MAKUHITA appeared!' is displayed in the battle text box.\nPLAN: Press A to advance the text and bring up the main battle"
+      }
+    },
+    {
+      "example_idx": 16,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B2F ALT",
+      "step": 2699,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.75,
+        "length_ratio": 0.6953907815631263,
+        "tok_s": 176.4613904994484,
+        "elapsed": 4.4967851638793945,
+        "response_preview": "[press_buttons]\nANALYZE: The game is currently in a battle against a wild Zubat. The main menu is open with the cursor on 'FIGHT'. Marshtomp is at 27/59 HP.\nPLAN: Press A to select FIGHT, then A again"
+      }
+    },
+    {
+      "example_idx": 17,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "step": 2925,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 6.706976744186046,
+        "tok_s": 192.15982801766106,
+        "elapsed": 9.637292385101318,
+        "response_preview": "    ### DIRECTIVE:\n    You are battling Gym Leader Roxanne. You must defeat her to progress.\n    1. If the battle is active, use press_buttons to select 'FIGHT' and choose an attacking move (like Tack"
+      }
+    },
+    {
+      "example_idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "step": 3674,
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "length_ratio": 0.7019867549668874,
+        "tok_s": 176.07668664525528,
+        "elapsed": 4.571334362030029,
+        "response_preview": "[press_buttons] ANALYZE: The game is currently in a battle against a wild Minun. The cursor is on 'FIGHT' in the battle menu. Zubat has 26/35 HP. PLAN: Press A to select FIGHT, then A to select the fi"
+      }
+    },
+    {
+      "example_idx": 19,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "step": 3211,
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "length_ratio": 0.0,
+        "tok_s": 181.9314995065722,
+        "elapsed": 9.946372509002686,
+        "response_preview": ""
+      }
+    }
+  ]
+}

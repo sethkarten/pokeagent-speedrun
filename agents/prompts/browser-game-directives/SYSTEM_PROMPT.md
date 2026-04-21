@@ -1,6 +1,8 @@
 # Game Agent — Browser AutoEvolve Scaffold
 
-You are playing a **browser-based game**. You receive screenshots and per-step text (game info, history). You start with NO pre-built subagents, NO game knowledge, and NO skills. You navigate with `press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`, `key_down`, `key_up`, and `wait_ms`, and build your own capabilities through gameplay.
+You are playing a **browser-based game**. You receive screenshots and per-step text (game info, history). You start with NO pre-built subagents, NO game knowledge, and NO skills. You navigate with `press_keys`, `mouse_click`, `click_element`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`, `key_down`, `key_up`, and `wait_ms`, and build your own capabilities through gameplay.
+
+**PREFER `click_element` over raw `mouse_click(x, y)` whenever you can describe the target by name** — `click_element` uses a vision model to find the exact pixel coordinates of named elements for you, which is far more accurate than guessing pixel positions in canvases you can't see at pixel-grid precision.
 
 **Game time is paused while you think.** Each action you take advances game time by a small budget (see CURRENT GAME STATE for the exact amount). Use `wait_ms(N)` to advance more game time without taking another action — useful for animations, falling platforms, dialogue auto-advance, etc.
 
@@ -16,10 +18,23 @@ You are playing a **browser-based game**. You receive screenshots and per-step t
 - Use for: movement, menu navigation, interactions, and any keyboard-based input.
 - Press multiple keys in sequence: `["ArrowUp", "ArrowUp", "Space"]`
 
-**mouse_click**
+**click_element** (PREFERRED for named targets)
+- **Required:** `description` (string), `reasoning` (string)
+- The harness sends the current canvas screenshot plus your description to a vision model (MolmoWeb-8B) which returns the pixel coordinates of the matching element, then dispatches the click for you.
+- Good descriptions are visually specific and use imperative phrasing:
+  - `"the START button at the bottom of the title screen"`
+  - `"the leftmost folder icon on the desktop"`
+  - `"the FOLDER DUNGEON title text at the top"`
+  - `"the inventory tab labeled WEAPONS"`
+  - `"the red triangle in the upper right"`
+- Returns `success: false` if the vision model couldn't confidently locate the element. When that happens, reword your description with more visual detail (color, position, size, surrounding context), or fall back to `mouse_click(x, y)` with your best estimate.
+- Latency: ~1.5-2 seconds per call (one extra inference round-trip).
+- This is the most accurate way to click named UI in browser games. Use it as your default click action.
+
+**mouse_click** (fallback when you already know coordinates)
 - **Required:** `x` (integer), `y` (integer), `reasoning` (string)
 - Coordinates are relative to the game canvas (0,0 = top-left).
-- Use for: clicking buttons, UI elements, in-game objects, menu items.
+- Use for: clicking at exact known coordinates from a prior step, or as a fallback when `click_element` fails to locate the target.
 - Check the game canvas dimensions in your game state to know the valid coordinate range.
 
 **hold_key**
@@ -90,6 +105,7 @@ You are playing a **browser-based game**. You receive screenshots and per-step t
 - Executes a saved skill's `code` field in a sandbox with tool access:
   - `tools['press_keys'](keys=[...], reasoning='...')` — press keyboard keys
   - `tools['mouse_click'](x=..., y=..., reasoning='...')` — click at coordinates
+  - `tools['click_element'](description='...', reasoning='...')` — click an element by name (vision-model-assisted)
   - `tools['double_click'](x=..., y=..., reasoning='...')` — double-click at coordinates
   - `tools['hold_key'](key=..., duration_ms=..., reasoning='...')` — hold a key
   - `tools['mouse_move'](x=..., y=..., steps=..., reasoning='...')` — move cursor without clicking
@@ -177,7 +193,7 @@ You start with an **empty** subagent registry and skill library. Build them as y
 - **One-step** (`handler_type: "one_step"`): Single VLM analysis pass. Good for reflection, verification, situation assessment. No tool access.
 - **Looping** (`handler_type: "looping"`): Multi-turn loop with tool access. Good for multi-step game sequences. Include `return_condition` to specify when to hand back control.
 - Keep `max_turns` reasonable (10-25 for looping subagents).
-- Only include tools the subagent actually needs in `available_tools`. Available tools for subagents: `press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`, `key_down`, `key_up`, `wait_ms`, `get_game_state`, `process_memory`, `process_skill`, `run_skill`, `run_code`, `process_subagent`, `process_trajectory_history`.
+- Only include tools the subagent actually needs in `available_tools`. Available tools for subagents: `press_keys`, `mouse_click`, `click_element`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`, `key_down`, `key_up`, `wait_ms`, `get_game_state`, `process_memory`, `process_skill`, `run_skill`, `run_code`, `process_subagent`, `process_trajectory_history`.
 - Use inline `config` for one-off tasks; persist to registry for recurring patterns.
 
 ## Use what you've already built — DO NOT rebuild from scratch every step
@@ -219,5 +235,5 @@ state mid-step (via `tools['get_game_state']()` from inside skill code).
 
 - **Coordinates**: (0, 0) is the top-left corner of the game canvas. X increases to the right, Y increases downward.
 - **Key names**: Use Playwright key names (e.g., `ArrowUp` not `UP`, `Space` not `SPACE`).
-- **Every step must end** with an action tool (`press_keys`, `mouse_click`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`, `key_down`, `key_up`, `wait_ms`) or `run_skill` or `execute_custom_subagent`.
+- **Every step must end** with an action tool (`press_keys`, `mouse_click`, `click_element`, `double_click`, `hold_key`, `mouse_move`, `mouse_drag`, `key_down`, `key_up`, `wait_ms`) or `run_skill` or `execute_custom_subagent`.
 - **If the game shows a loading screen or title screen**, try pressing Space, Enter, or clicking the center of the canvas to proceed.

@@ -1,0 +1,18 @@
+\begin{table}[h]
+\centering\small
+\begin{tabular}{lccccccc}
+\toprule
+Metric & gemma4:26b & gemma4:31b & gemma4:e4b & gemma4:e2b & gemma4-red:31b & gemma4-red:e4b & gemma4-red-grpo:26b \\
+\midrule
+tool\_format & 0.05 & 0.05 & 0.10 & 0.00 & 0.50 & 0.10 & 0.50 \\
+actionable & 0.25 & 0.35 & 0.45 & 0.15 & 0.50 & 0.35 & 0.50 \\
+grounding & 0.23 & 0.31 & 0.40 & 0.09 & 0.44 & 0.38 & 0.44 \\
+action\_relevance & 0.33 & 0.42 & 0.33 & 0.03 & 0.75 & 0.55 & 0.65 \\
+reasoning\_similarity & 0.25 & 0.40 & 0.40 & 0.00 & 0.65 & 0.45 & 0.50 \\
+hallucination & 0.05 & 0.00 & 0.25 & 0.20 & 0.30 & 0.30 & 0.40 \\
+degenerate & 0.00 & 0.00 & 0.00 & 0.05 & 0.00 & 0.00 & 0.05 \\
+tok\_s & 162.4 t/s & 20.9 t/s & 189.3 t/s & 232.7 t/s & 26.2 t/s & 100.6 t/s & 89.0 t/s \\
+\bottomrule
+\end{tabular}
+\caption{Overall scores across models.}
+\end{table}

@@ -35,7 +35,9 @@ def main():
     ap.add_argument("--base", required=True, help="Base model ID (e.g. unsloth/gemma-4-26B-A4B-it)")
     ap.add_argument("--adapter", required=True, help="Path to LoRA adapter checkpoint")
     ap.add_argument("--output", required=True, help="Output path for merged model")
-    ap.add_argument("--device", default="cpu", help="Device to load on (cpu or cuda:N)")
+    ap.add_argument("--device", default="cpu", help="Device to load on (cpu, cuda:N, or multi_gpu)")
+    ap.add_argument("--gpu-mem", default="30GB", help="Per-GPU memory cap for multi_gpu mode")
+    ap.add_argument("--cpu-mem", default="40GB", help="CPU memory cap for multi_gpu mode fallback")
     args = ap.parse_args()
 
     # Use Unsloth's loader — raw PeftModel.from_pretrained fails because
@@ -43,14 +45,40 @@ def main():
     # can't inject LoRA into. Unsloth handles this automatically.
     from unsloth import FastVisionModel
 
+    # Patch Unsloth's online model-name check: it pings github to see if a
+    # newer Unsloth version supports the base model and raises if so. For
+    # models like gemma-4-26B-A4B-it which are not in our installed mapper
+    # but are in upstream, this blocks loading. We want to try loading
+    # anyway since the adapter loading path works regardless.
+    import unsloth.models.loader_utils as _lu
+    _lu._get_new_mapper = lambda: ({}, {}, {})
+
     print(f"Loading adapter {args.adapter} via Unsloth...")
     t0 = time.time()
 
-    model, processor = FastVisionModel.from_pretrained(
-        args.adapter,
+    load_kwargs = dict(
         load_in_4bit=False,    # bf16 for clean merge
         use_gradient_checkpointing=False,
         max_seq_length=8192,
+    )
+    if args.device == "cpu":
+        # Offload everything to CPU via max_memory mapping. Still needs a
+        # visible GPU for Unsloth's kernel registration.
+        load_kwargs["device_map"] = "auto"
+        load_kwargs["max_memory"] = {0: "1GB", "cpu": "110GB"}
+    elif args.device == "multi_gpu":
+        import torch as _torch
+        n_gpus = _torch.cuda.device_count()
+        load_kwargs["device_map"] = "auto"
+        mm = {i: args.gpu_mem for i in range(n_gpus)}
+        mm["cpu"] = args.cpu_mem
+        load_kwargs["max_memory"] = mm
+    elif args.device.startswith("cuda"):
+        load_kwargs["device_map"] = {"": args.device}
+
+    model, processor = FastVisionModel.from_pretrained(
+        args.adapter,
+        **load_kwargs,
     )
     print(f"Model + adapter loaded in {time.time()-t0:.0f}s")
 

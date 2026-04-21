@@ -69,6 +69,7 @@ class BrowserMCPToolAdapter:
             "get_game_state": "/mcp/get_game_state",
             "press_keys": "/mcp/press_keys",
             "mouse_click": "/mcp/mouse_click",
+            "click_element": "/mcp/click_element",
             "double_click": "/mcp/double_click",
             "hold_key": "/mcp/hold_key",
             "mouse_move": "/mcp/mouse_move",
@@ -268,7 +269,12 @@ class BrowserGameAgent:
                 "description": (
                     "Click at (x, y) coordinates on the game canvas. "
                     "Use for menu buttons, UI elements, or point-and-click interactions. "
-                    "Coordinates are relative to the game canvas (0,0 = top-left)."
+                    "Coordinates are relative to the game canvas (0,0 = top-left). "
+                    "PREFER click_element when the target has a name — "
+                    "click_element is much more accurate because it uses a "
+                    "vision model to find the element for you. Only use raw "
+                    "mouse_click when click_element fails or when you already "
+                    "know the exact coordinates from a prior step."
                 ),
                 "parameters": {
                     "type_": "OBJECT",
@@ -287,6 +293,49 @@ class BrowserGameAgent:
                         },
                     },
                     "required": ["x", "y", "reasoning"],
+                },
+            },
+            {
+                "name": "click_element",
+                "description": (
+                    "Click an on-screen element identified by a "
+                    "natural-language description. The harness sends the "
+                    "current canvas screenshot plus your description to a "
+                    "vision model (MolmoWeb) which returns the pixel "
+                    "coordinates of the matching element, then dispatches "
+                    "the click for you. PREFER this over mouse_click(x, y) "
+                    "whenever you know what to click but not the exact "
+                    "coordinates — it's much more accurate than guessing "
+                    "pixel positions in canvases.\n"
+                    "\n"
+                    "Good descriptions are imperative and visually specific:\n"
+                    "  - 'the START button at the bottom of the title screen'\n"
+                    "  - 'the leftmost folder icon on the desktop'\n"
+                    "  - 'the FOLDER DUNGEON title text at the top'\n"
+                    "  - 'the red triangle in the upper right'\n"
+                    "  - 'the inventory tab labeled WEAPONS'\n"
+                    "\n"
+                    "If click_element fails (returns success=false because "
+                    "MolmoWeb couldn't locate the element), reword your "
+                    "description with more visual detail or fall back to "
+                    "mouse_click(x, y) with your best estimate."
+                ),
+                "parameters": {
+                    "type_": "OBJECT",
+                    "properties": {
+                        "description": {
+                            "type_": "STRING",
+                            "description": (
+                                "Natural-language description of the element "
+                                "to click. Be visually specific."
+                            ),
+                        },
+                        "reasoning": {
+                            "type_": "STRING",
+                            "description": "Why you are clicking this element",
+                        },
+                    },
+                    "required": ["description", "reasoning"],
                 },
             },
             {
@@ -799,8 +848,8 @@ class BrowserGameAgent:
 
         sandbox_tools = {}
         for tool_name in (
-            "press_keys", "mouse_click", "double_click", "hold_key",
-            "mouse_move", "mouse_drag",
+            "press_keys", "mouse_click", "click_element", "double_click",
+            "hold_key", "mouse_move", "mouse_drag",
             "key_down", "key_up", "wait_ms",
             "get_game_state", "process_memory",
         ):
@@ -1153,6 +1202,33 @@ class BrowserGameAgent:
             return "No subagents registered yet."
 
     def _format_action_history(self) -> str:
+        """Render the agent's recent steps with both calls AND results.
+
+        Critical: this MUST include the ``result`` field of each tool call,
+        not just the call. Without results in the persistent history, the
+        agent can't tell what its own previous actions accomplished, and
+        loops forever re-trying the same thing because every step looks
+        identical to the previous one. We learned this the hard way on
+        the first 1k Folder Dungeon run — the agent clicked the same
+        chest icon 26 times in a row because the click_element results
+        weren't visible past one step.
+
+        Result rendering is per-tool because different tools need
+        different summaries:
+          - click_element / mouse_click → coordinates clicked + the
+            molmoweb thought (what the click oracle thought it was
+            clicking on)
+          - run_code → captured stdout + the ``result`` variable, which
+            is the only way the agent gets to inspect game state from
+            inside its sandbox
+          - process_memory / process_skill / process_subagent → success
+            flag + summary line
+          - everything else → first ~250 chars of the result JSON
+
+        Total per-tool budget: ~400 chars. With ACTION_HISTORY_WINDOW=10
+        and ~2 tools per step, that's ~8 KB of action history in the
+        prompt. Comfortable for our 32K context budget.
+        """
         if not self.conversation_history:
             return "No previous actions recorded."
         recent = self.conversation_history[-ACTION_HISTORY_WINDOW:]
@@ -1162,17 +1238,176 @@ class BrowserGameAgent:
             llm_response = entry.get("llm_response", "").strip()
             lines.append(f"[Step {step}]")
             if llm_response:
-                lines.append(f"  THINKING: {llm_response}")
+                # Truncate llm_response to ~300 chars so a verbose
+                # gemma "thinking" turn doesn't dominate the budget.
+                trimmed = llm_response[:300]
+                if len(llm_response) > 300:
+                    trimmed += "..."
+                lines.append(f"  THINKING: {trimmed}")
             tool_calls = entry.get("tool_calls", [])
             if tool_calls:
                 lines.append("  TOOLS:")
                 for tc in tool_calls:
                     name = tc.get("name", "unknown")
                     args = tc.get("args", {})
+                    result = tc.get("result", "")
                     lines.append(f"    - {name}")
-                    lines.append(f"      args: {json.dumps(args, ensure_ascii=False)}")
+                    lines.append(
+                        f"      args: {json.dumps(args, ensure_ascii=False)[:300]}"
+                    )
+                    summary = self._summarize_tool_result(name, result)
+                    if summary:
+                        lines.append(f"      result: {summary}")
             lines.append("")
         return "\n".join(lines).strip()
+
+    def _summarize_tool_result(self, name: str, result) -> str:
+        """Render a per-tool result summary for the action history view.
+
+        Tools have different "interesting" fields. We extract the most
+        actionable subset per tool so the agent can see what changed
+        without us pasting full JSON dumps into every history entry.
+        Falls back to a 250-char prefix of the JSON for unknown tools.
+        """
+        if not result:
+            return ""
+
+        # Coerce dicts and JSON strings to a uniform dict view.
+        if isinstance(result, str):
+            try:
+                obj = json.loads(result)
+            except (json.JSONDecodeError, ValueError):
+                # Not JSON — treat as opaque string and truncate.
+                return result[:250].replace("\n", " ")
+        elif isinstance(result, dict):
+            obj = result
+        else:
+            return str(result)[:250].replace("\n", " ")
+
+        if not isinstance(obj, dict):
+            return str(obj)[:250].replace("\n", " ")
+
+        success = obj.get("success", True)
+        success_marker = "OK" if success else "FAIL"
+
+        if name == "click_element":
+            if not success:
+                err = obj.get("error", "")
+                thought = obj.get("molmoweb_thought", "")
+                return f"FAIL — {err[:100]}" + (f" | thought: {thought[:100]}" if thought else "")
+            clicked = obj.get("clicked", {})
+            thought = obj.get("molmoweb_thought", "")
+            x = clicked.get("x") if isinstance(clicked, dict) else None
+            y = clicked.get("y") if isinstance(clicked, dict) else None
+            parts = [f"OK clicked at ({x},{y})"]
+            if thought:
+                parts.append(f"oracle: {thought[:150]}")
+            return " | ".join(parts)
+
+        if name == "mouse_click":
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            clicked = obj.get("clicked", {})
+            x = clicked.get("x") if isinstance(clicked, dict) else None
+            y = clicked.get("y") if isinstance(clicked, dict) else None
+            return f"OK clicked at ({x},{y})"
+
+        if name == "press_keys":
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            keys = obj.get("keys_pressed") or obj.get("keys") or []
+            return f"OK pressed {keys}"
+
+        if name == "double_click":
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            dc = obj.get("double_clicked", {})
+            x = dc.get("x") if isinstance(dc, dict) else None
+            y = dc.get("y") if isinstance(dc, dict) else None
+            return f"OK double-clicked at ({x},{y})"
+
+        if name == "hold_key":
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            key = obj.get("key_held") or obj.get("key", "?")
+            dur = obj.get("duration_ms", "?")
+            return f"OK held {key} for {dur}ms"
+
+        if name == "mouse_move":
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            mt = obj.get("moved_to", {})
+            x = mt.get("x") if isinstance(mt, dict) else None
+            y = mt.get("y") if isinstance(mt, dict) else None
+            return f"OK moved to ({x},{y})"
+
+        if name == "mouse_drag":
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            d = obj.get("dragged", {})
+            return f"OK dragged {d.get('from')} -> {d.get('to')}" if isinstance(d, dict) else "OK"
+
+        if name in ("key_down", "key_up"):
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            # Server uses key_down/key_up as response field names
+            key = obj.get(name) or obj.get("key", "?")
+            return f"OK {name}({key})"
+
+        if name == "wait_ms":
+            return f"OK waited {obj.get('duration_ms', '?')}ms"
+
+        if name == "run_code":
+            # The most important result type. Show captured stdout +
+            # the `result` variable so the agent can actually use
+            # what it computed.
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:300]}"
+            stdout = obj.get("stdout", "") or obj.get("output", "")
+            res_var = obj.get("result")
+            parts = ["OK"]
+            if stdout:
+                stdout_trim = stdout[:400]
+                if len(stdout) > 400:
+                    stdout_trim += "...[truncated]"
+                parts.append(f"stdout: {stdout_trim}")
+            if res_var is not None:
+                rv_str = json.dumps(res_var, default=str)[:300]
+                parts.append(f"result var: {rv_str}")
+            return " | ".join(parts)
+
+        if name == "run_skill":
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:300]}"
+            stdout = obj.get("stdout", "") or obj.get("output", "")
+            res_var = obj.get("result")
+            parts = ["OK"]
+            if stdout:
+                parts.append(f"stdout: {stdout[:300]}")
+            if res_var is not None:
+                parts.append(f"result: {json.dumps(res_var, default=str)[:200]}")
+            return " | ".join(parts)
+
+        if name in ("process_memory", "process_skill", "process_subagent", "replan_objectives"):
+            if not success:
+                return f"FAIL — {obj.get('error', '')[:200]}"
+            # These have action-specific summaries; just confirm they
+            # took effect with a short note.
+            action = obj.get("action") or obj.get("operation") or ""
+            count = obj.get("count") or obj.get("entries_count") or ""
+            extra = f"action={action} count={count}".strip()
+            return f"OK {extra}".strip()
+
+        if name in ("get_game_state", "get_memory_overview", "get_skill_overview", "get_subagent_overview"):
+            # These are read-only and run automatically each step;
+            # surfacing their results in history is noise.
+            return ""
+
+        # Fallback: 250-char prefix of the raw JSON.
+        try:
+            return f"{success_marker} " + json.dumps(obj, default=str)[:250]
+        except Exception:
+            return f"{success_marker} <unserializable>"
 
     def _calculate_context_size(self) -> int:
         size = 0

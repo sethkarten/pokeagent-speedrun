@@ -3540,6 +3540,145 @@ async def mcp_mouse_click(request: dict):
         return {"success": False, "error": str(e)}
 
 
+@app.post("/mcp/click_element")
+async def mcp_click_element(request: dict):
+    """MCP Tool: Click an element by natural-language description.
+
+    Wraps the gemma4 planner over a MolmoWeb-8B click oracle. The agent
+    provides a natural-language description of the target element
+    ("the START button", "the leftmost folder icon", "the player
+    character"); the harness sends the current canvas screenshot plus
+    that description to the MolmoWeb inference server, parses the
+    coordinates out of MolmoWeb's response, and dispatches a real
+    mouse click at those pixels.
+
+    This eliminates a major failure mode of the bare ``mouse_click``
+    tool: gemma4 is good at planning ("I should click the START
+    button") but bad at coordinates (it hallucinates pixel positions
+    in canvases it can't grid). MolmoWeb is the inverse — a web agent
+    trained for click prediction. Splitting the two roles gets us both
+    halves at the cost of one extra ~1.5s inference call per click.
+
+    Configuration via env vars:
+        BROWSER_MOLMOWEB_URL — base URL of the molmoweb server
+            (default: http://127.0.0.1:11436)
+        BROWSER_MOLMOWEB_ENABLED — set to "0" to disable the tool
+            (returns an error so the agent falls back to mouse_click)
+    """
+    if game_type != "browser":
+        return {"success": False, "error": "click_element is only available for browser games"}
+    if env is None:
+        return {"success": False, "error": "Browser environment not initialized"}
+
+    if os.environ.get("BROWSER_MOLMOWEB_ENABLED", "1") == "0":
+        return {
+            "success": False,
+            "error": "click_element is disabled (BROWSER_MOLMOWEB_ENABLED=0)",
+        }
+
+    description = (request.get("description") or "").strip()
+    reasoning = request.get("reasoning", "")
+    if not description:
+        return {"success": False, "error": "description is required"}
+
+    molmoweb_url = os.environ.get("BROWSER_MOLMOWEB_URL", "http://127.0.0.1:11436")
+
+    try:
+        # 1. Capture the current canvas screenshot. We capture *before*
+        #    calling MolmoWeb so the model sees the same frame the
+        #    agent saw when it decided to click.
+        try:
+            if hasattr(env, "pause_virtual_time"):
+                env.pause_virtual_time()
+        except Exception:
+            pass
+        pre_screenshot = env.get_screenshot()
+        pre_b64 = _pil_to_base64(pre_screenshot)
+        game_info = env.get_game_info()
+        canvas_w = int(game_info.get("canvas_width") or pre_screenshot.size[0])
+        canvas_h = int(game_info.get("canvas_height") or pre_screenshot.size[1])
+        page_title = game_info.get("title") or "Game"
+        page_url = game_info.get("url") or "about:blank"
+
+        # 2. Ask MolmoWeb where to click.
+        import requests as _req
+        try:
+            resp = _req.post(
+                f"{molmoweb_url}/find_element",
+                json={
+                    "screenshot_b64": pre_b64,
+                    "description": description,
+                    "canvas_width": canvas_w,
+                    "canvas_height": canvas_h,
+                    "page_title": page_title,
+                    "page_url": page_url,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            molmo_result = resp.json()
+        except Exception as e:
+            logger.error(f"click_element: MolmoWeb call failed: {e}")
+            return {
+                "success": False,
+                "error": f"MolmoWeb server unreachable or errored: {e}",
+                "molmoweb_url": molmoweb_url,
+            }
+
+        if not molmo_result.get("success"):
+            # MolmoWeb couldn't confidently locate the target. Surface
+            # the model's thought + reason so the agent can try a
+            # different description on the next step.
+            return {
+                "success": False,
+                "error": molmo_result.get("error", "MolmoWeb returned no click target"),
+                "molmoweb_thought": molmo_result.get("thought", ""),
+                "molmoweb_action_name": molmo_result.get("action_name"),
+                "description": description,
+                "reasoning": reasoning,
+            }
+
+        x = int(molmo_result["x"])
+        y = int(molmo_result["y"])
+
+        # 3. Dispatch the click via the same path mouse_click uses.
+        env.click_at(x, y)
+        _advance_browser_step_budget()
+
+        global browser_last_action
+        browser_last_action = {
+            "type": "click_element",
+            "description": description,
+            "x": x,
+            "y": y,
+        }
+
+        post_screenshot = env.get_screenshot()
+        post_b64 = _pil_to_base64(post_screenshot)
+        update_frame_cache(post_screenshot)
+
+        try:
+            from utils.data_persistence.llm_logger import increment_action_count
+            increment_action_count(1)
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "description": description,
+            "clicked": {"x": x, "y": y},
+            "molmoweb_x_norm": molmo_result.get("x_norm"),
+            "molmoweb_y_norm": molmo_result.get("y_norm"),
+            "molmoweb_thought": molmo_result.get("thought", ""),
+            "molmoweb_latency_s": molmo_result.get("latency_s", 0.0),
+            "reasoning": reasoning,
+            "screenshot_base64": post_b64,
+        }
+    except Exception as e:
+        logger.error(f"click_element error: {e}")
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/mcp/double_click")
 async def mcp_double_click(request: dict):
     """MCP Tool: Double-click at (x, y) coordinates in a browser game."""

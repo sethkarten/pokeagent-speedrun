@@ -1,0 +1,566 @@
+{
+  "gemma4:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 314.97629497622825,
+        "response_preview": "[press_buttons] ANALYZE: The player is in the SLATEPORT CITY OCEANIC MUSEUM 2F, an overworld location. The scene shows a large interior space with platforms, windows, and some floating objects on the "
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 292.2156896317614,
+        "response_preview": "[press_buttons] ANALYZE: The player character is standing on a dirt path in a grassy field. There are rows of trees and some objects visible. PLAN: Move forward along the path to explore the area furt"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "tok_s": 319.94787396812154,
+        "response_preview": "[replan_objectives] ANALYZE: The current state is the overworld in LITTLEROOT TOWN. The screen displays a view of the town, including buildings, trees, and character sprites. PLAN: Explore the LITTLER"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 287.3517265616842,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot shows the overworld environment of RUSTBORO CITY CUTTERS HOUSE. There are various objects, including trees, wooden structures, and furniture. PLAN: Since the st"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "tok_s": 324.35354542289457,
+        "response_preview": "[press_buttons] ANALYZE: The image shows a street scene in Rustboro City, an overworld environment. The player character is standing on the street. There are no immediate interactive elements or threa"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 293.50228492941824,
+        "response_preview": "[replan_objectives] ANALYZE: The screenshot displays an overworld environment in the Petalburg Woods. The area is characterized by large fields divided into rows of trees and patches of tilled earth. "
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 330.4738663198467,
+        "response_preview": "[press_buttons] ANALYZE: The image shows the interior of a Pok\u00e9mon Center, specifically the first floor (1F) in Oldale Town. There are various items, furniture, and character sprites present. The text"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 1F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 294.52042859597725,
+        "response_preview": "[press_buttons] ANALYZE: The player is currently inside a room in \"Brendan's House\" on the first floor. The room contains furniture (cabinets, beds) and a doorway. PLAN: Explore the room or look for i"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "ROUTE 107",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "tok_s": 330.54308183064904,
+        "response_preview": "[replan_objectives] ANALYZE: The current state is the overworld (Route 107). The image shows the environment, including landmasses and water, suggesting a navigational context. PLAN: Since the locatio"
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 295.1223722377224,
+        "response_preview": "[press_buttons] ANALYZE: The player is currently in Brendan's house (2F) in Littleroot Town, in the overworld state. The screenshot shows an interior room with furniture and the player character stand"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "tok_s": 295.673250404831,
+        "response_preview": "[press_buttons] ANALYZE: The image displays a Pok\u00e9mon battle screen between two Poochena Pok\u00e9mon. There are HP bars visible for both, and a prompt at the bottom reading \"Go! MARSHOTMP!\". This indicate"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "tok_s": 323.5070771641989,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot displays a scene from Pokemon Emerald, showing two characters fishing. There is text overlay stating \"FISHERMAN ELLIOT would like to bat\". The game state is exp"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "tok_s": 291.16141916467313,
+        "response_preview": "[press_buttons] ANALYZE: The game state indicates the current context is a \"battle.\" The screenshot shows the player character and their Pok\u00e9mon in the game environment, but the actual battle interfac"
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "tok_s": 295.1623689864027,
+        "response_preview": "[press_buttons] ANALYZE: The game state is a battle in the Petalburg Woods. The image shows two Pok\u00e9mon ready for combat. To proceed in a battle, the player needs to interact with the battle interface"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "tok_s": 299.545397465451,
+        "response_preview": "[press_buttons] ANALYZE: The screen displays an invitation from \"TEAM AQUA GRUNT\" to battle. The prompt is \"TEAM AQUA GRUNT would like to battle!\". PLAN: Press the button to accept the battle invitati"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "tok_s": 295.1501610646481,
+        "response_preview": "[press_buttons] ANALYZE: The game is in a Pok\u00e9mon battle between Mudkip (the player's Pok\u00e9mon) and Wurmple (the opponent). The player is prompted to choose an action for Mudkip. The available options "
+      }
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "tok_s": 309.8931769812071,
+        "response_preview": "[press_buttons] ANALYZE: The game state is a battle on ROUTE 102. The screenshot shows the game interface but does not display the active battle screen or available move options. PLAN: Since it is a b"
+      }
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "tok_s": 293.26077672175614,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot shows a Pok\u00e9mon battle between the player's Tailow and another Tailow. The text indicates that a \"Wild TAILLOW appeared!\". This is a battle state. PLAN: Since t"
+      }
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "tok_s": 304.250074795383,
+        "response_preview": "[press_buttons] ANALYZE: The image displays a Pok\u00e9mon battle between NOEPASS (Lv15) and MUDKIP (Lv15). The text \"It's super effective!\" suggests a recent damage calculation or move execution. The goal"
+      }
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "tok_s": 327.73096785159476,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot shows a Pok\u00e9mon battle between Gulpin (Lv12) and Zubat (Lv15). The text displayed is \"It doesn't affect ZUBAT...\", suggesting a specific outcome or status relat"
+      }
+    }
+  ],
+  "gemma4-emerald:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 299.19756445906046,
+        "response_preview": "tool_code print(f\"Current Location: {location}\") print(f\"Current Game State: {game_state}\") print(f\"Available Actions: {available_actions}\") print(f\"Current Player Position: {player_position}\") print("
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 284.40326375934967,
+        "response_preview": "[press_buttons] ANALYZE: The current location is the overworld of Pokemon Emerald. The map is mostly green and contains a clear path running mostly south through the center. There are no immediate obs"
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "tok_s": 294.3171783990117,
+        "response_preview": "[press_buttons] ANALYZE: The player is standing in front of the three houses in Littleroot Town. The objective is likely to interact with them. The 'A' button is typically used to interact with object"
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 291.3775318847847,
+        "response_preview": "[press_buttons] ANALYZE: The current location is the Cutter's Room in Rustboro City. There is a door to the right, and a gap in the floor/stairs on the left. I should try to move down and left to find"
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.25,
+        "tok_s": 298.28722746089676,
+        "response_preview": "[press_buttons] ANALYZE: The screenshot shows the player in the overworld of Rustboro City. There are several NPCs visible. The most prominent one is directly north. PLAN: The most efficient way to in"
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 304.34529791068593,
+        "response_preview": "tool_code print(f\"Game State: {game_state}\") print(f\"Player Position: {player_position}\") print(f\"NPCs: {npc_locations}\") print(f\"Actions: {available_actions}\") print(f\"Tool: press_buttons\") print(f\"A"
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "tok_s": 298.58641863506034,
+        "response_preview": "[press_buttons] ANALYZE: I am in the Oldale Town Pokemon Center. The beds are on the left, the desks are in the middle, and the counter/TV is at the bottom. I need to navigate to the counter to find t"
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 1F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "tok_s": 293.4707698112526,
+        "response_preview": "[tool_code] # Analyze the image and game state. # The player is standing in front of a long wooden cabinet/desk. # There are stairs behind the cabinet. # The cabinet itself has doors on the left and r"
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "ROUTE 107",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "tok_s": 305.2474815443563,
+        "response_preview": "[press_buttons] ANALYZE: The player is on Route 107, which is mostly water and rock formations. The route continues south, and there is a large southern island/rock formation. The most logical next st"
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "LITTLEROOT TOWN BRENDANS HOUSE 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 294.08867821555356,
+        "response_preview": "ANALYSIS: The player is in a small room in Littleroot Town Brendans House 2F. The bed is on the left, the desk is in the middle, the cabinet is on the right, and the door is behind the bed. The most d"
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "RUSTURF TUNNEL ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "tok_s": 326.62540240290406,
+        "response_preview": "[tool_code] print(f\"Poochyena's Bite damage: {11} HP\") print(f\"Marshom's HP: {11}\") print(f\"Poochyena's HP: {11}\") print(f\"Marshom's HP: {11}\") print(f\"Poochyena's Bite damage: {11}\") print(f\"Marshom'"
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "ROUTE 106",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "tok_s": 306.17559734544443,
+        "response_preview": "[tool_code] print(f\"The opponent is on the line. I will reel it in.\")\\nprint(\"Pressing buttons to simulate reeling in the opponent.\")\\n# Simulate reeling in the opponent\\nfor _ in range(10):\\n    prin"
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 290.6857552594995,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 325.82926563891243,
+        "response_preview": "[press_buttons] ANALYZE: The opponent is a massive, dark, amorphous creature that takes up most of the screen. The player's Pok\u00e9mon is extremely small and light-colored. A direct attack is unlikely to"
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "tok_s": 293.62325717236394,
+        "response_preview": "[tool_code] # The optimal strategy is to use the strongest available moves to win the battle as quickly as possible. # Aqua's Water Gun and Ice Beam are high damage. Magma's Fire Spin and Rock Smash a"
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 322.57550872128854,
+        "response_preview": ""
+      }
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "tok_s": 294.4559572158507,
+        "response_preview": "[press_buttons] ANALYZE: The battle is against a wild Pok\u00e9mon. The opponent's HP is 100%. The current move selection is Tackle (1), Growl (2), Scratch (3), Bite (4). Bite (4) is the strongest move and"
+      }
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "tok_s": 318.53647472209735,
+        "response_preview": "[press_button] TACKLE  ANALYZE: The opponent's Pokemon only has 6 HP. Taillow's HP is 10. The goal is to defeat the opponent in one turn. TACKLE is Taillow's only move, so it is the best move to win t"
+      }
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY GYM",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 294.4626341796512,
+        "response_preview": "[press_buttons] ANALYZE: The current screen shows the move selection for Mudkip against a Rock type opponent. The moves are listed: Mud Shot, Water Gun, Tackle, Growl. Mud Shot is the most effective m"
+      }
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "tok_s": 323.044900595122,
+        "response_preview": "[tool_code] # Analyze the situation: # Gulping (Lv 12) vs Zubat (Lv 15). # Both have 39 HP. # All moves (Bite, Swallow, Gulp) deal 39 damage. # Since all moves deal the same damage, I will use 'Swallo"
+      }
+    }
+  ]
+}

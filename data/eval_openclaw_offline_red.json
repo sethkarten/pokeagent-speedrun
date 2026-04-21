@@ -1,0 +1,381 @@
+{
+  "gemma4-openclaw-offline:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00003.jsonl:592",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.04047560691833496
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "PalletTown",
+      "source": "shard_00000.jsonl:105",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 178.7519284992286,
+        "elapsed": 2.4864113330841064
+      },
+      "response_preview": "[press_buttons] ANALYZE: Overworld state. Location: Pallet Town (12, 12). Objective: Reach Viridian City by heading north. Situation: Standing at the southern exit of Pallet Town. PLAN: Action: Press a sequence of UP buttons. Reason: Effici"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "source": "shard_00000.jsonl:1068",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 194.31707774387647,
+        "elapsed": 3.6011993885040283
+      },
+      "response_preview": "[press_buttons] Situation: [4, 2, Facing Up, PewterGym, Overworld].\nStatus: [Charmander 37/37 HP Lv.13, 1 Potion].\nObjective: [Talk to Brock at (4, 1) to initiate the Gym Leader battle].\nStuck/Loop Check: [No].\nTechnical Check: [Yes, manual"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Route5",
+      "source": "shard_00002.jsonl:1808",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 194.31088217140504,
+        "elapsed": 3.8162410259246826
+      },
+      "response_preview": "[press_buttons] ANALYZE: Player is at (12, 24) on Route 5, standing on a grass tile. Objective: Return to Cerulean City. Situation: The path north is clear but the map transition is at (10, 0). PLAN: Action: Press UP. Reason: Move into the "
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "Route2",
+      "source": "shard_00000.jsonl:844",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 194.66158887765152,
+        "elapsed": 3.805539131164551
+      },
+      "response_preview": "[press_buttons] Situation: [8, 2, Facing Left, Route 2]. \nStatus: [Charmander 31/31 Lv.10, 1 Potion, $25]. \nObjective: [Enter the tall grass on Route 2 to begin training Charmander to Level 12]. \nStuck Check: [No]. \nAction: Moving LEFT from"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Route6",
+      "source": "shard_00002.jsonl:833",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.8642466068267822
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoonPokecenter",
+      "source": "shard_00000.jsonl:1696",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 195.4672613355248,
+        "elapsed": 2.8130033016204834
+      },
+      "response_preview": "[press_buttons] 1. Current State: [Coords (3, 4), MtMoonPokecenter, Overworld].\n2. Obstacle Audit: [UP at (3, 3) is WALKABLE. Path to counter is clear].\n3. Decimal Audit: [No decimals].\n4. Action: [Press UP to reach (3, 3), positioning the "
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "VermilionPokecenter",
+      "source": "shard_00002.jsonl:919",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.8389496803283691
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1659",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.032099008560180664
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "PewterCity",
+      "source": "shard_00000.jsonl:1058",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 193.9683041423009,
+        "elapsed": 3.010240316390991
+      },
+      "response_preview": "[press_buttons] Situation: [11, 16, Facing Up, Pewter City, Overworld].\nStatus: [Charmander 37/37 HP Lv.13, 1 Potion, $245].\nObjective: [Navigate to the Pewter Gym at (16, 17) to challenge Brock].\nStuck Check: [No].\nSyntax Check: [Yes].\nAct"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "source": "shard_00002.jsonl:1307",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.8861806392669678
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "VermilionGym",
+      "source": "shard_00003.jsonl:589",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.035126447677612305
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1310",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 195.7460079426431,
+        "elapsed": 2.942279577255249
+      },
+      "response_preview": "[press_buttons] 1. Context: [11, 6, Route 3, Dialog]. 2. Status: [Charmander 34/42 HP/Lv.15, $166]. 3. Objective: [Defeat the Youngster at (10, 6)]. 4. Navigation Check: [Adjacent to trainer, dialogue triggered]. 5. Technical Check: [No dec"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route1",
+      "source": "shard_00000.jsonl:399",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 194.1031152747923,
+        "elapsed": 3.8204996585845947
+      },
+      "response_preview": "[press_buttons] ANALYZE: Player is at (14, 14) on Route 1. Objective: Travel north to Viridian City. Situation: A wall at (14, 13) blocks the direct path north. A gap exists at (15, 13). PLAN: Action: Move RIGHT to (15, 14), then move UP 5 "
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "source": "shard_00001.jsonl:784",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.8715965747833252
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ViridianForest",
+      "source": "shard_00000.jsonl:567",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 194.97643222375495,
+        "elapsed": 2.793044090270996
+      },
+      "response_preview": "[press_buttons] ANALYZE: Player is at (17, 40) in Viridian Forest. Objective: Navigate north to reach Pewter City. Situation: Just entered a grass patch. PLAN: Action: Move UP 5 times. Reason: Advance through the grass to reach the next cle"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "OaksLab",
+      "source": "shard_00000.jsonl:79",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.0,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 195.8893002288681,
+        "elapsed": 2.9181339740753174
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Oak's Lab, location: (5,3), objective: get_starter, situation: Dialogue with Prof. Oak is continuing]. PLAN: [action: Press A. Reason: Advance the dialogue to reach the point where I can select a start"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "MtMoonB1f",
+      "source": "shard_00001.jsonl:943",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.6955337524414062
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "Route24",
+      "source": "shard_00001.jsonl:1749",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.033150672912597656
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "CeruleanGym",
+      "source": "shard_00002.jsonl:1936",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.0375514030456543
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    }
+  ],
+  "_aggregate": {
+    "overall": {
+      "gemma4-openclaw-offline:26b": {
+        "tool_format": 0.5,
+        "grounding": 0.4,
+        "action_relevance": 0.55,
+        "reasoning_similarity": 0.3,
+        "hallucination": 0.6,
+        "degenerate": 0.05,
+        "actionable": 0.5,
+        "tok_s": 96.60959492200229
+      }
+    },
+    "by_state_type": {
+      "overworld": {
+        "gemma4-openclaw-offline:26b": {
+          "tool_format": 0.6,
+          "grounding": 0.575,
+          "action_relevance": 0.75,
+          "reasoning_similarity": 0.3333333333333333,
+          "hallucination": 0.5,
+          "degenerate": 0.0,
+          "actionable": 0.6,
+          "tok_s": 115.14770427699872
+        }
+      },
+      "battle": {
+        "gemma4-openclaw-offline:26b": {
+          "tool_format": 0.4,
+          "grounding": 0.225,
+          "action_relevance": 0.25,
+          "reasoning_similarity": 0.25,
+          "hallucination": 0.75,
+          "degenerate": 0.1,
+          "actionable": 0.4,
+          "tok_s": 78.07148556700585
+        }
+      }
+    }
+  },
+  "_meta": {
+    "dataset": "red_v1",
+    "n_samples": 20,
+    "prompt_mode": "real",
+    "backend": "llama-server",
+    "judge": "gemini-2.5-flash"
+  }
+}

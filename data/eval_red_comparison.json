@@ -1,0 +1,454 @@
+{
+  "gemma4:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "Route4",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "tok_s": 155.2546482628461
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "MtMoonB2f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 161.88612309771185
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 1.0,
+        "tok_s": 136.77592055203235
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SsAnneCaptainsRoom",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 145.52202900325332
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "ViridianForestSouthGate",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 159.5343681203466
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoon1f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 151.5251460984826
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "UndergroundPathRoute5",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 1.0,
+        "tok_s": 160.23513561697075
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "Route6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.5,
+        "tok_s": 160.1057899595301
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "Route2",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "tok_s": 152.3874530234597
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "Route3",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 152.52791344197914
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 1.0,
+        "tok_s": 147.37430810087176
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route1",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 162.09186963428277
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route25",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.3333333333333333,
+        "tok_s": 160.2315698954983
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.6666666666666666,
+        "tok_s": 157.11705462270112
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "PewterGym",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "reasoning_similarity": 0.5,
+        "tok_s": 152.05312978607617
+      }
+    }
+  ],
+  "gemma4-red:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "Route4",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "MtMoonB2f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "?",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "SsAnneCaptainsRoom",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "ViridianForestSouthGate",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoon1f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "UndergroundPathRoute5",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "Route6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "Route2",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "Route3",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route1",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route25",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "PewterGym",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "reasoning_similarity": 0.0,
+        "tok_s": 0.0
+      }
+    }
+  ]
+}

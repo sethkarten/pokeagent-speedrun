@@ -1,0 +1,743 @@
+{
+  "gemma4-emerald:31b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.83651598035596,
+        "elapsed": 9.649142503738403
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City Mart. Objective: Restock supplies. Situation: I am standing in front of the cashier, but the shop dialogue hasn't appeared yet. PLAN: Action: Press A. Reason: Initiate the shop dialogue to op"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.4092509746551514
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.90782202497582,
+        "elapsed": 9.013310194015503
+      },
+      "response_preview": "[press_buttons] ANALYZE: We are in the Bag menu, specifically the Poke Balls pocket. The cursor is hovering over our Poke Balls. We want to use a Poke Ball. PLAN: Action: Press A to select the Poke Ball, then A again to confirm 'USE', and q"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.24232723256301,
+        "elapsed": 13.837208271026611
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Player at (2, 8) in Petalburg Woods. Objective: Reach Rustboro City.] Situation: Just finished a battle. Previous subagent hit safety cap. Following Engineer's Protocol for manual movement. PLAN: [acti"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.375,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 53.264423584010125,
+        "elapsed": 14.068523168563843
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Cutter's House (5, 8). Objective: Talk to the Cutter to get HM01 Cut. Situation: The Cutter is sitting at (7, 5). I can reach him by walking UP 3 times and RIGHT 1 time to (6, 5). PLAN: Action: Press UP x3"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.21817002899473,
+        "elapsed": 13.854716539382935
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave B1F. Objective: Switch train Nincada. Situation: Marshtomp just used Tackle. The attack animation and text are playing. PLAN: Action: Press A 4 times. Reason: Advance the text to get back to t"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.464601755142212
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03652667999267578
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 53.39056488977782,
+        "elapsed": 10.377284526824951
+      },
+      "response_preview": "[press_buttons] ANALYZE: We are at (15, 12) in Petalburg City. The Pokemon Center door is at (20, 16). PLAN: Action: Press UP x3, LEFT x2. Reason: Move north to be level with the door, then west to step up to it. Expected: Player moves to ("
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.283601760864258
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.036260128021240234
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03525042533874512
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03426551818847656
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03295636177062988
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 53.22724383248322,
+        "elapsed": 10.448756456375122
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: A wild Poochyena appeared, and the intro animations/text are playing. PLAN: Action: Press A twice and wait. Reason: To advance the text ('Wild "
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 53.25034599724326,
+        "elapsed": 19.699642419815063
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 53.119797281573625,
+        "elapsed": 19.644906520843506
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.1405422687530518
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.77415270427849,
+        "elapsed": 17.18976092338562
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.820279359817505
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    }
+  ],
+  "gemma4-emerald-grpo:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.457909187572476,
+        "elapsed": 18.114917993545532
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.190352201461792
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.721777193444744,
+        "elapsed": 17.099273443222046
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.23810167554731,
+        "elapsed": 21.527127981185913
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.303354963971465,
+        "elapsed": 21.33903455734253
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.78716216216216,
+        "elapsed": 14.088895320892334
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.3762166500091553
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03728318214416504
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "PETALBURG CITY",
+      "source": "shard_00000.jsonl:463",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.28115333858051,
+        "elapsed": 18.201757669448853
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 1F",
+      "source": "shard_00002.jsonl:231",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.154086112976074
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.032996416091918945
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03197455406188965
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.032707929611206055
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.0294339656829834
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.28197014393165,
+        "elapsed": 18.184592962265015
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.84814879231142,
+        "elapsed": 19.81480097770691
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.85029812419634,
+        "elapsed": 19.713263988494873
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.1365063190460205
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "ROUTE 101",
+      "source": "shard_00000.jsonl:166",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 52.58311469917837,
+        "elapsed": 17.303403615951538
+      },
+      "response_preview": "<unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49><unused49>"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "PETALBURG WOODS",
+      "source": "shard_00003.jsonl:72",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 3.8709778785705566
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    }
+  ],
+  "_aggregate": {
+    "overall": {
+      "gemma4-emerald:31b": {
+        "tool_format": 0.35,
+        "grounding": 0.45,
+        "action_relevance": 0.25,
+        "reasoning_similarity": 0.05,
+        "hallucination": 0.5,
+        "degenerate": 0.1,
+        "actionable": 0.35,
+        "tok_s": 26.661568177812796
+      },
+      "gemma4-emerald-grpo:26b": {
+        "tool_format": 0.0,
+        "grounding": 0.4,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 26.26764951404482
+      }
+    },
+    "by_state_type": {
+      "overworld": {
+        "gemma4-emerald:31b": {
+          "tool_format": 0.6,
+          "grounding": 0.575,
+          "action_relevance": 0.4166666666666667,
+          "reasoning_similarity": 0.08333333333333333,
+          "hallucination": 0.6666666666666666,
+          "degenerate": 0.1,
+          "actionable": 0.6,
+          "tok_s": 32.08598237406774
+        },
+        "gemma4-emerald-grpo:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.55,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.0,
+          "tok_s": 31.47894585212786
+        }
+      },
+      "battle": {
+        "gemma4-emerald:31b": {
+          "tool_format": 0.1,
+          "grounding": 0.325,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.25,
+          "degenerate": 0.1,
+          "actionable": 0.1,
+          "tok_s": 21.23715398155786
+        },
+        "gemma4-emerald-grpo:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.25,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.0,
+          "tok_s": 21.056353175961778
+        }
+      }
+    }
+  },
+  "_meta": {
+    "dataset": "emerald_v3",
+    "n_samples": 20,
+    "prompt_mode": "real",
+    "backend": "llama-server",
+    "judge": "gemini-2.5-flash"
+  }
+}

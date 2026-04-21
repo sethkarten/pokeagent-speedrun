@@ -46,6 +46,11 @@ for _c in _hf_candidates:
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
         break
 
+try:
+    import unsloth.models.loader_utils as _lu
+    _lu._get_new_mapper = lambda: ({}, {}, {})
+except Exception:
+    pass
 from unsloth import FastVisionModel  # noqa: E402  isort:skip
 
 import argparse  # noqa: E402
@@ -205,9 +210,20 @@ def main() -> int:
                     help="Full finetuning (all params trainable) instead of "
                          "LoRA. Implies --no-4bit. Only feasible for "
                          "smaller models on a single H200.")
+    ap.add_argument("--resume-adapter", action="store_true",
+                    help="--model-id points to an existing LoRA adapter dir. "
+                         "Skip fresh get_peft_model and continue training the "
+                         "loaded adapter (for DAgger-style iterative SFT).")
     args = ap.parse_args()
     if args.full_ft:
         args.no_4bit = True
+    # Auto-detect an adapter dir so callers don't need to pass --resume-adapter.
+    if not args.resume_adapter and not args.full_ft:
+        cfg = Path(args.model_id) / "adapter_config.json"
+        if cfg.exists():
+            logger.info("detected adapter_config.json at %s — enabling --resume-adapter",
+                        args.model_id)
+            args.resume_adapter = True
 
     args.output.mkdir(parents=True, exist_ok=True)
     config_path = args.output / "config.json"
@@ -248,6 +264,9 @@ def main() -> int:
 
     if args.full_ft:
         logger.info("FULL FINETUNING — skipping LoRA injection")
+    elif args.resume_adapter:
+        logger.info("RESUME ADAPTER — LoRA already attached by from_pretrained, "
+                    "skipping fresh get_peft_model")
     else:
         logger.info("attaching LoRA (rank=%d, alpha=%d, dropout=%.2f)",
                     args.lora_rank, args.lora_alpha, args.lora_dropout)
@@ -342,11 +361,25 @@ def main() -> int:
                 len(train_records), len(eval_records))
 
     loss_log = args.output / "losses.jsonl"
+
+    # UnslothVisionDataCollator requires processor.image_processor.
+    # Qwen3.5 MoE doesn't expose it — use a standard DataCollatorForSeq2Seq instead.
+    # Unsloth's processor loader may not return image_processor for some models
+    # (e.g. Qwen3.5 MoE). Load via AutoProcessor as fallback.
+    if not hasattr(processor, "image_processor"):
+        try:
+            from transformers import AutoProcessor
+            processor = AutoProcessor.from_pretrained(args.model_id)
+            logger.info("replaced processor with AutoProcessor (has image_processor=%s)",
+                        hasattr(processor, "image_processor"))
+        except Exception as e:
+            logger.warning("AutoProcessor fallback failed: %s", e)
+
     trainer = SFTTrainer(
         model=model,
         train_dataset=train_records,
         eval_dataset=eval_records,
-        processing_class=processor.tokenizer,
+        processing_class=getattr(processor, "tokenizer", processor),
         data_collator=UnslothVisionDataCollator(model, processor),
         args=sft_cfg,
         callbacks=[JsonlLossLogger(loss_log)],

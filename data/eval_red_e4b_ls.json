@@ -1,0 +1,381 @@
+{
+  "gemma4-red:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00003.jsonl:592",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03487706184387207
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "PalletTown",
+      "source": "shard_00000.jsonl:105",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 188.69412608453055,
+        "elapsed": 3.6550076007843018
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "source": "shard_00000.jsonl:1068",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 189.11914801823818,
+        "elapsed": 1.5042388439178467
+      },
+      "response_preview": "[A] Dialogue continues: \"I am the Rock Pok\u00e9mon! I am the master of the move Rock Slide!\""
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Route5",
+      "source": "shard_00002.jsonl:1808",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 202.60294636839234,
+        "elapsed": 2.8910608291625977
+      },
+      "response_preview": "<|tool_call>call: run_skill\n  skill_id: navigate_to_coords_v5_ultimate\n  args: {\"x\": 10.0, \"y\": 0.0}\n  reasoning: \"ANALYZE: Player is at (12, 26) on Route 5. Objective: Reach the northern exit warp to Cerulean City (10, 0). Situation: The p"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "Route2",
+      "source": "shard_00000.jsonl:844",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 204.55636548331657,
+        "elapsed": 3.3423280715942383
+      },
+      "response_preview": "<|tool_call>call:press_buttons\n  args: {\"buttons\": [\"LEFT\"], \"reasoning\": \"Situation: [7, 2, Facing Right, Route 2]. \\nStatus: [Charmander 31/31 Lv.10, 1 Potion, $25]. \\nObjective: [Enter tall grass on Route 2 to begin training Charmander t"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Route6",
+      "source": "shard_00002.jsonl:833",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.16167068481445312
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoonPokecenter",
+      "source": "shard_00000.jsonl:1696",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 204.25144951925424,
+        "elapsed": 2.2045397758483887
+      },
+      "response_preview": "1.  **Current State**: [Coords (3, 4), MtMoonPokecenter, Overworld].\n2.  **Obstacle Audit**: [UP at (3, 3) is clear. UP at (3, 2) is the counter. A is the interaction tile].\n3.  **Decimal Audit**: [No decimals].\n4.  **Action**: [Press UP th"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "VermilionPokecenter",
+      "source": "shard_00002.jsonl:919",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.15923762321472168
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1659",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.031115055084228516
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "PewterCity",
+      "source": "shard_00000.jsonl:1058",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 204.3239252541578,
+        "elapsed": 3.5891542434692383
+      },
+      "response_preview": "<|tool_call>call:run_skill\n  args: {\"skill_id\": \"navigate_to_coords\", \"x\": 16.0, \"y\": 17.0}\n  reasoning: \"Situation: [11, 16, Facing Down, Pewter City, Overworld].\\nStatus: [Charmander 37/37 HP Lv.13"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "source": "shard_00002.jsonl:1307",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.15836119651794434
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "VermilionGym",
+      "source": "shard_00003.jsonl:589",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.04123377799987793
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1310",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 204.5659499738953,
+        "elapsed": 3.179896354675293
+      },
+      "response_preview": "<|tool_call>call:press_buttons\n  args: {\"buttons\": [\"A\", \"A\"], \"reasoning\": \"1. Context: [11, 6, Route 3, Battle]. 2. Status: [Charmander 34/42 HP/Lv.15, $166]. 3. Objective: [Defeat the Youngster trainer (Pidgey)]. 4. Navigation Check: [N/"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route1",
+      "source": "shard_00000.jsonl:399",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 203.99125114957064,
+        "elapsed": 3.3057191371917725
+      },
+      "response_preview": "ANALYZE: Player is at (15, 9) on Route 1. Objective: Travel north to Viridian City. Situation: The path is clear, and I have successfully bypassed the ledge and NPC obstacles. PLAN: Action: Move UP 5 times. Reason: Continue the manual movem"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "source": "shard_00001.jsonl:784",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.15981006622314453
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ViridianForest",
+      "source": "shard_00000.jsonl:567",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 203.9213945448946,
+        "elapsed": 2.564218521118164
+      },
+      "response_preview": "<|tool_call>call: run_skill\n  args: {\"skill_id\": \"navigate_to_coords_v2_simple\", \"x\": 1.0, \"y\": 10.0}\n  reasoning\": \"ANALYZE: Player is at (2, 31) in Viridian Forest. Objective: Navigate north to Pewter City. Situation: Just picked up the P"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "OaksLab",
+      "source": "shard_00000.jsonl:79",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 205.766940004469,
+        "elapsed": 3.350048780441284
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "MtMoonB1f",
+      "source": "shard_00001.jsonl:943",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.13123345375061035
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "Route24",
+      "source": "shard_00001.jsonl:1749",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03242611885070801
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "CeruleanGym",
+      "source": "shard_00002.jsonl:1936",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.03828597068786621
+      },
+      "response_preview": "ERROR: 400 Client Error: Bad Request for url: http://127.0.0.1:11435/v1/chat/completions"
+    }
+  ],
+  "_aggregate": {
+    "overall": {
+      "gemma4-red:e4b": {
+        "tool_format": 0.1,
+        "grounding": 0.375,
+        "action_relevance": 0.55,
+        "reasoning_similarity": 0.45,
+        "hallucination": 0.3,
+        "degenerate": 0.0,
+        "actionable": 0.35,
+        "tok_s": 100.58967482003597
+      }
+    },
+    "by_state_type": {
+      "overworld": {
+        "gemma4-red:e4b": {
+          "tool_format": 0.2,
+          "grounding": 0.5,
+          "action_relevance": 0.75,
+          "reasoning_similarity": 0.5833333333333334,
+          "hallucination": 0.16666666666666666,
+          "degenerate": 0.0,
+          "actionable": 0.4,
+          "tok_s": 119.35479607278896
+        }
+      },
+      "battle": {
+        "gemma4-red:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.25,
+          "action_relevance": 0.25,
+          "reasoning_similarity": 0.25,
+          "hallucination": 0.5,
+          "degenerate": 0.0,
+          "actionable": 0.3,
+          "tok_s": 81.82455356728295
+        }
+      }
+    }
+  },
+  "_meta": {
+    "dataset": "red_v1",
+    "n_samples": 20,
+    "prompt_mode": "real",
+    "backend": "llama-server",
+    "judge": "gemini-2.5-flash"
+  }
+}

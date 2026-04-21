@@ -1,0 +1,663 @@
+{
+  "gemma4:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 174.16519658427814,
+        "elapsed": 10.603254795074463
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 156.7858540776485,
+        "elapsed": 7.20394229888916
+      },
+      "response_preview": "---\n"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 161.2443014638035,
+        "elapsed": 6.168168067932129
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 171.51429298967892,
+        "elapsed": 6.496582508087158
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 174.11371065348484,
+        "elapsed": 6.344871759414673
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 166.52560321847469,
+        "elapsed": 6.712353944778442
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 161.87699353552858,
+        "elapsed": 7.6229634284973145
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 145.50929378104712,
+        "elapsed": 8.347680807113647
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 150.96751666973,
+        "elapsed": 7.584272384643555
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 140.85587775559642,
+        "elapsed": 8.593323707580566
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 159.6949075203157,
+        "elapsed": 7.459946870803833
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - press_buttons\n      args: {\"buttons\": [\"A\", \"B\", \"A\", \"B\"], \"reasoning\": \"ANALYZE: [game screen: Wild battle vs Poochyena Lv 12. Text \\\"It's sup\\\" (super effective) is visible. Zubat Lv 15 has 3"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 155.48853320187087,
+        "elapsed": 7.191266775131226
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 173.48582009092095,
+        "elapsed": 6.367019414901733
+      },
+      "response_preview": "ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: A wild Nincada has appeared, and I have already advanced the intro text. The main battle menu (FIGHT, BAG, POKEMON, RUN) is now visible. PLAN: Press DOWN and A"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 173.6430812374155,
+        "elapsed": 5.528665542602539
+      },
+      "response_preview": "```json\n{\n  \"action\": \"execute_custom_subagent\",\n  \"args\": {\n    \"reasoning\": \"ANALYZE: The battle with Casey has just been initiated. The pre-battle dialogue has been cleared, and we are now entering the battle screen. OBJECTIVE: Defeat Ca"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 177.65087862380878,
+        "elapsed": 3.8486826419830322
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 156.2190822279585,
+        "elapsed": 7.277724742889404
+      },
+      "response_preview": ""
+    }
+  ],
+  "gemma4-emerald:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY MART",
+      "source": "shard_00000.jsonl:1034",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 173.46519796875307,
+        "elapsed": 8.97607135772705
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City Mart. Objective: Restock supplies. Situation: The shop menu is open, but the cursor is currently on 'SELL'. I need to move the cursor to 'BUY' to purchase Potions and Paralyze Heals. PLAN: Ac"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "DEWFORD TOWN POKEMON CENTER 1F",
+      "source": "shard_00003.jsonl:868",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.875,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 158.04211432208436,
+        "elapsed": 4.5071775913238525
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Dewford Pokemon Center 1F. Location: (7, 8). Objective: defeat_brawly_gym.] Situation: Inside the Pokemon Center. Nurse Joy is at (7, 2). Counter is at (7, 3). PLAN: [action: Move UP 4 times. Reason: R"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "OLDALE TOWN POKEMON CENTER 1F",
+      "source": "shard_00000.jsonl:365",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 158.60208160518098,
+        "elapsed": 3.3333513736724854
+      },
+      "response_preview": "[press_buttons] ANALYZE: We are at (7, 8) in the Pokemon Center. The nurse is at (7, 2). We need to heal our Mudkip. PLAN: Action: Press UP x5. Reason: Move towards the nurse to initiate healing. Expected: Player moves to (7, 3)."
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Map_11_01",
+      "source": "shard_00002.jsonl:1341",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 165.9016529766036,
+        "elapsed": 4.244417905807495
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Player at (2, 8) in Petalburg Woods. North path blocked by trees at Y=7. Objective: Reach Rustboro City.] Situation: The path to the exit (14, 4) requires bypassing the tree line. Manual movement is re"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "RUSTBORO CITY CUTTERS HOUSE",
+      "source": "shard_00000.jsonl:685",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.875,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 164.43027265348098,
+        "elapsed": 3.972813844680786
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City (16, 39). Objective: Enter the Cutter's house to get HM01 Cut. Situation: The Cutter's house is directly left of the Pokemon Center, with its door at (9, 38). PLAN: Action: Press LEFT x7, the"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00002.jsonl:6",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 165.48043274332895,
+        "elapsed": 4.178055047988892
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave B1F. Objective: Navigate to the next ladder (28, 21). Situation: I am at (6, 15) in the dark, but I can use the ASCII map to pathfind. PLAN: Action: Move RIGHT 2, DOWN 6, RIGHT 1. Reason: Foll"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "SLATEPORT CITY MART",
+      "source": "shard_00004.jsonl:466",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.833333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 163.3954636534246,
+        "elapsed": 5.138582944869995
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Slateport Mart (3,7). Player is facing the clerk at (2,3). Objective: Sell TMs to buy 10 Potions.] SITUATION: The previous attempt to move UP to (3,3) failed because (3,4) was blocked by a sign. The cl"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00001.jsonl:1975",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 152.24124874276234,
+        "elapsed": 5.442026853561401
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave 1F. Objective: Enter the ladder to the basement. Situation: I am at (35, 8). The path UP is blocked by a rock wall. I need to navigate around it to reach the ladder at (35, 3). PLAN: Action: P"
+    },
+    {
+      "idx": 8,
+      "state_type": "battle",
+      "location": "DEWFORD TOWN GYM",
+      "source": "shard_00003.jsonl:923",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.833333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 156.50543863145168,
+        "elapsed": 4.846492052078247
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Battle with Brawly. Marshtomp vs Makuhita. Text: 'Foe MAKUHITA used POUND!'] Location: Dewford Gym (4,4). Objective: defeat_brawly_gym. Situation: Makuhita is at roughly 40-50% HP. The battle menu is a"
+    },
+    {
+      "idx": 9,
+      "state_type": "battle",
+      "location": "GRANITE CAVE 1F ALT",
+      "source": "shard_00001.jsonl:1988",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.833333,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 153.87319552969925,
+        "elapsed": 10.281767129898071
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Granite Cave 1F. Objective: Switch train Nincada. Situation: A wild battle against Makuhita has started. The intro text is visible. PLAN: Action: Press A 3 times. Reason: Advance the intro text to reach th"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "ROUTE 110",
+      "source": "shard_00003.jsonl:1916",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 147.47172846530074,
+        "elapsed": 4.933245420455933
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Wild battle vs Poochyena Lv 12. Main battle menu visible. Zubat Lv 15 at 37/39 HP.] SITUATION: Continuing the Zubat grind. Poochyena is at low HP. Leech Life is super effective. OBJECTIVE: Defeat Pooch"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "SLATEPORT CITY OCEANIC MUSEUM 2F",
+      "source": "shard_00003.jsonl:1162",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 144.6349327122923,
+        "elapsed": 4.589731693267822
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Wild battle against Lv. 15 Carvanha. Location: Route 110. Objective: Deliver Devon Goods.] Situation: The battle has just started. I need to advance through the intro text to reach the main battle menu"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "ROUTE 116",
+      "source": "shard_00001.jsonl:1530",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 161.14482479532614,
+        "elapsed": 4.1648595333099365
+      },
+      "response_preview": "[execute_custom_subagent] ANALYZE: Location: Route 116 Battle. Objective: Switch-train Nincada. Situation: Nincada has been safely switched out, and Marshtomp is now in battle facing a wild Nincada. The switch is complete. PLAN: Action: Exe"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "ROUTE 102",
+      "source": "shard_00000.jsonl:402",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 1.0,
+        "tok_s": 168.73387604359593,
+        "elapsed": 3.6789963245391846
+      },
+      "response_preview": "[execute_custom_subagent] ANALYZE: The player has encountered a wild Pokemon (looks like a Poochyena) on Route 102. The battle transition is complete and the main battle menu is visible. Location: Route 102. Objective: Defeat the wild Pokem"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "RUSTBORO CITY",
+      "source": "shard_00000.jsonl:1268",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 167.44598851496522,
+        "elapsed": 3.3649048805236816
+      },
+      "response_preview": "[press_buttons] ANALYZE: Location: Rustboro City (16, 49). Objective: Defeat the Rival. Situation: The battle with the Rival has just started. The intro text is being displayed. PLAN: Action: Press A x4. Reason: Advance the intro text to re"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "GRANITE CAVE B1F ALT",
+      "source": "shard_00003.jsonl:291",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.625,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 156.26906447705133,
+        "elapsed": 4.591081142425537
+      },
+      "response_preview": "[press_buttons] ANALYZE: [game screen: Wild battle vs Zubat (Lv. 9). Location: Granite Cave B1F (6, 13). Objective: deliver_letter_to_steven.] Situation: Zubat is in the 'used a POKE BALL' state. I need to clear the dialogue to see if the c"
+    }
+  ],
+  "_aggregate": {
+    "overall": {
+      "gemma4:26b": {
+        "tool_format": 0.0,
+        "grounding": 0.125,
+        "action_relevance": 0.15625,
+        "reasoning_similarity": 0.15625,
+        "hallucination": 0.0625,
+        "degenerate": 0.0,
+        "actionable": 0.1875,
+        "tok_s": 162.48380897697257
+      },
+      "gemma4-emerald:26b": {
+        "tool_format": 1.0,
+        "grounding": 0.7968749374999999,
+        "action_relevance": 0.53125,
+        "reasoning_similarity": 0.34375,
+        "hallucination": 0.5,
+        "degenerate": 0.0625,
+        "actionable": 1.0,
+        "tok_s": 159.85234461470634
+      }
+    },
+    "by_state_type": {
+      "overworld": {
+        "gemma4:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.0625,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.0,
+          "tok_s": 163.96690578799303
+        },
+        "gemma4-emerald:26b": {
+          "tool_format": 1.0,
+          "grounding": 0.807291625,
+          "action_relevance": 0.375,
+          "reasoning_similarity": 0.1875,
+          "hallucination": 0.5,
+          "degenerate": 0.125,
+          "actionable": 1.0,
+          "tok_s": 162.69480808320236
+        }
+      },
+      "battle": {
+        "gemma4:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.1875,
+          "action_relevance": 0.3125,
+          "reasoning_similarity": 0.3125,
+          "hallucination": 0.125,
+          "degenerate": 0.0,
+          "actionable": 0.375,
+          "tok_s": 161.00071216595208
+        },
+        "gemma4-emerald:26b": {
+          "tool_format": 1.0,
+          "grounding": 0.78645825,
+          "action_relevance": 0.6875,
+          "reasoning_similarity": 0.5,
+          "hallucination": 0.5,
+          "degenerate": 0.0,
+          "actionable": 1.0,
+          "tok_s": 157.00988114621035
+        }
+      }
+    }
+  },
+  "_meta": {
+    "dataset": "emerald_v3",
+    "n_samples": 16,
+    "prompt_mode": "real",
+    "models": [
+      "gemma4:26b",
+      "gemma4-emerald:26b"
+    ],
+    "judge": "gemini-2.5-flash",
+    "seed": 42
+  }
+}

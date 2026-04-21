@@ -15,7 +15,10 @@ import base64
 import io
 import os, sys
 from typing import Optional, List, Tuple
-from pokemon_env.enums import MetatileBehavior
+try:
+    from pokemon_env.enums import MetatileBehavior
+except ImportError:
+    MetatileBehavior = None
 from utils import state_formatter as sf
 from utils.mapping.porymap_state import (
     PorymapResult,

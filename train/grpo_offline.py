@@ -153,6 +153,15 @@ from unsloth import FastVisionModel, PatchFastRL  # noqa: E402  isort:skip
 import argparse  # noqa: E402
 
 import torch  # noqa: E402, F401
+
+# Patch Unsloth's online model-name check: it pings GitHub and fails
+# through SOCKS5 proxies on HPC compute nodes.
+try:
+    import unsloth.models.loader_utils as _lu
+    _lu._get_new_mapper = lambda: ({}, {}, {})
+except Exception:
+    pass
+
 from datasets import Dataset  # noqa: E402
 from PIL import Image  # noqa: E402
 from transformers.trainer_callback import TrainerCallback  # noqa: E402
@@ -199,7 +208,10 @@ def load_grpo_dataset(
                 if not line.strip():
                     continue
                 r = json.loads(line)
-                img_path = r["image_path"]
+                img_path = r.get("image_path")
+                if img_path is None:
+                    skipped += 1
+                    continue
                 if data_root is not None and not Path(img_path).is_absolute():
                     img_path = str(data_root / img_path)
                 try:
@@ -278,6 +290,11 @@ def main() -> int:
     ap.add_argument("--max-records", type=int, default=None,
                     help="Cap dataset size (for debugging).")
     ap.add_argument("--save-steps", type=int, default=200)
+    ap.add_argument("--use-openclaw-judge", action="store_true",
+                    help="Use online Gemini judge as sole reward (OpenClaw-RL style). "
+                         "Replaces the four offline reward functions with openclaw_judge_reward.")
+    ap.add_argument("--openclaw-judge-weight", type=float, default=1.0,
+                    help="Scaling multiplier on the openclaw judge reward (default 1.0).")
     ap.add_argument("--4bit", dest="load_4bit", action="store_true",
                     help="QLoRA for smoke tests on smaller GPUs.")
     args = ap.parse_args()
@@ -349,7 +366,7 @@ def main() -> int:
         #   zero advantage → no gradient. Observed empirically.
         # - Too high (0.7): generations drift from SFT distribution.
         # 0.5 with top_p=0.9 keeps diversity while staying reasonable.
-        temperature=0.5,
+        temperature=0.9,
         top_p=0.9,
         beta=0.0,
         loss_type="dapo",
@@ -359,7 +376,7 @@ def main() -> int:
         # logits tensor (vocab 262144 x seq_len x fp32 = ~35 GB at our
         # sizes, which caused deterministic OOM on Red at step 10).
         use_liger_loss=True,
-        reward_weights=[2.0, 1.5, 1.0, 0.5],
+        reward_weights=[1.0] if args.use_openclaw_judge else [2.0, 1.5, 1.0, 0.5],
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         num_train_epochs=args.epochs,
@@ -384,14 +401,27 @@ def main() -> int:
 
     # -- Build trainer --
     loss_log = args.output / "losses.jsonl"
-    trainer = GRPOTrainer(
-        model=model,
-        reward_funcs=[
+    if args.use_openclaw_judge:
+        from train.openclaw_judge import openclaw_judge_reward as _oj
+
+        def _scaled(*a, **kw):
+            rs = _oj(*a, **kw)
+            return [r * args.openclaw_judge_weight for r in rs]
+        _scaled.__name__ = "openclaw_judge_reward"
+        _reward_funcs = [_scaled]
+        logger.info("OpenClaw-RL mode: single-reward training via Gemini online judge (weight=%.2f)",
+                    args.openclaw_judge_weight)
+    else:
+        _reward_funcs = [
             tool_match_reward,
             action_similarity_reward,
             state_accuracy_reward,
             format_reward,
-        ],
+        ]
+
+    trainer = GRPOTrainer(
+        model=model,
+        reward_funcs=_reward_funcs,
         args=grpo_config,
         train_dataset=dataset,
         processing_class=processor,

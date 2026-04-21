@@ -179,3 +179,12 @@ celerybeat-schedule
 celerybeat.pid
 *.sage.py
 
+
+# Large binary artifacts (not versioned)
+adapters/
+gguf/
+merged/
+staging_adapters/
+showcase/
+PokemonRed-GBC/red.gb
+PokemonRed-GBC/*.gb

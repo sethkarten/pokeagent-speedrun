@@ -1,0 +1,1926 @@
+{
+  "gemma4:26b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00003.jsonl:592",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 158.38119202309724,
+        "elapsed": 12.076171159744263
+      },
+      "response_preview": "ANALYZE: The experience gain dialogue (\"ODDISH gained 369 EXP. Points!\") is being cleared. After this, the game will either present the next Pok\u00e9mon from the Sailor's team or return to the overworld if the battle is over. PLAN: Press A repe"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "PalletTown",
+      "source": "shard_00000.jsonl:105",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 180.48286613018072,
+        "elapsed": 5.713937044143677
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "source": "shard_00000.jsonl:1068",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 162.80472527296436,
+        "elapsed": 6.34789514541626
+      },
+      "response_preview": "* **Situation**: [4, 2, Facing Up, PewterGym, Dialog].\n* **Status**: [Charmander 37/37 HP Lv.13, 1 Potion, $245].\n* **Objective**: [Advance Brock's dialogue to initiate the battle].\n* **Stuck/Loop Check**: [No].\n* **Technical Check**: [Yes,"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Route5",
+      "source": "shard_00002.jsonl:1808",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 173.43541953501582,
+        "elapsed": 6.719438076019287
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "Route2",
+      "source": "shard_00000.jsonl:844",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 162.70904498996364,
+        "elapsed": 6.392434597015381
+      },
+      "response_preview": "**Situation**: [7, 2, Facing Left, Route 2].\n**Status**: [Charmander "
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Route6",
+      "source": "shard_00002.jsonl:833",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 160.33205881684628,
+        "elapsed": 8.475910425186157
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoonPokecenter",
+      "source": "shard_00000.jsonl:1696",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 159.64731533289148,
+        "elapsed": 6.5826404094696045
+      },
+      "response_preview": "1. **Current State**: [Coords (3, 4), MtMoonPokecenter, Overworld].\n2. **Obstacle Audit**: [The path to the counter is clear. The player is moving towards the desk].\n3. **Decimal Audit**: [No decimals].\n4. **Action**: [Call `heal_at_pokecen"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "VermilionPokecenter",
+      "source": "shard_00002.jsonl:919",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 169.0582593483596,
+        "elapsed": 7.523853540420532
+      },
+      "response_preview": "ANALYZE: Player is at (3, 3) in the Vermilion Pokemon Center. The dialogue \"Welcome to our POKEMON CENTER!\" is currently on screen.\nPLAN: \n1. Press 'A' to advance the dialogue.\n2. Continue pressing 'A' to clear any subsequent dialogue lines"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1659",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 151.19672678789328,
+        "elapsed": 8.251971006393433
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "PewterCity",
+      "source": "shard_00000.jsonl:1058",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 161.1141079838648,
+        "elapsed": 6.544403076171875
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "source": "shard_00002.jsonl:1307",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 160.03855078628206,
+        "elapsed": 7.191991090774536
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "VermilionGym",
+      "source": "shard_00003.jsonl:589",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 156.80153691672433,
+        "elapsed": 7.420815467834473
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1310",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 158.51881328645348,
+        "elapsed": 6.57148814201355
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route1",
+      "source": "shard_00000.jsonl:399",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 160.2183716267284,
+        "elapsed": 5.648524761199951
+      },
+      "response_preview": "I am in a battle against a wild Pidgey. My Charmander has 17/22 HP. My objective is to win this battle and then continue my journey to Viridian City. I will now use the `battle_handler` subagent to automate the battle using `SCRATCH`.\n\n```p"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "source": "shard_00001.jsonl:784",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 165.9316760884282,
+        "elapsed": 7.439258098602295
+      },
+      "response_preview": "---\n"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ViridianForest",
+      "source": "shard_00000.jsonl:567",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 162.48975651954336,
+        "elapsed": 4.676148891448975
+      },
+      "response_preview": "Current State: Battle. Position: (2, 31). Goal: Resolve battle with Caterpie and continue navigating Viridian Forest. Action: execute_custom_subagent to handle the battle."
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "OaksLab",
+      "source": "shard_00000.jsonl:79",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 166.76073676740899,
+        "elapsed": 5.659044981002808
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "MtMoonB1f",
+      "source": "shard_00001.jsonl:943",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 156.78383441079347,
+        "elapsed": 8.087997913360596
+      },
+      "response_preview": "---\n"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "Route24",
+      "source": "shard_00001.jsonl:1749",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 154.10770221542836,
+        "elapsed": 7.383578538894653
+      },
+      "response_preview": "press_buttons\n  args: {\"reasoning\": \"ANALYZE: The battle is in the victory phase as the opponent's Zubat has 0 HP. The player needs to advance through the victory dialogue and level-up/EXP screens to return to the overworld. \\nPLAN: Press A"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "CeruleanGym",
+      "source": "shard_00002.jsonl:1936",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 167.36819837000067,
+        "elapsed": 7.558701276779175
+      },
+      "response_preview": ""
+    }
+  ],
+  "gemma4:31b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00003.jsonl:592",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 20.04079877710955,
+        "elapsed": 43.140591621398926
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "PalletTown",
+      "source": "shard_00000.jsonl:105",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 22.4807094186152,
+        "elapsed": 29.962798833847046
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "source": "shard_00000.jsonl:1068",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 20.232224970828906,
+        "elapsed": 33.54681849479675
+      },
+      "response_preview": "**Situation**: [4, 2, Facing Up, PewterGym, Dialog].\n**Status**: [Charmander 37/37 HP Lv.13, 1 Potion].\n**Objective**: [Advance dialogue to start the battle with Brock].\n**Stuck/Loop Check**: [No].\n**Technical Check**: [Yes, manual A button"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Route5",
+      "source": "shard_00002.jsonl:1808",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 21.61876909807551,
+        "elapsed": 33.81118583679199
+      },
+      "response_preview": "```json\n{\n  \"action\": \"run_skill\",\n  \"args\": {\n    \"skill_id\": \"navigate_to_coords_v5_ultimate\",\n    \"args\": {\n      \"x\": 10.0,\n      \"y\": 0.0\n    },\n    \"reasoning\": \"ANALYZE: Player is at (12, 24) on Route 5. Objective: Return to Cerulean"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "Route2",
+      "source": "shard_00000.jsonl:844",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 20.766796937601818,
+        "elapsed": 33.04014277458191
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Route6",
+      "source": "shard_00002.jsonl:833",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 20.88672538118999,
+        "elapsed": 39.80285429954529
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoonPokecenter",
+      "source": "shard_00000.jsonl:1696",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 20.819457115184456,
+        "elapsed": 33.2384135723114
+      },
+      "response_preview": "```json\n{\n  \"reasoning\": \"1. Current State: [Coords (3, 4), MtMoonPokecenter, Over"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "VermilionPokecenter",
+      "source": "shard_00002.jsonl:919",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 21.794116080431415,
+        "elapsed": 30.113783836364746
+      },
+      "response_preview": "```json\n{\n  \"reasoning\": \"ANALYZE: Player is at (3, 3) in the Vermilion Pokemon Center. Dialogue 'Welcome to our POKEMON CENTER!' is active. \\nPLAN: \\n1. Press 'A' multiple times to advance through Nurse Joy's dialogue and confirm the heali"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1659",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 19.947101967061716,
+        "elapsed": 39.64781856536865
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "PewterCity",
+      "source": "shard_00000.jsonl:1058",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 20.888831973947898,
+        "elapsed": 33.20238971710205
+      },
+      "response_preview": "```json\n{\n  \"reasoning\": \"Situation: [11, 16, Facing ?, Pewter City, Overworld].\\nStatus: [Charmander 37/37 HP Lv.13, 1 Potion, $245].\\nObjective: ["
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "source": "shard_00002.jsonl:1307",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 20.791650644806463,
+        "elapsed": 35.39657711982727
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "VermilionGym",
+      "source": "shard_00003.jsonl:589",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 20.328114999507466,
+        "elapsed": 35.68613386154175
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"A\",\n      \"A\",\n      \"A\",\n      \"A\",\n      \"A\"\n    ],\n    \"reasoning\": \"ANALYZE: The screenshot shows 'ODDISH used ABSORB!'. Pikachu had only 2 HP, so it should have"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1310",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 20.893509021460822,
+        "elapsed": 32.97002077102661
+      },
+      "response_preview": "```json\n{\n  \"reasoning\": \"1. Context: [11, 6, Route 3, Battle].\\n2. Status: [Charmander 34/42 HP/Lv.15, $166].\\n3."
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route1",
+      "source": "shard_00000.jsonl:399",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 20.752468204269245,
+        "elapsed": 25.22282648086548
+      },
+      "response_preview": "```json\n{\n  \"action\": \"execute_custom_subagent\",\n  \"args\": {\n    \"subagent_id\": \"combat_specialist\",\n    \"reasoning\": \"ANALYZE: I have encountered a wild Pidgey (Lv. 2) while traveling north on Route 1. My current Pok\u00e9mon is Charmander (Lv."
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "source": "shard_00001.jsonl:784",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 21.757821049738702,
+        "elapsed": 35.446943044662476
+      },
+      "response_preview": "```json\n{\n  \"action"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ViridianForest",
+      "source": "shard_00000.jsonl:567",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 21.284469301603046,
+        "elapsed": 23.086305618286133
+      },
+      "response_preview": "```json\n{\n  \"reasoning\": \"Current State: Battle. Position: (4, 31) (approx). Goal: Resolve wild encounter with Caterpie. Situation: A wild Lv. 3 Caterpie has appeared. Charmander is Lv. 7 and healthy enough to win quickly. PLAN: Action: Lau"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "OaksLab",
+      "source": "shard_00000.jsonl:79",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 21.178301458430635,
+        "elapsed": 30.14093828201294
+      },
+      "response_preview": "```json\n{\n  \"action\": \"press_buttons\",\n  \"args\": {\n    \"buttons\": [\n      \"A\",\n      \"A\",\n      \"A\"\n    ],\n    \"reasoning\": \"ANALYZE: [game screen: Battle screen, location: OaksLab, objective: rival_battle"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "MtMoonB1f",
+      "source": "shard_00001.jsonl:943",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 20.670642024085417,
+        "elapsed": 38.3053240776062
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "Route24",
+      "source": "shard_00001.jsonl:1749",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 20.027588935630764,
+        "elapsed": 27.811240196228027
+      },
+      "response_preview": "```json\n{\n  \"reasoning\": \"ANALYZE: Battle in progress against the 4th Nugget Bridge trainer (Cooltrainer_F1). The opponent's Zubat has 0 HP, indicating a knockout. PLAN: Launch the combat_specialist subagent to handle the victory sequence, "
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "CeruleanGym",
+      "source": "shard_00002.jsonl:1936",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 21.68773423682488,
+        "elapsed": 36.03730607032776
+      },
+      "response_preview": "```json\n{\n  \"reasoning\": \"ANALYZE: I am in a trainer battle against a Swimmer's Shellder. Oddish is the active Pok\u00e9mon and is a Grass-type, making it highly effective against the Water-type Shellder. \\nPLAN: Use Oddish's ABSORB move to deal"
+    }
+  ],
+  "gemma4:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00003.jsonl:592",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 189.75518585709176,
+        "elapsed": 12.669884443283081
+      },
+      "response_preview": "**THINKING:** ANALYZE: The previous actions (7063-7066) successfully defeated the Pikachu and cleared the associated experience gain dialogue. The battle is now in its final stages, either transitioning to the next opponent or concluding en"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "PalletTown",
+      "source": "shard_00000.jsonl:105",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 203.02863718610277,
+        "elapsed": 4.205302000045776
+      },
+      "response_preview": "**THINKING:** ANALYZE: Overworld state. Location: PalletTown (12, 12). Objective: Reach Viridian City by heading north through Route 1. Situation: I have successfully exited Oak's Lab and am in the main Pallet Town overworld. PLAN: Action: "
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "source": "shard_00000.jsonl:1068",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 187.75622637491276,
+        "elapsed": 4.582507848739624
+      },
+      "response_preview": "**Situation**: [4, 2, Facing Up, PewterGym, Dialog].\n**Status**: [Charmander 37/37 HP Lv.13, 1 Potion].\n**Objective**: [Advance dialogue to start the battle with Brock].\n**Stuck/Loop Check**: [No].\n**Technical Check**: [Yes].\n**Action**: Th"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Route5",
+      "source": "shard_00002.jsonl:1808",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 195.3144797883442,
+        "elapsed": 4.808746576309204
+      },
+      "response_preview": "**Plan:**\n1.  **"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "Route2",
+      "source": "shard_00000.jsonl:844",
+      "scores": {
+        "tool_format": 1.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 183.45132440003542,
+        "elapsed": 4.68608832359314
+      },
+      "response_preview": "**Situation**: [7, 2, Facing Left, Route2 (Tall Grass)].\n**Status**: [Charmander Lv.10, 1 Potion, $25].\n**Objective**: [Grind in tall grass on Route 2 until Charmander reaches Level 12].\n**Stuck Check**: [No].\n**Action**: The previous step "
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Route6",
+      "source": "shard_00002.jsonl:833",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 185.32490285475816,
+        "elapsed": 5.831745386123657
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoonPokecenter",
+      "source": "shard_00000.jsonl:1696",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 194.04907988778675,
+        "elapsed": 4.578624486923218
+      },
+      "response_preview": "1.  **Current State**: [Coords (3, 4), MtMoonPokecenter, Overworld].\n2.  **Obstacle Audit**: [The exit warp is available at the bottom of the building. The party needs to be fully healed before leaving to ensure readiness for the next objec"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "VermilionPokecenter",
+      "source": "shard_00002.jsonl:919",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.5,
+        "hallucination": 0.0,
+        "tok_s": 190.74147361835435,
+        "elapsed": 5.291890382766724
+      },
+      "response_preview": "**THINKING:** ANALYZE: The player has successfully entered the Vermilion Pok\u00e9mon Center and initiated the healing dialogue. Charmeleon's HP is 44/86, which is low. The immediate priority is to heal Charmeleon. The current game state is"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1659",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 176.84291581742707,
+        "elapsed": 5.731425523757935
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "PewterCity",
+      "source": "shard_00000.jsonl:1058",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.75,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 193.44851967030436,
+        "elapsed": 4.016592502593994
+      },
+      "response_preview": "**Situation**: (11, 16), Facing Down, PewterCity, Overworld.\n**Status**: Charmander 37/37 HP Lv.13, 1 Potion, $245.\n**Objective**: Navigate to the Pewter Gym entrance at (16, 17) and challenge Brock.\n**Stuck Check**: No.\n**Syntax Check**: Y"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "source": "shard_00002.jsonl:1307",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 182.41872323543006,
+        "elapsed": 5.12135910987854
+      },
+      "response_preview": "**THINKING:** ANALYZE: The previous action sequence (B then A) was intended to clear the 'disabled!' message and re-establish the move menu focus. Charmeleon (7 HP) must now use RAGE (Slot 1) to finish off Kadabra (9 HP). The battle is at i"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "VermilionGym",
+      "source": "shard_00003.jsonl:589",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 181.5634014920983,
+        "elapsed": 5.214765548706055
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1310",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 187.62719053022585,
+        "elapsed": 4.631261110305786
+      },
+      "response_preview": "**1. Context**: [11, 6, Route 3, Battle].\n**2. Status**: [Charmander 34/42 HP/Lv.15, $166].\n**3. Objective**: [Defeat the Youngster at (10, 6) and continue traversing Route 3].\n**4. Navigation Check**: [N/A - In Battle].\n**5. Technical Chec"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route1",
+      "source": "shard_00000.jsonl:399",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 198.42303546511152,
+        "elapsed": 4.279252290725708
+      },
+      "response_preview": "**Reasoning:** I am currently engaged in a wild battle with a Pidgey. My primary objective (reaching Viridian City) is paused until this encounter is resolved. Since the Pidgey is significantly weaker than my Charmander, I will use the `bat"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "source": "shard_00001.jsonl:784",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 191.65111835206469,
+        "elapsed": 5.160955190658569
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ViridianForest",
+      "source": "shard_00000.jsonl:567",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 197.9952050426143,
+        "elapsed": 4.582841634750366
+      },
+      "response_preview": "Current State: Battle Mode. Position: (2, 31) in Viridian Forest. Goal: Defeat"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "OaksLab",
+      "source": "shard_00000.jsonl:79",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 1.0,
+        "tok_s": 194.43205565232097,
+        "elapsed": 3.410876750946045
+      },
+      "response_preview": "**THINKING:** ANALYZE: [game screen: Oaks Lab, location: (5,3), objective: get_starter, situation: Dialogue with Prof. Oak is continuing]. PLAN: [action: Press A. Reason: Continue advancing the dialogue. I must reach the point where the sta"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "MtMoonB1f",
+      "source": "shard_00001.jsonl:943",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 178.01701855770537,
+        "elapsed": 5.6946117877960205
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "Route24",
+      "source": "shard_00001.jsonl:1749",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 1.0,
+        "reasoning_similarity": 1.0,
+        "hallucination": 0.0,
+        "tok_s": 182.48780786837298,
+        "elapsed": 5.116619110107422
+      },
+      "response_preview": "The battle against the 4th trainer (Cooltrainer_F1) is still in progress, as indicated by the opponent Zubat having 0 HP. I must allow the combat specialist subagent to finish the battle sequence to proceed to the final Team Rocket encounte"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "CeruleanGym",
+      "source": "shard_00002.jsonl:1936",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 190.94221564060317,
+        "elapsed": 5.2762205600738525
+      },
+      "response_preview": "**THINKING:** ANALYZE: The previous subagent successfully cleared the dialogue and defeated the Swimmer trainer. The immediate obstacle is removed. Objective: Defeat Gym Leader Misty at (4, 2). Situation: Oddish is correctly in the lead slo"
+    }
+  ],
+  "gemma4:e2b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00003.jsonl:592",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 232.64482815881746,
+        "elapsed": 8.869102954864502
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "PalletTown",
+      "source": "shard_00000.jsonl:105",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 268.6969370846741,
+        "elapsed": 3.2720327377319336
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "source": "shard_00000.jsonl:1068",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 227.680607054557,
+        "elapsed": 3.7450406551361084
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Route5",
+      "source": "shard_00002.jsonl:1808",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 247.11346150248508,
+        "elapsed": 3.821755886077881
+      },
+      "response_preview": "Action executed: press_buttons\n  TOOLS:\n    - run_skill\n      args: {\"skill_id\": \"navigate_to_coords_v5_ultimate\", \"args\": {\"x\": 10.0, \"y\": 0.0}, \"reasoning\": \"ANALYZE: The agent has successfully navigated to the exit point of"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "Route2",
+      "source": "shard_00000.jsonl:844",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 224.74322037977282,
+        "elapsed": 3.796447277069092
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Route6",
+      "source": "shard_00002.jsonl:833",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 221.00586874998172,
+        "elapsed": 4.737629413604736
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoonPokecenter",
+      "source": "shard_00000.jsonl:1696",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.5,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 242.3233217596512,
+        "elapsed": 3.667043447494507
+      },
+      "response_preview": "1. **Current State**: [Coords (3, 6), MtMoonPokecenter, Overworld].\n2. **Obstacle Audit**: [The exit path is clear. The goal is to leave the building and proceed to Route 3].\n3. **Decimal Audit**:"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "VermilionPokecenter",
+      "source": "shard_00002.jsonl:919",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 233.8906711852919,
+        "elapsed": 4.24579381942749
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1659",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 201.05653623328863,
+        "elapsed": 4.779561758041382
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "PewterCity",
+      "source": "shard_00000.jsonl:1058",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 245.54900818415322,
+        "elapsed": 3.6392016410827637
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "source": "shard_00002.jsonl:1307",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 215.61374588366618,
+        "elapsed": 4.202330827713013
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "VermilionGym",
+      "source": "shard_00003.jsonl:589",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 212.20916720682084,
+        "elapsed": 4.317058801651001
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1310",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 227.1480598107212,
+        "elapsed": 3.7942919731140137
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route1",
+      "source": "shard_00000.jsonl:399",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 255.0806588234615,
+        "elapsed": 3.588167667388916
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "source": "shard_00001.jsonl:784",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 236.64288486711615,
+        "elapsed": 4.145140886306763
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ViridianForest",
+      "source": "shard_00000.jsonl:567",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 1.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 251.1600685940193,
+        "elapsed": 3.5830142498016357
+      },
+      "response_preview": "Action executed: run_skill\n  TOOLS:\n    - run_skill\n      args: {\"skill_id\": \"navigate_to_coords_v2_simple\", \"args\": {\"x\": 2.0, \"y\": 0.0}, \"reasoning\": \"ANALYZE: Player is at (2, 19) in Viridian Forest. Objective: Navigate through the fores"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "OaksLab",
+      "source": "shard_00000.jsonl:79",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 1.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 1.0,
+        "tok_s": 256.0361556336455,
+        "elapsed": 3.2426908016204834
+      },
+      "response_preview": "Action executed: interact\n  TOOLS:\n    - interact\n      args: {\"target\": \"PokeBall\", \"reasoning\": \"ANALYZE: Objective is to choose a starter Pokemon in Prof. Oak's Lab. The dialogue has progressed, and the next step is to interact with the "
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "MtMoonB1f",
+      "source": "shard_00001.jsonl:943",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 206.57366937135308,
+        "elapsed": 4.673397541046143
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "Route24",
+      "source": "shard_00001.jsonl:1749",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 214.1717124281146,
+        "elapsed": 4.234148025512695
+      },
+      "response_preview": ""
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "CeruleanGym",
+      "source": "shard_00002.jsonl:1936",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "action_relevance": 0.0,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.0,
+        "tok_s": 234.12636120540537,
+        "elapsed": 4.235378980636597
+      },
+      "response_preview": ""
+    }
+  ],
+  "gemma4-red:e4b": [
+    {
+      "idx": 0,
+      "state_type": "overworld",
+      "location": "?",
+      "source": "shard_00003.jsonl:592",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 1.0,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 2.9347972869873047
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 1,
+      "state_type": "overworld",
+      "location": "PalletTown",
+      "source": "shard_00000.jsonl:105",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.15679526329040527
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 2,
+      "state_type": "overworld",
+      "location": "PewterGym",
+      "source": "shard_00000.jsonl:1068",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.16811394691467285
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 3,
+      "state_type": "overworld",
+      "location": "Route5",
+      "source": "shard_00002.jsonl:1808",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.1695420742034912
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 4,
+      "state_type": "overworld",
+      "location": "Route2",
+      "source": "shard_00000.jsonl:844",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.1582801342010498
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 5,
+      "state_type": "overworld",
+      "location": "Route6",
+      "source": "shard_00002.jsonl:833",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.17545104026794434
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 6,
+      "state_type": "overworld",
+      "location": "MtMoonPokecenter",
+      "source": "shard_00000.jsonl:1696",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.16074228286743164
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 7,
+      "state_type": "overworld",
+      "location": "VermilionPokecenter",
+      "source": "shard_00002.jsonl:919",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.17080235481262207
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 8,
+      "state_type": "overworld",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1659",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.17126083374023438
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 9,
+      "state_type": "overworld",
+      "location": "PewterCity",
+      "source": "shard_00000.jsonl:1058",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.5,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.16090178489685059
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 10,
+      "state_type": "battle",
+      "location": "SsAnne2f",
+      "source": "shard_00002.jsonl:1307",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.17310476303100586
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 11,
+      "state_type": "battle",
+      "location": "VermilionGym",
+      "source": "shard_00003.jsonl:589",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.1761782169342041
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 12,
+      "state_type": "battle",
+      "location": "Route3",
+      "source": "shard_00000.jsonl:1310",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.15618252754211426
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 13,
+      "state_type": "battle",
+      "location": "Route1",
+      "source": "shard_00000.jsonl:399",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.16060900688171387
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 14,
+      "state_type": "battle",
+      "location": "MtMoonB2f",
+      "source": "shard_00001.jsonl:784",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.1739823818206787
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 15,
+      "state_type": "battle",
+      "location": "ViridianForest",
+      "source": "shard_00000.jsonl:567",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.1632678508758545
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 16,
+      "state_type": "battle",
+      "location": "OaksLab",
+      "source": "shard_00000.jsonl:79",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.15285134315490723
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 17,
+      "state_type": "battle",
+      "location": "MtMoonB1f",
+      "source": "shard_00001.jsonl:943",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.1755659580230713
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 18,
+      "state_type": "battle",
+      "location": "Route24",
+      "source": "shard_00001.jsonl:1749",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.17325639724731445
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    },
+    {
+      "idx": 19,
+      "state_type": "battle",
+      "location": "CeruleanGym",
+      "source": "shard_00002.jsonl:1936",
+      "scores": {
+        "tool_format": 0.0,
+        "grounding": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0,
+        "elapsed": 0.17813897132873535
+      },
+      "response_preview": "ERROR: 500 Server Error: Internal Server Error for url: http://localhost:11434/api/generate"
+    }
+  ],
+  "_aggregate": {
+    "overall": {
+      "gemma4:26b": {
+        "tool_format": 0.05,
+        "grounding": 0.225,
+        "action_relevance": 0.325,
+        "reasoning_similarity": 0.25,
+        "hallucination": 0.05,
+        "degenerate": 0.0,
+        "actionable": 0.25,
+        "tok_s": 162.4090446604434
+      },
+      "gemma4:31b": {
+        "tool_format": 0.05,
+        "grounding": 0.3125,
+        "action_relevance": 0.425,
+        "reasoning_similarity": 0.4,
+        "hallucination": 0.0,
+        "degenerate": 0.0,
+        "actionable": 0.35,
+        "tok_s": 20.942391579820193
+      },
+      "gemma4:e4b": {
+        "tool_format": 0.1,
+        "grounding": 0.4,
+        "action_relevance": 0.325,
+        "reasoning_similarity": 0.4,
+        "hallucination": 0.25,
+        "degenerate": 0.0,
+        "actionable": 0.45,
+        "tok_s": 189.26352586458324
+      },
+      "gemma4:e2b": {
+        "tool_format": 0.0,
+        "grounding": 0.0875,
+        "action_relevance": 0.025,
+        "reasoning_similarity": 0.0,
+        "hallucination": 0.2,
+        "degenerate": 0.05,
+        "actionable": 0.15,
+        "tok_s": 232.67334720584986
+      },
+      "gemma4-red:e4b": {
+        "tool_format": 0.0,
+        "grounding": 0.4,
+        "action_relevance": null,
+        "reasoning_similarity": null,
+        "hallucination": null,
+        "degenerate": 0.0,
+        "actionable": 0.0,
+        "tok_s": 0.0
+      }
+    },
+    "by_state_type": {
+      "overworld": {
+        "gemma4:26b": {
+          "tool_format": 0.1,
+          "grounding": 0.275,
+          "action_relevance": 0.4,
+          "reasoning_similarity": 0.25,
+          "hallucination": 0.1,
+          "degenerate": 0.0,
+          "actionable": 0.2,
+          "tok_s": 163.91617162210773
+        },
+        "gemma4:31b": {
+          "tool_format": 0.1,
+          "grounding": 0.275,
+          "action_relevance": 0.3,
+          "reasoning_similarity": 0.35,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.2,
+          "tok_s": 20.947553172004646
+        },
+        "gemma4:e4b": {
+          "tool_format": 0.2,
+          "grounding": 0.525,
+          "action_relevance": 0.45,
+          "reasoning_similarity": 0.4,
+          "hallucination": 0.1,
+          "degenerate": 0.0,
+          "actionable": 0.4,
+          "tok_s": 189.9712745455118
+        },
+        "gemma4:e2b": {
+          "tool_format": 0.0,
+          "grounding": 0.15,
+          "action_relevance": 0.05,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.2,
+          "degenerate": 0.0,
+          "actionable": 0.1,
+          "tok_s": 234.4704460292673
+        },
+        "gemma4-red:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.55,
+          "action_relevance": null,
+          "reasoning_similarity": null,
+          "hallucination": null,
+          "degenerate": 0.0,
+          "actionable": 0.0,
+          "tok_s": 0.0
+        }
+      },
+      "battle": {
+        "gemma4:26b": {
+          "tool_format": 0.0,
+          "grounding": 0.175,
+          "action_relevance": 0.25,
+          "reasoning_similarity": 0.25,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.3,
+          "tok_s": 160.90191769877913
+        },
+        "gemma4:31b": {
+          "tool_format": 0.0,
+          "grounding": 0.35,
+          "action_relevance": 0.55,
+          "reasoning_similarity": 0.45,
+          "hallucination": 0.0,
+          "degenerate": 0.0,
+          "actionable": 0.5,
+          "tok_s": 20.93722998763575
+        },
+        "gemma4:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.275,
+          "action_relevance": 0.2,
+          "reasoning_similarity": 0.4,
+          "hallucination": 0.4,
+          "degenerate": 0.0,
+          "actionable": 0.5,
+          "tok_s": 188.5557771836547
+        },
+        "gemma4:e2b": {
+          "tool_format": 0.0,
+          "grounding": 0.025,
+          "action_relevance": 0.0,
+          "reasoning_similarity": 0.0,
+          "hallucination": 0.2,
+          "degenerate": 0.1,
+          "actionable": 0.2,
+          "tok_s": 230.87624838243238
+        },
+        "gemma4-red:e4b": {
+          "tool_format": 0.0,
+          "grounding": 0.25,
+          "action_relevance": null,
+          "reasoning_similarity": null,
+          "hallucination": null,
+          "degenerate": 0.0,
+          "actionable": 0.0,
+          "tok_s": 0.0
+        }
+      }
+    }
+  },
+  "_meta": {
+    "dataset": "red_v1",
+    "n_samples": 20,
+    "prompt_mode": "real",
+    "models": [
+      "gemma4:26b",
+      "gemma4:31b",
+      "gemma4:e4b",
+      "gemma4:e2b",
+      "gemma4-red:e4b"
+    ],
+    "judge": "gemini-2.5-flash",
+    "seed": 42
+  }
+}
