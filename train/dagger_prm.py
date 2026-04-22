@@ -48,15 +48,16 @@ from pathlib import Path
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 os.environ.setdefault("NO_PROXY", "localhost,127.0.0.1")
 
-# Disable torch.compile / inductor. On della with a 1-GPU SLURM allocation,
-# inductor's forked compile worker can't grab a CUDA context alongside the
-# main process and crashes with "Could not find an active GPU backend",
-# failing every rollout step. Unsloth has its own kernel fusion and doesn't
-# depend on dynamo, so this is safe. Clearing the torchinductor cache on
-# startup also avoids loading stale kernels left by prior jobs on the node.
-os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
-os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+# Force torch inductor to compile kernels in-process (no worker fork). On
+# della with a 1-GPU SLURM allocation, the default forked compile worker
+# can't grab a CUDA context alongside the main process and crashes with
+# "Could not find an active GPU backend". Fully disabling dynamo
+# (TORCHDYNAMO_DISABLE=1) worked around that but broke sampling — the
+# student model produced identical deterministic outputs across steps
+# with no parseable tool call. Single-threaded in-process compile keeps
+# dynamo + temperature sampling functional without forking.
 os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", "1")
+os.environ.setdefault("TORCHINDUCTOR_WORKER_START", "fork")
 try:
     import shutil as _sh
     _sh.rmtree(f"/tmp/torchinductor_{os.environ.get('USER', 'unknown')}",
@@ -223,9 +224,8 @@ def run_rollout_harness(
         ("HF_HUB_OFFLINE", "1"),
         ("TRANSFORMERS_OFFLINE", "1"),
         ("HF_DATASETS_OFFLINE", "1"),
-        ("TORCHDYNAMO_DISABLE", "1"),
-        ("TORCH_COMPILE_DISABLE", "1"),
         ("TORCHINDUCTOR_COMPILE_THREADS", "1"),
+        ("TORCHINDUCTOR_WORKER_START", "fork"),
     ):
         env.setdefault(k, v)
     if "HF_HOME" in os.environ:
