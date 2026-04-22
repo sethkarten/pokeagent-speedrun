@@ -2649,9 +2649,14 @@ def _extract_prose_buttons(text: str) -> List[str]:
             t = synonyms[t]
         return t if t in valid else None
 
-    # 1) "press A, B, UP" / "move DOWN, LEFT" sequences
+    # Verb regex handles both imperative ("press A") and gerund/ing forms
+    # ("pressing UP", "moving LEFT") the SFT-trained student produces when
+    # narrating its plan.
+    verb = r'press(?:ing|es|ed)?|mov(?:e|ing|es|ed)|hit(?:ting)?|tap(?:ping)?|push(?:ing|es|ed)?'
+
+    # 1) Sequences: "press A, B, UP" / "move DOWN, LEFT" / "Pressing UP 5 times"
     for m in _re.finditer(
-        r'\b(?:press|move|hit|tap|push)\s+((?:[A-Za-z]+(?:\s*,\s*|\s+(?:and|then)\s+|\s+))*[A-Za-z]+)\b',
+        rf'\b(?:{verb})\s+((?:[A-Za-z]+(?:\s*,\s*|\s+(?:and|then)\s+|\s+))*[A-Za-z]+)\b',
         text, _re.IGNORECASE,
     ):
         for tok in _re.split(r'[,\s]+(?:and|then)?\s*', m.group(1)):
@@ -2661,12 +2666,25 @@ def _extract_prose_buttons(text: str) -> List[str]:
                 if len(out) >= 3:
                     return out
 
+    # 1b) Prioritise directional mentions when there's a mix. If we picked up
+    # an A/B button first but a direction appears later ("press A to use it ...
+    # pressing UP 5 times"), prefer the direction — movement advances the
+    # game while button-press advances dialogue we're not necessarily in.
+    if out and all(b in ("A", "B") for b in out):
+        for m in _re.finditer(
+            rf'\b(?:{verb})\s+(?:the\s+)?["\'`]?(up|down|left|right|north|south|east|west)',
+            text, _re.IGNORECASE,
+        ):
+            b = _canon(m.group(1))
+            if b:
+                return [b]
+
     if out:
         return out
 
     # 2) Explicit single-button mentions
     for m in _re.finditer(
-        r'\b(?:press|push|hit|tap)\s+(?:the\s+)?(?:["\'`]?([ABabLR])["\'`]?|(up|down|left|right|start|select|north|south|east|west))\b',
+        rf'\b(?:{verb})\s+(?:the\s+)?(?:["\'`]?([ABabLR])["\'`]?|(up|down|left|right|start|select|north|south|east|west))\b',
         text, _re.IGNORECASE,
     ):
         tok = m.group(1) or m.group(2) or ""
