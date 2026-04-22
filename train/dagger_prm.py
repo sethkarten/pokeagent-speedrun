@@ -434,39 +434,78 @@ def score_and_relabel(
         reward_mean, len(low), len(records), relabel_threshold,
     )
 
-    teacher_calls = 0
+    # Pre-compute per-record routing and gather teacher-query jobs
+    jobs: list[tuple[int, dict]] = []      # list of (idx, meta) for teacher calls
+    meta_by_i: dict[int, dict] = {}        # per-record metadata
+    for i, t in enumerate(records):
+        pre_state = t.get("pre_state", {})
+        img_path = t.get("_image_path_abs")
+        if not img_path:
+            img_path = _resolve_screenshot(run_dir, t.get("step", i), t)
+        prompt = t.get("llm_prompt") or t.get("prompt") or ""
+        reward = t.get("_reward", 0.0)
+        teacher_hint = t.get("_teacher_hint", "")
+        valid = bool(img_path and Path(img_path).exists() and prompt)
+        meta_by_i[i] = {
+            "t": t,
+            "pre_state": pre_state,
+            "img_path": img_path,
+            "prompt": prompt,
+            "reward": reward,
+            "teacher_hint": teacher_hint,
+            "valid": valid,
+        }
+
+    # Build the teacher-call queue up to budget, preserving trajectory order so
+    # the budget cap picks the earliest low-reward steps rather than later ones.
+    for i, m in meta_by_i.items():
+        if not m["valid"]:
+            continue
+        if m["reward"] >= relabel_threshold:
+            continue
+        if max_teacher_calls is not None and len(jobs) >= max_teacher_calls:
+            break
+        jobs.append((i, m))
+
+    # Parallelize teacher queries (8-way) — same pattern as the PRM judge.
+    teacher_responses: dict[int, str | None] = {}
+    if jobs:
+        logger.info("dispatching %d teacher queries (parallel)", len(jobs))
+        import concurrent.futures
+
+        def _run(j):
+            i, m = j
+            return i, _teacher_query(
+                image_path=m["img_path"],
+                prompt_text=m["prompt"],
+                teacher_hint=m["teacher_hint"],
+                teacher_model=teacher_model,
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+            for i, resp in ex.map(_run, jobs):
+                teacher_responses[i] = resp
+
+    teacher_calls = len(jobs)
     relabeled = 0
     kept = 0
     skipped = 0
     with open(shard_path, "w") as fout:
-        for i, t in enumerate(records):
-            pre_state = t.get("pre_state", {})
-            img_path = t.get("_image_path_abs")
-            if not img_path:
-                img_path = _resolve_screenshot(run_dir, t.get("step", i), t)
-            prompt = t.get("llm_prompt") or t.get("prompt") or ""
-            reward = t.get("_reward", 0.0)
-            teacher_hint = t.get("_teacher_hint", "")
-
-            # Need both image and prompt to build an SFT record
-            if not img_path or not Path(img_path).exists() or not prompt:
+        for i, m in meta_by_i.items():
+            t = m["t"]
+            if not m["valid"]:
                 skipped += 1
                 continue
+            img_path, prompt, reward = m["img_path"], m["prompt"], m["reward"]
+            pre_state = m["pre_state"]
+            teacher_hint = m["teacher_hint"]
 
             if reward < relabel_threshold:
-                # Relabel via teacher — query only if budget allows
-                if max_teacher_calls is not None and teacher_calls >= max_teacher_calls:
+                if i not in teacher_responses:  # over budget
                     skipped += 1
                     continue
-                teacher_resp = _teacher_query(
-                    image_path=img_path,
-                    prompt_text=prompt,
-                    teacher_hint=teacher_hint,
-                    teacher_model=teacher_model,
-                )
-                teacher_calls += 1
+                teacher_resp = teacher_responses[i]
                 if not teacher_resp:
-                    # teacher failed — drop rather than train on bad agent action
                     skipped += 1
                     continue
                 response_text = teacher_resp
@@ -537,7 +576,7 @@ def run_sft(
         "--epochs", str(epochs),
         "--batch-size", "1",
         "--grad-accum", "4",
-        "--lr", "5e-6",  # conservative for continual SFT
+        "--lr", "2e-6",  # small-batch DAgger needs low LR for stability
         "--lora-rank", str(lora_rank),
         "--lora-alpha", str(lora_rank),
         "--max-length", "8192",
