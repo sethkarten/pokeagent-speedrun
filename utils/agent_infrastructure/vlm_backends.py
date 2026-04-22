@@ -2609,6 +2609,83 @@ class GeminiBackend(VLMBackend):
             return "I encountered an error processing the request. I'll proceed with a basic action: press 'A' to continue."
 
 
+def _extract_prose_buttons(text: str) -> List[str]:
+    """Recover button-press intent from natural-language prose.
+
+    Distilled SFT/GRPO adapters frequently drift from the bracket format
+    they were trained on and instead narrate their action in prose, e.g.
+    ``"I will press A to interact"`` or ``"Move DOWN to (3, 7)"``. Without
+    this fallback the harness parses zero tool calls and the emulator
+    receives no button press for the entire rollout. This keeps the game
+    advancing — which is a prerequisite for the DAgger+PRM loop to
+    generate useful gradient signal.
+
+    Strategy (most specific first):
+      1. Find ``"press X, Y, Z"`` sequences
+      2. Find individual ``"Press A"`` / ``"move DOWN"`` mentions
+      3. Fall back to the first directional/A/B mention anywhere
+
+    Only emits up to 3 buttons per response to avoid runaway sequences
+    from long plan enumerations.
+    """
+    import re as _re
+
+    if not text:
+        return []
+
+    # Strip markdown emphasis markers (**bold**, _italic_, `code`) so things
+    # like "press **A**" match the same regex as "press A".
+    text = _re.sub(r'[*_`]+', ' ', text)
+
+    valid = {"A", "B", "UP", "DOWN", "LEFT", "RIGHT", "START", "SELECT"}
+    synonyms = {
+        "NORTH": "UP", "SOUTH": "DOWN", "EAST": "RIGHT", "WEST": "LEFT",
+    }
+    out: list[str] = []
+
+    def _canon(tok: str) -> Optional[str]:
+        t = tok.strip().strip('"\'`.,;:!?()[]{}').upper()
+        if t in synonyms:
+            t = synonyms[t]
+        return t if t in valid else None
+
+    # 1) "press A, B, UP" / "move DOWN, LEFT" sequences
+    for m in _re.finditer(
+        r'\b(?:press|move|hit|tap|push)\s+((?:[A-Za-z]+(?:\s*,\s*|\s+(?:and|then)\s+|\s+))*[A-Za-z]+)\b',
+        text, _re.IGNORECASE,
+    ):
+        for tok in _re.split(r'[,\s]+(?:and|then)?\s*', m.group(1)):
+            b = _canon(tok)
+            if b and b not in out:
+                out.append(b)
+                if len(out) >= 3:
+                    return out
+
+    if out:
+        return out
+
+    # 2) Explicit single-button mentions
+    for m in _re.finditer(
+        r'\b(?:press|push|hit|tap)\s+(?:the\s+)?(?:["\'`]?([ABabLR])["\'`]?|(up|down|left|right|start|select|north|south|east|west))\b',
+        text, _re.IGNORECASE,
+    ):
+        tok = m.group(1) or m.group(2) or ""
+        b = _canon(tok)
+        if b and b not in out:
+            out.append(b)
+            if len(out) >= 3:
+                return out
+    if out:
+        return out
+
+    # 3) Fallback: first clearly-directional token anywhere
+    for tok in _re.findall(r'\b(?:UP|DOWN|LEFT|RIGHT|NORTH|SOUTH|EAST|WEST)\b', text, _re.IGNORECASE):
+        b = _canon(tok)
+        if b:
+            return [b]
+    return []
+
+
 def _extract_bracket_tool_calls(
     text: str,
     tool_schemas: Optional[List[Dict[str, Any]]] = None,
@@ -2768,7 +2845,28 @@ def _extract_text_action_calls(
     if bracket_calls:
         return bracket_calls
 
+    # --- call:tool_name(args) / call:tool_name{args} format ---
+    # The GRPO-tuned checkpoint drifted toward a `call:name(...)` or
+    # `call:name{...}` format with partially-malformed args. Pick up the
+    # tool name even if the args are bad; the bracket parser's heuristics
+    # fill in reasonable defaults (press_buttons gets ["A"] etc).
+    colon_match = _re.search(r'\bcall:([A-Za-z_][A-Za-z0-9_]*)\b', text)
+    if colon_match:
+        synthetic = f"[{colon_match.group(1)}] " + text
+        bracket_calls = _extract_bracket_tool_calls(synthetic, tool_schemas)
+        if bracket_calls:
+            return bracket_calls
+
     if "ACTION:" not in text:
+        # --- Natural-language fallback ---
+        # The SFT adapter at inference often produces prose like
+        # "I will press A to interact" or "Move DOWN to (3, 7)" without
+        # any explicit tool marker. Recover button intent from the prose
+        # so the game actually advances — otherwise the agent monologues
+        # forever with tool_calls: [] and the emulator ticks without input.
+        prose_buttons = _extract_prose_buttons(text)
+        if prose_buttons:
+            return [{"name": "press_buttons", "args": {"buttons": prose_buttons}}]
         return []
 
     # Build a {name -> [param1, param2, ...]} map from the schemas so
