@@ -571,7 +571,7 @@ def score_and_relabel(
 # ── Phase 3: SFT ────────────────────────────────────────────────────
 
 def run_sft(
-    shard_path: str,
+    shard_paths: list[str],
     adapter_path: str,
     base_model_id: str,
     output_dir: str,
@@ -579,23 +579,26 @@ def run_sft(
     epochs: int = 1,
     lora_rank: int = 256,
     num_gpus: int = 2,
+    lr: float = 2e-6,
 ) -> int:
-    """Run sft_run.py on the DAgger shard. Resumes from current adapter LoRA."""
-    # NB: sft_run.py loads the adapter via FastVisionModel.from_pretrained when
-    # --model-id points at a LoRA checkpoint dir.
+    """Run sft_run.py on one or more DAgger shards. Resumes from current adapter LoRA.
+
+    Passing all prior iteration shards (pure DAgger) grows the training set
+    monotonically and averages noise out of the per-iteration PRM signal.
+    """
     cmd = [
         sys.executable, "-m", "accelerate.commands.launch",
         "--num_processes", str(num_gpus),
         "--mixed_precision", "bf16",
         "-m", "train.sft_run",
-        "--shard", shard_path,
+        "--shard", *shard_paths,
         "--data-root", data_root,
         "--output", output_dir,
         "--model-id", adapter_path,
         "--epochs", str(epochs),
         "--batch-size", "1",
         "--grad-accum", "4",
-        "--lr", "2e-6",  # small-batch DAgger needs low LR for stability
+        "--lr", str(lr),
         "--lora-rank", str(lora_rank),
         "--lora-alpha", str(lora_rank),
         "--max-length", "8192",
@@ -632,6 +635,11 @@ def main() -> int:
     ap.add_argument("--max-teacher-calls", type=int, default=None,
                     help="Cap teacher API calls per iteration (None = unlimited).")
     ap.add_argument("--sft-epochs", type=int, default=1)
+    ap.add_argument("--sft-lr", type=float, default=2e-6,
+                    help="SFT learning rate. Default 2e-6 is safe for "
+                         "small-batch DAgger; raise to 5e-6 when "
+                         "accumulating historical shards gives larger "
+                         "effective datasets.")
     ap.add_argument("--lora-rank", type=int, default=256)
     ap.add_argument("--socks-login-host", type=str, default=None,
                     help="Hostname of the SSH login node to tunnel through "
@@ -699,13 +707,20 @@ def main() -> int:
             logger.error("empty DAgger shard, stopping")
             return 1
 
-        # Phase 3
+        # Phase 3 — pure DAgger: accumulate ALL prior shards into each SFT.
+        # Data grows monotonically; noise from any single iteration's PRM
+        # calls averages out; systematic teacher corrections compound.
         train_dir = iter_dir / "sft_checkpoint"
-        logger.info("PHASE 3: SFT on %d records (%d relabeled, %d kept)",
-                    stats["relabeled"] + stats["kept"],
+        all_shards = sorted(
+            str(p) for p in args.output.glob("iter_*/dagger_shard.jsonl")
+        )
+        logger.info("PHASE 3: SFT on %d shard(s) totaling ~%d records "
+                    "(current iter: %d relabeled, %d kept)",
+                    len(all_shards),
+                    sum(1 for s in all_shards for _ in open(s)),
                     stats["relabeled"], stats["kept"])
         rc = run_sft(
-            shard_path=str(shard_path),
+            shard_paths=all_shards,
             adapter_path=current_adapter,
             base_model_id=args.base_model_id,
             output_dir=str(train_dir),
@@ -713,6 +728,7 @@ def main() -> int:
             epochs=args.sft_epochs,
             lora_rank=args.lora_rank,
             num_gpus=args.num_gpus,
+            lr=args.sft_lr,
         )
         if rc != 0:
             logger.error("SFT failed (exit %d)", rc)
