@@ -3475,7 +3475,16 @@ class UnslothBackend(VLMBackend):
         logger.info("UnslothBackend: model loaded on %s", self.device)
 
     def _generate(self, messages, module_name="Unknown"):
-        """Build inputs from messages, run generate, return decoded text + usage."""
+        """Build inputs from messages, run generate, return decoded text + usage.
+
+        Explicit tensor deletion + empty_cache after each call. Without this
+        a long rollout progressively leaks KV-cache memory into the pool;
+        observed 3x→20x slowdown across 20 steps of a DAgger iteration
+        (~73s → 807s for the same 1.4k-token prompt and ~150 output tokens).
+        Also caps max_new_tokens at 1024 — generating 5000 is wasted work
+        since the student's tool-call responses are consistently <300 tokens
+        and the upper bound inflates memory during decoding.
+        """
         import torch, time
 
         inputs = self.processor.apply_chat_template(
@@ -3488,19 +3497,33 @@ class UnslothBackend(VLMBackend):
 
         input_len = inputs["input_ids"].shape[1]
         t0 = time.time()
-        with torch.no_grad():
-            out = self.model.generate(
-                **inputs,
-                max_new_tokens=5000,
-                temperature=0.7,
-                top_p=0.95,
-                do_sample=True,
-                use_cache=True,
-            )
-        duration = time.time() - t0
-        new_tokens = out[0, input_len:]
-        output_len = len(new_tokens)
-        text = self.processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
+        try:
+            with torch.no_grad():
+                out = self.model.generate(
+                    **inputs,
+                    max_new_tokens=1024,
+                    temperature=0.7,
+                    top_p=0.95,
+                    do_sample=True,
+                    use_cache=True,
+                )
+            duration = time.time() - t0
+            new_tokens = out[0, input_len:]
+            output_len = len(new_tokens)
+            text = self.processor.tokenizer.decode(new_tokens, skip_special_tokens=True)
+        finally:
+            # Release GPU memory held by the generate call's KV cache +
+            # temporaries. Reference-counting isn't enough — PyTorch's
+            # caching allocator keeps the blocks, fragmentation compounds.
+            try:
+                del inputs
+                if 'out' in locals():
+                    del out
+                if 'new_tokens' in locals():
+                    del new_tokens
+                torch.cuda.empty_cache()
+            except Exception:
+                pass
 
         usage = {
             "prompt_tokens": input_len,
