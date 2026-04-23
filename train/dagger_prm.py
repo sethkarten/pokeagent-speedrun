@@ -707,20 +707,23 @@ def main() -> int:
             logger.error("empty DAgger shard, stopping")
             return 1
 
-        # Phase 3 — pure DAgger: accumulate ALL prior shards into each SFT.
-        # Data grows monotonically; noise from any single iteration's PRM
-        # calls averages out; systematic teacher corrections compound.
+        # Phase 3 — online DAgger: train only on THIS iteration's shard,
+        # warm-starting from the previous iteration's checkpoint. Pure DAgger
+        # theory aggregates because it retrains from scratch each iter; since
+        # we warm-start, prior iterations are already baked into the weights.
+        # Aggregating again double-counts old data and dilutes the recent
+        # teacher corrections that represent the actual progress frontier.
+        # Also keeps SFT wall-time constant (~17 min) instead of growing
+        # linearly (was ~90 min by iter 5, would be 150+ min by iter 8).
         train_dir = iter_dir / "sft_checkpoint"
-        all_shards = sorted(
-            str(p) for p in args.output.glob("iter_*/dagger_shard.jsonl")
-        )
+        latest_shard = [str(shard_path)]
         logger.info("PHASE 3: SFT on %d shard(s) totaling ~%d records "
                     "(current iter: %d relabeled, %d kept)",
-                    len(all_shards),
-                    sum(1 for s in all_shards for _ in open(s)),
+                    len(latest_shard),
+                    sum(1 for s in latest_shard for _ in open(s)),
                     stats["relabeled"], stats["kept"])
         rc = run_sft(
-            shard_paths=all_shards,
+            shard_paths=latest_shard,
             adapter_path=current_adapter,
             base_model_id=args.base_model_id,
             output_dir=str(train_dir),
