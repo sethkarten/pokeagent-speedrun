@@ -86,6 +86,19 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+# Load .env at import time so GEMINI_API_KEY is present in os.environ before
+# we spawn any rollout subprocess. Otherwise `--rollout-backend gemini` child
+# processes die with "Gemini API key is missing!" because dagger_prm only
+# lazily loads .env when the judge/teacher needs it.
+try:
+    from dotenv import load_dotenv
+    for env_path in (REPO_ROOT / ".env", Path.home() / ".env"):
+        if env_path.exists():
+            load_dotenv(env_path)
+            break
+except Exception:
+    pass
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -206,8 +219,12 @@ def run_rollout_harness(
     - "gemini": teacher drives the emulator directly (pure behavior-cloning
       data stream; no teacher relabel needed because the rollout IS the
       teacher)
+
+    run_name is derived from the output dir so that parallel ablation jobs
+    don't collide on the shared run_data/ tree. Each variant gets its own
+    namespaced run_dir.
     """
-    run_name = f"dagger_iter"
+    run_name = f"dagger_{output_dir.parent.name}_{output_dir.name}"
     if rollout_backend == "gemini":
         cmd = [
             sys.executable, "run.py",
@@ -252,6 +269,10 @@ def run_rollout_harness(
         env.setdefault(k, v)
     if "HF_HOME" in os.environ:
         env["HF_HOME"] = os.environ["HF_HOME"]
+    # Gemini-backed rollouts need the API key explicitly in the child env.
+    for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY"):
+        if k in os.environ:
+            env[k] = os.environ[k]
 
     result = subprocess.run(
         cmd, cwd=str(REPO_ROOT), env=env,
