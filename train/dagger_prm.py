@@ -198,21 +198,43 @@ def run_rollout_harness(
     device_index: int = 0,
     rom: str = "PokemonRed-GBC/pokered.gbc",
     model_name: str = "gemma4-dagger",
+    rollout_backend: str = "unsloth",
+    teacher_model: str = "gemini-3-flash-preview",
 ) -> dict:
+    """Spawn run.py for one rollout. rollout_backend selects who drives:
+    - "unsloth": student adapter (normal DAgger rollout)
+    - "gemini": teacher drives the emulator directly (pure behavior-cloning
+      data stream; no teacher relabel needed because the rollout IS the
+      teacher)
+    """
     run_name = f"dagger_iter"
-    cmd = [
-        sys.executable, "run.py",
-        "--game", game,
-        "--backend", "unsloth",
-        "--base-model-id", adapter_path,
-        "--model-name", model_name,
-        "--max-steps", str(n_steps),
-        "--scaffold", "autoevolve",
-        "--rom", rom,
-        "--device-index", str(device_index),
-        "--run-name", run_name,
-        "--headless",
-    ]
+    if rollout_backend == "gemini":
+        cmd = [
+            sys.executable, "run.py",
+            "--game", game,
+            "--backend", "gemini",
+            "--model-name", teacher_model,
+            "--max-steps", str(n_steps),
+            "--scaffold", "autoevolve",
+            "--rom", rom,
+            "--device-index", str(device_index),
+            "--run-name", run_name,
+            "--headless",
+        ]
+    else:
+        cmd = [
+            sys.executable, "run.py",
+            "--game", game,
+            "--backend", "unsloth",
+            "--base-model-id", adapter_path,
+            "--model-name", model_name,
+            "--max-steps", str(n_steps),
+            "--scaffold", "autoevolve",
+            "--rom", rom,
+            "--device-index", str(device_index),
+            "--run-name", run_name,
+            "--headless",
+        ]
     logger.info("rollout cmd: %s", " ".join(cmd))
 
     env = os.environ.copy()
@@ -645,7 +667,25 @@ def main() -> int:
                     help="Hostname of the SSH login node to tunnel through "
                          "for Gemini API access (e.g. della-gpu.princeton.edu). "
                          "Required on della compute which has no external net.")
+    ap.add_argument("--rollout-backend", type=str, default="unsloth",
+                    choices=["unsloth", "gemini"],
+                    help="Who drives the emulator during rollout. 'unsloth' "
+                         "= student adapter (classic DAgger). 'gemini' = "
+                         "teacher drives directly (behavior cloning stream).")
+    ap.add_argument("--shard-mode", type=str, default="online",
+                    choices=["online", "accumulate"],
+                    help="SFT data strategy. 'online' = train only on this "
+                         "iteration's shard (fast, constant SFT time, risk "
+                         "of catastrophic forgetting). 'accumulate' = train "
+                         "on all prior iter_*/dagger_shard.jsonl files "
+                         "(stable but SFT wall-time grows linearly).")
     args = ap.parse_args()
+    # Teacher-driven rollouts don't need relabel — the rollout IS the teacher
+    # already. Force threshold to 0 so all records are kept-as-agent.
+    if args.rollout_backend == "gemini":
+        logger.info("rollout-backend=gemini: forcing --relabel-threshold=0.0 "
+                    "(no relabel needed when teacher drives the rollout)")
+        args.relabel_threshold = 0.0
 
     args.output.mkdir(parents=True, exist_ok=True)
     data_root = str(args.data_root or REPO_ROOT)
@@ -681,6 +721,8 @@ def main() -> int:
             output_dir=iter_dir,
             device_index=args.rollout_device,
             rom=args.rom,
+            rollout_backend=args.rollout_backend,
+            teacher_model=args.teacher_model,
         )
         with open(iter_dir / "rollout_summary.json", "w") as f:
             json.dump(rollout, f, indent=2)
@@ -707,23 +749,28 @@ def main() -> int:
             logger.error("empty DAgger shard, stopping")
             return 1
 
-        # Phase 3 — online DAgger: train only on THIS iteration's shard,
-        # warm-starting from the previous iteration's checkpoint. Pure DAgger
-        # theory aggregates because it retrains from scratch each iter; since
-        # we warm-start, prior iterations are already baked into the weights.
-        # Aggregating again double-counts old data and dilutes the recent
-        # teacher corrections that represent the actual progress frontier.
-        # Also keeps SFT wall-time constant (~17 min) instead of growing
-        # linearly (was ~90 min by iter 5, would be 150+ min by iter 8).
+        # Phase 3 — SFT strategy controlled by --shard-mode.
+        #  - online:     train only on THIS iter's shard, warm-started from
+        #                prev checkpoint. Constant ~17 min per iter. Risks
+        #                catastrophic forgetting across iters.
+        #  - accumulate: train on ALL prior iter_*/dagger_shard.jsonl,
+        #                warm-started. SFT wall-time grows linearly but
+        #                early-iter lessons persist.
         train_dir = iter_dir / "sft_checkpoint"
-        latest_shard = [str(shard_path)]
-        logger.info("PHASE 3: SFT on %d shard(s) totaling ~%d records "
+        if args.shard_mode == "accumulate":
+            shards_for_sft = sorted(
+                str(p) for p in args.output.glob("iter_*/dagger_shard.jsonl")
+            )
+        else:
+            shards_for_sft = [str(shard_path)]
+        logger.info("PHASE 3 [%s]: SFT on %d shard(s) totaling ~%d records "
                     "(current iter: %d relabeled, %d kept)",
-                    len(latest_shard),
-                    sum(1 for s in latest_shard for _ in open(s)),
+                    args.shard_mode,
+                    len(shards_for_sft),
+                    sum(1 for s in shards_for_sft for _ in open(s)),
                     stats["relabeled"], stats["kept"])
         rc = run_sft(
-            shard_paths=latest_shard,
+            shard_paths=shards_for_sft,
             adapter_path=current_adapter,
             base_model_id=args.base_model_id,
             output_dir=str(train_dir),
