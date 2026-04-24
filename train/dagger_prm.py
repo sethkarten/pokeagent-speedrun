@@ -475,6 +475,11 @@ def score_and_relabel(
     teacher_model: str,
     relabel_threshold: float,
     max_teacher_calls: int | None = None,
+    prm_mode: str = "rubric",
+    prm_stride: int = 8,
+    run_root: Path | None = None,
+    game: str = "red",
+    iter_idx: int = 0,
 ) -> dict:
     """Write a DAgger shard: teacher response for low-reward steps, agent for high.
 
@@ -488,8 +493,21 @@ def score_and_relabel(
             if line.strip():
                 records.append(json.loads(line))
 
-    logger.info("PRM scoring %d records with %s", len(records), judge_model)
-    records = _score_traj_records(records, run_dir, judge_model)
+    logger.info("PRM scoring %d records with %s (mode=%s)",
+                len(records), judge_model, prm_mode)
+    if prm_mode == "pairwise":
+        from train.sensei_prm import score_traj_records_pairwise
+        records = score_traj_records_pairwise(
+            records=records,
+            run_dir=run_dir,
+            run_root=run_root if run_root is not None else run_dir,
+            judge_model=judge_model,
+            game=game,
+            stride=prm_stride,
+            iter_idx=iter_idx,
+        )
+    else:
+        records = _score_traj_records(records, run_dir, judge_model)
 
     rewards = [r.get("_reward", 0.0) for r in records]
     reward_mean = sum(rewards) / max(len(rewards), 1)
@@ -703,6 +721,19 @@ def main() -> int:
                          "of catastrophic forgetting). 'accumulate' = train "
                          "on all prior iter_*/dagger_shard.jsonl files "
                          "(stable but SFT wall-time grows linearly).")
+    ap.add_argument("--prm-mode", type=str, default="rubric",
+                    choices=["rubric", "pairwise"],
+                    help="PRM scoring strategy. 'rubric' = per-step absolute "
+                         "4-metric rubric via openclaw_judge (current default). "
+                         "'pairwise' = SENSEI-style: cached goal context + "
+                         "per-step pairwise preference vs anchor state + "
+                         "position-delta hard gate. Addresses the 'stuck but "
+                         "articulate' failure mode where rubric rewards "
+                         "reasoning quality while the agent is frozen.")
+    ap.add_argument("--prm-stride", type=int, default=8,
+                    help="For --prm-mode=pairwise: stride between current and "
+                         "anchor state in each comparison. Smaller = denser "
+                         "delta-progress signal but more Gemini calls.")
     ap.add_argument("--reset-free", action="store_true",
                     help="Continue each iteration's rollout from the previous "
                          "iteration's final emulator state (reset-free "
@@ -794,6 +825,11 @@ def main() -> int:
             teacher_model=args.teacher_model,
             relabel_threshold=args.relabel_threshold,
             max_teacher_calls=args.max_teacher_calls,
+            prm_mode=args.prm_mode,
+            prm_stride=args.prm_stride,
+            run_root=args.output,
+            game=args.game,
+            iter_idx=iteration,
         )
         with open(iter_dir / "dagger_stats.json", "w") as f:
             json.dump(stats, f, indent=2)
