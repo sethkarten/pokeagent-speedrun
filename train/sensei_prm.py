@@ -237,10 +237,16 @@ def score_traj_records_pairwise(
     stride: int = 8,
     iter_idx: int = 0,
     max_parallel: int = 8,
+    objective_block: str = "",
 ) -> list[dict]:
     """SENSEI-style scoring. Attaches `_reward`, `_teacher_hint`,
     `_image_path_abs` to every record. Public shape matches
     `_score_traj_records` so score_and_relabel can use this drop-in.
+
+    When `objective_block` is provided (from the objective_context module
+    reading the server's persisted objectives.json), we use the authoritative
+    story objective as the goal for pairwise preference. Otherwise we fall
+    back to the original ask-Gemini-from-first-screenshot goal_context.
     """
     from train.openclaw_judge import _load_image_bytes
 
@@ -251,17 +257,20 @@ def score_traj_records_pairwise(
     for i, t in enumerate(records):
         t["_image_path_abs"] = _resolve_screenshot(run_dir, t.get("step", i), t)
 
-    # 2. goal context (one call)
-    first_img = records[0].get("_image_path_abs")
-    first_ps = records[0].get("pre_state", {}) or {}
-    goal_ctx = get_or_build_goal_context(
-        run_root=run_root,
-        first_image_path=first_img,
-        first_pre_state=first_ps,
-        game=game,
-        judge_model=judge_model,
-        iter_idx=iter_idx,
-    )
+    # 2. goal context — prefer the authoritative DirectObjective block if given.
+    if objective_block.strip():
+        goal_ctx = objective_block
+    else:
+        first_img = records[0].get("_image_path_abs")
+        first_ps = records[0].get("pre_state", {}) or {}
+        goal_ctx = get_or_build_goal_context(
+            run_root=run_root,
+            first_image_path=first_img,
+            first_pre_state=first_ps,
+            game=game,
+            judge_model=judge_model,
+            iter_idx=iter_idx,
+        )
 
     # 3. image bytes cache
     img_bytes: dict[int, Optional[bytes]] = {}

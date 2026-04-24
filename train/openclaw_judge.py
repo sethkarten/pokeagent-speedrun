@@ -208,6 +208,7 @@ _JUDGE_PROMPT = """You are a process reward model (PRM) grading a Pokemon-playin
 You are given:
 - the current screenshot of the game (attached as an image)
 - the game state summary and the teacher's trajectory context
+- the CURRENT STORY OBJECTIVE from the Pokemon Red walkthrough (authoritative; tells you exactly what the agent should be doing right now)
 - the student model's response (reasoning + chosen tool call)
 
 Score four metrics in [0.0, 1.0] and return ONE JSON object:
@@ -218,15 +219,15 @@ Score four metrics in [0.0, 1.0] and return ONE JSON object:
    wall, ignoring a visible NPC/item, missing a clear exit.
    1.0 = clearly correct; 0.7 = plausible; 0.3 = wrong; 0.0 = irrelevant.
 
-2. trajectory_progress: Does this action advance the agent toward a NEW area or game objective? Consider the trajectory context provided.
-   1.0 = reaches a new location or triggers a new game event.
-   0.5 = moves toward an exit/objective but hasn't reached it yet.
-   0.2 = stays in same area but interacts with something new.
-   0.0 = repeats previous actions, stays stuck in same spot, or loops.
-   IMPORTANT: If the teacher reference says STUCK, this score should be very low unless the action clearly breaks the loop.
+2. trajectory_progress: Does this action advance the agent toward the CURRENT STORY OBJECTIVE's completion_condition?
+   1.0 = action clearly progresses toward the navigation_hint / target_location.
+   0.5 = plausibly useful (e.g. moving in the right direction).
+   0.2 = interacts with something relevant but not progressing toward the condition.
+   0.0 = repeats previous actions, wrong direction, or irrelevant to the current objective.
+   IMPORTANT: ground this score in the CURRENT STORY OBJECTIVE, not vague "exploration".
 
-3. reasoning_quality: Does the model's reasoning correctly describe the current situation and form a coherent plan?
-   1.0 = accurate state description + clear plan; 0.5 = partially correct; 0.0 = hallucinated or incoherent.
+3. reasoning_quality: Does the model's reasoning correctly describe the current situation and form a coherent plan that aligns with the current objective?
+   1.0 = accurate state description + plan matches navigation_hint; 0.5 = partial; 0.0 = hallucinated or off-task.
 
 4. format_compliance: Did the model produce a parseable tool call in EITHER accepted format?
    Accepted: `[tool_name]` bracket OR `call:tool_name(args)` OR `ACTION: call:tool_name(...)` plus ANALYZE/PLAN sections.
@@ -236,10 +237,11 @@ Score four metrics in [0.0, 1.0] and return ONE JSON object:
 Your entire output must be a single JSON object. Example:
 {{"action_correctness": 0.7, "trajectory_progress": 0.2, "reasoning_quality": 0.5, "format_compliance": 1.0}}
 
+{objective_block}
 # State
 {state}
 
-# Teacher reference (includes trajectory context)
+# Teacher reference (trajectory context)
 {teacher}
 
 # Model-under-test response
@@ -271,6 +273,7 @@ def _score_one(
     state_summary: str,
     image_bytes: Optional[bytes],
     judge_model: str,
+    objective_block: str = "",
 ) -> tuple[float, dict]:
     if not model_text.strip():
         return 0.0, {"action_correctness": 0.0, "trajectory_progress": 0.0, "reasoning_quality": 0.0, "format_compliance": 0.0}
@@ -278,6 +281,7 @@ def _score_one(
         state=state_summary,
         teacher=(teacher_text or "")[:2000],
         model=model_text[:1600],
+        objective_block=(objective_block or "").strip(),
     )
     parts: list[Any] = [prompt]
     if image_bytes:

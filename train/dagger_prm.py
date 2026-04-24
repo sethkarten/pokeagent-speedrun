@@ -214,6 +214,8 @@ def run_rollout_harness(
     rollout_backend: str = "unsloth",
     teacher_model: str = "gemini-3-flash-preview",
     load_state: str | None = None,
+    direct_objectives: str | None = None,
+    direct_objectives_start: int = 0,
 ) -> dict:
     """Spawn run.py for one rollout. rollout_backend selects who drives:
     - "unsloth": student adapter (normal DAgger rollout)
@@ -255,6 +257,9 @@ def run_rollout_harness(
         ]
     if load_state:
         cmd += ["--load-state", load_state]
+    if direct_objectives:
+        cmd += ["--direct-objectives", direct_objectives,
+                "--direct-objectives-start", str(direct_objectives_start)]
     logger.info("rollout cmd: %s", " ".join(cmd))
 
     env = os.environ.copy()
@@ -349,7 +354,8 @@ def _resolve_screenshot(run_dir: Path, step_n: int, t: dict) -> str | None:
     return str(cand) if cand.exists() else None
 
 
-def _score_traj_records(records: list[dict], run_dir: Path, judge_model: str) -> list[dict]:
+def _score_traj_records(records: list[dict], run_dir: Path, judge_model: str,
+                        objective_block: str = "") -> list[dict]:
     """Run PRM judge on each trajectory record; attach reward + detail."""
     from train.openclaw_judge import _score_one, _build_state_summary, _load_image_bytes
 
@@ -386,6 +392,7 @@ def _score_traj_records(records: list[dict], run_dir: Path, judge_model: str) ->
             state_summary=state_summary,
             image_bytes=img,
             judge_model=judge_model,
+            objective_block=objective_block,
         )
         t["_reward"] = reward
         t["_reward_detail"] = detail
@@ -403,6 +410,7 @@ def _teacher_query(
     teacher_hint: str,
     teacher_model: str = "gemini-3-flash-preview",
     timeout_s: float = 90.0,
+    objective_block: str = "",
 ) -> str | None:
     from train.openclaw_judge import _get_session, _load_image_bytes, _load_env
 
@@ -416,17 +424,20 @@ def _teacher_query(
     # Keep the teacher aligned with the harness tool-call format so its outputs
     # drop straight into SFT without re-parsing. The agent's prompt already
     # describes the tool schema; we just need a directive prefix.
+    objective_text = (objective_block or "").strip()
     system_directive = (
-        "You are an expert Pokemon player guiding a student agent. "
+        "You are an expert Pokemon Red player guiding a student agent. "
         "The student is stuck or making poor choices.\n\n"
-        f"Context: {teacher_hint}\n\n"
+        + (f"{objective_text}\n\n" if objective_text else "")
+        + f"Local context: {teacher_hint}\n\n"
         "Produce the SAME response the student should have produced: "
         "a single tool call in the student's format (e.g. `call:press_buttons` "
         "with ANALYZE/PLAN/ACTION sections, or the bracket `[tool_name]` "
         "format if that's what the prompt specifies), plus concise reasoning. "
         "Match the format exactly — do not wrap in markdown, do not add "
         "preamble, do not explain yourself outside the ANALYZE/PLAN sections. "
-        "Pick an action that BREAKS LOOPS and MAKES PROGRESS."
+        "Pick an action that DIRECTLY PROGRESSES the CURRENT STORY OBJECTIVE "
+        "above — match its navigation_hint and completion_condition."
     )
     full_text = system_directive + "\n\n---\nSTUDENT PROMPT:\n" + prompt_text
 
@@ -493,6 +504,23 @@ def score_and_relabel(
             if line.strip():
                 records.append(json.loads(line))
 
+    # Load the authoritative story objective from the server's cache dir.
+    # Empty block means no objective system loaded (run.py wasn't given
+    # --direct-objectives); PRM falls back to generic scoring.
+    from train.objective_context import (
+        load_objectives_state, get_objective_context, render_objective_block,
+        judge_completion_advance, apply_advance_and_persist,
+    )
+    run_id = run_dir.name
+    cache_dir = REPO_ROOT / ".pokeagent_cache" / run_id
+    obj_state = load_objectives_state(cache_dir)
+    obj_ctx = get_objective_context(obj_state)
+    objective_block = render_objective_block(obj_ctx)
+    if obj_ctx["has_objective"]:
+        logger.info("[objective] current #%d/%d: %s (@%s)",
+                    obj_ctx["story_index"] + 1, obj_ctx["story_total"],
+                    obj_ctx["current"]["id"], obj_ctx["current"]["target_location"])
+
     logger.info("PRM scoring %d records with %s (mode=%s)",
                 len(records), judge_model, prm_mode)
     if prm_mode == "pairwise":
@@ -505,9 +533,11 @@ def score_and_relabel(
             game=game,
             stride=prm_stride,
             iter_idx=iter_idx,
+            objective_block=objective_block,
         )
     else:
-        records = _score_traj_records(records, run_dir, judge_model)
+        records = _score_traj_records(records, run_dir, judge_model,
+                                      objective_block=objective_block)
 
     rewards = [r.get("_reward", 0.0) for r in records]
     reward_mean = sum(rewards) / max(len(rewards), 1)
@@ -563,6 +593,7 @@ def score_and_relabel(
                 prompt_text=m["prompt"],
                 teacher_hint=m["teacher_hint"],
                 teacher_model=teacher_model,
+                objective_block=objective_block,
             )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
@@ -619,6 +650,28 @@ def score_and_relabel(
             }
             fout.write(json.dumps(record) + "\n")
 
+    # Ask Gemini whether this window completed any objectives, then
+    # persist the advanced index for the next iteration to pick up via
+    # --direct-objectives-start.
+    objective_advance = 0
+    objective_reason = ""
+    new_story_index = obj_ctx["story_index"]
+    if obj_ctx["has_objective"] and run_root is not None:
+        try:
+            objective_advance, objective_reason = judge_completion_advance(
+                records=records,
+                objectives_state=obj_state,
+                judge_model=judge_model,
+            )
+            new_story_index = apply_advance_and_persist(
+                objectives_state=obj_state,
+                advance_by=objective_advance,
+                run_cache_dir=cache_dir,
+                run_root=run_root,
+            )
+        except Exception as e:
+            logger.warning("[objective] completion judge failed: %s", e)
+
     stats = {
         "total": len(records),
         "relabeled": relabeled,
@@ -627,6 +680,10 @@ def score_and_relabel(
         "teacher_calls": teacher_calls,
         "reward_mean": reward_mean,
         "reward_low_count": len(low),
+        "objective_advance": objective_advance,
+        "objective_reason": objective_reason,
+        "story_index": new_story_index,
+        "story_total": obj_ctx["story_total"],
     }
     logger.info("DAgger shard: %s", stats)
     return stats
@@ -734,6 +791,14 @@ def main() -> int:
                     help="For --prm-mode=pairwise: stride between current and "
                          "anchor state in each comparison. Smaller = denser "
                          "delta-progress signal but more Gemini calls.")
+    ap.add_argument("--direct-objectives", type=str, default=None,
+                    help="Name of the objective sequence to load in run.py "
+                         "(e.g. 'categorized_full_game' for the full Red "
+                         "walkthrough with 78 story objectives). When set, "
+                         "dagger_prm injects the current objective into every "
+                         "PRM + teacher prompt, and after each rollout runs a "
+                         "Gemini completion judge to advance the story index. "
+                         "Persists across iters via `<output>/objectives_index.txt`.")
     ap.add_argument("--reset-free", action="store_true",
                     help="Continue each iteration's rollout from the previous "
                          "iteration's final emulator state (reset-free "
@@ -779,6 +844,11 @@ def main() -> int:
         # Phase 1
         logger.info("PHASE 1: rollout %d steps via autoevolve harness with %s",
                     args.rollout_steps, current_adapter)
+        # Pick up the persisted story index (if any) so the rollout's
+        # objective system starts where the previous iter ended.
+        from train.objective_context import load_persisted_index
+        start_obj_idx = load_persisted_index(args.output) if args.direct_objectives else 0
+
         rollout = run_rollout_harness(
             adapter_path=current_adapter,
             base_model_id=args.base_model_id,
@@ -790,6 +860,8 @@ def main() -> int:
             rollout_backend=args.rollout_backend,
             teacher_model=args.teacher_model,
             load_state=persistent_state_path if args.reset_free else None,
+            direct_objectives=args.direct_objectives,
+            direct_objectives_start=start_obj_idx,
         )
         with open(iter_dir / "rollout_summary.json", "w") as f:
             json.dump(rollout, f, indent=2)
