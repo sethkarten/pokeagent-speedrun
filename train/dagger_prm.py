@@ -213,6 +213,7 @@ def run_rollout_harness(
     model_name: str = "gemma4-dagger",
     rollout_backend: str = "unsloth",
     teacher_model: str = "gemini-3-flash-preview",
+    load_state: str | None = None,
 ) -> dict:
     """Spawn run.py for one rollout. rollout_backend selects who drives:
     - "unsloth": student adapter (normal DAgger rollout)
@@ -252,6 +253,8 @@ def run_rollout_harness(
             "--run-name", run_name,
             "--headless",
         ]
+    if load_state:
+        cmd += ["--load-state", load_state]
     logger.info("rollout cmd: %s", " ".join(cmd))
 
     env = os.environ.copy()
@@ -700,6 +703,13 @@ def main() -> int:
                          "of catastrophic forgetting). 'accumulate' = train "
                          "on all prior iter_*/dagger_shard.jsonl files "
                          "(stable but SFT wall-time grows linearly).")
+    ap.add_argument("--reset-free", action="store_true",
+                    help="Continue each iteration's rollout from the previous "
+                         "iteration's final emulator state (reset-free "
+                         "continual play). Without this flag every iteration "
+                         "starts at the game's initial save. Reset-free lets "
+                         "the agent compound spatial/story progress across "
+                         "iterations.")
     args = ap.parse_args()
     # Teacher-driven rollouts don't need relabel — the rollout IS the teacher
     # already. Force threshold to 0 so all records are kept-as-agent.
@@ -711,6 +721,10 @@ def main() -> int:
     args.output.mkdir(parents=True, exist_ok=True)
     data_root = str(args.data_root or REPO_ROOT)
     current_adapter = str(args.adapter)
+    # For --reset-free: the emulator state carried across iterations.
+    # After iter N's rollout, we copy the server's checkpoint.state to a
+    # stable path and feed it to iter N+1 via run.py --load-state.
+    persistent_state_path: str | None = None
 
     # Start SOCKS tunnel up-front so judge + teacher can reach Gemini.
     # Safe to run unconditionally; on hosts with direct internet the
@@ -744,12 +758,29 @@ def main() -> int:
             rom=args.rom,
             rollout_backend=args.rollout_backend,
             teacher_model=args.teacher_model,
+            load_state=persistent_state_path if args.reset_free else None,
         )
         with open(iter_dir / "rollout_summary.json", "w") as f:
             json.dump(rollout, f, indent=2)
         if rollout["steps"] == 0 or rollout.get("trajectory") is None:
             logger.error("rollout produced no data, stopping")
             return 1
+
+        # Capture the emulator state for the next iteration's rollout.
+        # The server saves checkpoint.state to .pokeagent_cache/<run_id>/
+        # after every agent step via PokeAgent's /checkpoint POST.
+        if args.reset_free:
+            run_id = Path(rollout["run_dir"]).name
+            src = REPO_ROOT / ".pokeagent_cache" / run_id / "checkpoint.state"
+            if src.exists():
+                dst = args.output / "persistent.state"
+                shutil.copy2(src, dst)
+                persistent_state_path = str(dst)
+                logger.info("[reset-free] carried emulator state forward: %s (%d bytes)",
+                            dst, dst.stat().st_size)
+            else:
+                logger.warning("[reset-free] expected checkpoint.state at %s — "
+                               "next iter will cold-start from game init", src)
 
         # Phase 2
         shard_path = iter_dir / "dagger_shard.jsonl"
