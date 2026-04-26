@@ -2864,10 +2864,22 @@ def _extract_text_action_calls(
         return bracket_calls
 
     # --- call:tool_name(args) / call:tool_name{args} format ---
-    # The GRPO-tuned checkpoint drifted toward a `call:name(...)` or
-    # `call:name{...}` format with partially-malformed args. Pick up the
-    # tool name even if the args are bad; the bracket parser's heuristics
-    # fill in reasonable defaults (press_buttons gets ["A"] etc).
+    # If the model emitted explicit args (e.g. `call:press_buttons(buttons=["A"])`),
+    # ast-parse them via the same path the ACTION: format uses. This avoids
+    # the bracket parser's prose-extraction fallback, which scans the surrounding
+    # ANALYZE/PLAN narrative and grabs ANY button name mentioned there — turning
+    # "Press A to open the menu (or B to cancel)" into ['A','B'] and silently
+    # cancelling every PC interaction in pallet_001.
+    colon_paren = _re.search(r'\bcall:([A-Za-z_][A-Za-z0-9_]*)\s*\(', text)
+    if colon_paren:
+        synthetic = "ACTION: " + text[colon_paren.start() + len("call:"):]
+        action_calls = _extract_text_action_calls(synthetic, tool_schemas)
+        if action_calls:
+            return action_calls
+
+    # Fallback for `call:name` without explicit parens (drifted/malformed).
+    # The bracket parser's heuristics fill in reasonable defaults
+    # (press_buttons gets ["A"]).
     colon_match = _re.search(r'\bcall:([A-Za-z_][A-Za-z0-9_]*)\b', text)
     if colon_match:
         synthetic = f"[{colon_match.group(1)}] " + text
