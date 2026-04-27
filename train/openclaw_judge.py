@@ -250,6 +250,13 @@ Your entire output must be a single JSON object. Example:
 
 
 def _build_state_summary(pre_state_raw: Any) -> str:
+    """Compact game-state summary fed to PRM + teacher.
+
+    Includes structured map exits (`warp_events`) and interactables
+    (`bg_events`) so Gemini can derive "next action that gets closer to
+    a relevant exit/object" without per-objective coordinate hardcoding.
+    Falls back to terse summary when the field isn't present.
+    """
     if isinstance(pre_state_raw, str):
         try:
             d = json.loads(pre_state_raw)
@@ -259,12 +266,45 @@ def _build_state_summary(pre_state_raw: Any) -> str:
         d = pre_state_raw
     else:
         return ""
-    return json.dumps({
+
+    out: dict[str, Any] = {
         "location": d.get("location"),
         "is_in_battle": d.get("is_in_battle"),
         "dialog_active": d.get("dialog_active"),
         "coords": d.get("player_coords") or {"x": d.get("x"), "y": d.get("y")},
-    })
+    }
+    # Structured world info: map exits + interactables on the current map.
+    # The agent's prompt has these but the PRM/teacher prompt didn't see
+    # them, leaving Gemini guessing at door coordinates from the
+    # screenshot alone.
+    map_data = d.get("map") or d.get("map_data") or {}
+    if isinstance(map_data, dict):
+        warps = map_data.get("warp_events")
+        if warps:
+            out["warp_events"] = [
+                {"x": w.get("x"), "y": w.get("y"), "dest_map": w.get("dest_map")}
+                for w in warps[:8]
+            ]
+        bg = map_data.get("bg_events")
+        if bg:
+            out["bg_events"] = [
+                {"x": e.get("x"), "y": e.get("y"),
+                 "symbol": e.get("symbol"), "script": e.get("script")}
+                for e in bg[:8]
+            ]
+    # Fall back: top-level warp_events / bg_events in pre_state.
+    if "warp_events" not in out and d.get("warp_events"):
+        out["warp_events"] = [
+            {"x": w.get("x"), "y": w.get("y"), "dest_map": w.get("dest_map")}
+            for w in d["warp_events"][:8]
+        ]
+    if "bg_events" not in out and d.get("bg_events"):
+        out["bg_events"] = [
+            {"x": e.get("x"), "y": e.get("y"),
+             "symbol": e.get("symbol"), "script": e.get("script")}
+            for e in d["bg_events"][:8]
+        ]
+    return json.dumps(out)
 
 
 def _score_one(
