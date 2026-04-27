@@ -159,10 +159,34 @@ Return JSON ONLY: {{"advance_by": <int 0-{max_advance}>, "reason": "<one sentenc
 """
 
 
-def _summarize_trajectory(records: list[dict], max_steps: int = 40) -> str:
-    """Compact per-step summary for the completion judge."""
+def _summarize_trajectory(records: list[dict], max_steps: int = 300) -> str:
+    """Compact per-step summary for the completion judge.
+
+    The previous default of 40 was a critical bug: a 64-step rollout that
+    transitioned to a new map at step 50+ would have those transition
+    records dropped, and the judge would say "no evidence of exit" while
+    the rollout's actual shard showed 17 PalletTown steps. With max_steps
+    300 we always cover 64- and 128-step rollouts in full; if a future
+    config exceeds that, we keep the first half AND the last half so the
+    endpoint is always visible.
+    """
+    n = len(records)
+    if n <= max_steps:
+        sample = list(enumerate(records))
+    else:
+        head = max_steps // 2
+        tail = max_steps - head
+        sample = (
+            list(enumerate(records[:head]))
+            + [(-1, None)]  # gap marker
+            + list(enumerate(records[-tail:], start=n - tail))
+        )
+
     lines = []
-    for i, t in enumerate(records[:max_steps]):
+    for i, t in sample:
+        if t is None:
+            lines.append(f"... ({n - max_steps} mid-window steps truncated)")
+            continue
         ps = t.get("pre_state", {}) or {}
         loc = ps.get("location", "?")
         coords = ps.get("player_coords") or ()
@@ -170,8 +194,6 @@ def _summarize_trajectory(records: list[dict], max_steps: int = 40) -> str:
         dial = "D" if ps.get("dialog_active") else ""
         flags = (batl + dial) or "-"
         lines.append(f"{i:3d} {loc} {tuple(coords)} [{flags}]")
-    if len(records) > max_steps:
-        lines.append(f"... ({len(records) - max_steps} more steps truncated)")
     return "\n".join(lines)
 
 
