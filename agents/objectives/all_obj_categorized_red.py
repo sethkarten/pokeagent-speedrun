@@ -43,17 +43,7 @@ STORY_OBJECTIVES = [
         action_type="navigate",
         category="story",
         target_location="Pallet Town",
-        navigation_hint=(
-            "ROUTE: (a) From bedroom RedsHouse2f, walk to stairs at (7,1) "
-            "and press A to descend. (b) In RedsHouse1f, walk to Mom near "
-            "(5,3), press A to talk, advance dialogue with A. (c) Then "
-            "WALK SOUTH-WEST to the front door at (2,7) RedsHouse1f. The "
-            "door tile (2,7) is on the bottom row, two from the left wall. "
-            "Step on (2,7) to transition to Pallet Town. After Mom dialogue "
-            "ends, your job is movement (DOWN/LEFT) to reach (2,7), NOT "
-            "more A presses. Avoid camping at (5,3) or (7,7) — neither is "
-            "the exit."
-        ),
+        navigation_hint="Walk to the stairs. Press A. Go downstairs. Talk to Mom — she says Professor Oak is looking for you. Exit the front door and enter Pallet Town.",
         completion_condition="talked_to_mom",
         priority=1
     ),
