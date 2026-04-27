@@ -282,9 +282,14 @@ def run_rollout_harness(
         if k in os.environ:
             env[k] = os.environ[k]
 
+    # Per-step budget at 180s gives 3x headroom over the 60s VLM timeout
+    # for occasional retry storms (slow Gemma4 inference under xformers
+    # fallback can produce 70s+ calls; 3 retries = 210s per stuck step).
+    # Without this, 30 stuck steps in a 64-step rollout busts the
+    # subprocess timeout and the iter dies with no shard.
     result = subprocess.run(
         cmd, cwd=str(REPO_ROOT), env=env,
-        timeout=n_steps * 120 + 600,
+        timeout=n_steps * 180 + 600,
     )
     if result.returncode != 0:
         logger.error("rollout harness exited %d", result.returncode)
