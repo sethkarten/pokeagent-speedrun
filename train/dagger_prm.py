@@ -799,6 +799,14 @@ def main() -> int:
                          "PRM + teacher prompt, and after each rollout runs a "
                          "Gemini completion judge to advance the story index. "
                          "Persists across iters via `<output>/objectives_index.txt`.")
+    ap.add_argument("--direct-objectives-start", type=int, default=0,
+                    help="Story index to start at (skips the first N "
+                         "objectives). Useful for skipping known-broken "
+                         "early objectives like pallet_001 (PC Potion "
+                         "interaction). Only takes effect on iter 1 — "
+                         "subsequent iters use the persisted index in "
+                         "objectives_index.txt that the completion judge "
+                         "advances.")
     ap.add_argument("--reset-free", action="store_true",
                     help="Continue each iteration's rollout from the previous "
                          "iteration's final emulator state (reset-free "
@@ -845,9 +853,19 @@ def main() -> int:
         logger.info("PHASE 1: rollout %d steps via autoevolve harness with %s",
                     args.rollout_steps, current_adapter)
         # Pick up the persisted story index (if any) so the rollout's
-        # objective system starts where the previous iter ended.
-        from train.objective_context import load_persisted_index
-        start_obj_idx = load_persisted_index(args.output) if args.direct_objectives else 0
+        # objective system starts where the previous iter ended. On the
+        # first iter, fall through to --direct-objectives-start (0 by
+        # default) so we can skip known-broken early objectives.
+        from train.objective_context import load_persisted_index, save_persisted_index
+        if args.direct_objectives:
+            start_obj_idx = load_persisted_index(args.output)
+            if start_obj_idx == 0 and args.direct_objectives_start > 0 and iteration == 0:
+                start_obj_idx = args.direct_objectives_start
+                save_persisted_index(args.output, start_obj_idx)
+                logger.info("[objective] seeding initial story index = %d "
+                            "(--direct-objectives-start)", start_obj_idx)
+        else:
+            start_obj_idx = 0
 
         rollout = run_rollout_harness(
             adapter_path=current_adapter,
