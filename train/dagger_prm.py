@@ -836,6 +836,59 @@ def score_and_relabel(
 
 # ── Phase 3: SFT ────────────────────────────────────────────────────
 
+def _prune_old_checkpoints(run_root: Path, current_iter: int) -> None:
+    """Delete sft_checkpoint dirs from old iters to bound disk usage.
+
+    Keeps:
+      - iter ``current_iter`` (just-finished SFT, needed as base for next iter)
+      - the iter with the highest historical reward_mean (winning snapshot
+        preserved for paper/inference/re-seeding)
+    Deletes every other ``iter_*/sft_checkpoint/`` directory.
+
+    Per-checkpoint footprint is ~3-8GB (rank-256 LoRA weights + AdamW
+    optimizer state on 26B params). 25 iters × 8GB = 200GB; without
+    pruning a long DAgger run quickly exceeds the CHIJ project quota.
+    """
+    log_path = run_root / "iteration_log.jsonl"
+    if not log_path.exists():
+        return
+    rows: list[dict] = []
+    for line in log_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            continue
+    if not rows:
+        return
+    try:
+        best = max(rows, key=lambda r: r.get("reward_mean", float("-inf")))
+        best_iter = int(best.get("iteration", current_iter))
+        best_reward = float(best.get("reward_mean", 0.0))
+    except Exception:
+        return
+    keep = {current_iter, best_iter}
+    for ckpt_dir in run_root.glob("iter_*/sft_checkpoint"):
+        try:
+            iter_n = int(ckpt_dir.parent.name.split("_", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        if iter_n in keep or not ckpt_dir.exists():
+            continue
+        try:
+            size_bytes = sum(p.stat().st_size for p in ckpt_dir.rglob("*") if p.is_file())
+            shutil.rmtree(ckpt_dir)
+            logger.info(
+                "[prune] removed iter_%d sft_checkpoint (~%.1fGB); "
+                "kept latest=iter_%d, best=iter_%d@reward=%.3f",
+                iter_n, size_bytes / 1e9, current_iter, best_iter, best_reward,
+            )
+        except Exception as e:
+            logger.warning("[prune] failed to delete %s: %s", ckpt_dir, e)
+
+
 def run_sft(
     shard_paths: list[str],
     adapter_path: str,
@@ -1131,6 +1184,14 @@ def main() -> int:
                 "teacher_calls": stats["teacher_calls"],
                 "adapter": current_adapter,
             }) + "\n")
+
+        # Auto-prune old sft_checkpoints to keep disk usage bounded.
+        # Each rank-256 LoRA on 26B is ~8GB; without pruning, a 25-iter run
+        # blows up to ~200GB and trips the CHIJ project quota. Keep only:
+        #   - the latest iter's checkpoint (needed as base for next iter's SFT)
+        #   - the historical-best reward_mean iter's checkpoint (preserve the
+        #     winning snapshot for paper / inference / re-seeding)
+        _prune_old_checkpoints(args.output, iteration + 1)
 
     logger.info("===== DAgger+PRM COMPLETE =====")
     return 0
