@@ -359,30 +359,157 @@ def _resolve_screenshot(run_dir: Path, step_n: int, t: dict) -> str | None:
     return str(cand) if cand.exists() else None
 
 
+def _format_action(action: Any) -> str:
+    """Compact one-line render of a rollout step's chosen action.
+
+    rollout_trajectory schema: action = {"type": "tool_calls",
+    "tool_calls": [{"name": <tool>, "args": {...}}]}
+    """
+    if not isinstance(action, dict):
+        return str(action)[:80] if action else "?"
+    calls = action.get("tool_calls") or []
+    if not calls:
+        return "no_action"
+    parts = []
+    for c in calls[:2]:  # usually 1, occasionally 2
+        name = c.get("name", "?")
+        args = c.get("args") or {}
+        # Render the most useful arg (buttons / x,y / args dict)
+        if "buttons" in args:
+            arg_str = "+".join(args["buttons"]) if isinstance(args["buttons"], list) else str(args["buttons"])
+        elif "x" in args and "y" in args:
+            arg_str = f"({args['x']},{args['y']})"
+        else:
+            arg_str = json.dumps(args, separators=(",", ":"))[:40]
+        parts.append(f"{name}({arg_str})")
+    return " | ".join(parts)
+
+
+def _format_traj_window(records: list[dict], i: int,
+                        window: int = 10,
+                        prev_iter_tail: list[dict] | None = None) -> str:
+    """Compact trajectory window fed to PRM + teacher.
+
+    Lines: ``step N: <action> @ <location> (x,y) -> <ok|fail>``.
+    Optionally prepends the tail of the previous iter so the teacher
+    sees compositional context across iter boundaries.
+    """
+    def _line(t: dict, marker: str = "") -> str:
+        step = t.get("step", "?")
+        loc = (t.get("location")
+               or t.get("pre_state", {}).get("location", "?"))
+        coords = (t.get("player_coords")
+                  or t.get("pre_state", {}).get("player_coords") or [])
+        if isinstance(coords, (list, tuple)) and len(coords) >= 2:
+            xy = f"({coords[0]},{coords[1]})"
+        else:
+            xy = "(?,?)"
+        action = _format_action(t.get("action"))
+        outcome = t.get("outcome") or {}
+        ok = "ok" if isinstance(outcome, dict) and outcome.get("success") else "fail"
+        return f"{marker}step {step}: {action} @ {loc} {xy} -> {ok}"
+
+    lines: list[str] = []
+    if prev_iter_tail:
+        lines.append("# Previous iter (terminal tail):")
+        for t in prev_iter_tail[-3:]:
+            lines.append(_line(t, marker="  prev "))
+    lines.append(f"# Current iter (last {window} steps):")
+    start = max(0, i - window)
+    for t in records[start:i]:
+        lines.append(_line(t))
+    if i == 0 and not prev_iter_tail:
+        lines.append("  (no prior steps in this iter)")
+    return "\n".join(lines)
+
+
+def _load_prev_iter_context(run_root: Path | None,
+                            iter_idx: int) -> tuple[str, list[dict]]:
+    """Read previous iter's terminal context for cross-iter memory.
+
+    Returns ``(prev_iter_summary, prev_iter_tail_records)``:
+      - summary: one-line "iter N-1 terminal: <judge_reason>"
+      - tail records: last ~5 rollout records from iter N-1 (for trajectory)
+    """
+    if not run_root or iter_idx <= 0:
+        return "", []
+    prev_dir = run_root / f"iter_{iter_idx - 1}"
+    if not prev_dir.exists():
+        return "", []
+    summary = ""
+    try:
+        stats = json.loads((prev_dir / "dagger_stats.json").read_text())
+        reason = (stats.get("objective_reason") or "").strip()
+        rew = stats.get("reward_mean", 0.0)
+        kept = stats.get("kept", 0)
+        total = stats.get("total", 0)
+        if reason or rew or total:
+            summary = (
+                f"Previous iter (iter {iter_idx - 1}) ended: "
+                f"reward={rew:.2f}, kept={kept}/{total}. "
+                f"Judge said: {reason or '(no completion verdict)'}"
+            )
+    except Exception:
+        pass
+    tail: list[dict] = []
+    try:
+        traj_path = prev_dir / "rollout_trajectory.jsonl"
+        if traj_path.exists():
+            with traj_path.open() as f:
+                lines = f.readlines()[-5:]
+            for ln in lines:
+                try:
+                    tail.append(json.loads(ln))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return summary, tail
+
+
 def _score_traj_records(records: list[dict], run_dir: Path, judge_model: str,
-                        objective_block: str = "") -> list[dict]:
-    """Run PRM judge on each trajectory record; attach reward + detail."""
+                        objective_block: str = "",
+                        run_root: Path | None = None,
+                        iter_idx: int = 0) -> list[dict]:
+    """Run PRM judge on each trajectory record; attach reward + detail.
+
+    Each step's PRM + teacher input includes a *structured* trajectory
+    window (prior steps' actions + locations) and previous-iter
+    terminal context, so the teacher can reason about progression
+    across the whole rollout instead of treating each step in isolation.
+    """
     from train.openclaw_judge import _score_one, _build_state_summary, _load_image_bytes
+
+    prev_summary, prev_tail = _load_prev_iter_context(run_root, iter_idx)
 
     for i, t in enumerate(records):
         pre_state = t.get("pre_state", {})
         location = pre_state.get("location", "?")
         in_battle = pre_state.get("is_in_battle", False)
 
-        window = [r.get("pre_state", {}).get("location", "?")
-                  for r in records[max(0, i - 20):i]]
+        # Trajectory window: prior 10 steps with action + coord transitions.
+        # Includes the previous iter's tail on the FIRST step of this iter
+        # so the teacher knows where reset-free state placed the agent.
+        traj_window = _format_traj_window(
+            records, i, window=10,
+            prev_iter_tail=(prev_tail if i == 0 else None),
+        )
+
+        # Stuck detection retained as a brief signal alongside the window.
+        loc_window = [r.get("pre_state", {}).get("location", "?")
+                      for r in records[max(0, i - 20):i]]
         loc_counts: dict[str, int] = {}
-        for rl in window:
+        for rl in loc_window:
             loc_counts[rl] = loc_counts.get(rl, 0) + 1
         stuck = any(c > 10 for c in loc_counts.values())
-        unique_recent = len(set(window))
         teacher_hint = (
             f"Game state: {location}. "
             f"{'Battle in progress.' if in_battle else 'Overworld exploration.'} "
-            f"Recent trajectory: {unique_recent} unique locations in last {len(window)} steps. "
-            f"{'STUCK: agent has been in the same location for many steps. ' if stuck else ''}"
-            f"Actions that advance game progress, explore new areas, or break loops "
-            f"score high. Actions that repeat recent behavior when stuck score low."
+            f"{'STUCK: agent in same location 10+ recent steps. ' if stuck else ''}"
+            + (f"{prev_summary} " if prev_summary and i < 5 else "")
+            + "Reward actions that advance the CURRENT objective; "
+            "penalize actions that undo recent progress (e.g. re-entering "
+            "a building the agent just exited)."
         )
 
         # Real trajectory schema: reasoning = full student response, llm_prompt = full prompt
@@ -398,10 +525,12 @@ def _score_traj_records(records: list[dict], run_dir: Path, judge_model: str,
             image_bytes=img,
             judge_model=judge_model,
             objective_block=objective_block,
+            trajectory_block=traj_window,
         )
         t["_reward"] = reward
         t["_reward_detail"] = detail
         t["_teacher_hint"] = teacher_hint
+        t["_traj_window"] = traj_window
         t["_image_path_abs"] = img_path
     return records
 
@@ -416,6 +545,7 @@ def _teacher_query(
     teacher_model: str = "gemini-3-flash-preview",
     timeout_s: float = 90.0,
     objective_block: str = "",
+    trajectory_block: str = "",
 ) -> str | None:
     from train.openclaw_judge import _get_session, _load_image_bytes, _load_env
 
@@ -430,10 +560,13 @@ def _teacher_query(
     # drop straight into SFT without re-parsing. The agent's prompt already
     # describes the tool schema; we just need a directive prefix.
     objective_text = (objective_block or "").strip()
+    traj_text = (trajectory_block or "").strip()
     system_directive = (
         "You are an expert Pokemon Red player guiding a student agent. "
         "The student is stuck or making poor choices.\n\n"
         + (f"{objective_text}\n\n" if objective_text else "")
+        + (f"## RECENT TRAJECTORY (for spatial reasoning)\n{traj_text}\n\n"
+           if traj_text else "")
         + f"Local context: {teacher_hint}\n\n"
         "Produce the SAME response the student should have produced: "
         "a single tool call in the student's format (e.g. `call:press_buttons` "
@@ -442,7 +575,10 @@ def _teacher_query(
         "Match the format exactly — do not wrap in markdown, do not add "
         "preamble, do not explain yourself outside the ANALYZE/PLAN sections. "
         "Pick an action that DIRECTLY PROGRESSES the CURRENT STORY OBJECTIVE "
-        "above — match its navigation_hint and completion_condition."
+        "above. CRITICAL: do NOT undo recent progress visible in the "
+        "trajectory window — if the student just exited a building, do not "
+        "walk back in. Prefer continuing forward toward the objective's "
+        "target_location."
     )
     full_text = system_directive + "\n\n---\nSTUDENT PROMPT:\n" + prompt_text
 
@@ -542,7 +678,8 @@ def score_and_relabel(
         )
     else:
         records = _score_traj_records(records, run_dir, judge_model,
-                                      objective_block=objective_block)
+                                      objective_block=objective_block,
+                                      run_root=run_root, iter_idx=iter_idx)
 
     rewards = [r.get("_reward", 0.0) for r in records]
     reward_mean = sum(rewards) / max(len(rewards), 1)
@@ -563,6 +700,7 @@ def score_and_relabel(
         prompt = t.get("llm_prompt") or t.get("prompt") or ""
         reward = t.get("_reward", 0.0)
         teacher_hint = t.get("_teacher_hint", "")
+        traj_window = t.get("_traj_window", "")
         valid = bool(img_path and Path(img_path).exists() and prompt)
         meta_by_i[i] = {
             "t": t,
@@ -571,6 +709,7 @@ def score_and_relabel(
             "prompt": prompt,
             "reward": reward,
             "teacher_hint": teacher_hint,
+            "traj_window": traj_window,
             "valid": valid,
         }
 
@@ -599,6 +738,7 @@ def score_and_relabel(
                 teacher_hint=m["teacher_hint"],
                 teacher_model=teacher_model,
                 objective_block=objective_block,
+                trajectory_block=m.get("traj_window", ""),
             )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:

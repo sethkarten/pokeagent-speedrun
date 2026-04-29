@@ -208,6 +208,7 @@ _JUDGE_PROMPT = """You are a process reward model (PRM) grading a Pokemon-playin
 You are given:
 - the current screenshot of the game (attached as an image)
 - the game state summary and the teacher's trajectory context
+- a structured RECENT TRAJECTORY window of recent actions/locations (use this to detect oscillation, regression, or backtracking)
 - the CURRENT STORY OBJECTIVE from the Pokemon Red walkthrough (authoritative; tells you exactly what the agent should be doing right now)
 - the student model's response (reasoning + chosen tool call)
 
@@ -223,8 +224,8 @@ Score four metrics in [0.0, 1.0] and return ONE JSON object:
    1.0 = action clearly progresses toward the navigation_hint / target_location.
    0.5 = plausibly useful (e.g. moving in the right direction).
    0.2 = interacts with something relevant but not progressing toward the condition.
-   0.0 = repeats previous actions, wrong direction, or irrelevant to the current objective.
-   IMPORTANT: ground this score in the CURRENT STORY OBJECTIVE, not vague "exploration".
+   0.0 = repeats previous actions, wrong direction, or **undoes recent progress visible in the RECENT TRAJECTORY window** (e.g. re-entering a building the agent just exited, walking back through a warp the agent already crossed).
+   IMPORTANT: ground this score in the CURRENT STORY OBJECTIVE and use the RECENT TRAJECTORY to penalize regressions.
 
 3. reasoning_quality: Does the model's reasoning correctly describe the current situation and form a coherent plan that aligns with the current objective?
    1.0 = accurate state description + plan matches navigation_hint; 0.5 = partial; 0.0 = hallucinated or off-task.
@@ -238,10 +239,11 @@ Your entire output must be a single JSON object. Example:
 {{"action_correctness": 0.7, "trajectory_progress": 0.2, "reasoning_quality": 0.5, "format_compliance": 1.0}}
 
 {objective_block}
+{trajectory_block}
 # State
 {state}
 
-# Teacher reference (trajectory context)
+# Teacher reference (one-line hint)
 {teacher}
 
 # Model-under-test response
@@ -314,14 +316,18 @@ def _score_one(
     image_bytes: Optional[bytes],
     judge_model: str,
     objective_block: str = "",
+    trajectory_block: str = "",
 ) -> tuple[float, dict]:
     if not model_text.strip():
         return 0.0, {"action_correctness": 0.0, "trajectory_progress": 0.0, "reasoning_quality": 0.0, "format_compliance": 0.0}
+    traj_text = (trajectory_block or "").strip()
+    traj_section = f"# Recent trajectory window\n{traj_text}\n" if traj_text else ""
     prompt = _JUDGE_PROMPT.format(
         state=state_summary,
         teacher=(teacher_text or "")[:2000],
         model=model_text[:1600],
         objective_block=(objective_block or "").strip(),
+        trajectory_block=traj_section,
     )
     parts: list[Any] = [prompt]
     if image_bytes:
