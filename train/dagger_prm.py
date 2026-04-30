@@ -974,8 +974,14 @@ def main() -> int:
                     help="SFT data strategy. 'online' = train only on this "
                          "iteration's shard (fast, constant SFT time, risk "
                          "of catastrophic forgetting). 'accumulate' = train "
-                         "on all prior iter_*/dagger_shard.jsonl files "
-                         "(stable but SFT wall-time grows linearly).")
+                         "on the last --shard-window iter_*/dagger_shard.jsonl "
+                         "files (or all of them if window=0). Stable but "
+                         "SFT wall-time grows linearly with the window size.")
+    ap.add_argument("--shard-window", type=int, default=0,
+                    help="In accumulate mode, train on the last N iter shards. "
+                         "0 (default) = unlimited (all prior iters). A finite "
+                         "window (e.g. 5) caps SFT wall-time per iter and lets "
+                         "stale early-iter shards drop out as the policy moves on.")
     ap.add_argument("--prm-mode", type=str, default="rubric",
                     choices=["rubric", "pairwise"],
                     help="PRM scoring strategy. 'rubric' = per-step absolute "
@@ -1125,18 +1131,25 @@ def main() -> int:
             logger.error("empty DAgger shard, stopping")
             return 1
 
-        # Phase 3 — SFT strategy controlled by --shard-mode.
+        # Phase 3 — SFT strategy controlled by --shard-mode + --shard-window.
         #  - online:     train only on THIS iter's shard, warm-started from
         #                prev checkpoint. Constant ~17 min per iter. Risks
         #                catastrophic forgetting across iters.
-        #  - accumulate: train on ALL prior iter_*/dagger_shard.jsonl,
-        #                warm-started. SFT wall-time grows linearly but
-        #                early-iter lessons persist.
+        #  - accumulate: train on prior iter_*/dagger_shard.jsonl files,
+        #                warm-started. SFT wall-time grows linearly. The
+        #                --shard-window flag bounds it — e.g. window=5 trains
+        #                on the last 5 iter shards (sliding window over the
+        #                training history). 0 = unlimited.
         train_dir = iter_dir / "sft_checkpoint"
         if args.shard_mode == "accumulate":
-            shards_for_sft = sorted(
-                str(p) for p in args.output.glob("iter_*/dagger_shard.jsonl")
-            )
+            all_shards = sorted(args.output.glob("iter_*/dagger_shard.jsonl"))
+            if args.shard_window > 0 and len(all_shards) > args.shard_window:
+                kept_shards = all_shards[-args.shard_window:]
+                logger.info("[shard-window] using last %d/%d shards",
+                            args.shard_window, len(all_shards))
+                shards_for_sft = [str(p) for p in kept_shards]
+            else:
+                shards_for_sft = [str(p) for p in all_shards]
         else:
             shards_for_sft = [str(shard_path)]
         logger.info("PHASE 3 [%s]: SFT on %d shard(s) totaling ~%d records "
