@@ -972,6 +972,84 @@ def run_sft(
     return result.returncode
 
 
+# ── Initial-state staging (multi-checkpoint cohort entry) ──────────
+
+def stage_initial_state(src: str, output_dir: Path) -> dict | None:
+    """Stage a backup checkpoint as the iter 0 starting point.
+
+    `src` is either a backup .zip (e.g.
+    `20260418_063630_defeat_brock_*.zip` from the autoevolve harness) or
+    an already-unpacked dir with the same layout. Extracts
+    `checkpoint.state` to `<output_dir>/initial.state` and reads
+    `objectives.json["story"]["index"]` so the rollout's objective
+    system starts at the right step.
+
+    Returns ``{"state_path": Path, "story_index": int | None}`` or
+    None on failure.
+    """
+    src_path = Path(src)
+    if not src_path.exists():
+        logger.error("[initial-state] source not found: %s", src_path)
+        return None
+
+    state_path = output_dir / "initial.state"
+    objectives_data: dict | None = None
+
+    if src_path.is_file() and src_path.suffix == ".zip":
+        import zipfile
+        with zipfile.ZipFile(src_path) as z:
+            ckpt_name = next(
+                (n for n in z.namelist()
+                 if n.endswith("/checkpoint.state") or n == "checkpoint.state"),
+                None,
+            )
+            obj_name = next(
+                (n for n in z.namelist()
+                 if n.endswith("/objectives.json") or n == "objectives.json"),
+                None,
+            )
+            if not ckpt_name:
+                logger.error("[initial-state] zip %s lacks checkpoint.state",
+                             src_path)
+                return None
+            with z.open(ckpt_name) as src_f, open(state_path, "wb") as dst_f:
+                shutil.copyfileobj(src_f, dst_f)
+            if obj_name:
+                with z.open(obj_name) as f:
+                    try:
+                        objectives_data = json.load(f)
+                    except Exception as e:
+                        logger.warning("[initial-state] objectives.json parse: %s", e)
+    elif src_path.is_dir():
+        ckpts = list(src_path.rglob("checkpoint.state"))
+        if not ckpts:
+            logger.error("[initial-state] dir %s lacks checkpoint.state", src_path)
+            return None
+        shutil.copy2(ckpts[0], state_path)
+        objs = list(src_path.rglob("objectives.json"))
+        if objs:
+            try:
+                with open(objs[0]) as f:
+                    objectives_data = json.load(f)
+            except Exception as e:
+                logger.warning("[initial-state] objectives.json parse: %s", e)
+    else:
+        logger.error("[initial-state] must be .zip or dir: %s", src_path)
+        return None
+
+    story_index: int | None = None
+    if objectives_data:
+        try:
+            story_index = int(objectives_data.get("story", {}).get("index", 0))
+        except Exception:
+            pass
+
+    logger.info("[initial-state] staged %s -> %s (%d bytes), story_index=%s",
+                src_path.name, state_path, state_path.stat().st_size,
+                story_index)
+    return {"state_path": state_path, "story_index": story_index}
+
+
 # ── Main loop ──────────────────────────────────────────────────────
 
 def main() -> int:
@@ -1061,6 +1139,16 @@ def main() -> int:
                          "starts at the game's initial save. Reset-free lets "
                          "the agent compound spatial/story progress across "
                          "iterations.")
+    ap.add_argument("--initial-state", type=str, default=None,
+                    help="Path to a backup checkpoint to start iter 0 from. "
+                         "Accepts either: (a) a .zip from the autoevolve "
+                         "harness backups (must contain checkpoint.state and "
+                         "optionally objectives.json) or (b) an unpacked "
+                         "directory with the same files. Stages "
+                         "checkpoint.state to <output>/initial.state and "
+                         "auto-derives --direct-objectives-start from the "
+                         "staged objectives.json's story.index. Implies "
+                         "--reset-free.")
     args = ap.parse_args()
     # Teacher-driven rollouts don't need relabel — the rollout IS the teacher
     # already. Force threshold to 0 so all records are kept-as-agent.
@@ -1076,6 +1164,28 @@ def main() -> int:
     # After iter N's rollout, we copy the server's checkpoint.state to a
     # stable path and feed it to iter N+1 via run.py --load-state.
     persistent_state_path: str | None = None
+
+    # Multi-checkpoint cohort entry: stage a backup state into the run as
+    # iter 0's starting point. Auto-set direct-objectives-start from the
+    # staged objectives.json so the PRM/teacher know which story step
+    # is currently active.
+    if args.initial_state:
+        staged = stage_initial_state(args.initial_state, args.output)
+        if staged is None:
+            logger.error("--initial-state staging failed; aborting")
+            return 1
+        persistent_state_path = str(staged["state_path"])
+        if not args.reset_free:
+            logger.info("[initial-state] auto-enabling --reset-free")
+            args.reset_free = True
+        if (args.direct_objectives
+                and args.direct_objectives_start == 0
+                and staged["story_index"] is not None
+                and staged["story_index"] > 0):
+            args.direct_objectives_start = staged["story_index"]
+            logger.info("[initial-state] auto-set --direct-objectives-start=%d "
+                        "from staged objectives.json",
+                        args.direct_objectives_start)
 
     # Start SOCKS tunnel up-front so judge + teacher can reach Gemini.
     # Safe to run unconditionally; on hosts with direct internet the
