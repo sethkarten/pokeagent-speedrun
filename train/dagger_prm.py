@@ -38,6 +38,7 @@ import glob
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -385,12 +386,35 @@ def _format_action(action: Any) -> str:
     return " | ".join(parts)
 
 
+_REASONING_HEAD_RE = re.compile(
+    r"ANALYZE\s*:\s*(.+?)(?:\n\s*PLAN|\n\s*ACTION|\Z)",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _reasoning_snippet(text: str, max_chars: int = 140) -> str:
+    """Pull the first sentence of ANALYZE (or first line) for trajectory display.
+
+    The teacher needs to see the student's *intent* per step, not just the
+    button press, otherwise it can't tell "agent intended to exit, bumped a
+    wall" from "agent intended to walk back in." Mirrors the live harness's
+    `_format_action_history` (PokeAgent.py:3283) which always includes a
+    reasoning snippet alongside the tool call.
+    """
+    if not text:
+        return ""
+    m = _REASONING_HEAD_RE.search(text)
+    head = (m.group(1) if m else text).strip()
+    head = re.sub(r"\s+", " ", head)
+    return head[:max_chars]
+
+
 def _format_traj_window(records: list[dict], i: int,
                         window: int = 10,
                         prev_iter_tail: list[dict] | None = None) -> str:
     """Compact trajectory window fed to PRM + teacher.
 
-    Lines: ``step N: <action> @ <location> (x,y) -> <ok|fail>``.
+    Lines: ``step N: <action> @ <location> (x,y) -> <ok|fail> | <reasoning>``.
     Optionally prepends the tail of the previous iter so the teacher
     sees compositional context across iter boundaries.
     """
@@ -407,7 +431,9 @@ def _format_traj_window(records: list[dict], i: int,
         action = _format_action(t.get("action"))
         outcome = t.get("outcome") or {}
         ok = "ok" if isinstance(outcome, dict) and outcome.get("success") else "fail"
-        return f"{marker}step {step}: {action} @ {loc} {xy} -> {ok}"
+        snippet = _reasoning_snippet(t.get("reasoning") or t.get("raw_response") or "")
+        snippet_part = f" | {snippet}" if snippet else ""
+        return f"{marker}step {step}: {action} @ {loc} {xy} -> {ok}{snippet_part}"
 
     lines: list[str] = []
     if prev_iter_tail:
@@ -565,20 +591,29 @@ def _teacher_query(
         "You are an expert Pokemon Red player guiding a student agent. "
         "The student is stuck or making poor choices.\n\n"
         + (f"{objective_text}\n\n" if objective_text else "")
-        + (f"## RECENT TRAJECTORY (for spatial reasoning)\n{traj_text}\n\n"
-           if traj_text else "")
+        + (f"## RECENT TRAJECTORY (student's prior actions, locations, and intent)\n"
+           f"{traj_text}\n\n" if traj_text else "")
         + f"Local context: {teacher_hint}\n\n"
         "Produce the SAME response the student should have produced: "
         "a single tool call in the student's format (e.g. `call:press_buttons` "
         "with ANALYZE/PLAN/ACTION sections, or the bracket `[tool_name]` "
         "format if that's what the prompt specifies), plus concise reasoning. "
         "Match the format exactly — do not wrap in markdown, do not add "
-        "preamble, do not explain yourself outside the ANALYZE/PLAN sections. "
-        "Pick an action that DIRECTLY PROGRESSES the CURRENT STORY OBJECTIVE "
-        "above. CRITICAL: do NOT undo recent progress visible in the "
-        "trajectory window — if the student just exited a building, do not "
-        "walk back in. Prefer continuing forward toward the objective's "
-        "target_location."
+        "preamble, do not explain yourself outside the ANALYZE/PLAN sections.\n\n"
+        "DECISION RULES (in order):\n"
+        "1. If the screen shows a dialog or battle, handle it first (press A "
+        "to advance dialog; in battle pick FIGHT > strongest move).\n"
+        "2. Otherwise, pick an action that DIRECTLY PROGRESSES the CURRENT "
+        "STORY OBJECTIVE above by moving toward its `target_location` (use "
+        "`navigation_hint` for routing).\n"
+        "3. CRITICAL: NEVER pick an action whose target is a location in the "
+        "ALREADY COMPLETED list. If the trajectory shows the student just "
+        "exited a building or area in the completed list, do NOT walk back "
+        "in. The student's reasoning may say it wants to revisit — override "
+        "that and route forward to the CURRENT objective.\n"
+        "4. If the student's last few steps show oscillation (same coords "
+        "repeated, or back-and-forth between two tiles), break the loop by "
+        "moving in a direction the student has not tried in the last 5 steps."
     )
     full_text = system_directive + "\n\n---\nSTUDENT PROMPT:\n" + prompt_text
 
@@ -676,6 +711,14 @@ def score_and_relabel(
             iter_idx=iter_idx,
             objective_block=objective_block,
         )
+        # Pairwise PRM doesn't attach _traj_window itself. Build it here so
+        # the teacher gets the same trajectory memory as the rubric path.
+        prev_summary, prev_tail = _load_prev_iter_context(run_root, iter_idx)
+        for i, t in enumerate(records):
+            t["_traj_window"] = _format_traj_window(
+                records, i, window=10,
+                prev_iter_tail=(prev_tail if i == 0 else None),
+            )
     else:
         records = _score_traj_records(records, run_dir, judge_model,
                                       objective_block=objective_block,

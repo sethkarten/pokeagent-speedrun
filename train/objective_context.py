@@ -73,21 +73,23 @@ def load_objectives_state(run_cache_dir: Path) -> Optional[dict]:
 
 
 def get_objective_context(objectives_state: Optional[dict],
-                          upcoming: int = 2) -> dict:
-    """Extract the currently-active story objective + upcoming objectives.
+                          upcoming: int = 2,
+                          completed_lookback: int = 5) -> dict:
+    """Extract the currently-active story objective + upcoming + completed objectives.
 
     Returns a dict shaped for prompt injection:
         {
             "has_objective": bool,
             "current": {id, description, target_location, navigation_hint, completion_condition} | None,
             "upcoming": [ {id, description, target_location} ],
+            "completed": [ {id, description, target_location} ],   # most-recent first
             "story_index": int,
             "story_total": int,
         }
     """
     if not objectives_state:
         return {"has_objective": False, "current": None, "upcoming": [],
-                "story_index": 0, "story_total": 0}
+                "completed": [], "story_index": 0, "story_total": 0}
 
     story = objectives_state.get("story", {})
     seq = story.get("sequence", [])
@@ -108,28 +110,48 @@ def get_objective_context(objectives_state: Optional[dict],
          if k in ("id", "description", "target_location")}
         for j in range(idx + 1, min(idx + 1 + upcoming, len(seq)))
     ]
+    # Most recent N completed objectives (story[idx-N..idx-1]), reverse chronological.
+    completed = [
+        {k: v for k, v in _obj_brief(seq[j]).items()
+         if k in ("id", "description", "target_location")}
+        for j in range(max(0, idx - completed_lookback), idx)
+    ][::-1]
     return {
         "has_objective": current is not None,
         "current": current,
         "upcoming": next_ones,
+        "completed": completed,
         "story_index": idx,
         "story_total": len(seq),
     }
 
 
 def render_objective_block(ctx: dict) -> str:
-    """Flat text block to inject into prompts (PRM / teacher)."""
+    """Flat text block to inject into prompts (PRM / teacher).
+
+    The teacher uses the COMPLETED list as a do-not-revisit signal: if the
+    student walks back to a `target_location` in the completed list, the
+    teacher should relabel toward the CURRENT objective instead. This
+    mirrors how live ContinualHarness Gemini uses its working-memory
+    achievement log to avoid regressing.
+    """
     if not ctx.get("has_objective"):
         return ""
     cur = ctx["current"]
-    out = [
+    out = []
+    if ctx.get("completed"):
+        out.append("## ALREADY COMPLETED — DO NOT WALK BACK TO THESE LOCATIONS")
+        for c in ctx["completed"]:
+            out.append(f"- {c['id']}: {c['description']} @ {c['target_location']}")
+        out.append("")  # blank line
+    out.extend([
         f"## CURRENT STORY OBJECTIVE ({ctx['story_index'] + 1}/{ctx['story_total']})",
         f"- id: {cur['id']}",
         f"- description: {cur['description']}",
         f"- target_location: {cur['target_location']}",
         f"- navigation_hint: {cur['navigation_hint']}",
         f"- completion_condition: {cur['completion_condition']}",
-    ]
+    ])
     if ctx["upcoming"]:
         out.append("## UPCOMING (for context)")
         for u in ctx["upcoming"]:
