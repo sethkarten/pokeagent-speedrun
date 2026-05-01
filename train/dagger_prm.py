@@ -1229,10 +1229,16 @@ def main() -> int:
             logger.error("[resume-from] no usable sft_checkpoint in any iter_*")
             return 1
         last_iter_dir, ckpt = chosen
-        n = int(last_iter_dir.name.split("_")[1])
+        n_adapter = int(last_iter_dir.name.split("_")[1])
+        # For start_iter, use the HIGHEST existing iter number so we don't
+        # overwrite a partially-walled iter that has stats but no SFT
+        # checkpoint. The adapter still comes from the latest *usable* iter
+        # (which may be earlier).
+        n_max = max(int(p.name.split("_")[1]) for p in existing)
         current_adapter = str(ckpt)
-        start_iter = n  # next iter dir will be iter_{n+1}
-        logger.info("[resume-from] resuming after iter %d", n)
+        start_iter = n_max  # next iter dir will be iter_{n_max+1}
+        logger.info("[resume-from] resuming after iter %d (max existing); "
+                    "adapter from iter %d", n_max, n_adapter)
         logger.info("[resume-from] adapter = %s", current_adapter)
         # Persistent emulator state: <output>/persistent.state is overwritten
         # each iter by reset-free, so it reflects the most recent live state.
