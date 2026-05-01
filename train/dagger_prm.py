@@ -1236,17 +1236,29 @@ def main() -> int:
         logger.info("[resume-from] adapter = %s", current_adapter)
         # Persistent emulator state: <output>/persistent.state is overwritten
         # each iter by reset-free, so it reflects the most recent live state.
+        # If absent (e.g., a wall-killed iter never wrote it), fall back to
+        # <output>/initial.state which is the staged checkpoint from
+        # --initial-state (preserves the original story_idx anchor).
         persist = resume_dir / "persistent.state"
+        initial = resume_dir / "initial.state"
+        chosen_state = None
         if persist.exists():
-            persistent_state_path = str(persist)
-            logger.info("[resume-from] persistent.state = %s (%d bytes)",
-                        persist, persist.stat().st_size)
+            chosen_state = persist
+            kind = "persistent.state"
+        elif initial.exists():
+            chosen_state = initial
+            kind = "initial.state (fallback — persistent.state missing)"
+        if chosen_state is not None:
+            persistent_state_path = str(chosen_state)
+            logger.info("[resume-from] %s = %s (%d bytes)",
+                        kind, chosen_state, chosen_state.stat().st_size)
             if not args.reset_free:
                 logger.info("[resume-from] auto-enabling --reset-free")
                 args.reset_free = True
         else:
-            logger.warning("[resume-from] %s missing; iter %d will cold-start",
-                           persist, n + 1)
+            logger.warning("[resume-from] no persistent.state or initial.state "
+                           "in %s; iter %d will cold-start from game init",
+                           resume_dir, n + 1)
         # objectives_index.txt is auto-loaded by load_persisted_index later.
 
     # Start SOCKS tunnel up-front so judge + teacher can reach Gemini.
