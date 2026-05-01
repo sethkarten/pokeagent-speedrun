@@ -1149,6 +1149,15 @@ def main() -> int:
                          "auto-derives --direct-objectives-start from the "
                          "staged objectives.json's story.index. Implies "
                          "--reset-free.")
+    ap.add_argument("--resume-from", type=Path, default=None,
+                    help="Resume a wall-killed run from its existing output "
+                         "dir. Auto-detects the highest existing iter_N/, "
+                         "loads iter_N/sft_checkpoint as the starting adapter, "
+                         "loads <resume_from>/persistent.state as the initial "
+                         "emulator state, and starts the iteration counter at "
+                         "N+1. objectives_index.txt is already auto-loaded by "
+                         "the existing logic. If --resume-from == --output, "
+                         "the new iters land in the same output dir.")
     args = ap.parse_args()
     # Teacher-driven rollouts don't need relabel — the rollout IS the teacher
     # already. Force threshold to 0 so all records are kept-as-agent.
@@ -1187,6 +1196,59 @@ def main() -> int:
                         "from staged objectives.json",
                         args.direct_objectives_start)
 
+    # Resume from a wall-killed run: pick up at the highest existing iter,
+    # load its trained adapter + persistent emulator state, advance the
+    # iteration counter so we don't overwrite prior data.
+    start_iter = 0
+    if args.resume_from:
+        resume_dir = args.resume_from
+        if not resume_dir.exists():
+            logger.error("--resume-from dir %s does not exist", resume_dir)
+            return 1
+        existing = sorted(
+            (p for p in resume_dir.glob("iter_*") if p.is_dir()),
+            key=lambda p: int(p.name.split("_")[1]),
+        )
+        if not existing:
+            logger.error("--resume-from dir %s has no iter_* dirs", resume_dir)
+            return 1
+        # Pick highest iter that has a finalized SFT checkpoint to resume from.
+        # Walk backwards: a wall-killed iter may have created iter_N/ but not
+        # finished its SFT; in that case use iter_{N-1}'s checkpoint.
+        chosen = None
+        for it in reversed(existing):
+            ckpt_dir = it / "sft_checkpoint"
+            ckpt_dirs = sorted(ckpt_dir.glob("checkpoint-*"))
+            if ckpt_dirs:
+                chosen = (it, ckpt_dirs[-1])
+                break
+            if (ckpt_dir / "adapter_config.json").exists():
+                chosen = (it, ckpt_dir)
+                break
+        if chosen is None:
+            logger.error("[resume-from] no usable sft_checkpoint in any iter_*")
+            return 1
+        last_iter_dir, ckpt = chosen
+        n = int(last_iter_dir.name.split("_")[1])
+        current_adapter = str(ckpt)
+        start_iter = n  # next iter dir will be iter_{n+1}
+        logger.info("[resume-from] resuming after iter %d", n)
+        logger.info("[resume-from] adapter = %s", current_adapter)
+        # Persistent emulator state: <output>/persistent.state is overwritten
+        # each iter by reset-free, so it reflects the most recent live state.
+        persist = resume_dir / "persistent.state"
+        if persist.exists():
+            persistent_state_path = str(persist)
+            logger.info("[resume-from] persistent.state = %s (%d bytes)",
+                        persist, persist.stat().st_size)
+            if not args.reset_free:
+                logger.info("[resume-from] auto-enabling --reset-free")
+                args.reset_free = True
+        else:
+            logger.warning("[resume-from] %s missing; iter %d will cold-start",
+                           persist, n + 1)
+        # objectives_index.txt is auto-loaded by load_persisted_index later.
+
     # Start SOCKS tunnel up-front so judge + teacher can reach Gemini.
     # Safe to run unconditionally; on hosts with direct internet the
     # proxy just adds a hop.
@@ -1200,9 +1262,9 @@ def main() -> int:
                        "Gemini API calls will fail on compute nodes with no "
                        "external DNS")
 
-    for iteration in range(args.iterations):
+    for iteration in range(start_iter, start_iter + args.iterations):
         logger.info("======== ITERATION %d/%d ========",
-                    iteration + 1, args.iterations)
+                    iteration + 1, start_iter + args.iterations)
         iter_dir = args.output / f"iter_{iteration + 1}"
         iter_dir.mkdir(parents=True, exist_ok=True)
 
