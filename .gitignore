@@ -173,3 +173,8 @@ celerybeat-schedule
 celerybeat.pid
 *.sage.py
 
+# TEMP
+research-paper/
+thesis/
+paper-data/
+bootstrap/

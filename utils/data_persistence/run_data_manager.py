@@ -194,16 +194,19 @@ class RunDataManager:
                       reasoning: str,
                       action: Dict[str, Any],
                       pre_state: Dict[str, Any],
-                      post_state: Optional[Dict[str, Any]] = None,
                       outcome: Optional[Dict[str, Any]] = None,
                       llm_prompt: Optional[str] = None,
                       llm_trace_ref: Optional[str] = None,
-                      objective_context: Optional[str] = None):
+                      objective_context: Optional[str] = None,
+                      **kwargs):
         """Log a system-level trajectory entry.
 
-        New schema (v2): ``post_state`` is no longer written. Location and
-        player_coords are promoted from pre_state to top-level fields.
-        ``objective_context`` captures the active objective IDs.
+        Location and player_coords are promoted from pre_state to
+        top-level fields.  ``objective_context`` captures the active
+        objective IDs.
+
+        ``post_state`` is deprecated and ignored (accepted via **kwargs
+        for backwards compatibility with older callers).
 
         Trajectory JSONL schema (current):
             Required:
@@ -219,8 +222,8 @@ class RunDataManager:
                 - objective_context
                 - llm_prompt
                 - llm_trace_ref
-            Legacy compatibility:
-                - post_state may exist in older runs
+            Legacy:
+                - post_state may exist in older run files but is not written
         """
         trajectory_entry: Dict[str, Any] = {
             "step": step,
@@ -441,6 +444,41 @@ class RunDataManager:
                 logger.debug(f"Skipping {dest_name} (not found)")
 
         self.copy_objectives_state()
+        self._export_bootstrap_artifacts()
+
+    def _export_bootstrap_artifacts(self) -> None:
+        """Create ``bootstrap/`` directories with final store state + evolved prompt.
+
+        Writes to both ``end_state/game_state/bootstrap/`` (archival) and
+        ``.pokeagent_cache/{run_id}/bootstrap/`` (easy re-use) so that future
+        runs can ``--bootstrap-from`` either location.
+        """
+        from utils.data_persistence.run_data_manager import get_cache_path, get_cache_directory
+
+        destinations = [
+            self.run_dir / "end_state" / "game_state" / "bootstrap",
+            Path(str(get_cache_directory())) / "bootstrap",
+        ]
+
+        store_files = ["memory.json", "skills.json", "subagents.json"]
+
+        for dest_dir in destinations:
+            try:
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                for store_file in store_files:
+                    src = Path(str(get_cache_path(store_file)))
+                    if src.exists():
+                        shutil.copy2(str(src), str(dest_dir / store_file))
+
+                meta_dir = self.run_dir / "prompt_evolution" / "meta_prompts"
+                if meta_dir.exists():
+                    prompt_files = sorted(meta_dir.glob("steps_*.md"), key=lambda p: p.stat().st_mtime)
+                    if prompt_files:
+                        shutil.copy2(str(prompt_files[-1]), str(dest_dir / "EVOLVED_ORCHESTRATOR_POLICY.md"))
+
+                logger.info(f"Exported bootstrap artifacts to {dest_dir}")
+            except Exception as exc:
+                logger.warning(f"Failed to export bootstrap artifacts to {dest_dir}: {exc}")
 
     def copy_map_data(self, map_stitcher_file: Optional[str] = None):
         """Copy map stitcher data to run_data end_state

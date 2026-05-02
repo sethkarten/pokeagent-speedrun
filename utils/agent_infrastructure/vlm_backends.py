@@ -2250,11 +2250,15 @@ class GeminiBackend(VLMBackend):
         """Calls the generate_content method with exponential backoff for rate limits.
 
         Handles 429 rate limit errors with exponential backoff.
-        Uses 180 second timeout for slow preview models like gemini-3-pro-preview.
+        Uses 300 second timeout for slow preview models like gemini-3.1-pro-preview.
         """
 
-        # Use longer timeout for preview models which are much slower
-        timeout = 180 if "preview" in self.model_name or "3-pro" in self.model_name else 60
+        if "3-pro" in self.model_name or "pro-preview" in self.model_name:
+            timeout = 300  # 5 minutes for pro-preview thinking models
+        elif "preview" in self.model_name:
+            timeout = 180  # 3 minutes for other preview models (e.g. flash-preview)
+        else:
+            timeout = 60
 
         max_retries = 5
         base_delay = 2  # Start with 2 second delay
@@ -2278,21 +2282,36 @@ class GeminiBackend(VLMBackend):
             except Exception as e:
                 error_str = str(e).lower()
 
-                # Check if it's a rate limit error (429 or quota exceeded)
-                if "429" in error_str or "quota" in error_str or "rate" in error_str:
+                # Rate limit errors: retry with exponential backoff
+                is_rate_limit = "429" in error_str or "quota" in error_str or "rate" in error_str
+                # Transient server errors: deadline exceeded, unavailable, internal, 504/503/500
+                is_transient = (
+                    "504" in error_str
+                    or "503" in error_str
+                    or "500" in error_str
+                    or "deadline" in error_str
+                    or "unavailable" in error_str
+                    or "internal" in error_str
+                )
+
+                if is_rate_limit or is_transient:
                     if attempt < max_retries - 1:
                         # Exponential backoff: 2s, 4s, 8s, 16s, 32s
                         delay = base_delay * (2**attempt) + random.uniform(0, 1)
+                        kind = "Rate limit" if is_rate_limit else "Transient server error"
                         logger.warning(
-                            f"Rate limit hit, retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})..."
+                            f"{kind} hit ({type(e).__name__}: {e}), "
+                            f"retrying in {delay:.1f}s (attempt {attempt + 1}/{max_retries})..."
                         )
                         time.sleep(delay)
                         continue
                     else:
-                        logger.error(f"Rate limit exceeded after {max_retries} retries")
+                        logger.error(
+                            f"Failed after {max_retries} retries: {type(e).__name__}: {e}"
+                        )
                         raise
                 else:
-                    # Not a rate limit error, raise immediately
+                    # Unknown / non-transient error, raise immediately
                     logger.error(f"Error in generate_content: {e}")
                     raise
 

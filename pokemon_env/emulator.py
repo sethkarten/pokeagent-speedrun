@@ -170,22 +170,24 @@ class MilestoneTracker:
                 except Exception as e:
                     logger.debug(f"Could not log milestone to LLM logger: {e}")
             
-            # Trigger backup for CLI agents when COMPARISON_MILESTONES are reached
-            # This ensures CLI agents have checkpoint backups at the same game progress points
-            # as VLM agents (who use objective-triggered backups)
+            # Trigger milestone backup when objective-triggered backups won't fire:
+            #   1) CLI agents (no objectives by design)
+            #   2) VLM scaffolds launched without --direct-objectives (e.g. simplest)
+            # VLM runs WITH objectives already get per-objective backups in server/app.py,
+            # so we skip here to avoid duplicate zips at every milestone.
             if milestone_id in COMPARISON_MILESTONES:
-                try:
-                    is_cli_run = os.environ.get("POKEAGENT_CLI_MODE", "") == "1"
-                    
-                    if is_cli_run:
+                is_cli_run = os.environ.get("POKEAGENT_CLI_MODE", "") == "1"
+                has_objectives = os.environ.get("HAS_DIRECT_OBJECTIVES", "") == "1"
+                if is_cli_run or not has_objectives:
+                    try:
                         from utils.data_persistence.backup_manager import create_cache_backup
-                        logger.info(f"[milestone-backup] Triggering backup for CLI agent at {milestone_id}")
+                        logger.info(f"[milestone-backup] Triggering backup at {milestone_id}")
                         create_cache_backup(
                             objective_id=f"milestone_{milestone_id.lower()}",
                             objective_description=f"Milestone: {milestone_id}"
                         )
-                except Exception as e:
-                    logger.warning(f"Could not create milestone backup: {e}")
+                    except Exception as e:
+                        logger.warning(f"Could not create milestone backup: {e}")
             
             return True
         return False

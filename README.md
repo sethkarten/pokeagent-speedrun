@@ -1,4 +1,4 @@
-# PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald
+# PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald & Red
 
 ![PokéAgent Challenge: RPG Speedrunning Agent in Pokémon Emerald](layout.png)
 
@@ -32,7 +32,7 @@
 
 ## Overview
 
-This project implements an AI agent capable of playing Pokémon Emerald on a Game Boy Advance emulator. `PokeAgent` uses a vision-language model (VLM) to analyze game frames, understand the current game state, and make intelligent decisions to progress through the game via a series of MCP tools that we expose. `PokeAgent` is designed to be easily customizable for different VLMs and agent behaviors.
+This project implements an AI agent capable of playing **Pokémon Emerald** (Game Boy Advance, **mGBA**) or **Pokémon Red** (Game Boy Color, **PyBoy**). Select the title with **`--game emerald`** (default) or **`--game red`** on **`run.py`** and **`run_cli.py`**; this sets **`GAME_TYPE`** for the game server and aligns prompt assets in `agents/prompts/paths.py`. `PokeAgent` uses a vision-language model (VLM) to analyze game frames, understand game state, and act via MCP-backed HTTP tools. The agent is designed to be customizable for different VLMs and behaviors.
 
 ## Architecture
 
@@ -42,7 +42,8 @@ For module-level detail, see the README in each area:
 
 - **[server/README.md](server/README.md)** — Game server, frame streaming, MCP proxy, ports and endpoints.
 - **[agents/README.md](agents/README.md)** — PokeAgent, prompts, objectives, prompt optimization, local subagents.
-- **[pokemon_env/README.md](pokemon_env/README.md)** — Emulator, memory reader, Porymap map data.
+- **[pokemon_env/README.md](pokemon_env/README.md)** — Emerald: mGBA emulator, memory reader, Porymap map data.
+- **`pokemon_red_env/`** — Red: PyBoy emulator, memory/map readers, Red milestones (see [System-Design/architecture/pokemon_infrastructure.md](System-Design/architecture/pokemon_infrastructure.md)).
 - **[utils/README.md](utils/README.md)** — Mapping, persistence, VLM backends, metrics.
 
 ## Features
@@ -51,10 +52,10 @@ For module-level detail, see the README in each area:
 - **Vision-based perception**: VLMs analyze game frames and state
 - **Agent scaffolds**: PokeAgent (optional trajectory-based prompt optimization via `--enable-prompt-optimization`; separate from the in-agent `subagent_reflect` tool), vision-only
 - **PokeAgent local subagents**: `subagent_reflect`, `subagent_verify`, `subagent_gym_puzzle`, and `subagent_summarize` are one-step local VLM calls; `subagent_battler` is a delegated battle loop that consumes real global steps but returns only a compacted battle summary to the orchestrator; `subagent_plan_objectives` is a delegated planning loop that can view, create, modify, and delete objectives via `replan_objectives`. Logged interaction names remain readable (`Subagent_Reflect`, `Subagent_Verify`, `Subagent_Summarize`, `Gym_Puzzle_Analysis`, `Subagent_Battler`, `Subagent_Plan_Objectives`). Trajectory logging is **primary** at `.pokeagent_cache/{run_id}/trajectory_history.jsonl` (`RunDataManager.log_trajectory`); a copy may sync to `run_data/{run_id}/trajectory_history.jsonl`.
-- **MCP support**: External CLI agents (Claude Code/Codex CLI/Gemini CLI) interact with the game via `pokemon_mcp_server.py`. Containerization limits non-tool HTTP to the game server. The HTTP game server does **not** implement local subagents such as `subagent_reflect`; CLI agents use a reduced MCP surface (see `server/cli/pokemon_mcp_server.py`).
+- **MCP support**: External CLI agents (Claude Code/Codex CLI/Gemini CLI) interact with the game via `pokemon_mcp_server.py` (**`get_game_state`**, **`press_buttons`** only). Containerization limits non-tool HTTP to the game server. The HTTP game server does **not** implement local subagents such as `subagent_reflect`; full orchestration tools remain on `POST /mcp/*` for in-process clients (see `server/cli/pokemon_mcp_server.py`).
 - **Checkpoints & backups**: Save/resume runs; backups in `backups/`; analysis data in `run_data/`. Backups restore **disk** state under `.pokeagent_cache/` (objectives, long-term memory, checkpoint, trajectories file if present, etc.), not the agent’s in-memory short-term conversation window—see [utils/README.md](utils/README.md) (`data_persistence`).
 - **Metrics & logging**: Per-step and cumulative tokens, cost, actions, as well as run initialization settings are found in .pokeagent_cache/{run_id}/cumulative_metrics.json; LLM logs (llm_logs/) and other session logs are also tracked, though cumulative_metrics is the single source of truth. One-step local subagents (reflect, verify, summarize, gym puzzle) record a synthetic `tool_calls` row on their step so the interaction name is visible next to token usage (they do not invoke MCP tools).
-- **Map system**: Porymap integration, NPC display, movement preview, portal tracking
+- **Map system**: **Emerald** — Porymap integration, NPC display, movement preview, portal tracking. **Red** — `RedMapReader` / PyBoy-backed map formatting (no Porymap).
 - **Web interface**: Real-time stream at `http://localhost:8000/stream` by default. The port can be manually specified via the --port flag to both run.py and run_cli.py
 - **Video recording**: Optional MP4 recording of gameplay saved to `run_data/{run_id}/end_state/videos/`
 - **Customizable prompts**: Edit prompt assets under `agents/prompts/` to directly steer agent behavior.
@@ -101,10 +102,13 @@ pokeagent-speedrun/
 │   ├── porymap_paths.py      # Centralized path resolution for porymap data
 │   ├── porymap/              # Pokeemerald decompilation data (data/maps, data/tilesets)
 │   └── ...
+├── pokemon_red_env/
+│   └── red_emulator.py       # RedEmulator (PyBoy), readers, Red milestones
 ├── tests/
 │   ├── run_tests.py, states/, ground_truth/, test_*.py
 │   └── ...
 ├── Emerald-GBAdvance/        # rom.gba (not included), *.state
+├── PokemonRed-GBC/           # pokered.gbc (not included), Red assets
 ├── .pokeagent_cache/        # Runtime cache per run (checkpoints, metrics, maps)
 ├── backups/                 # Backup archives
 ├── run_data/                # Per-run analysis data
@@ -114,9 +118,10 @@ pokeagent-speedrun/
 ## Requirements
 
 - Python 3.10–3.11
-- Pokémon Emerald ROM (not included; obtain legally)
-- An API key for access to of the supported VLM backends (see VLM Backend Setup)
-- mGBA system library for Python bindings
+- **Emerald:** Pokémon Emerald ROM (not included; obtain legally)
+- **Red:** Pokémon Red ROM as `PokemonRed-GBC/pokered.gbc` (not included; obtain legally)
+- An API key for access to one of the supported VLM backends (see VLM Backend Setup)
+- **mGBA** system library for Python bindings (**Emerald**); **PyBoy** is a Python dependency (**Red**)
 
 ## Installation
 
@@ -152,7 +157,7 @@ Create a conda env (e.g. `conda create -n pokeagent python=3.10`), then install 
 
 ### 3. mGBA System Library
 
-Required for the mGBA Python bindings. Example (Ubuntu 20.04):
+Required for **Emerald** (mGBA Python bindings). **Red** does not use mGBA. Example (Ubuntu 20.04):
 
 ```bash
 wget https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-ubuntu64-focal.tar.xz
@@ -169,7 +174,10 @@ macOS (x86_64): `brew install mgba`
 
 ### 5. Game ROM
 
-Place your Pokémon Emerald ROM at `Emerald-GBAdvance/rom.gba`. US English SHA-1: `f3ae088181bf583e55daf962a92bb46f4f1d07b7`.
+- **Emerald:** `Emerald-GBAdvance/rom.gba`. US English SHA-1: `f3ae088181bf583e55daf962a92bb46f4f1d07b7`.
+- **Red:** `PokemonRed-GBC/pokered.gbc` (expected filename for `setup_environment()`).
+
+Use **`--game red|emerald`** with **`run.py`** / **`run_cli.py`** so server and agent prompts match the ROM you placed.
 
 ## VLM Backend Setup (run.py)
 
@@ -238,7 +246,9 @@ Choose behavior with `--scaffold` (default: `pokeagent`).
 
 | Scaffold         | Description                                                                               |
 | ---------------- | ----------------------------------------------------------------------------------------- |
-| `pokeagent`      | Default. Main benchmark agent with direct objectives, knowledge, and prompt optimization. |
+| `pokeagent`      | Default. Full tool scaffolding (built-in subagents, walkthrough/wiki/pathfinding where enabled). |
+| `simple` / `simplest` | Minimal scaffold: no built-in subagent tools; orchestrator uses `replan_objectives`; empty registry. |
+| `autoevolve`     | Like `simple`, plus harness evolution when `--enable-prompt-optimization` is set.          |
 | `autonomous_cli` | Legacy alias for `pokeagent`.                                                             |
 | `vision_only`    | Vision-only agent (no map info, no pathfinding, button sequences).                        |
 
@@ -256,14 +266,15 @@ python run.py --scaffold pokeagent --agent-auto
 
 | Flag                                     | Description                                                                                                                                              |
 | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--rom PATH`                             | Path to the ROM file (default: `Emerald-GBAdvance/rom.gba`).                                                                                             |
+| `--game red\|emerald`                    | Which title to run; sets server **`GAME_TYPE`** and client env before agents import (default: `emerald`).                                                |
+| `--rom PATH`                             | Client-side ROM path hint (default: `Emerald-GBAdvance/rom.gba`). If `game=red` and ROM is still the default Emerald path, rewritten to `PokemonRed-GBC/pokered.gbc`. The spawned game server uses **`setup_environment()`** ROM constants, not `--rom`. |
 | `--port INT`                             | Port for the game server and web interface (default: 8000). Frame server and MCP server are accessed through at ports at a +1 and +2 offset respectively |
 | `--load-state PATH`                      | Load a saved state file on startup.                                                                                                                      |
 | `--load-checkpoint`                      | Load from checkpoint files in the run cache.                                                                                                             |
 | `--backup-state PATH`                    | Load from a backup zip; extracts to cache and loads checkpoint, metrics, and persistent knowledge (preferred for resuming a run).                        |
 | `--backend NAME`                         | VLM backend: `openai`, `gemini`, `openrouter`, `anthropic`, or `auto` (default: `gemini`).                                                               |
 | `--model-name TEXT`                      | Model name for the backend (default: `gemini-2.5-flash`).                                                                                                |
-| `--scaffold NAME`                        | Agent scaffold: `pokeagent`, `autonomous_cli`, or `vision_only` (default: `pokeagent`).                                                                  |
+| `--scaffold NAME`                        | Agent scaffold: `pokeagent`, `simple`, `simplest`, `autoevolve`, `autonomous_cli`, `vision_only` (default: `pokeagent`).                                  |
 | `--headless`                             | Run without the pygame display.                                                                                                                          |
 | `--agent-auto`                           | Run the agent in automatic mode (no manual stepping).                                                                                                    |
 | `--manual`                               | Start in manual mode instead of agent mode.                                                                                                              |
@@ -275,7 +286,7 @@ python run.py --scaffold pokeagent --agent-auto
 | `--clear-knowledge-base`                 | Clear `knowledge_base.json` before starting.                                                                                                             |
 | `--run-name TEXT`                        | Optional suffix for the run directory name.                                                                                                              |
 | `--enable-prompt-optimization`           | Enable reflective prompt optimization from trajectory analysis.                                                                                          |
-| `--optimization-frequency INT`           | Steps between prompt optimization runs (default: 10).                                                                                                    |
+| `--optimization-window-length INT`       | Number of recent trajectory steps used for evolution analysis (default: 50).                                                                              |
 | `--allow-walkthrough`                    | Enable `get_walkthrough` tool (vision_only scaffold).                                                                                                    |
 | `--allow-slam`                           | Enable SLAM / map building (vision_only scaffold).                                                                                                       |
 
@@ -304,12 +315,13 @@ python run.py --scaffold pokeagent --agent-auto
 | `--run-name TEXT`               | Optional name for the run directory.                                                                                                                                    |
 | `--build`                       | Build the container image before running (recommended so files are owned by your user).                                                                                 |
 | `--mcp-sse-port INT`            | Port for MCP SSE server (default: game port + 2).                                                                                                                       |
+| `--game red\|emerald`           | Same semantics as `run.py`: game server + `GAME_TYPE` + host prompt resolution (default: `emerald`).                                                                   |
 | `--agent-thinking-effort LEVEL` | Reasoning/thinking effort for CLI agent: `low`, `medium`, or `high` (Claude: `--thinking-budget`; Codex: `-c model_reasoning_effort`; Gemini: `modelConfigs` override). |
 
 
 ## Customizing Agent Behavior (Prompt Editing Guide)
 
-- **Prompt files**: `agents/prompts/` holds `pokeagent-directives/` and `cli-agent-directives/`; paths are repo-root-relative.
+- **Prompt files**: `agents/prompts/` holds `pokeagent-directives/` and `cli-agent-directives/`; `agents/prompts/paths.py` picks **Red vs Emerald** markdown from **`GAME_TYPE`** (set before importing agents in `run.py`). Paths are repo-root-relative.
 - **Main benchmark agent**: `agents/PokeAgent.py`.
 - **Vision-only variant**: `agents/vision_only_agent.py`.
 
@@ -318,7 +330,7 @@ Edit the prompts in those files and restart the agent. Use `--debug-state` for d
 ## Advanced Configuration
 
 - **Environment**: `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY`; optional `PYTHONPATH` for development.
-- **Persistence**: Checkpoints and run data are under `.pokeagent_cache/{run_id}/` and `run_data/{run_id}/`. Backups of `.pokeagent_cache/{run_id}/` are created on objective or milestone completion; milestone ordering comes from the canonical `MILESTONE_PHASES`/`ORDERED_PROGRESS_MILESTONES` in `pokemon_env/emulator.py`. See [utils/README.md](utils/README.md) for layout.
+- **Persistence**: Checkpoints and run data are under `.pokeagent_cache/{run_id}/` and `run_data/{run_id}/`. Backups of `.pokeagent_cache/{run_id}/` are created on objective or milestone completion; **Emerald** milestone ordering comes from `MILESTONE_PHASES` / `ORDERED_PROGRESS_MILESTONES` in `pokemon_env/emulator.py`; **Red** uses `RED_MILESTONES_ORDER` in `pokemon_red_env/red_emulator.py`. See [utils/README.md](utils/README.md) for layout.
 - **Metrics**: `cumulative_metrics.json` (in cache) and LLM logs; see [utils/README.md](utils/README.md).
 
 ## Troubleshooting
